@@ -1,0 +1,45 @@
+import { useEffect } from "react";
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Sidebar } from "./components/Sidebar";
+import { TitleBar } from "./components/TitleBar";
+import { BookPage } from "./pages/BookPage";
+import { SettingPage } from "./pages/SettingPage";
+import { SkillsPage } from "./pages/SkillsPage";
+import { useThemeStore } from "./stores/themeStore";
+
+function AppShell() {
+  const initializeTheme = useThemeStore((state) => state.initializeTheme);
+
+  useEffect(() => {
+    initializeTheme();
+  }, [initializeTheme]);
+
+  return (
+    <div className="h-screen overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">
+      <div className="flex h-full flex-col overflow-hidden">
+        <TitleBar />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <Sidebar />
+          <main className="min-h-0 flex-1 overflow-hidden bg-[#f7f8fb] dark:bg-[#0f1012]">
+            <Routes>
+              <Route path="/" element={<Navigate to="/book" replace />} />
+              <Route path="/book" element={<BookPage />} />
+              <Route path="/skills" element={<SkillsPage />} />
+              <Route path="/setting" element={<SettingPage />} />
+            </Routes>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <HashRouter>
+      <AppShell />
+    </HashRouter>
+  );
+}
+
+export default App;
