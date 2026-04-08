@@ -2,9 +2,11 @@ import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
+import { AgentDetailPage } from "./pages/AgentDetailPage";
+import { AgentsPage } from "./pages/AgentsPage";
 import { BookPage } from "./pages/BookPage";
 import { SettingPage } from "./pages/SettingPage";
-import { AgentsPage } from "./pages/AgentsPage";
+import { SkillDetailPage } from "./pages/SkillDetailPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { useThemeStore } from "./stores/themeStore";
 
@@ -26,7 +28,9 @@ function AppShell() {
               <Route path="/" element={<Navigate to="/book" replace />} />
               <Route path="/book" element={<BookPage />} />
               <Route path="/skills" element={<SkillsPage />} />
+              <Route path="/skills/:skillId" element={<SkillDetailPage />} />
               <Route path="/agents" element={<AgentsPage />} />
+              <Route path="/agents/:agentId" element={<AgentDetailPage />} />
               <Route path="/setting" element={<SettingPage />} />
             </Routes>
           </main>

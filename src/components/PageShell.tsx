@@ -4,14 +4,16 @@ import type { LucideIcon } from "lucide-react";
 type PageAction = {
   icon: LucideIcon;
   label: string;
+  onClick?: () => void;
   tone?: "default" | "dark" | "primary";
 };
 
 type PageShellProps = {
   actions?: PageAction[];
   children: ReactNode;
-  description?: string;
-  title: string;
+  contentClassName?: string;
+  headerRight?: ReactNode;
+  title: ReactNode;
 };
 
 const actionStyles: Record<NonNullable<PageAction["tone"]>, string> = {
@@ -23,23 +25,27 @@ const actionStyles: Record<NonNullable<PageAction["tone"]>, string> = {
     "border-[#0f172a] bg-[#0f172a] text-white hover:bg-[#1e293b] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white",
 };
 
-export function PageShell({ actions = [], children, description: _description, title }: PageShellProps) {
+export function PageShell({
+  actions = [],
+  children,
+  contentClassName,
+  headerRight,
+  title,
+}: PageShellProps) {
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f7f8] px-4 py-3 dark:bg-[#111214] sm:px-5">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e2e8f0] pb-2 dark:border-[#20242b]">
-        <div className="min-w-0">
-          <h1 className="truncate text-[15px] font-semibold tracking-[-0.02em] text-[#111827] dark:text-zinc-100">
-            {title}
-          </h1>
-        </div>
-        {actions.length > 0 ? (
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {actions.map(({ icon: Icon, label, tone = "default" }) => (
+    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]">
+      <header className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-1 dark:border-[#20242b] sm:px-5">
+        <div className="min-w-0 flex-1">{title}</div>
+        {headerRight || actions.length > 0 ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {headerRight}
+            {actions.map(({ icon: Icon, label, onClick, tone = "default" }) => (
               <button
                 key={label}
                 type="button"
+                onClick={onClick}
                 className={[
-                  "inline-flex h-8 items-center gap-2 rounded-[8px] border px-3 text-[12px] font-medium transition-colors duration-200",
+                  "inline-flex h-8 items-center gap-1.5 rounded-[8px] border px-3 text-[12px] font-medium transition-colors duration-200",
                   actionStyles[tone],
                 ].join(" ")}
               >
@@ -50,7 +56,9 @@ export function PageShell({ actions = [], children, description: _description, t
           </div>
         ) : null}
       </header>
-      <div className="min-h-0 flex-1 overflow-hidden pt-3">{children}</div>
+      <div className={["min-h-0 flex-1 overflow-hidden px-4 py-3 sm:px-5", contentClassName ?? ""].join(" ")}>
+        {children}
+      </div>
     </section>
   );
 }

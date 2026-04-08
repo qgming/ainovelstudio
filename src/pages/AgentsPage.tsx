@@ -1,59 +1,39 @@
+import { Plus, Upload } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { SubAgentRow } from "../components/agents/SubAgentRow";
 import { useSubAgentStore } from "../stores/subAgentStore";
 
 export function AgentsPage() {
+  const navigate = useNavigate();
   const subAgents = useSubAgentStore((state) => state.subAgents);
   const toggleSubAgent = useSubAgentStore((state) => state.toggleSubAgent);
-  const enabledCount = subAgents.filter((a) => a.enabled).length;
-
-  const builtinAgents = subAgents.filter((a) => a.source === "builtin");
-  const importedAgents = subAgents.filter((a) => a.source === "imported");
 
   return (
-    <PageShell title="代理">
+    <PageShell
+      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">代理中心</h1>}
+      actions={[
+        { icon: Upload, label: "导入代理", tone: "default" },
+        { icon: Plus, label: "新建代理", tone: "primary" },
+      ]}
+    >
       <div className="h-full overflow-y-auto pr-1">
-        <div className="max-w-4xl space-y-3 pb-6">
-          <section className="rounded-[10px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]">
-            <div className="border-b border-[#e2e8f0] px-4 py-2 dark:border-[#20242b]">
-              <h2 className="text-sm font-semibold text-[#111827] dark:text-zinc-100">
-                内置代理 · 已启用 {builtinAgents.filter((a) => a.enabled).length}
-              </h2>
-            </div>
-            <div className="divide-y divide-[#e2e8f0] dark:divide-[#20242b]">
-              {builtinAgents.map((agent) => (
-                <SubAgentRow
-                  key={agent.id}
-                  agent={agent}
-                  onToggle={() => toggleSubAgent(agent.id)}
-                />
-              ))}
-            </div>
-          </section>
-
-          {importedAgents.length > 0 ? (
-            <section className="rounded-[10px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]">
-              <div className="border-b border-[#e2e8f0] px-4 py-2 dark:border-[#20242b]">
-                <h2 className="text-sm font-semibold text-[#111827] dark:text-zinc-100">
-                  导入代理 · 已启用 {importedAgents.filter((a) => a.enabled).length}
-                </h2>
-              </div>
-              <div className="divide-y divide-[#e2e8f0] dark:divide-[#20242b]">
-                {importedAgents.map((agent) => (
-                  <SubAgentRow
-                    key={agent.id}
-                    agent={agent}
-                    onToggle={() => toggleSubAgent(agent.id)}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <p className="px-1 text-xs text-[#64748b] dark:text-zinc-400">
-            已启用 {enabledCount} 个代理。启用后的代理将参与 Agent 工作流的多角色协作。
-          </p>
-        </div>
+        {subAgents.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 pb-6">
+            {subAgents.map((agent) => (
+              <SubAgentRow
+                key={agent.id}
+                agent={agent}
+                onOpen={() => navigate(`/agents/${agent.id}`)}
+                onToggle={() => toggleSubAgent(agent.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-full min-h-[240px] items-center justify-center rounded-[16px] border border-dashed border-[#d7dde8] bg-[#fbfbfc] px-6 text-sm text-[#64748b] dark:border-[#2a3038] dark:bg-[#15171b] dark:text-zinc-400">
+            暂无可用代理。
+          </div>
+        )}
       </div>
     </PageShell>
   );

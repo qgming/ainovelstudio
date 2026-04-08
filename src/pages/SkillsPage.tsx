@@ -1,58 +1,42 @@
-import type { ReactNode } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { PageShell } from "../components/PageShell";
 import { SkillCard } from "../components/skills/SkillCard";
 import { useSkillsStore } from "../stores/skillsStore";
-
-function SkillSection({
-  children,
-  title,
-}: {
-  children: ReactNode;
-  title: string;
-}) {
-  return (
-    <section className="rounded-[10px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]">
-      <div className="border-b border-[#e2e8f0] px-4 py-2 dark:border-[#20242b]">
-        <h2 className="text-sm font-semibold text-[#111827] dark:text-zinc-100">{title}</h2>
-      </div>
-      <div className="divide-y divide-[#e2e8f0] dark:divide-[#20242b]">{children}</div>
-    </section>
-  );
-}
+import { useNavigate } from "react-router-dom";
 
 export function SkillsPage() {
+  const navigate = useNavigate();
   const builtinSkills = useSkillsStore((state) => state.builtinSkills);
   const importedSkills = useSkillsStore((state) => state.importedSkills);
   const toggleSkill = useSkillsStore((state) => state.toggleSkill);
-  const enabledCount = [...builtinSkills, ...importedSkills].filter((skill) => skill.enabled).length;
+
+  const skills = [...builtinSkills, ...importedSkills];
 
   return (
     <PageShell
-      title="技能中心"
-      description={`已启用 ${enabledCount} 个技能。启用后的技能会作为结构化上下文注入右侧 Agent 工作台。`}
-      actions={[{ icon: Plus, label: "导入技能", tone: "default" }]}
+      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">技能中心</h1>}
+      actions={[
+        { icon: Upload, label: "导入技能", tone: "default" },
+        { icon: Plus, label: "新建技能", tone: "primary" },
+      ]}
     >
       <div className="h-full overflow-y-auto pr-1">
-        <div className="max-w-4xl space-y-3 pb-6">
-          <SkillSection title={`内置技能 · 已启用 ${builtinSkills.filter((skill) => skill.enabled).length}`}>
-            {builtinSkills.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} onToggle={() => toggleSkill(skill.id)} />
+        {skills.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 pb-6">
+            {skills.map((skill) => (
+              <SkillCard
+                key={skill.id}
+                skill={skill}
+                onOpen={() => navigate(`/skills/${skill.id}`)}
+                onToggle={() => toggleSkill(skill.id)}
+              />
             ))}
-          </SkillSection>
-
-          <SkillSection title={`导入技能 · 已启用 ${importedSkills.filter((skill) => skill.enabled).length}`}>
-            {importedSkills.length > 0 ? (
-              importedSkills.map((skill) => (
-                <SkillCard key={skill.id} skill={skill} onToggle={() => toggleSkill(skill.id)} />
-              ))
-            ) : (
-              <div className="px-4 py-4 text-xs leading-5 text-[#64748b] dark:text-zinc-400">
-                暂无导入技能。
-              </div>
-            )}
-          </SkillSection>
-        </div>
+          </div>
+        ) : (
+          <div className="flex h-full min-h-[240px] items-center justify-center rounded-[16px] border border-dashed border-[#d7dde8] bg-[#fbfbfc] px-6 text-sm text-[#64748b] dark:border-[#2a3038] dark:bg-[#15171b] dark:text-zinc-400">
+            暂无可用技能。
+          </div>
+        )}
       </div>
     </PageShell>
   );
