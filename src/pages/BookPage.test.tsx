@@ -96,7 +96,7 @@ describe("BookPage", () => {
     expect(screen.getByRole("button", { name: "新建书籍" })).toBeInTheDocument();
   });
 
-  it("选择书籍后显示三栏中的文件树和 Agent 占位栏", async () => {
+  it("选择书籍后显示三栏中的文件树和 Agent 工作台", async () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
@@ -105,7 +105,7 @@ describe("BookPage", () => {
     expect(screen.getByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
     expect(screen.getByText("第一卷")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Agent" })).toBeInTheDocument();
-    expect(screen.getByText("Agent 面板预留中")).toBeInTheDocument();
+    expect(screen.queryByText("支持消息流、工具调用、子代理和深度思考展示")).not.toBeInTheDocument();
   });
 
   it("点击文本文件后会自动保存编辑内容", async () => {
@@ -171,6 +171,21 @@ describe("BookPage", () => {
     });
 
     expect(await screen.findByText("第一卷")).toBeInTheDocument();
+  });
+
+  it("编辑区顶部保存按钮使用纯图标工具栏样式", async () => {
+    render(<BookPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第1章-开篇.md" }));
+
+    const saveButton = await screen.findByRole("button", { name: "保存当前文件" });
+    expect(saveButton).toHaveTextContent("");
+    expect(saveButton.className).toContain("h-8");
+    expect(saveButton.className).toContain("w-8");
+    expect(saveButton.className).toContain("rounded-[8px]");
+    expect(saveButton.className).toContain("hover:bg-[#edf1f6]");
   });
 
   it("已打开书籍后可从顶部重新打开书籍菜单并再次选择书籍", async () => {
@@ -368,5 +383,3 @@ describe("BookPage", () => {
     });
   });
 });
-
-

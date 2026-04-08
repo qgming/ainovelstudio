@@ -1,10 +1,11 @@
-import { FileText, Settings, Sparkles, Sun, Moon } from "lucide-react";
+import { FileText, Settings, Sparkles, Sun, Moon, Users } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useThemeStore } from "../stores/themeStore";
 
 const topItems = [
   { to: "/book", label: "首页", Icon: FileText },
   { to: "/skills", label: "技能", Icon: Sparkles },
+  { to: "/agents", label: "代理", Icon: Users },
 ];
 
 const bottomItems = [{ to: "/setting", label: "设置", Icon: Settings }];

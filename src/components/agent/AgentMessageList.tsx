@@ -1,0 +1,53 @@
+import { useEffect, useRef } from "react";
+import { AgentPartRenderer } from "./AgentPartRenderer";
+import type { AgentMessage } from "../../lib/agent/types";
+
+type AgentMessageListProps = {
+  messages: AgentMessage[];
+};
+
+export function AgentMessageList({ messages }: AgentMessageListProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 消息变化时自动滚动到底部
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages]);
+
+  return (
+    <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+      <div className="space-y-4">
+        {messages.map((message) => {
+          const isUser = message.role === "user";
+
+          return (
+            <article key={message.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[94%] space-y-2 ${isUser ? "items-end" : "items-start"}`}>
+                <span className={`text-[11px] font-semibold ${isUser ? "text-[#111827] dark:text-zinc-100" : "text-[#64748b] dark:text-zinc-400"}`}>
+                  {message.author}
+                </span>
+                {message.parts.map((part, index) => {
+                  if (part.type === "text") {
+                    return (
+                      <div
+                        key={`${message.id}-${index}`}
+                        className={`rounded-[10px] px-3.5 py-2.5 text-sm ${isUser ? "bg-[#111827] text-white dark:bg-[#f3f4f6] dark:text-[#111827]" : "border border-[#e2e8f0] bg-white text-[#1f2937] dark:border-[#20242b] dark:bg-[#15171b] dark:text-[#eef2f7]"}`}
+                      >
+                        <AgentPartRenderer part={part} />
+                      </div>
+                    );
+                  }
+
+                  return <AgentPartRenderer key={`${message.id}-${index}`} part={part} />;
+                })}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

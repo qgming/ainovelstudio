@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { BookPage } from "./pages/BookPage";
 import { SettingPage } from "./pages/SettingPage";
+import { AgentsPage } from "./pages/AgentsPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { useThemeStore } from "./stores/themeStore";
 
@@ -25,6 +26,7 @@ function AppShell() {
               <Route path="/" element={<Navigate to="/book" replace />} />
               <Route path="/book" element={<BookPage />} />
               <Route path="/skills" element={<SkillsPage />} />
+              <Route path="/agents" element={<AgentsPage />} />
               <Route path="/setting" element={<SettingPage />} />
             </Routes>
           </main>
