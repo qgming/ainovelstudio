@@ -33,7 +33,7 @@ export function BookEditorPanel({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-2 dark:border-[#20242b]">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e2e8f0] px-3 py-1 dark:border-[#20242b]">
         <h2 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
           {activeFileName}
         </h2>

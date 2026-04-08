@@ -7,6 +7,7 @@ import { BookPanelResizeHandle } from "../components/book/BookPanelResizeHandle"
 import { BookWorkspaceLoadingState } from "../components/book/BookWorkspaceLoadingState";
 import { BookTreePanel } from "../components/book/BookTreePanel";
 import { BookWorkspaceEmptyState } from "../components/book/BookWorkspaceEmptyState";
+import { BookWorkspaceActionMenu } from "../components/book/BookWorkspaceActionMenu";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
 import { getStoredWorkspaceSnapshot } from "../lib/bookWorkspace/api";
@@ -93,6 +94,7 @@ export function BookPage() {
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
   const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
   const updateDraft = useBookWorkspaceStore((state) => state.updateDraft);
+  const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
   const [panelLayout, setPanelLayout] = useState<BookPanelLayout>(
     () => getStoredBookPanelLayout() ?? DEFAULT_BOOK_PANEL_LAYOUT,
   );
@@ -316,6 +318,7 @@ export function BookPage() {
                   onCreateFile={openCreateFileDialog}
                   onCreateFolder={openCreateFolderDialog}
                   onDelete={requestDelete}
+                  onOpenBookMenu={() => setIsBookMenuOpen(true)}
                   onRefresh={() => void refreshWorkspace()}
                   onRename={openRenameDialog}
                   onSelectFile={(path) => void selectFile(path)}
@@ -364,6 +367,21 @@ export function BookPage() {
         )}
       </div>
 
+      {isBookMenuOpen ? (
+        <BookWorkspaceActionMenu
+          busy={isBusy}
+          onClose={() => setIsBookMenuOpen(false)}
+          onCreateBook={() => {
+            setIsBookMenuOpen(false);
+            openCreateBookDialog();
+          }}
+          onOpenBook={() => {
+            setIsBookMenuOpen(false);
+            void openWorkspace();
+          }}
+        />
+      ) : null}
+
       {promptState ? (
         <PromptDialog
           busy={isBusy}
@@ -391,3 +409,5 @@ export function BookPage() {
     </section>
   );
 }
+
+

@@ -180,6 +180,17 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     await loadWorkspace(rootPath, nextSelectedFilePath);
   }
 
+  async function persistDirtyDraftIfNeeded() {
+    const { activeFilePath, draftContent, isDirty, rootPath } = get();
+    if (!rootPath || !activeFilePath || !isDirty) {
+      return;
+    }
+
+    await writeWorkspaceTextFile(rootPath, activeFilePath, draftContent);
+    set({ isDirty: false });
+    setStoredWorkspaceSnapshot(rootPath, activeFilePath);
+  }
+
   return {
     ...initialState,
     closeConfirm: () => set({ confirmState: null }),
@@ -246,6 +257,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     openWorkspace: async () => {
       try {
         set({ errorMessage: null, isBusy: true });
+        await persistDirtyDraftIfNeeded();
         const rootPath = await pickWorkspaceDirectory();
         if (!rootPath) {
           set({ isBusy: false });
@@ -350,6 +362,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         set({ errorMessage: null, isBusy: true });
 
         if (promptState.mode === "createBook") {
+          await persistDirtyDraftIfNeeded();
           const parentPath = await pickWorkspaceDirectory();
           if (!parentPath) {
             set({ isBusy: false });

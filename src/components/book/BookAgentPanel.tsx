@@ -8,7 +8,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       style={{ width }}
       className="flex h-full shrink-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-2 dark:border-[#20242b]">
+      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-1 dark:border-[#20242b]">
         <h2 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
           Agent
         </h2>

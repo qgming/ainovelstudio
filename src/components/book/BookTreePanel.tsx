@@ -1,4 +1,5 @@
 import {
+  BookOpenText,
   FilePlus2,
   FolderPlus,
   Maximize2,
@@ -17,6 +18,7 @@ type BookTreePanelProps = {
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (node: TreeNode) => void;
+  onOpenBookMenu: () => void;
   onRefresh: () => void;
   onRename: (node: TreeNode) => void;
   onSelectFile: (path: string) => void;
@@ -49,6 +51,31 @@ function ToolbarButton({
   );
 }
 
+function WorkspaceButton({
+  busy = false,
+  name,
+  onClick,
+}: {
+  busy?: boolean;
+  name: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="打开书籍菜单"
+      disabled={busy}
+      onClick={onClick}
+      className="flex h-8 min-w-0 items-center gap-2 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
+    >
+      <BookOpenText className="h-4 w-4 shrink-0" />
+      <span className="truncate text-[15px] font-semibold leading-none tracking-[-0.03em]">
+        {name}
+      </span>
+    </button>
+  );
+}
+
 export function BookTreePanel({
   activeFilePath,
   busy = false,
@@ -57,6 +84,7 @@ export function BookTreePanel({
   onCreateFile,
   onCreateFolder,
   onDelete,
+  onOpenBookMenu,
   onRefresh,
   onRename,
   onSelectFile,
@@ -74,11 +102,13 @@ export function BookTreePanel({
       style={{ width }}
       className="flex h-full shrink-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-2 dark:border-[#20242b]">
-        <h2 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
-          {rootNode.name}
-        </h2>
-        <div className="flex items-center gap-0.5">
+      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-2 py-1 dark:border-[#20242b]">
+        <WorkspaceButton
+          busy={busy}
+          name={rootNode.name}
+          onClick={onOpenBookMenu}
+        />
+        <div className="flex shrink-0 items-center gap-0.5">
           <ToolbarButton
             ariaLabel="刷新当前书籍"
             busy={busy}
