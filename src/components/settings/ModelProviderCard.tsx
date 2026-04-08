@@ -12,11 +12,11 @@ const inputClassName =
 
 export function ModelProviderCard({ config, onChange, onReset }: ModelProviderCardProps) {
   return (
-    <section className="rounded-[10px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]">
-      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-3 dark:border-[#20242b]">
-        <div className="flex items-center gap-2 text-[#111827] dark:text-zinc-100">
+    <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">
+      <div className="flex items-center justify-between gap-3 px-3 py-3">
+        <div className="flex items-center gap-2 text-[#111827] dark:text-[#f3f4f6]">
           <PlugZap className="h-4 w-4" />
-          <h2 className="text-sm font-semibold">模型配置</h2>
+          <h2 className="text-[15px] font-semibold tracking-[-0.03em]">模型设置</h2>
         </div>
         <button
           type="button"
@@ -27,7 +27,7 @@ export function ModelProviderCard({ config, onChange, onReset }: ModelProviderCa
         </button>
       </div>
 
-      <div className="grid gap-3 px-4 py-3 lg:grid-cols-2">
+      <div className="grid gap-3 border-t border-[#e2e8f0] px-3 py-3 lg:grid-cols-2 dark:border-[#20242b]">
         <label className="block">
           <span className="mb-1.5 inline-flex items-center gap-2 text-xs font-medium text-[#475569] dark:text-zinc-300">
             <Cable className="h-3.5 w-3.5" />

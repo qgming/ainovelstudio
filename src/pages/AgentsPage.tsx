@@ -17,9 +17,9 @@ export function AgentsPage() {
         { icon: Plus, label: "新建代理", tone: "primary" },
       ]}
     >
-      <div className="h-full overflow-y-auto pr-1">
+      <div className="h-full overflow-y-auto">
         {subAgents.length > 0 ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 pb-6">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-7 dark:border-[#20242b]">
             {subAgents.map((agent) => (
               <SubAgentRow
                 key={agent.id}
@@ -30,7 +30,7 @@ export function AgentsPage() {
             ))}
           </div>
         ) : (
-          <div className="flex h-full min-h-[240px] items-center justify-center rounded-[16px] border border-dashed border-[#d7dde8] bg-[#fbfbfc] px-6 text-sm text-[#64748b] dark:border-[#2a3038] dark:bg-[#15171b] dark:text-zinc-400">
+          <div className="flex h-full min-h-[240px] items-center justify-center border-t border-[#e2e8f0] px-6 text-sm text-[#64748b] dark:border-[#20242b] dark:text-zinc-400">
             暂无可用代理。
           </div>
         )}

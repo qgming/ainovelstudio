@@ -19,8 +19,7 @@ type PageShellProps = {
 const actionStyles: Record<NonNullable<PageAction["tone"]>, string> = {
   default:
     "border-[#d7dde8] bg-transparent text-[#111827] hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-100 dark:hover:bg-[#1b1f26]",
-  dark:
-    "border-[#2c323c] bg-[#2c323c] text-white hover:bg-[#252b34] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white",
+  dark: "border-[#2c323c] bg-[#2c323c] text-white hover:bg-[#252b34] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white",
   primary:
     "border-[#0f172a] bg-[#0f172a] text-white hover:bg-[#1e293b] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white",
 };
@@ -56,7 +55,12 @@ export function PageShell({
           </div>
         ) : null}
       </header>
-      <div className={["min-h-0 flex-1 overflow-hidden px-4 py-3 sm:px-5", contentClassName ?? ""].join(" ")}>
+      <div
+        className={[
+          "min-h-0 flex-1 overflow-hidden",
+          contentClassName ?? "",
+        ].join(" ")}
+      >
         {children}
       </div>
     </section>

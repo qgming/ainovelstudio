@@ -1,29 +1,149 @@
-import { Check, MonitorCog, MoonStar, Wrench } from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
+import { Info, MoonStar, Settings2, Sparkles, Wrench, type LucideIcon } from "lucide-react";
 import { PageShell } from "../components/PageShell";
 import { ModelProviderCard } from "../components/settings/ModelProviderCard";
+import { Switch } from "../components/ui/Switch";
 import { BUILTIN_TOOLS } from "../lib/agent/toolDefs";
 import { useAgentSettingsStore } from "../stores/agentSettingsStore";
 import { useThemeStore } from "../stores/themeStore";
 
-const settingItems = [
+type SettingSectionKey = "basic" | "models" | "tools" | "about";
+
+type SettingNavItem = {
+  icon: LucideIcon;
+  key: SettingSectionKey;
+  title: string;
+};
+
+const settingNavItems: SettingNavItem[] = [
   {
-    title: "工作区偏好",
-    description: "后续可接入默认模板、自动恢复会话与创作模式预设。",
-    icon: MonitorCog,
+    key: "basic",
+    title: "基本设置",
+    icon: Settings2,
+  },
+  {
+    key: "models",
+    title: "模型设置",
+    icon: Sparkles,
+  },
+  {
+    key: "tools",
+    title: "工具库",
+    icon: Wrench,
+  },
+  {
+    key: "about",
+    title: "关于我们",
+    icon: Info,
   },
 ];
 
-function SettingSectionRow({ description, icon: Icon, title }: (typeof settingItems)[number]) {
+
+function SectionCard({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-start gap-3 px-4 py-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#edf1f6] text-[#475569] dark:bg-[#1b1f26] dark:text-zinc-200">
-        <Icon className="h-4 w-4" />
+    <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">
+      {children}
+    </section>
+  );
+}
+
+
+function ThemeSection({
+  theme,
+  toggleTheme,
+}: {
+  theme: "dark" | "light";
+  toggleTheme: () => void;
+}) {
+  return (
+    <SectionCard>
+      <div className="flex items-center justify-between gap-3 px-3 py-3">
+        <div className="flex items-center gap-3">
+          <MoonStar className="h-4 w-4 shrink-0 text-[#111827] dark:text-[#f3f4f6]" />
+          <h2 className="text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
+            主题
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="inline-flex h-8 items-center rounded-[8px] border border-[#0f172a] bg-[#0f172a] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#1e293b] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white"
+        >
+          {theme === "dark" ? "浅色模式" : "深色模式"}
+        </button>
       </div>
-      <div className="min-w-0">
-        <h2 className="text-sm font-medium text-[#111827] dark:text-zinc-100">{title}</h2>
-        <p className="mt-1 text-xs leading-5 text-[#64748b] dark:text-zinc-400">{description}</p>
+    </SectionCard>
+  );
+}
+
+function ToolLibrarySection({
+  enabledCount,
+  enabledTools,
+  toggleTool,
+}: {
+  enabledCount: number;
+  enabledTools: Record<string, boolean>;
+  toggleTool: (toolId: string) => void;
+}) {
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-3 px-3 py-3">
+        <h2 className="text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
+          工具库
+        </h2>
+        <span className="text-xs text-[#64748b] dark:text-zinc-400">已启用 {enabledCount}</span>
       </div>
-    </div>
+      <div className="grid border-t border-[#e2e8f0] sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 dark:border-[#20242b]">
+        {BUILTIN_TOOLS.map((toolDef) => {
+          const enabled = enabledTools[toolDef.id] ?? true;
+          return (
+            <div
+              key={toolDef.id}
+              className="aspect-square border-r border-b border-[#e2e8f0] px-3 py-3 dark:border-[#20242b]"
+            >
+              <div className="flex h-full flex-col">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1 pr-2">
+                    <h3 className="text-sm font-medium text-[#111827] dark:text-zinc-100">{toolDef.name}</h3>
+                    <p className="text-xs text-[#64748b] dark:text-zinc-400">{toolDef.id}</p>
+                  </div>
+                  <Switch
+                    checked={enabled}
+                    label={enabled ? `禁用 ${toolDef.name}` : `启用 ${toolDef.name}`}
+                    onChange={() => toggleTool(toolDef.id)}
+                  />
+                </div>
+                <div className="flex min-h-0 flex-1 items-end pt-3">
+                  <p className="line-clamp-4 text-xs leading-6 text-[#64748b] dark:text-zinc-400">{toolDef.description}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AboutSection() {
+  return (
+    <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">
+      <div className="space-y-2 px-3 py-3 text-sm text-[#475569] dark:text-zinc-300">
+        <div className="flex items-center gap-3 text-[#111827] dark:text-[#f3f4f6]">
+          <Info className="h-4 w-4 shrink-0" />
+          <h2 className="text-[15px] font-semibold tracking-[-0.03em]">
+            AI Novel Studio
+          </h2>
+        </div>
+        <p>
+          面向创作工作流的桌面端写作环境，聚合图书工作区、模型配置与 Agent
+          工具能力。
+        </p>
+        <p>
+          当前设置页采用与图书页一致的分割线式布局，左侧负责导航，右侧负责内容编辑。
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -35,88 +155,76 @@ export function SettingPage() {
   const updateConfig = useAgentSettingsStore((state) => state.updateConfig);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
+  const [activeSection, setActiveSection] =
+    useState<SettingSectionKey>("basic");
 
-  const enabledCount = Object.values(enabledTools).filter(Boolean).length;
+  const enabledCount = useMemo(
+    () => Object.values(enabledTools).filter(Boolean).length,
+    [enabledTools],
+  );
+
+  function renderSectionContent() {
+    if (activeSection === "basic") {
+      return <ThemeSection theme={theme} toggleTheme={toggleTheme} />;
+    }
+
+    if (activeSection === "models") {
+      return (
+        <ModelProviderCard
+          config={config}
+          onChange={updateConfig}
+          onReset={resetConfig}
+        />
+      );
+    }
+
+    if (activeSection === "tools") {
+      return (
+        <ToolLibrarySection
+          enabledCount={enabledCount}
+          enabledTools={enabledTools}
+          toggleTool={toggleTool}
+        />
+      );
+    }
+
+    return <AboutSection />;
+  }
 
   return (
-    <PageShell title="设置">
-      <div className="h-full overflow-y-auto pr-1">
-        <div className="max-w-4xl space-y-3 pb-6">
-          <section className="rounded-[10px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]">
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#edf1f6] text-[#475569] dark:bg-[#1b1f26] dark:text-zinc-200">
-                  <MoonStar className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-semibold text-[#111827] dark:text-zinc-100">主题</h2>
-                  <p className="mt-1 text-xs text-[#64748b] dark:text-zinc-400">
-                    当前：{theme === "dark" ? "深色模式" : "浅色模式"}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="inline-flex h-8 items-center rounded-[8px] border border-[#0f172a] bg-[#0f172a] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#1e293b] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white"
-              >
-                {theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-              </button>
-            </div>
-          </section>
+    <PageShell
+      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">设置</h1>}
+      contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
+    >
+      <div className="flex h-full min-h-0 flex-col gap-0 lg:flex-row">
+        <aside className="w-full shrink-0 overflow-hidden border-b border-[#e2e8f0] dark:border-[#20242b] lg:w-[240px] lg:border-r lg:border-b-0">
+          <div>
+            {settingNavItems.map(({ icon: Icon, key, title }) => {
+              const isActive = activeSection === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveSection(key)}
+                  className={[
+                    "flex h-10 w-full items-center gap-3 border-b border-[#e2e8f0] px-3 text-left transition dark:border-[#20242b]",
+                    isActive
+                      ? "bg-[#eaf3ff] text-[#0f172a] dark:bg-[#162131] dark:text-[#f8fbff]"
+                      : "text-[#334155] hover:bg-[#eef2f7] dark:text-[#cbd5e1] dark:hover:bg-[#171b21]",
+                  ].join(" ")}
+                >
+                  <Icon className="h-4.5 w-4.5 shrink-0" />
+                  <span className="truncate text-[16px] font-medium leading-none tracking-[-0.03em]">
+                    {title}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
 
-          <ModelProviderCard config={config} onChange={updateConfig} onReset={resetConfig} />
-
-          {/* 内置工具列表 */}
-          <section className="rounded-[10px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]">
-            <div className="border-b border-[#e2e8f0] px-4 py-2 dark:border-[#20242b]">
-              <h2 className="text-sm font-semibold text-[#111827] dark:text-zinc-100">
-                内置工具 · 已启用 {enabledCount}
-              </h2>
-            </div>
-            <div className="divide-y divide-[#e2e8f0] dark:divide-[#20242b]">
-              {BUILTIN_TOOLS.map((toolDef) => {
-                const enabled = enabledTools[toolDef.id] ?? true;
-                return (
-                  <div
-                    key={toolDef.id}
-                    className="flex items-center justify-between gap-4 px-4 py-3"
-                  >
-                    <div className="flex min-w-0 gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#edf1f6] text-[#475569] dark:bg-[#1b1f26] dark:text-zinc-200">
-                        <Wrench className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-medium text-[#111827] dark:text-zinc-100">
-                          {toolDef.name}
-                        </h3>
-                        <p className="mt-0.5 text-xs text-[#64748b] dark:text-zinc-400">
-                          {toolDef.description}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleTool(toolDef.id)}
-                      className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border px-3 text-[12px] font-medium transition-colors ${enabled ? "border-[#1f7a52] bg-[#eaf8f0] text-[#1f7a52] dark:border-[#28543f] dark:bg-[#122017] dark:text-[#9dd9b7]" : "border-[#d7dde8] bg-transparent text-[#475569] hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-200 dark:hover:bg-[#1b1f26]"}`}
-                    >
-                      {enabled ? <Check className="h-3.5 w-3.5" /> : null}
-                      {enabled ? "已启用" : "启用"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {settingItems.map((item) => (
-            <section
-              key={item.title}
-              className="rounded-[10px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]"
-            >
-              <SettingSectionRow {...item} />
-            </section>
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div>{renderSectionContent()}</div>
         </div>
       </div>
     </PageShell>
