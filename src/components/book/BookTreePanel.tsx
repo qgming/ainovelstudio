@@ -1,5 +1,5 @@
 import {
-  BookOpenText,
+  ChevronRight,
   FilePlus2,
   FolderPlus,
   Maximize2,
@@ -66,9 +66,9 @@ function WorkspaceButton({
       aria-label="打开书籍菜单"
       disabled={busy}
       onClick={onClick}
-      className="flex h-8 min-w-0 items-center gap-2 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
+      className="flex h-8 min-w-0 items-center gap-0.5 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
     >
-      <BookOpenText className="h-4 w-4 shrink-0" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-black dark:text-white" />
       <span className="truncate text-[15px] font-semibold leading-none tracking-[-0.03em]">
         {name}
       </span>

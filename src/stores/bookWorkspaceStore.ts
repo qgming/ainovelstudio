@@ -45,6 +45,7 @@ export type BookWorkspaceStore = {
   openWorkspace: () => Promise<void>;
   promptState: PromptState | null;
   refreshWorkspace: () => Promise<void>;
+  refreshWorkspaceAfterExternalChange: () => Promise<void>;
   requestDelete: (node: TreeNode) => void;
   resetState: () => void;
   rootNode: TreeNode | null;
@@ -285,6 +286,21 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
           setStoredWorkspaceSnapshot(rootPath, activeFilePath);
         }
 
+        await loadWorkspace(rootPath, activeFilePath);
+      } catch (error) {
+        set({ errorMessage: getReadableError(error) });
+      }
+
+      set({ isBusy: false });
+    },
+    refreshWorkspaceAfterExternalChange: async () => {
+      const { activeFilePath, rootPath } = get();
+      if (!rootPath) {
+        return;
+      }
+
+      try {
+        set({ errorMessage: null, isBusy: true });
         await loadWorkspace(rootPath, activeFilePath);
       } catch (error) {
         set({ errorMessage: getReadableError(error) });

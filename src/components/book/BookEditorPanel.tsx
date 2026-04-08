@@ -45,14 +45,12 @@ export function BookEditorPanel({
           ) : null}
           <button
             type="button"
+            aria-label={busy ? "保存中" : "保存当前文件"}
             disabled={busy}
             onClick={onSave}
-            className="flex h-8 items-center justify-center gap-1 rounded-[8px] bg-[#0b84e7] px-3 text-white transition-colors duration-200 hover:bg-[#0975cd] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-black dark:hover:bg-zinc-200"
+            className="flex h-8 w-8 items-center justify-center rounded-[8px] p-0 text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
           >
-            <Save className="h-3.5 w-3.5" />
-            <span className="text-[11px] font-medium leading-none tracking-[0.01em]">
-              {busy ? "保存中..." : "保存"}
-            </span>
+            <Save className="h-4 w-4" />
           </button>
         </div>
       </header>
