@@ -8,6 +8,7 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
+      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "你好",
@@ -46,6 +47,7 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: "chapter-1.md",
+      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "续写",
@@ -82,6 +84,7 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       abortSignal,
       activeFilePath: null,
+      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "停止测试",
@@ -126,6 +129,7 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
+      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["read_workspace_tree"],
       prompt: "读取目录树",

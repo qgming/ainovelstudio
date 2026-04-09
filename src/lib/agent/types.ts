@@ -8,7 +8,7 @@ export type AgentPart =
   | { type: "reasoning"; summary: string; detail: string; collapsed?: boolean }
   | { type: "tool-call"; toolName: string; status: AgentRunStatus; inputSummary: string; outputSummary?: string }
   | { type: "tool-result"; toolName: string; status: AgentRunStatus; outputSummary: string }
-  | { type: "subagent"; name: string; status: AgentRunStatus; summary: string };
+  | { type: "subagent"; name: string; status: AgentRunStatus; summary: string; detail?: string };
 
 export type AgentMessage = {
   id: string;

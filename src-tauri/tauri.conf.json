@@ -30,7 +30,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "resources/skills"
+      "resources/skills",
+      "resources/agents"
     ],
     "icon": [
       "icons/32x32.png",

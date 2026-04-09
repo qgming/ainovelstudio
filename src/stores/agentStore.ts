@@ -5,6 +5,7 @@ import { createWorkspaceToolset } from "../lib/agent/tools";
 import type { AgentMessage, AgentPart, AgentRun } from "../lib/agent/types";
 import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 import { getEnabledSkills, useSkillsStore } from "./skillsStore";
+import { getEnabledAgents, useSubAgentStore } from "./subAgentStore";
 
 type AgentStoreState = {
   abortController: AbortController | null;
@@ -126,6 +127,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       const workspaceState = useBookWorkspaceStore.getState();
       const providerConfig = useAgentSettingsStore.getState().config ?? getStoredAgentConfig();
       const enabledSkills = getEnabledSkills(useSkillsStore.getState());
+      const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
       const enabledToolsMap = useAgentSettingsStore.getState().enabledTools ?? getStoredEnabledTools();
       const enabledToolIds = Object.entries(enabledToolsMap)
         .filter(([, v]) => v)
@@ -143,6 +145,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       const stream = runAgentTurn({
         abortSignal: abortController.signal,
         activeFilePath: workspaceState.activeFilePath,
+        enabledAgents,
         enabledSkills,
         enabledToolIds,
         prompt: nextInput,

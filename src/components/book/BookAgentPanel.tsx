@@ -3,7 +3,7 @@ import { AgentComposer } from "../agent/AgentComposer";
 import { AgentMessageList } from "../agent/AgentMessageList";
 import { useAgentStore } from "../../stores/agentStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
-import { useSubAgentStore } from "../../stores/subAgentStore";
+import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
 
 type BookAgentPanelProps = {
   width: number;
@@ -54,13 +54,13 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
   const enabledSkills = getEnabledSkills({ manifests, preferences });
-  const enabledSubAgents = useSubAgentStore((state) => state.subAgents).filter(
-    (a) => a.enabled,
-  );
+  const agentManifests = useSubAgentStore((state) => state.manifests);
+  const agentPreferences = useSubAgentStore((state) => state.preferences);
+  const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
   const contextTags = [
     ...baseTags,
     ...enabledSkills.slice(0, 2).map((skill) => `技能: ${skill.name}`),
-    ...enabledSubAgents.slice(0, 2).map((agent) => `代理: ${agent.name}`),
+    ...enabledAgents.slice(0, 2).map((agent) => `代理: ${agent.name}`),
   ];
 
   return (

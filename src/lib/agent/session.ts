@@ -3,12 +3,14 @@ import type { ToolSet } from "ai";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { AgentMessage, AgentPart } from "./types";
-import { streamAgentText, defineTool } from "./modelGateway";
+import { generateAgentText, streamAgentText, defineTool } from "./modelGateway";
 import type { AgentTool } from "./runtime";
+import type { ResolvedAgent } from "../../stores/subAgentStore";
 
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
   activeFilePath: string | null;
+  enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   /** 启用的工具 ID 列表 */
   enabledToolIds: string[];
@@ -24,7 +26,23 @@ function hasProviderConfig(config: AgentProviderConfig) {
   return Boolean(config.apiKey.trim() && config.baseURL.trim() && config.model.trim());
 }
 
-function buildSystemPrompt(enabledSkills: ResolvedSkill[]) {
+function buildAgentPromptBlock(agent: ResolvedAgent) {
+  return [
+    `### 代理: ${agent.name}`,
+    `来源: ${agent.sourceLabel}`,
+    agent.role ? `角色: ${agent.role}` : null,
+    `说明: ${agent.description}`,
+    agent.dispatchHint ? `委派时机: ${agent.dispatchHint}` : null,
+    agent.suggestedTools.length > 0 ? `推荐工具: ${agent.suggestedTools.join(", ")}` : "推荐工具: 无",
+    `AGENTS.md:\n${agent.body}`,
+    agent.toolsPreview ? `TOOLS.md 摘要:\n${agent.toolsPreview}` : null,
+    agent.memoryPreview ? `MEMORY.md 摘要:\n${agent.memoryPreview}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildSystemPrompt(enabledSkills: ResolvedSkill[], enabledAgents: ResolvedAgent[]) {
   const skillBlock =
     enabledSkills.length > 0
       ? enabledSkills
@@ -37,9 +55,7 @@ function buildSystemPrompt(enabledSkills: ResolvedSkill[]) {
               `## 技能: ${skill.name}`,
               `来源: ${skill.sourceLabel}`,
               `说明: ${skill.description}`,
-              skill.suggestedTools.length > 0
-                ? `推荐工具: ${skill.suggestedTools.join(", ")}`
-                : "推荐工具: 无",
+              skill.suggestedTools.length > 0 ? `推荐工具: ${skill.suggestedTools.join(", ")}` : "推荐工具: 无",
               `技能内容:\n${skill.effectivePrompt}`,
               referenceBlock,
             ]
@@ -49,14 +65,82 @@ function buildSystemPrompt(enabledSkills: ResolvedSkill[]) {
           .join("\n\n")
       : "- 当前未启用额外技能";
 
+  const agentBlock =
+    enabledAgents.length > 0
+      ? enabledAgents.map((agent) => buildAgentPromptBlock(agent)).join("\n\n")
+      : "- 当前未启用可委派代理";
+
   return [
     "你是桌面端 AI 小说写作工作台中的主代理。",
-    "你的任务是结合当前章节内容、启用技能和工具结果，为用户提供可执行的创作输出。",
+    "你的任务是结合当前章节内容、启用技能、已启用代理和工具结果，为用户提供可执行的创作输出。",
     "请优先保持中文输出，结构清晰，适合小说创作工作流。",
     "你可以使用提供的工具来读取和操作工作区中的文件。",
+    "当某个任务明显更适合交给某个已启用代理时，请先综合该代理的身份、工具说明与记忆，再输出结果。",
+    "你可以直接吸收代理内容后作答，也可以在心中先让对应代理完成一次子分析，但最终回复仍由你统一给出。",
     "已启用技能：",
     skillBlock,
+    "已启用代理：",
+    agentBlock,
   ].join("\n");
+}
+
+function buildSubAgentSystem(agent: ResolvedAgent, enabledSkills: ResolvedSkill[]) {
+  const skillSummary =
+    enabledSkills.length > 0
+      ? enabledSkills
+          .map((skill) => `- ${skill.name}：${skill.description}\n${skill.effectivePrompt}`)
+          .join("\n\n")
+      : "- 当前没有额外技能";
+
+  return [
+    `你现在扮演子代理：${agent.name}。`,
+    agent.role ? `你的角色是：${agent.role}。` : null,
+    `代理说明：${agent.description}`,
+    agent.dispatchHint ? `适合接手的任务：${agent.dispatchHint}` : null,
+    "以下是你的 AGENTS.md：",
+    agent.body,
+    agent.toolsPreview ? `以下是你的 TOOLS.md 摘要：\n${agent.toolsPreview}` : null,
+    agent.memoryPreview ? `以下是你的 MEMORY.md 摘要：\n${agent.memoryPreview}` : null,
+    enabledSkills.length > 0 ? `可参考的技能：\n${skillSummary}` : null,
+    "请只返回你的专业分析、改写建议或正文结果，不要解释你是子代理。",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+async function maybeRunSubAgent(params: {
+  enabledAgents: ResolvedAgent[];
+  enabledSkills: ResolvedSkill[];
+  prompt: string;
+  providerConfig: AgentProviderConfig;
+}): Promise<{ agent: ResolvedAgent; text: string } | null> {
+  const { enabledAgents, enabledSkills, prompt, providerConfig } = params;
+  if (enabledAgents.length === 0) {
+    return null;
+  }
+
+  const normalizedPrompt = prompt.toLowerCase();
+  const matchedAgent =
+    enabledAgents.find((agent) => agent.tags.some((tag) => normalizedPrompt.includes(tag.toLowerCase()))) ??
+    enabledAgents.find((agent) => agent.role && normalizedPrompt.includes(agent.role.toLowerCase())) ??
+    enabledAgents.find((agent) => agent.dispatchHint && normalizedPrompt.includes(agent.dispatchHint.toLowerCase())) ??
+    enabledAgents[0];
+
+  const subagentPrompt = [
+    "请基于以下用户请求给出你的专业结果。",
+    prompt,
+  ].join("\n\n");
+
+  const text = await generateAgentText({
+    prompt: subagentPrompt,
+    providerConfig,
+    system: buildSubAgentSystem(matchedAgent, enabledSkills),
+  });
+
+  return {
+    agent: matchedAgent,
+    text,
+  };
 }
 
 /** 把 workspace 工具转成 AI SDK ToolSet 格式 */
@@ -67,7 +151,6 @@ function buildAiSdkTools(
   const toolSet: ToolSet = {};
   const enabledSet = new Set(enabledToolIds);
 
-  // read_file 工具
   if (enabledSet.has("read_file") && workspaceTools.read_file) {
     const wsTool = workspaceTools.read_file;
     toolSet.read_file = defineTool({
@@ -82,7 +165,6 @@ function buildAiSdkTools(
     });
   }
 
-  // write_file 工具
   if (enabledSet.has("write_file") && workspaceTools.write_file) {
     const wsTool = workspaceTools.write_file;
     toolSet.write_file = defineTool({
@@ -98,7 +180,6 @@ function buildAiSdkTools(
     });
   }
 
-  // create_file 工具
   if (enabledSet.has("create_file") && workspaceTools.create_file) {
     const wsTool = workspaceTools.create_file;
     toolSet.create_file = defineTool({
@@ -114,7 +195,6 @@ function buildAiSdkTools(
     });
   }
 
-  // create_folder 工具
   if (enabledSet.has("create_folder") && workspaceTools.create_folder) {
     const wsTool = workspaceTools.create_folder;
     toolSet.create_folder = defineTool({
@@ -130,7 +210,6 @@ function buildAiSdkTools(
     });
   }
 
-  // delete_path 工具
   if (enabledSet.has("delete_path") && workspaceTools.delete_path) {
     const wsTool = workspaceTools.delete_path;
     toolSet.delete_path = defineTool({
@@ -145,7 +224,6 @@ function buildAiSdkTools(
     });
   }
 
-  // rename_path 工具
   if (enabledSet.has("rename_path") && workspaceTools.rename_path) {
     const wsTool = workspaceTools.rename_path;
     toolSet.rename_path = defineTool({
@@ -161,7 +239,6 @@ function buildAiSdkTools(
     });
   }
 
-  // read_workspace_tree 工具
   if (enabledSet.has("read_workspace_tree") && workspaceTools.read_workspace_tree) {
     const wsTool = workspaceTools.read_workspace_tree;
     toolSet.read_workspace_tree = defineTool({
@@ -193,6 +270,7 @@ function createSystemMessage(text: string): AgentMessage {
 export async function* runAgentTurn({
   abortSignal,
   activeFilePath,
+  enabledAgents,
   enabledSkills,
   enabledToolIds,
   prompt,
@@ -205,13 +283,32 @@ export async function* runAgentTurn({
     return;
   }
 
-  const system = buildSystemPrompt(enabledSkills);
+  const maybeSubAgent = await maybeRunSubAgent({
+    enabledAgents,
+    enabledSkills,
+    prompt,
+    providerConfig,
+  });
+
+  if (maybeSubAgent) {
+    yield {
+      type: "subagent",
+      name: maybeSubAgent.agent.name,
+      status: "completed",
+      summary: `已委派给 ${maybeSubAgent.agent.name}`,
+      detail: maybeSubAgent.text,
+    };
+  }
+
+  const system = buildSystemPrompt(enabledSkills, enabledAgents);
   const aiTools = buildAiSdkTools(workspaceTools, enabledToolIds);
 
-  // 构建用户消息，包含文件上下文
   let userContent = prompt;
   if (activeFilePath) {
     userContent = `[当前活动文件: ${activeFilePath}]\n\n${prompt}`;
+  }
+  if (maybeSubAgent) {
+    userContent += `\n\n[子代理 ${maybeSubAgent.agent.name} 的预分析]\n${maybeSubAgent.text}`;
   }
 
   const result = _streamFn({
@@ -255,7 +352,6 @@ export async function* runAgentTurn({
         break;
 
       default:
-        // 忽略其他 stream part 类型（start-step, finish-step 等）
         break;
     }
   }

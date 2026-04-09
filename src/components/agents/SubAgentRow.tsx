@@ -1,9 +1,9 @@
 import type { KeyboardEvent } from "react";
-import type { SubAgentDefinition } from "../../stores/subAgentStore";
+import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { Switch } from "../ui/Switch";
 
 type SubAgentRowProps = {
-  agent: SubAgentDefinition;
+  agent: ResolvedAgent;
   onOpen: () => void;
   onToggle: () => void;
 };
@@ -33,10 +33,7 @@ export function SubAgentRow({ agent, onOpen, onToggle }: SubAgentRowProps) {
         </div>
 
         <div className="min-h-0 flex-1 pt-3">
-          <p className="line-clamp-2 text-xs leading-5 text-[#526074] dark:text-zinc-300">
-            {agent.role}
-          </p>
-          <p className="mt-2 line-clamp-3 text-xs leading-5 text-[#64748b] dark:text-zinc-400">
+          <p className="line-clamp-3 text-xs leading-5 text-[#64748b] dark:text-zinc-400">
             {agent.description}
           </p>
         </div>

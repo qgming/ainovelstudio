@@ -1,83 +1,296 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import {
+  createAgent,
+  deleteInstalledAgent,
+  importAgentZip,
+  initializeBuiltinAgents,
+  pickAgentArchive,
+  scanInstalledAgents,
+  type AgentManifest,
+  type AgentSourceKind,
+} from "../lib/agents/api";
 
-/** 子代理定义 */
-export type SubAgentDefinition = {
-  /** 唯一标识 */
-  id: string;
-  /** 显示名称 */
-  name: string;
-  /** 一句话角色定位 */
-  role: string;
-  /** 详细说明 */
-  description: string;
-  /** 是否启用 */
+const STORAGE_KEY = "ainovelstudio-agents-preferences";
+
+export type AgentValidation = AgentManifest["validation"];
+export type AgentSource = AgentSourceKind;
+
+export type ResolvedAgent = AgentManifest & {
   enabled: boolean;
-  /** 来源 */
-  source: "builtin" | "imported";
-  /** lucide 图标名 */
-  avatar: string;
+  files: string[];
+  sourceLabel: string;
+};
+
+
+type AgentPreferences = {
+  enabledById: Record<string, boolean>;
 };
 
 type SubAgentState = {
-  subAgents: SubAgentDefinition[];
-  toggleSubAgent: (id: string) => void;
+  errorMessage: string | null;
+  lastScannedAt: number | null;
+  manifests: AgentManifest[];
+  preferences: AgentPreferences;
+  status: "idle" | "loading" | "ready" | "error";
 };
 
-const builtinSubAgents: SubAgentDefinition[] = [
-  {
-    id: "editor",
-    name: "编辑",
-    role: "审查叙事节奏、结构完整性和章节衔接",
-    description:
-      "从专业编辑视角审视稿件，检查叙事节奏是否流畅、章节之间的衔接是否自然、故事结构是否完整。标注冗余段落、断裂的伏笔和需要补充的过渡场景。",
-    enabled: true,
-    source: "builtin",
-    avatar: "PenLine",
-  },
-  {
-    id: "senior-reader",
-    name: "资深读者",
-    role: "以深度读者视角评估沉浸感和情感张力",
-    description:
-      "模拟资深读者的阅读体验，评估故事的沉浸感、情感张力和角色共情度。指出让人出戏的情节、薄弱的情感高潮和缺乏吸引力的段落。",
-    enabled: true,
-    source: "builtin",
-    avatar: "BookOpen",
-  },
-  {
-    id: "internet-critic",
-    name: "网络喷子",
-    role: "模拟苛刻读者挑刺，找出逻辑漏洞和尬点",
-    description:
-      "以最挑剔的网络读者身份审阅，专门寻找逻辑漏洞、不合理设定、尴尬对话和令人出戏的情节。用犀利但有建设性的方式指出问题。",
-    enabled: false,
-    source: "builtin",
-    avatar: "MessageCircleWarning",
-  },
-  {
-    id: "risk-reviewer",
-    name: "风险审核",
-    role: "检查敏感内容、政策合规和出版风险",
-    description:
-      "扫描文本中的敏感内容、潜在政策违规和出版风险点。覆盖暴力尺度、意识形态表达、版权风险和平台审核红线。",
-    enabled: false,
-    source: "builtin",
-    avatar: "ShieldAlert",
-  },
-];
+type SubAgentActions = {
+  createAgent: (name: string, description: string) => Promise<string>;
+  deleteInstalledAgentById: (agentId: string) => Promise<void>;
+  hydrate: () => Promise<void>;
+  importAgentPackage: () => Promise<void>;
+  initialize: () => Promise<void>;
+  refresh: () => Promise<void>;
+  reset: () => void;
+  toggleAgent: (agentId: string) => void;
+};
 
-export const useSubAgentStore = create<SubAgentState>()(
-  persist(
-    (set) => ({
-      subAgents: builtinSubAgents,
-      toggleSubAgent: (id) =>
-        set((state) => ({
-          subAgents: state.subAgents.map((agent) =>
-            agent.id === id ? { ...agent, enabled: !agent.enabled } : agent,
-          ),
-        })),
+export type SubAgentStore = SubAgentState & SubAgentActions;
+
+function readPreferences(): AgentPreferences {
+  if (typeof window === "undefined") {
+    return { enabledById: {} };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return { enabledById: {} };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<AgentPreferences>;
+    return {
+      enabledById: parsed.enabledById && typeof parsed.enabledById === "object" ? parsed.enabledById : {},
+    };
+  } catch {
+    return { enabledById: {} };
+  }
+}
+
+function persistPreferences(preferences: AgentPreferences) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+}
+
+function formatAgentsError(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+  if (typeof error === "object" && error !== null) {
+    const message = Reflect.get(error, "message");
+    if (typeof message === "string" && message.trim().length > 0) {
+      return message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return fallbackMessage;
+    }
+  }
+  return fallbackMessage;
+}
+
+function getSourceLabel(sourceKind: AgentSourceKind) {
+  switch (sourceKind) {
+    case "builtin-package":
+      return "内置";
+    case "installed-package":
+      return "已安装";
+    default:
+      return "代理";
+  }
+}
+
+function sortManifests(manifests: AgentManifest[]) {
+  return [...manifests].sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+}
+
+function resolveFiles() {
+  return ["AGENTS.md", "TOOLS.md", "MEMORY.md"];
+}
+
+function resolveAgents(manifests: AgentManifest[], preferences: AgentPreferences): ResolvedAgent[] {
+  return manifests.map((agent) => ({
+    ...agent,
+    enabled: Boolean(preferences.enabledById[agent.id]),
+    files: resolveFiles(),
+    sourceLabel: getSourceLabel(agent.sourceKind),
+  }));
+}
+
+function buildInitialState(): SubAgentState {
+  return {
+    errorMessage: null,
+    lastScannedAt: null,
+    manifests: [],
+    preferences: readPreferences(),
+    status: "idle",
+  };
+}
+
+async function loadInstalledManifests() {
+  return sortManifests(await scanInstalledAgents());
+}
+
+export function getResolvedAgents(state: Pick<SubAgentState, "manifests" | "preferences">) {
+  return resolveAgents(state.manifests, state.preferences);
+}
+
+export function getEnabledAgents(state: Pick<SubAgentState, "manifests" | "preferences">) {
+  return getResolvedAgents(state).filter((agent) => agent.enabled);
+}
+
+export const useSubAgentStore = create<SubAgentStore>((set) => ({
+  ...buildInitialState(),
+  createAgent: async (name, description) => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+    try {
+      const manifests = sortManifests(await createAgent(name, description));
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+      return name;
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatAgentsError(error, "创建代理失败。"),
+        status: "error",
+      }));
+      throw error;
+    }
+  },
+  deleteInstalledAgentById: async (agentId) => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+    try {
+      const manifests = sortManifests(await deleteInstalledAgent(agentId));
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatAgentsError(error, "删除代理失败。"),
+        status: "error",
+      }));
+      throw error;
+    }
+  },
+  hydrate: async () => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+    try {
+      const manifests = await loadInstalledManifests();
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatAgentsError(error, "代理扫描失败。"),
+        manifests: [],
+        status: "error",
+      }));
+    }
+  },
+  importAgentPackage: async () => {
+    const zipPath = await pickAgentArchive();
+    if (!zipPath) {
+      return;
+    }
+
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+    try {
+      const manifests = sortManifests(await importAgentZip(zipPath));
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatAgentsError(error, "代理导入失败。"),
+        status: "error",
+      }));
+    }
+  },
+  initialize: async () => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+    try {
+      await initializeBuiltinAgents();
+      const manifests = await loadInstalledManifests();
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatAgentsError(error, "代理初始化失败。"),
+        manifests: [],
+        status: "error",
+      }));
+    }
+  },
+  refresh: async () => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+    try {
+      const manifests = sortManifests(await scanInstalledAgents());
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatAgentsError(error, "代理刷新失败。"),
+        status: "error",
+      }));
+    }
+  },
+  reset: () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+    set(buildInitialState());
+  },
+  toggleAgent: (agentId) =>
+    set((state) => {
+      const nextPreferences = {
+        enabledById: {
+          ...state.preferences.enabledById,
+          [agentId]: !state.preferences.enabledById[agentId],
+        },
+      };
+      persistPreferences(nextPreferences);
+      return {
+        ...state,
+        preferences: nextPreferences,
+      };
     }),
-    { name: "ainovelstudio-subagents" },
-  ),
-);
+}));

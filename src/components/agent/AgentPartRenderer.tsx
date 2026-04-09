@@ -58,7 +58,6 @@ function StatusPill({ status }: { status: "idle" | "running" | "completed" | "fa
   );
 }
 
-/** 可折叠手风琴容器 */
 function AccordionCard({
   children,
   icon: Icon,
@@ -100,7 +99,6 @@ function AccordionCard({
 }
 
 export function AgentPartRenderer({ part }: { part: AgentPart }) {
-  // text-delta 已在 agentStore 的 mergePart 中转为 text，此处做安全兜底
   if (part.type === "text-delta") {
     return null;
   }
@@ -144,10 +142,16 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
     return null;
   }
 
-  // subagent
   return (
     <AccordionCard icon={Users} label={part.name} summary={part.summary} status={part.status}>
-      <p className="text-sm leading-6 text-[#5a4c82] dark:text-[#b9acd9]">{part.summary}</p>
+      <div className="space-y-2">
+        <p className="text-sm leading-6 text-[#5a4c82] dark:text-[#b9acd9]">{part.summary}</p>
+        {part.detail ? (
+          <div className="rounded-[8px] bg-[#f4f7fb] px-2.5 py-2 text-sm leading-6 text-[#42536b] dark:bg-[#1a1f27] dark:text-[#c1cede]">
+            {part.detail}
+          </div>
+        ) : null}
+      </div>
     </AccordionCard>
   );
 }

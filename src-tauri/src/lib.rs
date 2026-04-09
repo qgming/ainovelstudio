@@ -1,3 +1,4 @@
+mod agents;
 mod skills;
 mod workspace;
 
@@ -7,6 +8,15 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            agents::pick_agent_archive,
+            agents::scan_installed_agents,
+            agents::initialize_builtin_agents,
+            agents::read_agent_detail,
+            agents::read_agent_file_content,
+            agents::write_agent_file_content,
+            agents::create_agent,
+            agents::delete_installed_agent,
+            agents::import_agent_zip,
             workspace::pick_book_directory,
             workspace::read_workspace_tree,
             workspace::read_text_file,
