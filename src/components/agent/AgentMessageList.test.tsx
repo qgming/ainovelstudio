@@ -17,7 +17,6 @@ describe("BookAgentPanel", () => {
     expect(screen.getByRole("button", { name: "发送消息" })).toBeInTheDocument();
     expect(screen.queryByText("未配置模型")).not.toBeInTheDocument();
     expect(screen.queryByText("空闲")).not.toBeInTheDocument();
-    // 初始无消息，不应有思考/工具卡片
     expect(screen.queryByText("思考")).not.toBeInTheDocument();
     expect(screen.queryByText("read_file")).not.toBeInTheDocument();
   });
@@ -49,7 +48,8 @@ describe("BookAgentPanel", () => {
     const { rerender } = render(<BookAgentPanel width={420} />);
 
     expect(screen.getByText("read_workspace_tree")).toBeInTheDocument();
-    expect(screen.getByText("运行中")).toBeInTheDocument();
+    expect(screen.getByLabelText("运行中")).toBeInTheDocument();
+    expect(screen.queryByText("运行中")).not.toBeInTheDocument();
 
     useAgentStore.setState({
       run: {
@@ -77,7 +77,8 @@ describe("BookAgentPanel", () => {
 
     rerender(<BookAgentPanel width={420} />);
 
-    expect(screen.getByText("运行成功")).toBeInTheDocument();
+    expect(screen.getByLabelText("运行成功")).toBeInTheDocument();
+    expect(screen.queryByText("运行成功")).not.toBeInTheDocument();
     expect(screen.queryAllByText("read_workspace_tree")).toHaveLength(1);
   });
 
@@ -135,14 +136,186 @@ describe("BookAgentPanel", () => {
     expect(screen.getByText("read_file")).toBeInTheDocument();
   });
 
-  it("支持输入并追加用户消息", () => {
+  it("发送后立即显示思考中占位", () => {
+    useAgentStore.setState({
+      run: {
+        id: "run-test",
+        status: "running",
+        title: "",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            author: "你",
+            parts: [{ type: "text", text: "继续扩写这一章" }],
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [{ type: "placeholder", text: "思考中..." }],
+          },
+        ],
+      },
+    });
+
     render(<BookAgentPanel width={420} />);
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Agent 输入框" }), {
-      target: { value: "继续扩写这一章" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(screen.getByText("思考中...")).toBeInTheDocument();
+  });
 
-    expect(screen.getByText("继续扩写这一章")).toBeInTheDocument();
+  it("支持 Markdown 渲染用户与 assistant 文本", () => {
+    useAgentStore.setState({
+      run: {
+        id: "run-test",
+        status: "completed",
+        title: "",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            author: "你",
+            parts: [{ type: "text", text: "**粗体用户**\n\n- 条目一" }],
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [{ type: "text", text: "# 标题\n\n```ts\nconst value = 1\n```" }],
+          },
+        ],
+      },
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    expect(screen.getByText("粗体用户").tagName).toBe("STRONG");
+    expect(screen.getByText("条目一").tagName).toBe("LI");
+    expect(screen.getByRole("heading", { name: "标题" })).toBeInTheDocument();
+    const codeBlock = screen.getByText("const value = 1");
+    expect(codeBlock.tagName).toBe("CODE");
+    expect(codeBlock.closest("pre")).not.toBeNull();
+  });
+
+  it("子代理卡片展开后显示带摘要的时间线", () => {
+    useAgentStore.setState({
+      run: {
+        id: "run-test",
+        status: "completed",
+        title: "",
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [
+              {
+                type: "subagent",
+                id: "subagent-1",
+                name: "剧情代理",
+                status: "completed",
+                summary: "剧情代理已完成分析",
+                detail: "建议提前铺垫主角动机。",
+                parts: [
+                  {
+                    type: "reasoning",
+                    summary: "思考中...",
+                    detail: "正在分析冲突走向，准备判断主角动机是否需要提前铺垫，并整理后续节奏。",
+                  },
+                  {
+                    type: "tool-call",
+                    toolName: "read_file",
+                    status: "completed",
+                    inputSummary: '{"path":"章节/第一章.md"}',
+                    outputSummary: "已读取当前章节，发现主角在入城段落之后直接进入冲突，缺少迟疑和动机铺垫。",
+                  },
+                  {
+                    type: "text",
+                    text: "建议先补一段主角迟疑，再推进后续冲突，让人物动机更完整。",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /剧情代理/ }));
+
+    expect(screen.getByText("时间线")).toBeInTheDocument();
+    expect(screen.getByText("已接收任务")).toBeInTheDocument();
+    expect(screen.getByText("深度思考")).toBeInTheDocument();
+    expect(screen.getByText("调用工具：read_file")).toBeInTheDocument();
+    expect(screen.getByText("生成结果")).toBeInTheDocument();
+    expect(screen.getByText(/正在分析冲突走向/)).toBeInTheDocument();
+    expect(screen.getByText(/已读取当前章节/)).toBeInTheDocument();
+    expect(screen.getByText(/建议先补一段主角迟疑/)).toBeInTheDocument();
+  });
+
+  it("同一个子代理更新后仍只保留一张卡片", () => {
+    useAgentStore.setState({
+      run: {
+        id: "run-test",
+        status: "running",
+        title: "",
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [
+              {
+                type: "subagent",
+                id: "subagent-1",
+                name: "剧情代理",
+                status: "running",
+                summary: "已委托给剧情代理",
+                parts: [{ type: "reasoning", summary: "思考中...", detail: "正在分析请求。" }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const { rerender } = render(<BookAgentPanel width={420} />);
+    expect(screen.queryAllByText("剧情代理")).toHaveLength(1);
+
+    useAgentStore.setState({
+      run: {
+        id: "run-test",
+        status: "completed",
+        title: "",
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [
+              {
+                type: "subagent",
+                id: "subagent-1",
+                name: "剧情代理",
+                status: "completed",
+                summary: "剧情代理已完成分析",
+                detail: "建议提前铺垫主角动机。",
+                parts: [
+                  { type: "reasoning", summary: "思考中...", detail: "正在分析请求。" },
+                  { type: "text", text: "建议先补一段主角迟疑。" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    rerender(<BookAgentPanel width={420} />);
+
+    expect(screen.queryAllByText("剧情代理")).toHaveLength(1);
+    expect(screen.getByLabelText("运行成功")).toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@ import type { ToolSet } from "ai";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { AgentMessage, AgentPart } from "./types";
-import { generateAgentText, streamAgentText, defineTool } from "./modelGateway";
+import { streamAgentText, defineTool } from "./modelGateway";
 import type { AgentTool } from "./runtime";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 
@@ -20,6 +20,8 @@ type RunAgentTurnInput = {
   workspaceTools: Record<string, AgentTool>;
   /** 可选：用于测试注入的流式调用 */
   _streamFn?: typeof streamAgentText;
+  /** 可选：用于测试注入的子代理流式调用 */
+  _subagentStreamFn?: typeof streamAgentText;
 };
 
 function hasProviderConfig(config: AgentProviderConfig) {
@@ -108,13 +110,81 @@ function buildSubAgentSystem(agent: ResolvedAgent, enabledSkills: ResolvedSkill[
     .join("\n\n");
 }
 
+function createSubagentSnapshot({
+  detail,
+  id,
+  name,
+  parts,
+  status,
+  summary,
+}: {
+  detail?: string;
+  id: string;
+  name: string;
+  parts: AgentPart[];
+  status: "running" | "completed" | "failed";
+  summary: string;
+}): Extract<AgentPart, { type: "subagent" }> {
+  return {
+    type: "subagent",
+    id,
+    name,
+    status,
+    summary,
+    detail,
+    parts: [...parts],
+  };
+}
+
+function mergeSubagentInnerParts(parts: AgentPart[], part: AgentPart): AgentPart[] {
+  if (part.type === "text-delta") {
+    const last = parts[parts.length - 1];
+    if (last && last.type === "text") {
+      return [...parts.slice(0, -1), { ...last, text: last.text + part.delta }];
+    }
+    return [...parts, { type: "text", text: part.delta }];
+  }
+
+  if (part.type === "reasoning") {
+    const last = parts[parts.length - 1];
+    if (last && last.type === "reasoning") {
+      return [...parts.slice(0, -1), { ...last, detail: last.detail + part.detail }];
+    }
+    return [...parts, part];
+  }
+
+  if (part.type === "tool-result") {
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const candidate = parts[index];
+      if (candidate?.type === "tool-call" && candidate.toolName === part.toolName && candidate.status === "running") {
+        return [
+          ...parts.slice(0, index),
+          {
+            ...candidate,
+            status: part.status,
+            outputSummary: part.outputSummary,
+          },
+          ...parts.slice(index + 1),
+        ];
+      }
+    }
+  }
+
+  return [...parts, part];
+}
+
 async function maybeRunSubAgent(params: {
+  abortSignal?: AbortSignal;
   enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   prompt: string;
   providerConfig: AgentProviderConfig;
-}): Promise<{ agent: ResolvedAgent; text: string } | null> {
-  const { enabledAgents, enabledSkills, prompt, providerConfig } = params;
+  streamFn: typeof streamAgentText;
+  workspaceTools: Record<string, AgentTool>;
+  enabledToolIds: string[];
+  onProgress?: (snapshot: AgentPart & { type: "subagent" }) => void;
+}): Promise<{ agent: ResolvedAgent; text: string; subagentId: string } | null> {
+  const { abortSignal, enabledAgents, enabledSkills, prompt, providerConfig, streamFn, workspaceTools, enabledToolIds, onProgress } = params;
   if (enabledAgents.length === 0) {
     return null;
   }
@@ -131,15 +201,99 @@ async function maybeRunSubAgent(params: {
     prompt,
   ].join("\n\n");
 
-  const text = await generateAgentText({
-    prompt: subagentPrompt,
+  const subagentId = `subagent-${matchedAgent.id}-${Date.now()}`;
+  const innerParts: AgentPart[] = [];
+  const subagentTools = buildAiSdkTools(workspaceTools, enabledToolIds);
+
+  onProgress?.(
+    createSubagentSnapshot({
+      id: subagentId,
+      name: matchedAgent.name,
+      status: "running",
+      summary: `已委托给 ${matchedAgent.name}`,
+      parts: innerParts,
+    }),
+  );
+
+  const result = streamFn({
+    abortSignal,
+    messages: [{ role: "user", content: subagentPrompt }],
     providerConfig,
     system: buildSubAgentSystem(matchedAgent, enabledSkills),
+    tools: Object.keys(subagentTools).length > 0 ? subagentTools : undefined,
   });
+
+  for await (const part of result.fullStream) {
+    let mappedPart: AgentPart | null = null;
+
+    switch (part.type) {
+      case "text-delta":
+        mappedPart = { type: "text-delta", delta: part.text };
+        break;
+      case "reasoning-delta":
+        mappedPart = {
+          type: "reasoning",
+          summary: "思考中...",
+          detail: part.text,
+        };
+        break;
+      case "tool-call":
+        mappedPart = {
+          type: "tool-call",
+          toolName: part.toolName,
+          status: "running",
+          inputSummary: JSON.stringify(part.input),
+        };
+        break;
+      case "tool-result":
+        mappedPart = {
+          type: "tool-result",
+          toolName: part.toolName,
+          status: "completed",
+          outputSummary: typeof part.output === "string" ? part.output : JSON.stringify(part.output),
+        };
+        break;
+      default:
+        break;
+    }
+
+    if (!mappedPart) {
+      continue;
+    }
+
+    const mergedParts = mergeSubagentInnerParts(innerParts, mappedPart);
+    innerParts.splice(0, innerParts.length, ...mergedParts);
+    onProgress?.(
+      createSubagentSnapshot({
+        id: subagentId,
+        name: matchedAgent.name,
+        status: "running",
+        summary: `${matchedAgent.name} 执行中`,
+        parts: innerParts,
+      }),
+    );
+  }
+
+  const finalText = innerParts
+    .filter((part): part is Extract<AgentPart, { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("\n\n");
+
+  onProgress?.(
+    createSubagentSnapshot({
+      id: subagentId,
+      name: matchedAgent.name,
+      status: "completed",
+      summary: `${matchedAgent.name} 已完成分析`,
+      detail: finalText,
+      parts: innerParts,
+    }),
+  );
 
   return {
     agent: matchedAgent,
-    text,
+    text: finalText,
+    subagentId,
   };
 }
 
@@ -277,36 +431,45 @@ export async function* runAgentTurn({
   providerConfig,
   workspaceTools,
   _streamFn = streamAgentText,
+  _subagentStreamFn = streamAgentText,
 }: RunAgentTurnInput): AsyncGenerator<AgentPart> {
+  const progressQueue: AgentPart[] = [];
   if (!hasProviderConfig(providerConfig)) {
     yield { type: "text", text: "请先前往设置页配置 Base URL、API Key 和模型名称，再运行 Agent。" };
     return;
   }
 
+  const aiTools = buildAiSdkTools(workspaceTools, enabledToolIds);
+  const system = buildSystemPrompt(enabledSkills, enabledAgents);
+  let userContent = activeFilePath
+    ? [
+        `当前激活文件: ${activeFilePath}`,
+        "用户请求:",
+        prompt,
+      ].join("\n\n")
+    : prompt;
+
   const maybeSubAgent = await maybeRunSubAgent({
+    abortSignal,
     enabledAgents,
     enabledSkills,
     prompt,
     providerConfig,
+    streamFn: _subagentStreamFn,
+    workspaceTools,
+    enabledToolIds,
+    onProgress: (snapshot) => {
+      progressQueue.push(snapshot);
+    },
   });
 
-  if (maybeSubAgent) {
-    yield {
-      type: "subagent",
-      name: maybeSubAgent.agent.name,
-      status: "completed",
-      summary: `已委派给 ${maybeSubAgent.agent.name}`,
-      detail: maybeSubAgent.text,
-    };
+  while (progressQueue.length > 0) {
+    const snapshot = progressQueue.shift();
+    if (snapshot) {
+      yield snapshot;
+    }
   }
 
-  const system = buildSystemPrompt(enabledSkills, enabledAgents);
-  const aiTools = buildAiSdkTools(workspaceTools, enabledToolIds);
-
-  let userContent = prompt;
-  if (activeFilePath) {
-    userContent = `[当前活动文件: ${activeFilePath}]\n\n${prompt}`;
-  }
   if (maybeSubAgent) {
     userContent += `\n\n[子代理 ${maybeSubAgent.agent.name} 的预分析]\n${maybeSubAgent.text}`;
   }

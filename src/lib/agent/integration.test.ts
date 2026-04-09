@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { runAgentTurn } from "./session";
 import type { AgentPart } from "./types";
 
@@ -174,5 +175,176 @@ describe("agent session (streaming)", () => {
           '{"kind":"directory","name":"北境余烬","path":"C:/books/北境余烬","children":[{"kind":"directory","name":"章节","path":"C:/books/北境余烬/章节"}]}',
       },
     ]);
+  });
+
+  it("连续多个同名工具调用时，每个完成状态都能正确回填", async () => {
+    const parts: AgentPart[] = [];
+
+    async function* mockFullStream() {
+      yield { type: "tool-call" as const, toolName: "read_file", input: { path: "章节/第一章.md" } };
+      yield { type: "tool-call" as const, toolName: "read_file", input: { path: "章节/第二章.md" } };
+      yield { type: "tool-result" as const, toolName: "read_file", output: "已读取第一章" };
+      yield { type: "tool-result" as const, toolName: "read_file", output: "已读取第二章" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["read_file"],
+      prompt: "连续读取章节",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {
+        read_file: {
+          description: "读取文件",
+          execute: async () => ({
+            ok: true,
+            summary: "已读取文件",
+          }),
+        },
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    expect(parts).toEqual([
+      {
+        type: "tool-call",
+        toolName: "read_file",
+        status: "running",
+        inputSummary: '{"path":"章节/第一章.md"}',
+      },
+      {
+        type: "tool-call",
+        toolName: "read_file",
+        status: "running",
+        inputSummary: '{"path":"章节/第二章.md"}',
+      },
+      {
+        type: "tool-result",
+        toolName: "read_file",
+        status: "completed",
+        outputSummary: "已读取第一章",
+      },
+      {
+        type: "tool-result",
+        toolName: "read_file",
+        status: "completed",
+        outputSummary: "已读取第二章",
+      },
+    ]);
+  });
+
+    const parts: AgentPart[] = [];
+
+    async function* mockSubagentFullStream() {
+      yield { type: "reasoning-delta" as const, text: "正在分析人物动机。" };
+      yield { type: "tool-call" as const, toolName: "read_file", input: { path: "章节/第一章.md" } };
+      yield { type: "tool-result" as const, toolName: "read_file", output: "已读取当前章节" };
+      yield { type: "text-delta" as const, text: "建议先补一段主角迟疑。" };
+    }
+
+    async function* mockMainFullStream() {
+      yield { type: "text-delta" as const, text: "主代理已整合子代理建议。" };
+    }
+
+    const mockSubagentStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockSubagentFullStream(),
+    });
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockMainFullStream(),
+    });
+    const enabledAgent: ResolvedAgent = {
+      id: "plot-agent",
+      name: "剧情代理",
+      description: "负责剧情推进",
+      role: "剧情",
+      tags: ["剧情", "动机"],
+      sourceLabel: "内置",
+      body: "专注处理剧情与人物动机。",
+      toolsPreview: "可读取章节文件",
+      memoryPreview: "记住当前故事走向",
+      suggestedTools: ["read_file"],
+      enabled: true,
+      files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+      sourceKind: "builtin-package",
+      dispatchHint: "当用户询问剧情推进时",
+      validation: { errors: [], isValid: true, warnings: [] },
+      discoveredAt: Date.now(),
+      isBuiltin: true,
+      rawMarkdown: "# 剧情代理",
+    };
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      enabledAgents: [enabledAgent],
+      enabledSkills: [],
+      enabledToolIds: ["read_file"],
+      prompt: "帮我分析主角动机",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {
+        read_file: {
+          description: "读取文件",
+          execute: async () => ({
+            ok: true,
+            summary: "已读取当前章节",
+          }),
+        },
+      },
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    const subagentParts = parts.filter((part): part is Extract<AgentPart, { type: "subagent" }> => part.type === "subagent");
+    expect(subagentParts).toHaveLength(6);
+    expect(new Set(subagentParts.map((part) => part.id)).size).toBe(1);
+    expect(subagentParts[0]).toMatchObject({
+      type: "subagent",
+      status: "running",
+      summary: "已委托给 剧情代理",
+      parts: [],
+    });
+    expect(subagentParts[3].parts).toEqual([
+      { type: "reasoning", summary: "思考中...", detail: "正在分析人物动机。" },
+      {
+        type: "tool-call",
+        toolName: "read_file",
+        status: "completed",
+        inputSummary: '{"path":"章节/第一章.md"}',
+        outputSummary: "已读取当前章节",
+      },
+    ]);
+    expect(subagentParts[5]).toMatchObject({
+      status: "completed",
+      summary: "剧情代理 已完成分析",
+      detail: "建议先补一段主角迟疑。",
+    });
+    expect(subagentParts[5].parts.at(-1)).toEqual({ type: "text", text: "建议先补一段主角迟疑。" });
+    expect(parts.at(-1)).toEqual({ type: "text-delta", delta: "主代理已整合子代理建议。" });
+    expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockStreamFn).toHaveBeenCalledTimes(1);
   });
 });

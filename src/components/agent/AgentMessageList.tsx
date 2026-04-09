@@ -26,11 +26,8 @@ export function AgentMessageList({ messages }: AgentMessageListProps) {
           return (
             <article key={message.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[94%] space-y-2 ${isUser ? "items-end" : "items-start"}`}>
-                <span className={`text-[11px] font-semibold ${isUser ? "text-[#111827] dark:text-zinc-100" : "text-[#64748b] dark:text-zinc-400"}`}>
-                  {message.author}
-                </span>
                 {message.parts.map((part, index) => {
-                  if (part.type === "text") {
+                  if (part.type === "text" || part.type === "placeholder") {
                     return (
                       <div
                         key={`${message.id}-${index}`}

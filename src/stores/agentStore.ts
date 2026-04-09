@@ -50,42 +50,66 @@ function buildUserMessage(text: string): AgentMessage {
   };
 }
 
+function buildAssistantPlaceholderMessage(): AgentMessage {
+  return {
+    id: `assistant-${Date.now()}`,
+    role: "assistant",
+    author: "主代理",
+    parts: [{ type: "placeholder", text: "思考中..." }],
+  };
+}
+
 /** 将流式 part 合并到 assistant message 的 parts 数组 */
 function mergePart(parts: AgentPart[], part: AgentPart): AgentPart[] {
+  const nextParts = parts[0]?.type === "placeholder" ? [] : parts;
+
   if (part.type === "text-delta") {
-    const last = parts[parts.length - 1];
+    const last = nextParts[nextParts.length - 1];
     if (last && last.type === "text") {
       // 追加到已有 text part
-      return [...parts.slice(0, -1), { ...last, text: last.text + part.delta }];
+      return [...nextParts.slice(0, -1), { ...last, text: last.text + part.delta }];
     }
     // 新建 text part
-    return [...parts, { type: "text", text: part.delta }];
+    return [...nextParts, { type: "text", text: part.delta }];
   }
 
   if (part.type === "reasoning") {
-    const last = parts[parts.length - 1];
+    const last = nextParts[nextParts.length - 1];
     if (last && last.type === "reasoning") {
       // 追加到已有 reasoning part 的 detail
-      return [...parts.slice(0, -1), { ...last, detail: last.detail + part.detail }];
+      return [...nextParts.slice(0, -1), { ...last, detail: last.detail + part.detail }];
     }
-    return [...parts, part];
+    return [...nextParts, part];
+  }
+
+  if (part.type === "subagent") {
+    const existingIndex = nextParts.findIndex(
+      (candidate) => candidate.type === "subagent" && candidate.id === part.id,
+    );
+    if (existingIndex >= 0) {
+      return nextParts.map((candidate, index) => (index === existingIndex ? { ...candidate, ...part } : candidate));
+    }
+    return [...nextParts, part];
   }
 
   if (part.type === "tool-result") {
-    const last = parts[parts.length - 1];
-    if (last && last.type === "tool-call" && last.toolName === part.toolName && last.status === "running") {
-      return [
-        ...parts.slice(0, -1),
-        {
-          ...last,
-          status: part.status,
-          outputSummary: part.outputSummary,
-        },
-      ];
+    for (let index = nextParts.length - 1; index >= 0; index -= 1) {
+      const candidate = nextParts[index];
+      if (candidate?.type === "tool-call" && candidate.toolName === part.toolName && candidate.status === "running") {
+        return [
+          ...nextParts.slice(0, index),
+          {
+            ...candidate,
+            status: part.status,
+            outputSummary: part.outputSummary,
+          },
+          ...nextParts.slice(index + 1),
+        ];
+      }
     }
   }
 
-  return [...parts, part];
+  return [...nextParts, part];
 }
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
@@ -106,12 +130,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
     const abortController = new AbortController();
     const userMessage = buildUserMessage(nextInput);
-    const assistantMessage: AgentMessage = {
-      id: `assistant-${Date.now()}`,
-      role: "assistant",
-      author: "主代理",
-      parts: [],
-    };
+    const assistantMessage = buildAssistantPlaceholderMessage();
 
     set((state) => ({
       abortController,
