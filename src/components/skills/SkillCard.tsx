@@ -1,12 +1,12 @@
-import { Wrench } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import type { KeyboardEvent } from "react";
-import type { SkillDefinition } from "../../stores/skillsStore";
+import type { ResolvedSkill } from "../../stores/skillsStore";
 import { Switch } from "../ui/Switch";
 
 type SkillCardProps = {
   onOpen: () => void;
   onToggle: () => void;
-  skill: SkillDefinition;
+  skill: ResolvedSkill;
 };
 
 export function SkillCard({ onOpen, onToggle, skill }: SkillCardProps) {
@@ -27,29 +27,24 @@ export function SkillCard({ onOpen, onToggle, skill }: SkillCardProps) {
         className="flex min-h-0 flex-1 cursor-pointer flex-col rounded-[12px] outline-none focus-visible:ring-2 focus-visible:ring-[#0b84e7] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#111214]"
       >
         <div className="flex items-start justify-between gap-3">
-          <h3 className="min-w-0 flex-1 line-clamp-2 text-sm font-semibold text-[#111827] dark:text-zinc-100">
-            {skill.name}
-          </h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="line-clamp-2 text-sm font-semibold text-[#111827] dark:text-zinc-100">{skill.name}</h3>
+          </div>
           <Switch checked={skill.enabled} label={`切换技能 ${skill.name}`} onChange={() => onToggle()} />
         </div>
 
         <div className="min-h-0 flex-1 pt-3">
-          <p className="line-clamp-3 text-xs leading-5 text-[#64748b] dark:text-zinc-400">
-            {skill.description}
-          </p>
+          <p className="line-clamp-3 text-xs leading-5 text-[#64748b] dark:text-zinc-400">{skill.description}</p>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {skill.suggestedTools.slice(0, 3).map((toolName) => (
-            <span
-              key={toolName}
-              className="inline-flex items-center gap-1 rounded-[999px] border border-[#d8dee8] bg-white px-2 py-0.5 text-[11px] font-medium text-[#526074] dark:border-[#2e353f] dark:bg-[#171b22] dark:text-[#95a1b3]"
-            >
-              <Wrench className="h-3 w-3" />
-              {toolName}
+        {!skill.validation.isValid ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-[999px] border border-[#f1d1d1] bg-[#fff5f5] px-2 py-0.5 text-[11px] font-medium text-[#b42318] dark:border-[#4a2323] dark:bg-[#221314] dark:text-[#ffb4ab]">
+              <AlertCircle className="h-3 w-3" />
+              校验异常
             </span>
-          ))}
-        </div>
+          </div>
+        ) : null}
       </div>
     </article>
   );

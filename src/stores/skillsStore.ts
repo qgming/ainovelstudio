@@ -1,127 +1,325 @@
 import { create } from "zustand";
+import {
+  createSkill,
+  createSkillReferenceFile,
+  deleteInstalledSkill,
+  importSkillZip,
+  initializeBuiltinSkills,
+  pickSkillArchive,
+  scanInstalledSkills,
+  type SkillManifest,
+  type SkillSourceKind,
+} from "../lib/skills/api";
 
-const STORAGE_KEY = "ainovelstudio-skills";
+const STORAGE_KEY = "ainovelstudio-skills-preferences";
 
-export type SkillDefinition = {
-  description: string;
+export type SkillReferenceEntry = SkillManifest["references"][number];
+export type SkillValidation = SkillManifest["validation"];
+export type SkillSource = SkillSourceKind;
+
+export type ResolvedSkill = SkillManifest & {
   enabled: boolean;
-  id: string;
-  name: string;
-  source: "builtin" | "imported";
-  suggestedTools: string[];
-  systemPrompt: string;
+  effectivePrompt: string;
+  sourceLabel: string;
+};
+
+type SkillPreferences = {
+  enabledById: Record<string, boolean>;
 };
 
 type SkillsState = {
-  builtinSkills: SkillDefinition[];
-  importedSkills: SkillDefinition[];
+  errorMessage: string | null;
+  lastScannedAt: number | null;
+  manifests: SkillManifest[];
+  preferences: SkillPreferences;
+  status: "idle" | "loading" | "ready" | "error";
 };
 
 type SkillsActions = {
+  createReferenceFile: (skillId: string, name: string) => Promise<string>;
+  createSkill: (name: string, description: string) => Promise<string>;
+  deleteInstalledSkillById: (skillId: string) => Promise<void>;
+  hydrate: () => Promise<void>;
+  initialize: () => Promise<void>;
+  importSkillPackage: () => Promise<void>;
+  refresh: () => Promise<void>;
   reset: () => void;
   toggleSkill: (skillId: string) => void;
 };
 
 export type SkillsStore = SkillsState & SkillsActions;
 
-function getDefaultSkills(): SkillsState {
-  return {
-    builtinSkills: [
-      {
-        id: "worldbuilding",
-        name: "世界观构建",
-        description: "补全势力结构、地理设定和历史暗线，确保世界观内部一致性",
-        enabled: false,
-        source: "builtin",
-        suggestedTools: ["read_file", "write_file"],
-        systemPrompt:
-          "你是世界观架构师。你的任务是审视和补全小说的世界观体系，包括势力分布、地理格局、历史脉络和魔法/科技体系。确保所有设定之间逻辑自洽，标记矛盾点并提出修复方案。输出格式：先列出现有设定摘要，再逐项检查一致性，最后给出补全建议。",
-      },
-      {
-        id: "chapter-outline",
-        name: "章节大纲",
-        description: "规划章节结构、场景转换节奏和悬念布局",
-        enabled: false,
-        source: "builtin",
-        suggestedTools: ["read_file", "list_directory"],
-        systemPrompt:
-          "你是章节规划师。你的任务是为小说设计章节级别的结构大纲，包括每章的核心冲突、场景切换节奏、悬念钩子和情感弧线。确保每一章都有明确的叙事目标和推进动力。输出格式：章节编号 → 核心事件 → 场景列表 → 悬念点 → 与前后章的衔接。",
-      },
-      {
-        id: "style-control",
-        name: "文风控制",
-        description: "统一叙述腔调、句式密度和修辞风格，保持全书文风一致",
-        enabled: false,
-        source: "builtin",
-        suggestedTools: ["read_file", "write_file"],
-        systemPrompt:
-          "你是文风把控者。你的任务是分析和统一小说的叙述腔调，包括句式长短搭配、修辞密度、叙事视角一致性和用词层次。对比不同章节的文风差异，标注偏离基准的段落并提供改写建议。保持作者原有风格意图的同时消除不协调感。",
-      },
-      {
-        id: "character-voice",
-        name: "角色语气",
-        description: "强化角色区分度，确保每个人物的对话和内心独白有独特纹理",
-        enabled: false,
-        source: "builtin",
-        suggestedTools: ["read_file", "write_file"],
-        systemPrompt:
-          "你是角色塑造师。你的任务是审查和强化每个角色的语言特征，包括口头禅、句式偏好、用词习惯和情绪表达方式。确保读者仅通过对话就能辨识说话人。对比角色语言档案，标注语气趋同的段落并提供区分度更高的改写方案。",
-      },
-    ],
-    importedSkills: [],
-  };
-}
-
-function readSkillsState(): SkillsState {
+function readPreferences(): SkillPreferences {
   if (typeof window === "undefined") {
-    return getDefaultSkills();
+    return { enabledById: {} };
   }
 
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return getDefaultSkills();
+      return { enabledById: {} };
     }
 
-    return { ...getDefaultSkills(), ...(JSON.parse(raw) as Partial<SkillsState>) };
+    const parsed = JSON.parse(raw) as Partial<SkillPreferences>;
+    return {
+      enabledById: parsed.enabledById && typeof parsed.enabledById === "object" ? parsed.enabledById : {},
+    };
   } catch {
-    return getDefaultSkills();
+    return { enabledById: {} };
   }
 }
 
-function persistSkillsState(state: SkillsState) {
+function persistPreferences(preferences: SkillPreferences) {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
 }
 
-export function getEnabledSkills(state: SkillsState) {
-  return [...state.builtinSkills, ...state.importedSkills].filter((skill) => skill.enabled);
+function formatSkillsError(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+  if (typeof error === "object" && error !== null) {
+    const message = Reflect.get(error, "message");
+    if (typeof message === "string" && message.trim().length > 0) {
+      return message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return fallbackMessage;
+    }
+  }
+  return fallbackMessage;
+}
+
+function getSourceLabel(sourceKind: SkillSourceKind) {
+  switch (sourceKind) {
+    case "builtin-package":
+      return "内置";
+    case "installed-package":
+      return "已安装";
+    default:
+      return "技能";
+  }
+}
+
+function sortManifests(manifests: SkillManifest[]) {
+  return [...manifests].sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+}
+
+function resolveSkills(manifests: SkillManifest[], preferences: SkillPreferences): ResolvedSkill[] {
+  return manifests.map((skill) => ({
+    ...skill,
+    enabled: Boolean(preferences.enabledById[skill.id]),
+    effectivePrompt: skill.body,
+    sourceLabel: getSourceLabel(skill.sourceKind),
+  }));
+}
+
+function buildInitialState(): SkillsState {
+  return {
+    errorMessage: null,
+    lastScannedAt: null,
+    manifests: [],
+    preferences: readPreferences(),
+    status: "idle",
+  };
+}
+
+async function loadInstalledManifests() {
+  return sortManifests(await scanInstalledSkills());
+}
+
+export function getResolvedSkills(state: Pick<SkillsState, "manifests" | "preferences">) {
+  return resolveSkills(state.manifests, state.preferences);
+}
+
+export function getEnabledSkills(state: Pick<SkillsState, "manifests" | "preferences">) {
+  return getResolvedSkills(state).filter((skill) => skill.enabled);
 }
 
 export const useSkillsStore = create<SkillsStore>((set) => ({
-  ...readSkillsState(),
+  ...buildInitialState(),
+  createReferenceFile: async (skillId, name) => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+
+    try {
+      const manifests = sortManifests(await createSkillReferenceFile(skillId, name));
+      const updatedSkill = manifests.find((item) => item.id === skillId);
+      const createdReference = updatedSkill?.references.find((entry) => entry.name === `${name}.md` || entry.path === `references/${name}.md`);
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+      return createdReference?.path ?? `references/${name}.md`;
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "创建参考文献失败。"),
+        status: "error",
+      }));
+      throw error;
+    }
+  },
+  createSkill: async (name, description) => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+
+    try {
+      const manifests = sortManifests(await createSkill(name, description));
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+      return name;
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "创建技能失败。"),
+        status: "error",
+      }));
+      throw error;
+    }
+  },
+  deleteInstalledSkillById: async (skillId) => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+
+    try {
+      const manifests = sortManifests(await deleteInstalledSkill(skillId));
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "删除技能失败。"),
+        status: "error",
+      }));
+      throw error;
+    }
+  },
+  hydrate: async () => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+
+    try {
+      const manifests = await loadInstalledManifests();
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "技能扫描失败。"),
+        manifests: [],
+        status: "error",
+      }));
+    }
+  },
+  initialize: async () => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+
+    try {
+      await initializeBuiltinSkills();
+      const manifests = await loadInstalledManifests();
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "技能初始化失败。"),
+        manifests: [],
+        status: "error",
+      }));
+    }
+  },
+  importSkillPackage: async () => {
+    const zipPath = await pickSkillArchive();
+    if (!zipPath) {
+      return;
+    }
+
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+
+    try {
+      const manifests = sortManifests(await importSkillZip(zipPath));
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "技能导入失败。"),
+        status: "error",
+      }));
+    }
+  },
+  refresh: async () => {
+    set((state) => ({ ...state, status: "loading", errorMessage: null }));
+
+    try {
+      const manifests = sortManifests(await scanInstalledSkills());
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        lastScannedAt: Date.now(),
+        manifests,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "技能刷新失败。"),
+        status: "error",
+      }));
+    }
+  },
   reset: () => {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
     }
 
-    set(getDefaultSkills());
+    set(buildInitialState());
   },
   toggleSkill: (skillId) =>
     set((state) => {
-      const nextState = {
-        builtinSkills: state.builtinSkills.map((skill) =>
-          skill.id === skillId ? { ...skill, enabled: !skill.enabled } : skill,
-        ),
-        importedSkills: state.importedSkills.map((skill) =>
-          skill.id === skillId ? { ...skill, enabled: !skill.enabled } : skill,
-        ),
+      const nextPreferences = {
+        enabledById: {
+          ...state.preferences.enabledById,
+          [skillId]: !state.preferences.enabledById[skillId],
+        },
       };
-
-      persistSkillsState(nextState);
-      return nextState;
+      persistPreferences(nextPreferences);
+      return {
+        ...state,
+        preferences: nextPreferences,
+      };
     }),
 }));

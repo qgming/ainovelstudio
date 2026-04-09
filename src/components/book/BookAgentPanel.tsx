@@ -2,7 +2,7 @@ import { ChevronRight, History, SquarePen } from "lucide-react";
 import { AgentComposer } from "../agent/AgentComposer";
 import { AgentMessageList } from "../agent/AgentMessageList";
 import { useAgentStore } from "../../stores/agentStore";
-import { useSkillsStore } from "../../stores/skillsStore";
+import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { useSubAgentStore } from "../../stores/subAgentStore";
 
 type BookAgentPanelProps = {
@@ -51,11 +51,9 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const sendMessage = useAgentStore((state) => state.sendMessage);
   const stopMessage = useAgentStore((state) => state.stopMessage);
   const setInput = useAgentStore((state) => state.setInput);
-  const builtinSkills = useSkillsStore((state) => state.builtinSkills);
-  const importedSkills = useSkillsStore((state) => state.importedSkills);
-  const enabledSkills = [...builtinSkills, ...importedSkills].filter(
-    (skill) => skill.enabled,
-  );
+  const manifests = useSkillsStore((state) => state.manifests);
+  const preferences = useSkillsStore((state) => state.preferences);
+  const enabledSkills = getEnabledSkills({ manifests, preferences });
   const enabledSubAgents = useSubAgentStore((state) => state.subAgents).filter(
     (a) => a.enabled,
   );

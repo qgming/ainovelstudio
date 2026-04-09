@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolSet } from "ai";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
-import type { SkillDefinition } from "../../stores/skillsStore";
+import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { AgentMessage, AgentPart } from "./types";
 import { streamAgentText, defineTool } from "./modelGateway";
 import type { AgentTool } from "./runtime";
@@ -9,7 +9,7 @@ import type { AgentTool } from "./runtime";
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
   activeFilePath: string | null;
-  enabledSkills: SkillDefinition[];
+  enabledSkills: ResolvedSkill[];
   /** 启用的工具 ID 列表 */
   enabledToolIds: string[];
   prompt: string;
@@ -24,10 +24,29 @@ function hasProviderConfig(config: AgentProviderConfig) {
   return Boolean(config.apiKey.trim() && config.baseURL.trim() && config.model.trim());
 }
 
-function buildSystemPrompt(enabledSkills: SkillDefinition[]) {
+function buildSystemPrompt(enabledSkills: ResolvedSkill[]) {
   const skillBlock =
     enabledSkills.length > 0
-      ? enabledSkills.map((skill) => `- ${skill.name}: ${skill.systemPrompt}`).join("\n")
+      ? enabledSkills
+          .map((skill) => {
+            const referenceBlock =
+              skill.references.length > 0
+                ? `\n参考资料: ${skill.references.map((entry) => entry.path).join(", ")}`
+                : "";
+            return [
+              `## 技能: ${skill.name}`,
+              `来源: ${skill.sourceLabel}`,
+              `说明: ${skill.description}`,
+              skill.suggestedTools.length > 0
+                ? `推荐工具: ${skill.suggestedTools.join(", ")}`
+                : "推荐工具: 无",
+              `技能内容:\n${skill.effectivePrompt}`,
+              referenceBlock,
+            ]
+              .filter(Boolean)
+              .join("\n");
+          })
+          .join("\n\n")
       : "- 当前未启用额外技能";
 
   return [

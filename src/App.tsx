@@ -9,13 +9,16 @@ import { SettingPage } from "./pages/SettingPage";
 import { SkillDetailPage } from "./pages/SkillDetailPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { useThemeStore } from "./stores/themeStore";
+import { useSkillsStore } from "./stores/skillsStore";
 
 function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
+  const initializeSkills = useSkillsStore((state) => state.initialize);
 
   useEffect(() => {
     initializeTheme();
-  }, [initializeTheme]);
+    void initializeSkills();
+  }, [initializeSkills, initializeTheme]);
 
   return (
     <div className="h-screen overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">
