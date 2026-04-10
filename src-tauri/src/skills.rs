@@ -492,9 +492,16 @@ fn ensure_user_skills_root(app: &AppHandle) -> CommandResult<PathBuf> {
     Ok(root)
 }
 
+fn resolve_builtin_skills_root(app: &AppHandle) -> Option<PathBuf> {
+    ["skills", "resources/skills"]
+        .into_iter()
+        .filter_map(|relative_path| app.path().resolve(relative_path, BaseDirectory::Resource).ok())
+        .find(|path| path.exists() && path.is_dir())
+}
+
 fn collect_skill_roots(app: &AppHandle) -> CommandResult<Vec<SkillRoot>> {
     let mut roots = Vec::new();
-    if let Ok(resource_root) = app.path().resolve("skills", BaseDirectory::Resource) {
+    if let Some(resource_root) = resolve_builtin_skills_root(app) {
         roots.push(SkillRoot {
             is_builtin: true,
             path: resource_root,
@@ -757,9 +764,9 @@ fn copy_directory_recursive(source: &Path, target: &Path) -> CommandResult<()> {
 
 fn sync_builtin_skills_to_user_dir(app: &AppHandle) -> CommandResult<BuiltinSkillsInitializationResult> {
     let user_root = ensure_user_skills_root(app)?;
-    let builtin_root = match app.path().resolve("skills", BaseDirectory::Resource) {
-        Ok(path) if path.exists() && path.is_dir() => path,
-        _ => {
+    let builtin_root = match resolve_builtin_skills_root(app) {
+        Some(path) => path,
+        None => {
             return Ok(BuiltinSkillsInitializationResult {
                 initialized_skill_ids: Vec::new(),
                 skipped_skill_ids: Vec::new(),
@@ -1097,3 +1104,4 @@ pub fn import_skill_zip(app: AppHandle, zipPath: String) -> CommandResult<Vec<Sk
 
     install_skill_from_zip(&app, &zip_path)
 }
+

@@ -454,9 +454,16 @@ fn ensure_user_agents_root(app: &AppHandle) -> CommandResult<PathBuf> {
     Ok(root)
 }
 
+fn resolve_builtin_agents_root(app: &AppHandle) -> Option<PathBuf> {
+    ["agents", "resources/agents"]
+        .into_iter()
+        .filter_map(|relative_path| app.path().resolve(relative_path, BaseDirectory::Resource).ok())
+        .find(|path| path.exists() && path.is_dir())
+}
+
 fn collect_agent_roots(app: &AppHandle) -> CommandResult<Vec<AgentRoot>> {
     let mut roots = Vec::new();
-    if let Ok(resource_root) = app.path().resolve("agents", BaseDirectory::Resource) {
+    if let Some(resource_root) = resolve_builtin_agents_root(app) {
         roots.push(AgentRoot {
             is_builtin: true,
             path: resource_root,
@@ -674,9 +681,9 @@ fn copy_directory_recursive(source: &Path, target: &Path) -> CommandResult<()> {
 
 fn sync_builtin_agents_to_user_dir(app: &AppHandle) -> CommandResult<BuiltinAgentsInitializationResult> {
     let user_root = ensure_user_agents_root(app)?;
-    let builtin_root = match app.path().resolve("agents", BaseDirectory::Resource) {
-        Ok(path) if path.exists() && path.is_dir() => path,
-        _ => {
+    let builtin_root = match resolve_builtin_agents_root(app) {
+        Some(path) => path,
+        None => {
             return Ok(BuiltinAgentsInitializationResult {
                 initialized_agent_ids: Vec::new(),
                 skipped_agent_ids: Vec::new(),
@@ -991,3 +998,4 @@ pub fn import_agent_zip(app: AppHandle, zipPath: String) -> CommandResult<Vec<Ag
 
     install_agent_from_zip(&app, &zip_path)
 }
+
