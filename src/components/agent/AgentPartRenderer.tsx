@@ -276,6 +276,7 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
     <AccordionCard icon={Users} label={part.name} summary={part.summary} status={part.status}>
       <div className="space-y-3">
         <div>
+          <h3 className="text-sm font-medium leading-6 text-[#42536b] dark:text-[#e2e8f0]">时间线</h3>
           <div>
             <div className="flex items-start gap-3">
               <div className="flex w-4 shrink-0 flex-col items-center self-stretch pt-1">
@@ -307,3 +308,4 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
     </AccordionCard>
   );
 }
+

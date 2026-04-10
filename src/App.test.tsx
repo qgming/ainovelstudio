@@ -109,13 +109,12 @@ describe("App shell", () => {
     expect(screen.queryByText(/已启用 \d+ 个技能/)).not.toBeInTheDocument();
   });
 
-  it("可以切换到代理页", () => {
+  it("可以切换到代理页", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("link", { name: "代理" }));
 
-    expect(screen.getByRole("heading", { name: "代理" })).toBeInTheDocument();
-    expect(screen.getByText("内置代理 · 已启用 2")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "代理中心" })).toBeInTheDocument();
   });
 
   it("点击侧边栏主题按钮会切换深色模式且不会离开当前页面", async () => {
@@ -133,10 +132,14 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "技能中心" })).toBeInTheDocument();
   });
 
-  it("设置页展示内置工具列表并支持开关", async () => {
+  it("设置页支持编辑默认 AGENTS，并可切换到工具库", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("link", { name: "设置" }));
+
+    expect(await screen.findByLabelText("默认 AGENTS 编辑器")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "工具库" }));
 
     await waitFor(() => {
       expect(screen.getByText(/内置工具 · 已启用 7/)).toBeInTheDocument();
@@ -151,6 +154,7 @@ describe("App shell", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("link", { name: "设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "基本设置" }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
@@ -206,3 +210,4 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "第1章-开篇.md" })).toBeInTheDocument();
   });
 });
+

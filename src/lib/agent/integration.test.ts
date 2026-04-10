@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
+import { DEFAULT_MAIN_AGENT_MARKDOWN } from "./promptContext";
 import { runAgentTurn } from "./session";
 import type { AgentPart } from "./types";
 
@@ -105,6 +106,109 @@ describe("agent session (streaming)", () => {
     }
 
     expect(mockStreamFn.mock.calls[0][0].abortSignal).toBe(abortSignal);
+  });
+
+  it("后续轮次会把上一轮的用户与 AI 回复一起发送给模型", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第二章.md",
+      workspaceRootPath: "C:/books/北境余烬",
+      conversationHistory: [
+        {
+          id: "user-1",
+          role: "user",
+          author: "你",
+          parts: [{ type: "text", text: "先总结上一章" }],
+        },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          author: "主代理",
+          parts: [{ type: "text", text: "上一章的核心冲突是主角是否进城。" }],
+        },
+      ],
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      prompt: "继续分析第二章",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const request = mockStreamFn.mock.calls[0][0];
+    expect(request.messages).toHaveLength(3);
+    expect(request.messages[0]).toEqual({ role: "user", content: "先总结上一章" });
+    expect(request.messages[1]).toEqual({
+      role: "assistant",
+      content: "上一章的核心冲突是主角是否进城。",
+    });
+    expect(request.messages[2].role).toBe("user");
+    expect(request.messages[2].content).toContain("继续分析第二章");
+    expect(request.messages[2].content).toContain("- 当前工作区：C:/books/北境余烬");
+  });
+
+  it("把默认 AGENTS 和结构化用户上下文传给模型", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      workspaceRootPath: "C:/books/北境余烬",
+      defaultAgentMarkdown: "# 自定义主代理\n\n- 优先吸收上下文后回答。",
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      prompt: "帮我整理这一章的冲突节奏",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const request = mockStreamFn.mock.calls[0][0];
+    expect(request.system).toContain("## s03 已启用工具");
+    expect(request.system).toContain("## s05 默认 AGENTS.md");
+    expect(request.system).toContain("# 自定义主代理");
+    expect(request.system).not.toContain(DEFAULT_MAIN_AGENT_MARKDOWN);
+    expect(request.messages[0].content).toContain("# 当前轮输入流水线");
+    expect(request.messages[0].content).toContain("=== DYNAMIC_BOUNDARY ===");
+    expect(request.messages[0].content).toContain("## s10 当前轮动态上下文");
+    expect(request.messages[0].content).toContain("- 当前工作区：C:/books/北境余烬");
+    expect(request.messages[0].content).toContain("- 当前激活文件：章节/第一章.md");
+    expect(request.messages[0].content).toContain("## s12 用户请求");
+    expect(request.messages[0].content).toContain("帮我整理这一章的冲突节奏");
   });
 
   it("目录树工具把真实目录树返回给模型", async () => {
@@ -248,6 +352,74 @@ describe("agent session (streaming)", () => {
     ]);
   });
 
+  it("普通请求默认由主代理直接处理，不自动委派子代理", async () => {
+    async function* mockMainFullStream() {
+      yield { type: "text-delta" as const, text: "主代理直接完成回复。" };
+    }
+
+    const mockSubagentStreamFn = vi.fn();
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockMainFullStream(),
+    });
+    const enabledAgent: ResolvedAgent = {
+      id: "plot-agent",
+      name: "剧情代理",
+      description: "负责剧情推进",
+      role: "剧情",
+      tags: ["剧情", "动机"],
+      sourceLabel: "内置",
+      body: "专注处理剧情与人物动机。",
+      toolsPreview: "可读取章节文件",
+      memoryPreview: "记住当前故事走向",
+      suggestedTools: ["read_file"],
+      enabled: true,
+      files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+      sourceKind: "builtin-package",
+      dispatchHint: "当用户询问剧情推进时",
+      validation: { errors: [], isValid: true, warnings: [] },
+      discoveredAt: Date.now(),
+      isBuiltin: true,
+      rawMarkdown: "# 剧情代理",
+    };
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      enabledAgents: [enabledAgent],
+      enabledSkills: [],
+      enabledToolIds: ["read_file"],
+      prompt: "继续写这一章",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {
+        read_file: {
+          description: "读取文件",
+          execute: async () => ({
+            ok: true,
+            summary: "已读取当前章节",
+          }),
+        },
+      },
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn as unknown as typeof mockStreamFn,
+    });
+
+    const parts: AgentPart[] = [];
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    expect(mockSubagentStreamFn).not.toHaveBeenCalled();
+    expect(mockStreamFn).toHaveBeenCalledTimes(1);
+    expect(parts).toEqual([{ type: "text-delta", delta: "主代理直接完成回复。" }]);
+    expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain("子任务摘要");
+  });
+
+  it("支持子代理预分析并把过程映射为 subagent part", async () => {
     const parts: AgentPart[] = [];
 
     async function* mockSubagentFullStream() {
@@ -290,6 +462,7 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
+      workspaceRootPath: "C:/books/北境余烬",
       enabledAgents: [enabledAgent],
       enabledSkills: [],
       enabledToolIds: ["read_file"],
@@ -324,7 +497,7 @@ describe("agent session (streaming)", () => {
     expect(subagentParts[0]).toMatchObject({
       type: "subagent",
       status: "running",
-      summary: "已委托给 剧情代理",
+      summary: "已派发子任务：剧情代理",
       parts: [],
     });
     expect(subagentParts[3].parts).toEqual([
@@ -339,12 +512,16 @@ describe("agent session (streaming)", () => {
     ]);
     expect(subagentParts[5]).toMatchObject({
       status: "completed",
-      summary: "剧情代理 已完成分析",
+      summary: "剧情代理 子任务已完成",
       detail: "建议先补一段主角迟疑。",
     });
     expect(subagentParts[5].parts.at(-1)).toEqual({ type: "text", text: "建议先补一段主角迟疑。" });
     expect(parts.at(-1)).toEqual({ type: "text-delta", delta: "主代理已整合子代理建议。" });
     expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockStreamFn.mock.calls[0][0].messages[0].content).toContain("## s11 子任务摘要（剧情代理）");
   });
 });
+
+
+

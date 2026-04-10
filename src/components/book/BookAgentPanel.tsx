@@ -37,7 +37,11 @@ function AgentHeaderButton() {
       className="flex h-8 min-w-0 items-center gap-0.5 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
     >
       <ChevronRight className="h-4 w-4 shrink-0 text-black dark:text-white" />
-      <span className="truncate text-[15px] font-semibold leading-none tracking-[-0.03em]">
+      <span
+        role="heading"
+        aria-level={2}
+        className="truncate text-[15px] font-semibold leading-none tracking-[-0.03em]"
+      >
         Agent
       </span>
     </button>
@@ -93,3 +97,4 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
     </aside>
   );
 }
+

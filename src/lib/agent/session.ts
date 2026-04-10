@@ -6,10 +6,16 @@ import type { AgentMessage, AgentPart } from "./types";
 import { streamAgentText, defineTool } from "./modelGateway";
 import type { AgentTool } from "./runtime";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
+import { selectSubAgentForPrompt } from "./delegation";
+import { buildConversationMessages } from "./messageContext";
+import { buildSubAgentSystem, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
   activeFilePath: string | null;
+  workspaceRootPath?: string | null;
+  conversationHistory?: AgentMessage[];
+  defaultAgentMarkdown?: string;
   enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   /** 启用的工具 ID 列表 */
@@ -28,87 +34,6 @@ function hasProviderConfig(config: AgentProviderConfig) {
   return Boolean(config.apiKey.trim() && config.baseURL.trim() && config.model.trim());
 }
 
-function buildAgentPromptBlock(agent: ResolvedAgent) {
-  return [
-    `### 代理: ${agent.name}`,
-    `来源: ${agent.sourceLabel}`,
-    agent.role ? `角色: ${agent.role}` : null,
-    `说明: ${agent.description}`,
-    agent.dispatchHint ? `委派时机: ${agent.dispatchHint}` : null,
-    agent.suggestedTools.length > 0 ? `推荐工具: ${agent.suggestedTools.join(", ")}` : "推荐工具: 无",
-    `AGENTS.md:\n${agent.body}`,
-    agent.toolsPreview ? `TOOLS.md 摘要:\n${agent.toolsPreview}` : null,
-    agent.memoryPreview ? `MEMORY.md 摘要:\n${agent.memoryPreview}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildSystemPrompt(enabledSkills: ResolvedSkill[], enabledAgents: ResolvedAgent[]) {
-  const skillBlock =
-    enabledSkills.length > 0
-      ? enabledSkills
-          .map((skill) => {
-            const referenceBlock =
-              skill.references.length > 0
-                ? `\n参考资料: ${skill.references.map((entry) => entry.path).join(", ")}`
-                : "";
-            return [
-              `## 技能: ${skill.name}`,
-              `来源: ${skill.sourceLabel}`,
-              `说明: ${skill.description}`,
-              skill.suggestedTools.length > 0 ? `推荐工具: ${skill.suggestedTools.join(", ")}` : "推荐工具: 无",
-              `技能内容:\n${skill.effectivePrompt}`,
-              referenceBlock,
-            ]
-              .filter(Boolean)
-              .join("\n");
-          })
-          .join("\n\n")
-      : "- 当前未启用额外技能";
-
-  const agentBlock =
-    enabledAgents.length > 0
-      ? enabledAgents.map((agent) => buildAgentPromptBlock(agent)).join("\n\n")
-      : "- 当前未启用可委派代理";
-
-  return [
-    "你是桌面端 AI 小说写作工作台中的主代理。",
-    "你的任务是结合当前章节内容、启用技能、已启用代理和工具结果，为用户提供可执行的创作输出。",
-    "请优先保持中文输出，结构清晰，适合小说创作工作流。",
-    "你可以使用提供的工具来读取和操作工作区中的文件。",
-    "当某个任务明显更适合交给某个已启用代理时，请先综合该代理的身份、工具说明与记忆，再输出结果。",
-    "你可以直接吸收代理内容后作答，也可以在心中先让对应代理完成一次子分析，但最终回复仍由你统一给出。",
-    "已启用技能：",
-    skillBlock,
-    "已启用代理：",
-    agentBlock,
-  ].join("\n");
-}
-
-function buildSubAgentSystem(agent: ResolvedAgent, enabledSkills: ResolvedSkill[]) {
-  const skillSummary =
-    enabledSkills.length > 0
-      ? enabledSkills
-          .map((skill) => `- ${skill.name}：${skill.description}\n${skill.effectivePrompt}`)
-          .join("\n\n")
-      : "- 当前没有额外技能";
-
-  return [
-    `你现在扮演子代理：${agent.name}。`,
-    agent.role ? `你的角色是：${agent.role}。` : null,
-    `代理说明：${agent.description}`,
-    agent.dispatchHint ? `适合接手的任务：${agent.dispatchHint}` : null,
-    "以下是你的 AGENTS.md：",
-    agent.body,
-    agent.toolsPreview ? `以下是你的 TOOLS.md 摘要：\n${agent.toolsPreview}` : null,
-    agent.memoryPreview ? `以下是你的 MEMORY.md 摘要：\n${agent.memoryPreview}` : null,
-    enabledSkills.length > 0 ? `可参考的技能：\n${skillSummary}` : null,
-    "请只返回你的专业分析、改写建议或正文结果，不要解释你是子代理。",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
 
 function createSubagentSnapshot({
   detail,
@@ -185,19 +110,14 @@ async function maybeRunSubAgent(params: {
   onProgress?: (snapshot: AgentPart & { type: "subagent" }) => void;
 }): Promise<{ agent: ResolvedAgent; text: string; subagentId: string } | null> {
   const { abortSignal, enabledAgents, enabledSkills, prompt, providerConfig, streamFn, workspaceTools, enabledToolIds, onProgress } = params;
-  if (enabledAgents.length === 0) {
+  const matchedAgent = selectSubAgentForPrompt(prompt, enabledAgents);
+  if (!matchedAgent) {
     return null;
   }
 
-  const normalizedPrompt = prompt.toLowerCase();
-  const matchedAgent =
-    enabledAgents.find((agent) => agent.tags.some((tag) => normalizedPrompt.includes(tag.toLowerCase()))) ??
-    enabledAgents.find((agent) => agent.role && normalizedPrompt.includes(agent.role.toLowerCase())) ??
-    enabledAgents.find((agent) => agent.dispatchHint && normalizedPrompt.includes(agent.dispatchHint.toLowerCase())) ??
-    enabledAgents[0];
-
   const subagentPrompt = [
-    "请基于以下用户请求给出你的专业结果。",
+    "这是父代理拆出的一个局部子任务，请在干净上下文中完成，并只返回必要摘要或结果。",
+    "## 子任务请求",
     prompt,
   ].join("\n\n");
 
@@ -210,7 +130,7 @@ async function maybeRunSubAgent(params: {
       id: subagentId,
       name: matchedAgent.name,
       status: "running",
-      summary: `已委托给 ${matchedAgent.name}`,
+      summary: `已派发子任务：${matchedAgent.name}`,
       parts: innerParts,
     }),
   );
@@ -268,7 +188,7 @@ async function maybeRunSubAgent(params: {
         id: subagentId,
         name: matchedAgent.name,
         status: "running",
-        summary: `${matchedAgent.name} 执行中`,
+        summary: `${matchedAgent.name} 子任务执行中`,
         parts: innerParts,
       }),
     );
@@ -284,7 +204,7 @@ async function maybeRunSubAgent(params: {
       id: subagentId,
       name: matchedAgent.name,
       status: "completed",
-      summary: `${matchedAgent.name} 已完成分析`,
+      summary: `${matchedAgent.name} 子任务已完成`,
       detail: finalText,
       parts: innerParts,
     }),
@@ -424,6 +344,9 @@ function createSystemMessage(text: string): AgentMessage {
 export async function* runAgentTurn({
   abortSignal,
   activeFilePath,
+  workspaceRootPath,
+  conversationHistory = [],
+  defaultAgentMarkdown,
   enabledAgents,
   enabledSkills,
   enabledToolIds,
@@ -440,14 +363,12 @@ export async function* runAgentTurn({
   }
 
   const aiTools = buildAiSdkTools(workspaceTools, enabledToolIds);
-  const system = buildSystemPrompt(enabledSkills, enabledAgents);
-  let userContent = activeFilePath
-    ? [
-        `当前激活文件: ${activeFilePath}`,
-        "用户请求:",
-        prompt,
-      ].join("\n\n")
-    : prompt;
+  const system = buildSystemPrompt({
+    defaultAgentMarkdown,
+    enabledAgents,
+    enabledSkills,
+    enabledToolIds,
+  });
 
   const maybeSubAgent = await maybeRunSubAgent({
     abortSignal,
@@ -470,13 +391,21 @@ export async function* runAgentTurn({
     }
   }
 
-  if (maybeSubAgent) {
-    userContent += `\n\n[子代理 ${maybeSubAgent.agent.name} 的预分析]\n${maybeSubAgent.text}`;
-  }
+  const userContent = buildUserTurnContent({
+    activeFilePath,
+    workspaceRootPath,
+    prompt,
+    subagentAnalysis: maybeSubAgent
+      ? {
+          agentName: maybeSubAgent.agent.name,
+          text: maybeSubAgent.text,
+        }
+      : null,
+  });
 
   const result = _streamFn({
     abortSignal,
-    messages: [{ role: "user", content: userContent }],
+    messages: buildConversationMessages(conversationHistory, userContent),
     providerConfig,
     system,
     tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
@@ -521,3 +450,11 @@ export async function* runAgentTurn({
 }
 
 export { createSystemMessage };
+
+
+
+
+
+
+
+

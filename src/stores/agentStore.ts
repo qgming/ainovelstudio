@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { getStoredAgentConfig, getStoredEnabledTools, useAgentSettingsStore } from "./agentSettingsStore";
+import { getStoredAgentConfig, getStoredDefaultAgentMarkdown, getStoredEnabledTools, useAgentSettingsStore } from "./agentSettingsStore";
 import { runAgentTurn } from "../lib/agent/session";
 import { createWorkspaceToolset } from "../lib/agent/tools";
 import type { AgentMessage, AgentPart, AgentRun } from "../lib/agent/types";
@@ -129,6 +129,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     }
 
     const abortController = new AbortController();
+    const conversationHistory = get().run.messages;
     const userMessage = buildUserMessage(nextInput);
     const assistantMessage = buildAssistantPlaceholderMessage();
 
@@ -148,6 +149,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       const enabledSkills = getEnabledSkills(useSkillsStore.getState());
       const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
       const enabledToolsMap = useAgentSettingsStore.getState().enabledTools ?? getStoredEnabledTools();
+      const defaultAgentMarkdown = useAgentSettingsStore.getState().defaultAgentMarkdown ?? getStoredDefaultAgentMarkdown();
       const enabledToolIds = Object.entries(enabledToolsMap)
         .filter(([, v]) => v)
         .map(([k]) => k);
@@ -164,6 +166,9 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       const stream = runAgentTurn({
         abortSignal: abortController.signal,
         activeFilePath: workspaceState.activeFilePath,
+        workspaceRootPath: workspaceState.rootPath,
+        conversationHistory,
+        defaultAgentMarkdown,
         enabledAgents,
         enabledSkills,
         enabledToolIds,
@@ -232,3 +237,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
   setInput: (value) => set({ input: value }),
 }));
+
+
+
+
+

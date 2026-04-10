@@ -16,6 +16,29 @@ describe("skills store", () => {
   beforeEach(() => {
     localStorage.clear();
     useSkillsStore.getState().reset();
+    useSkillsStore.setState({
+      manifests: [
+        {
+          body: "技能正文",
+          description: "测试技能",
+          discoveredAt: 1,
+          id: "builtin-skill",
+          isBuiltin: true,
+          name: "内置技能",
+          rawMarkdown: "---\nname: 内置技能\n---\n技能正文",
+          references: [],
+          sourceKind: "builtin-package",
+          suggestedTools: ["read_file"],
+          tags: ["builtin"],
+          validation: {
+            errors: [],
+            isValid: true,
+            warnings: [],
+          },
+        },
+      ],
+      status: "ready",
+    });
     vi.mocked(scanInstalledSkills).mockReset();
   });
 
@@ -62,3 +85,4 @@ describe("skills store", () => {
     expect(getEnabledSkills(useSkillsStore.getState()).map((skill) => skill.id)).toContain(skillId);
   });
 });
+
