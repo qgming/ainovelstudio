@@ -22,11 +22,30 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import App from "./App";
+import { useAgentStore } from "./stores/agentStore";
 import { useBookWorkspaceStore } from "./stores/bookWorkspaceStore";
 import { useThemeStore } from "./stores/themeStore";
 
 const rootPath = "C:/books/北境余烬";
 const chapterPath = `${rootPath}/章节/第一卷/第1章-开篇.md`;
+const chatBootstrap = {
+  sessions: [
+    {
+      id: "session-1",
+      title: "新对话",
+      summary: "",
+      status: "idle",
+      createdAt: "1",
+      updatedAt: "1",
+      lastMessageAt: null,
+      pinned: false,
+      archived: false,
+    },
+  ],
+  activeSessionId: "session-1",
+  activeSessionMessages: [],
+  activeSessionDraft: "",
+};
 const tree = {
   kind: "directory",
   name: "北境余烬",
@@ -48,7 +67,14 @@ describe("App shell", () => {
     document.documentElement.className = "";
     useThemeStore.setState({ theme: "light", initialized: false });
     useBookWorkspaceStore.getState().resetState();
+    useAgentStore.getState().reset();
     mockInvoke.mockReset();
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "initialize_chat_storage") {
+        return chatBootstrap;
+      }
+      return undefined;
+    });
     mockWindow.close.mockReset();
     mockWindow.isMaximized.mockReset();
     mockWindow.isMaximized.mockResolvedValue(false);
@@ -180,6 +206,8 @@ describe("App shell", () => {
     let resolveFile!: (value: string) => void;
     mockInvoke.mockImplementation(async (command: string) => {
       switch (command) {
+        case "initialize_chat_storage":
+          return chatBootstrap;
         case "read_workspace_tree":
           return tree;
         case "read_text_file":
@@ -212,6 +240,3 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "第1章-开篇.md" })).toBeInTheDocument();
   });
 });
-
-
-

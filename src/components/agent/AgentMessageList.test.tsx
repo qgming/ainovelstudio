@@ -21,6 +21,51 @@ describe("BookAgentPanel", () => {
     expect(screen.queryByText("read_file")).not.toBeInTheDocument();
   });
 
+
+  it("点击历史按钮后在触发位置弹出会话菜单", () => {
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      sessions: [
+        {
+          id: "session-1",
+          title: "当前剧情讨论",
+          summary: "继续完善高潮戏。",
+          status: "completed",
+          createdAt: "10",
+          updatedAt: "20",
+          lastMessageAt: "20",
+          pinned: false,
+          archived: false,
+        },
+        {
+          id: "session-2",
+          title: "人物关系梳理",
+          summary: "补充反派动机。",
+          status: "idle",
+          createdAt: "8",
+          updatedAt: "12",
+          lastMessageAt: "12",
+          pinned: false,
+          archived: false,
+        },
+      ],
+      run: {
+        id: "session-1",
+        status: "completed",
+        title: "当前剧情讨论",
+        messages: [],
+      },
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "打开历史记录" }));
+
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "当前剧情讨论" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "人物关系梳理" })).toBeInTheDocument();
+    expect(screen.queryByText("历史会话")).not.toBeInTheDocument();
+  });
   it("工具运行中与完成后使用同一个工具卡片展示状态", () => {
     useAgentStore.setState({
       run: {
@@ -319,3 +364,6 @@ describe("BookAgentPanel", () => {
     expect(screen.getByLabelText("运行成功")).toBeInTheDocument();
   });
 });
+
+
+

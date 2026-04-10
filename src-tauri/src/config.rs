@@ -1,5 +1,8 @@
 use serde::Serialize;
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use tauri::{path::BaseDirectory, AppHandle, Manager};
 
 type CommandResult<T> = Result<T, String>;
@@ -28,7 +31,11 @@ fn normalize_markdown(content: &str) -> String {
 }
 
 fn ensure_user_config_root(app: &AppHandle) -> CommandResult<PathBuf> {
-    let root = app.path().app_data_dir().map_err(error_to_string)?.join("config");
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(error_to_string)?
+        .join("config");
     fs::create_dir_all(&root).map_err(error_to_string)?;
     Ok(root)
 }
@@ -36,7 +43,11 @@ fn ensure_user_config_root(app: &AppHandle) -> CommandResult<PathBuf> {
 fn resolve_builtin_config_root(app: &AppHandle) -> Option<PathBuf> {
     ["config", "resources/config"]
         .into_iter()
-        .filter_map(|relative_path| app.path().resolve(relative_path, BaseDirectory::Resource).ok())
+        .filter_map(|relative_path| {
+            app.path()
+                .resolve(relative_path, BaseDirectory::Resource)
+                .ok()
+        })
         .find(|path| path.exists() && path.is_dir())
 }
 
@@ -65,7 +76,11 @@ fn ensure_user_default_agent_file(app: &AppHandle) -> CommandResult<(PathBuf, bo
     Ok((file_path, true))
 }
 
-fn build_document(path: PathBuf, markdown: String, initialized_from_builtin: bool) -> DefaultAgentConfigDocument {
+fn build_document(
+    path: PathBuf,
+    markdown: String,
+    initialized_from_builtin: bool,
+) -> DefaultAgentConfigDocument {
     DefaultAgentConfigDocument {
         initialized_from_builtin,
         markdown,
@@ -74,12 +89,18 @@ fn build_document(path: PathBuf, markdown: String, initialized_from_builtin: boo
 }
 
 #[tauri::command]
-pub fn initialize_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
+pub fn initialize_default_agent_config(
+    app: AppHandle,
+) -> CommandResult<DefaultAgentConfigDocument> {
     let (file_path, initialized_from_builtin) = ensure_user_default_agent_file(&app)?;
     let markdown = fs::read_to_string(&file_path)
         .map(|content| normalize_markdown(&content))
         .map_err(error_to_string)?;
-    Ok(build_document(file_path, markdown, initialized_from_builtin))
+    Ok(build_document(
+        file_path,
+        markdown,
+        initialized_from_builtin,
+    ))
 }
 
 #[tauri::command]
@@ -93,7 +114,10 @@ pub fn read_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentCo
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn write_default_agent_config(app: AppHandle, content: String) -> CommandResult<DefaultAgentConfigDocument> {
+pub fn write_default_agent_config(
+    app: AppHandle,
+    content: String,
+) -> CommandResult<DefaultAgentConfigDocument> {
     let (file_path, _initialized) = ensure_user_default_agent_file(&app)?;
     let markdown = normalize_markdown(&content);
     fs::write(&file_path, &markdown).map_err(error_to_string)?;

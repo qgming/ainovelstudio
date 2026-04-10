@@ -9,6 +9,7 @@ import { SettingPage } from "./pages/SettingPage";
 import { SkillDetailPage } from "./pages/SkillDetailPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { useAgentSettingsStore } from "./stores/agentSettingsStore";
+import { useAgentStore } from "./stores/agentStore";
 import { useThemeStore } from "./stores/themeStore";
 import { useSkillsStore } from "./stores/skillsStore";
 import { useSubAgentStore } from "./stores/subAgentStore";
@@ -18,13 +19,15 @@ function AppShell() {
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const initializeAgents = useSubAgentStore((state) => state.initialize);
   const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
+  const initializeAgentHistory = useAgentStore((state) => state.initialize);
 
   useEffect(() => {
     initializeTheme();
     void initializeSkills();
     void initializeAgents();
     void initializeAgentSettings();
-  }, [initializeAgentSettings, initializeAgents, initializeSkills, initializeTheme]);
+    void initializeAgentHistory();
+  }, [initializeAgentHistory, initializeAgentSettings, initializeAgents, initializeSkills, initializeTheme]);
 
   return (
     <div className="h-screen overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">

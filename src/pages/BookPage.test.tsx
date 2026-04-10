@@ -197,9 +197,9 @@ describe("BookPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "打开书籍菜单" }));
 
-    expect(screen.getByRole("heading", { name: "书籍菜单" })).toBeInTheDocument();
+    expect(screen.getByRole("menu")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "选择书籍" }));
 
     await waitFor(() => {
       const pickDirectoryCalls = mockInvoke.mock.calls.filter(([command]) => command === "pick_book_directory");
@@ -215,7 +215,8 @@ describe("BookPage", () => {
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "打开书籍菜单" }));
-    fireEvent.click(screen.getByRole("button", { name: "新建书籍" }));
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "新建书籍" }));
 
     expect(screen.getByRole("heading", { name: "新建书籍" })).toBeInTheDocument();
     expect(screen.getByLabelText("书名")).toBeInTheDocument();
@@ -383,3 +384,4 @@ describe("BookPage", () => {
     });
   });
 });
+

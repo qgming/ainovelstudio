@@ -1,5 +1,7 @@
 mod agents;
+mod chat;
 mod config;
+mod db;
 mod skills;
 mod workspace;
 
@@ -18,6 +20,15 @@ pub fn run() {
             agents::create_agent,
             agents::delete_installed_agent,
             agents::import_agent_zip,
+            chat::initialize_chat_storage,
+            chat::create_chat_session,
+            chat::switch_chat_session,
+            chat::delete_chat_session,
+            chat::rename_chat_session,
+            chat::set_chat_draft,
+            chat::append_chat_message,
+            chat::update_chat_message,
+            chat::delete_chat_message,
             config::initialize_default_agent_config,
             config::read_default_agent_config,
             config::write_default_agent_config,

@@ -114,7 +114,8 @@ fn sanitize_agent_id_fallback(value: &str) -> String {
         .trim()
         .chars()
         .map(|char| {
-            if char.is_ascii_lowercase() || char.is_ascii_digit() || matches!(char, '.' | '_' | '-') {
+            if char.is_ascii_lowercase() || char.is_ascii_digit() || matches!(char, '.' | '_' | '-')
+            {
                 char
             } else if char.is_ascii_uppercase() {
                 char.to_ascii_lowercase()
@@ -136,11 +137,19 @@ fn sanitize_agent_id_fallback(value: &str) -> String {
     }
 }
 
-fn read_object_field<'a>(frontmatter: Option<&'a Map<String, Value>>, key: &str) -> Option<&'a Map<String, Value>> {
-    frontmatter.and_then(|map| map.get(key)).and_then(Value::as_object)
+fn read_object_field<'a>(
+    frontmatter: Option<&'a Map<String, Value>>,
+    key: &str,
+) -> Option<&'a Map<String, Value>> {
+    frontmatter
+        .and_then(|map| map.get(key))
+        .and_then(Value::as_object)
 }
 
-fn read_metadata_string_field(frontmatter: Option<&Map<String, Value>>, key: &str) -> Option<String> {
+fn read_metadata_string_field(
+    frontmatter: Option<&Map<String, Value>>,
+    key: &str,
+) -> Option<String> {
     read_object_field(frontmatter, "metadata")
         .and_then(|map| map.get(key))
         .and_then(Value::as_str)
@@ -224,7 +233,8 @@ fn parse_agent_markdown(raw: &str) -> CommandResult<ParsedAgentMarkdown> {
         search_offset = absolute + 4;
     }
 
-    let closing_index = closing_index.ok_or_else(|| "AGENTS.md 的 YAML 头部缺少结束分隔符 ---。".to_string())?;
+    let closing_index =
+        closing_index.ok_or_else(|| "AGENTS.md 的 YAML 头部缺少结束分隔符 ---。".to_string())?;
     let yaml_raw = normalized[4..(closing_index - 1)].trim().to_string();
     let body_start = if normalized[closing_index..].starts_with("---\n") {
         closing_index + 4
@@ -241,7 +251,8 @@ fn parse_agent_markdown(raw: &str) -> CommandResult<ParsedAgentMarkdown> {
         });
     }
 
-    let parsed = serde_yaml::from_str::<Value>(&yaml_raw).map_err(|error| format!("YAML 解析失败：{error}"))?;
+    let parsed = serde_yaml::from_str::<Value>(&yaml_raw)
+        .map_err(|error| format!("YAML 解析失败：{error}"))?;
 
     match parsed {
         Value::Object(_) => Ok(ParsedAgentMarkdown {
@@ -267,7 +278,10 @@ fn validate_agent_name(name: &str) -> bool {
         .all(|char| char.is_ascii_lowercase() || char.is_ascii_digit() || char == '-')
 }
 
-fn validate_frontmatter(frontmatter: Option<&Map<String, Value>>, directory_name: &str) -> (Vec<String>, Vec<String>) {
+fn validate_frontmatter(
+    frontmatter: Option<&Map<String, Value>>,
+    directory_name: &str,
+) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
@@ -310,7 +324,10 @@ fn validate_frontmatter(frontmatter: Option<&Map<String, Value>>, directory_name
     }
 
     if let Some(metadata) = read_object_field(frontmatter, "metadata") {
-        if metadata.iter().any(|(key, value)| key.trim().is_empty() || !value.is_string()) {
+        if metadata
+            .iter()
+            .any(|(key, value)| key.trim().is_empty() || !value.is_string())
+        {
             errors.push("frontmatter.metadata 仅支持字符串键值对。".into());
         }
     }
@@ -344,13 +361,18 @@ fn parse_agent_manifest(agent_dir: &Path, source_root: &AgentRoot) -> CommandRes
         }
     };
 
-    let frontmatter_object = parsed_markdown.frontmatter.as_ref().and_then(Value::as_object);
+    let frontmatter_object = parsed_markdown
+        .frontmatter
+        .as_ref()
+        .and_then(Value::as_object);
     let id = sanitize_agent_id_fallback(&directory_name);
-    let (frontmatter_errors, frontmatter_warnings) = validate_frontmatter(frontmatter_object, &directory_name);
+    let (frontmatter_errors, frontmatter_warnings) =
+        validate_frontmatter(frontmatter_object, &directory_name);
     errors.extend(frontmatter_errors);
     warnings.extend(frontmatter_warnings);
 
-    let name = read_string_field(frontmatter_object, "name").unwrap_or_else(|| directory_name.clone());
+    let name =
+        read_string_field(frontmatter_object, "name").unwrap_or_else(|| directory_name.clone());
     let description = read_string_field(frontmatter_object, "description")
         .unwrap_or_else(|| extract_description_from_body(&parsed_markdown.body));
     let version = read_string_field(frontmatter_object, "version")
@@ -449,7 +471,11 @@ fn scan_agent_root(root: &AgentRoot) -> CommandResult<Vec<AgentManifest>> {
 }
 
 fn ensure_user_agents_root(app: &AppHandle) -> CommandResult<PathBuf> {
-    let root = app.path().app_data_dir().map_err(error_to_string)?.join("agents");
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(error_to_string)?
+        .join("agents");
     fs::create_dir_all(&root).map_err(error_to_string)?;
     Ok(root)
 }
@@ -457,7 +483,11 @@ fn ensure_user_agents_root(app: &AppHandle) -> CommandResult<PathBuf> {
 fn resolve_builtin_agents_root(app: &AppHandle) -> Option<PathBuf> {
     ["agents", "resources/agents"]
         .into_iter()
-        .filter_map(|relative_path| app.path().resolve(relative_path, BaseDirectory::Resource).ok())
+        .filter_map(|relative_path| {
+            app.path()
+                .resolve(relative_path, BaseDirectory::Resource)
+                .ok()
+        })
         .find(|path| path.exists() && path.is_dir())
 }
 
@@ -512,10 +542,12 @@ fn resolve_agent_file_path(agent_dir: &Path, relative_path: &str) -> CommandResu
     if relative.is_absolute() {
         return Err("文件路径不合法。".into());
     }
-    if relative
-        .components()
-        .any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_)))
-    {
+    if relative.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
         return Err("文件路径不合法。".into());
     }
 
@@ -552,7 +584,11 @@ fn write_agent_file(agent_dir: &Path, relative_path: &str, content: &str) -> Com
     fs::write(file_path, content).map_err(error_to_string)
 }
 
-fn create_agent_directory_from_content(app: &AppHandle, name: &str, agent_markdown: &str) -> CommandResult<()> {
+fn create_agent_directory_from_content(
+    app: &AppHandle,
+    name: &str,
+    agent_markdown: &str,
+) -> CommandResult<()> {
     let safe_name = name.trim();
     if !validate_agent_name(safe_name) {
         return Err("名称格式不合法：仅支持小写字母、数字和连字符。".into());
@@ -564,10 +600,16 @@ fn create_agent_directory_from_content(app: &AppHandle, name: &str, agent_markdo
     }
 
     fs::write(agent_dir.join("AGENTS.md"), agent_markdown).map_err(error_to_string)?;
-    fs::write(agent_dir.join("TOOLS.md"), "# TOOLS\n\n- 在这里记录该代理可使用的工具、技能与边界。\n")
-        .map_err(error_to_string)?;
-    fs::write(agent_dir.join("MEMORY.md"), "# MEMORY\n\n- 在这里记录用户对该代理的长期偏好。\n")
-        .map_err(error_to_string)?;
+    fs::write(
+        agent_dir.join("TOOLS.md"),
+        "# TOOLS\n\n- 在这里记录该代理可使用的工具、技能与边界。\n",
+    )
+    .map_err(error_to_string)?;
+    fs::write(
+        agent_dir.join("MEMORY.md"),
+        "# MEMORY\n\n- 在这里记录用户对该代理的长期偏好。\n",
+    )
+    .map_err(error_to_string)?;
 
     let scan_root = AgentRoot {
         is_builtin: false,
@@ -612,10 +654,16 @@ fn create_agent_directory(app: &AppHandle, name: &str, description: &str) -> Com
         build_agent_markdown_template(&safe_name, trimmed_description),
     )
     .map_err(error_to_string)?;
-    fs::write(agent_dir.join("TOOLS.md"), "# TOOLS\n\n- 记录该代理可用的工具与技能。\n")
-        .map_err(error_to_string)?;
-    fs::write(agent_dir.join("MEMORY.md"), "# MEMORY\n\n- 记录用户对该代理的长期偏好。\n")
-        .map_err(error_to_string)?;
+    fs::write(
+        agent_dir.join("TOOLS.md"),
+        "# TOOLS\n\n- 记录该代理可用的工具与技能。\n",
+    )
+    .map_err(error_to_string)?;
+    fs::write(
+        agent_dir.join("MEMORY.md"),
+        "# MEMORY\n\n- 记录用户对该代理的长期偏好。\n",
+    )
+    .map_err(error_to_string)?;
 
     let scan_root = AgentRoot {
         is_builtin: false,
@@ -679,7 +727,9 @@ fn copy_directory_recursive(source: &Path, target: &Path) -> CommandResult<()> {
     Ok(())
 }
 
-fn sync_builtin_agents_to_user_dir(app: &AppHandle) -> CommandResult<BuiltinAgentsInitializationResult> {
+fn sync_builtin_agents_to_user_dir(
+    app: &AppHandle,
+) -> CommandResult<BuiltinAgentsInitializationResult> {
     let user_root = ensure_user_agents_root(app)?;
     let builtin_root = match resolve_builtin_agents_root(app) {
         Some(path) => path,
@@ -751,7 +801,9 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         if entry.size() > MAX_ARCHIVE_FILE_SIZE {
             return Err("ZIP 内单个文件过大。".into());
         }
-        if entry.compressed_size() > 0 && entry.size() / entry.compressed_size().max(1) > MAX_COMPRESSION_RATIO {
+        if entry.compressed_size() > 0
+            && entry.size() / entry.compressed_size().max(1) > MAX_COMPRESSION_RATIO
+        {
             return Err("ZIP 压缩比异常，已拒绝导入。".into());
         }
         total_uncompressed = total_uncompressed.saturating_add(entry.size());
@@ -763,7 +815,11 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
 
     let agent_files = safe_paths
         .iter()
-        .filter(|path| path.file_name().map(|name| name == "AGENTS.md").unwrap_or(false))
+        .filter(|path| {
+            path.file_name()
+                .map(|name| name == "AGENTS.md")
+                .unwrap_or(false)
+        })
         .cloned()
         .collect::<Vec<_>>();
 
@@ -776,7 +832,11 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
             .join("，");
         return Err(format!(
             "ZIP 中未找到 AGENTS.md。压缩包内检测到的文件示例：{}",
-            if preview.is_empty() { "无可用文件".into() } else { preview }
+            if preview.is_empty() {
+                "无可用文件".into()
+            } else {
+                preview
+            }
         ));
     }
     if agent_files.len() > 1 {
@@ -792,7 +852,10 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
     }
 
     let agent_file_path = &agent_files[0];
-    let root_prefix = agent_file_path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let root_prefix = agent_file_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
     let archive_file_name = zip_path
         .file_stem()
         .and_then(|name| name.to_str())
@@ -804,7 +867,11 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         .app_data_dir()
         .map_err(error_to_string)?
         .join("agent-import-temp")
-        .join(format!("{}-{}", archive_file_name, current_timestamp_millis()));
+        .join(format!(
+            "{}-{}",
+            archive_file_name,
+            current_timestamp_millis()
+        ));
     if temp_root.exists() {
         fs::remove_dir_all(&temp_root).map_err(error_to_string)?;
     }
@@ -906,7 +973,9 @@ pub fn scan_installed_agents(app: AppHandle) -> CommandResult<Vec<AgentManifest>
 }
 
 #[tauri::command]
-pub fn initialize_builtin_agents(app: AppHandle) -> CommandResult<BuiltinAgentsInitializationResult> {
+pub fn initialize_builtin_agents(
+    app: AppHandle,
+) -> CommandResult<BuiltinAgentsInitializationResult> {
     sync_builtin_agents_to_user_dir(&app)
 }
 
@@ -921,7 +990,11 @@ pub fn read_agent_detail(app: AppHandle, agentId: String) -> CommandResult<Agent
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn read_agent_file_content(app: AppHandle, agentId: String, relativePath: String) -> CommandResult<String> {
+pub fn read_agent_file_content(
+    app: AppHandle,
+    agentId: String,
+    relativePath: String,
+) -> CommandResult<String> {
     let agent_dir = resolve_agent_directory(&app, &agentId)?;
     let file_path = resolve_agent_file_path(&agent_dir, &relativePath)?;
     fs::read_to_string(file_path).map_err(error_to_string)
@@ -951,10 +1024,14 @@ pub fn write_agent_file_content(
             let copied_agent_dir = user_root.join(&agentId);
             if let Some(install_path) = manifest.install_path {
                 let source_path = PathBuf::from(install_path);
-                for relative in PRIMARY_AGENT_FILES.iter().filter(|name| **name != "AGENTS.md") {
+                for relative in PRIMARY_AGENT_FILES
+                    .iter()
+                    .filter(|name| **name != "AGENTS.md")
+                {
                     let source_file = source_path.join(relative);
                     if source_file.exists() && source_file.is_file() {
-                        fs::copy(&source_file, copied_agent_dir.join(relative)).map_err(error_to_string)?;
+                        fs::copy(&source_file, copied_agent_dir.join(relative))
+                            .map_err(error_to_string)?;
                     }
                 }
             }
@@ -967,14 +1044,21 @@ pub fn write_agent_file_content(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn create_agent(app: AppHandle, name: String, description: String) -> CommandResult<Vec<AgentManifest>> {
+pub fn create_agent(
+    app: AppHandle,
+    name: String,
+    description: String,
+) -> CommandResult<Vec<AgentManifest>> {
     create_agent_directory(&app, &name, &description)?;
     scan_all_agents(&app)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn delete_installed_agent(app: AppHandle, agentId: String) -> CommandResult<Vec<AgentManifest>> {
+pub fn delete_installed_agent(
+    app: AppHandle,
+    agentId: String,
+) -> CommandResult<Vec<AgentManifest>> {
     let target_path = resolve_installed_agent_directory(&app, &agentId)?;
     fs::remove_dir_all(&target_path).map_err(error_to_string)?;
     scan_all_agents(&app)
@@ -998,4 +1082,3 @@ pub fn import_agent_zip(app: AppHandle, zipPath: String) -> CommandResult<Vec<Ag
 
     install_agent_from_zip(&app, &zip_path)
 }
-

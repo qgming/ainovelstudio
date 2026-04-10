@@ -156,7 +156,11 @@ fn resolve_line_index(lines: &[String], line_number: usize) -> CommandResult<usi
 
     let index = line_number - 1;
     if index >= lines.len() {
-        return Err(format!("目标文件只有 {} 行，无法访问第 {} 行。", lines.len(), line_number));
+        return Err(format!(
+            "目标文件只有 {} 行，无法访问第 {} 行。",
+            lines.len(),
+            line_number
+        ));
     }
 
     Ok(index)
@@ -203,7 +207,14 @@ fn collect_workspace_search_matches(
 
         if path.is_dir() {
             if lowered_name.contains(query)
-                && push_search_match(matches, "directory_name", display_path.clone(), None, None, limit)
+                && push_search_match(
+                    matches,
+                    "directory_name",
+                    display_path.clone(),
+                    None,
+                    None,
+                    limit,
+                )
             {
                 return Ok(());
             }
@@ -216,7 +227,14 @@ fn collect_workspace_search_matches(
         }
 
         if lowered_name.contains(query)
-            && push_search_match(matches, "file_name", display_path.clone(), None, None, limit)
+            && push_search_match(
+                matches,
+                "file_name",
+                display_path.clone(),
+                None,
+                None,
+                limit,
+            )
         {
             return Ok(());
         }
@@ -317,7 +335,10 @@ fn validate_name(value: &str) -> CommandResult<String> {
     if trimmed == "index.json" {
         return Err("index.json 由系统维护，不能手动创建或重命名。".into());
     }
-    if trimmed.chars().any(|char| INVALID_NAME_CHARS.contains(&char)) {
+    if trimmed
+        .chars()
+        .any(|char| INVALID_NAME_CHARS.contains(&char))
+    {
         return Err("名称不能包含 < > : \" / \\ | ? *。".into());
     }
     Ok(trimmed.to_string())
@@ -425,7 +446,11 @@ fn write_index_file(root: &Path, current: &Path) -> CommandResult<()> {
         }
 
         items.push(HiddenIndexItem {
-            extension: if path.is_file() { file_extension(&path) } else { None },
+            extension: if path.is_file() {
+                file_extension(&path)
+            } else {
+                None
+            },
             kind: if path.is_dir() {
                 "directory".into()
             } else {

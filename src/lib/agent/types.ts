@@ -19,11 +19,17 @@ export type AgentPart =
       parts: AgentPart[];
     };
 
+export type AgentMessageMeta = {
+  activeFilePath?: string | null;
+  workspaceRootPath?: string | null;
+};
+
 export type AgentMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   author: string;
   parts: AgentPart[];
+  meta?: AgentMessageMeta;
 };
 
 export type AgentRun = {

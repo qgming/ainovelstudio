@@ -1,6 +1,8 @@
 import { ChevronRight, History, SquarePen } from "lucide-react";
+import { useState } from "react";
 import { AgentComposer } from "../agent/AgentComposer";
 import { AgentMessageList } from "../agent/AgentMessageList";
+import { ActionMenu, ActionMenuItem } from "../common/ActionMenu";
 import { useAgentStore } from "../../stores/agentStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
@@ -9,19 +11,28 @@ type BookAgentPanelProps = {
   width: number;
 };
 
-function ToolbarButton({
-  ariaLabel,
-  children,
-}: {
+type ToolbarButtonProps = {
   ariaLabel: string;
   children: React.ReactNode;
-}) {
+  disabled?: boolean;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+};
+
+type AnchorRect = {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+};
+
+function ToolbarButton({ ariaLabel, children, disabled = false, onClick }: ToolbarButtonProps) {
   return (
     <button
       type="button"
       aria-label={ariaLabel}
-      onClick={() => {}}
-      className="flex h-8 w-8 items-center justify-center rounded-[8px] p-0 text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-9 w-9 items-center justify-center rounded-[10px] text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
     >
       {children}
     </button>
@@ -33,56 +44,115 @@ function AgentHeaderButton() {
     <button
       type="button"
       aria-label="Agent 面板"
-      onClick={() => {}}
-      className="flex h-8 min-w-0 items-center gap-0.5 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
+      className="flex h-9 min-w-0 items-center gap-1 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
     >
       <ChevronRight className="h-4 w-4 shrink-0 text-black dark:text-white" />
-      <span
-        role="heading"
-        aria-level={2}
-        className="truncate text-[15px] font-semibold leading-none tracking-[-0.03em]"
-      >
-        Agent
-      </span>
+      <div className="min-w-0">
+        <span role="heading" aria-level={2} className="block truncate text-[15px] font-semibold leading-none tracking-[-0.03em]">
+          Agent
+        </span>
+      </div>
     </button>
   );
 }
 
+function toAnchorRect(rect: DOMRect): AnchorRect {
+  return {
+    bottom: rect.bottom,
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+  };
+}
+
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
+  const activeSessionId = useAgentStore((state) => state.activeSessionId);
   const baseTags = useAgentStore((state) => state.contextTags);
+  const createNewSession = useAgentStore((state) => state.createNewSession);
+  const errorMessage = useAgentStore((state) => state.errorMessage);
   const input = useAgentStore((state) => state.input);
+  const isHistoryOpen = useAgentStore((state) => state.isHistoryOpen);
+  const openHistory = useAgentStore((state) => state.openHistory);
+  const closeHistory = useAgentStore((state) => state.closeHistory);
   const run = useAgentStore((state) => state.run);
   const sendMessage = useAgentStore((state) => state.sendMessage);
-  const stopMessage = useAgentStore((state) => state.stopMessage);
+  const sessions = useAgentStore((state) => state.sessions);
   const setInput = useAgentStore((state) => state.setInput);
+  const stopMessage = useAgentStore((state) => state.stopMessage);
+  const switchSession = useAgentStore((state) => state.switchSession);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
   const enabledSkills = getEnabledSkills({ manifests, preferences });
   const agentManifests = useSubAgentStore((state) => state.manifests);
   const agentPreferences = useSubAgentStore((state) => state.preferences);
   const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
+  const isRunning = run.status === "running";
+  const [historyAnchorRect, setHistoryAnchorRect] = useState<AnchorRect | null>(null);
   const contextTags = [
     ...baseTags,
     ...enabledSkills.slice(0, 2).map((skill) => `技能: ${skill.name}`),
     ...enabledAgents.slice(0, 2).map((agent) => `代理: ${agent.name}`),
   ];
 
+  const handleHistoryToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (isHistoryOpen) {
+      setHistoryAnchorRect(null);
+      closeHistory();
+      return;
+    }
+
+    setHistoryAnchorRect(toAnchorRect(event.currentTarget.getBoundingClientRect()));
+    openHistory();
+  };
+
+  const handleHistoryClose = () => {
+    setHistoryAnchorRect(null);
+    closeHistory();
+  };
+
+  const handleSessionSelect = (sessionId: string) => {
+    handleHistoryClose();
+    void switchSession(sessionId);
+  };
+
   return (
     <aside
       style={{ width }}
       className="flex h-full shrink-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-2 py-1 dark:border-[#20242b]">
+      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-2 py-1.5 dark:border-[#20242b]">
         <AgentHeaderButton />
-        <div className="flex shrink-0 items-center gap-0.5">
-          <ToolbarButton ariaLabel="打开历史记录">
+        <div className="flex shrink-0 items-center gap-1">
+          <ToolbarButton ariaLabel={isHistoryOpen ? "收起历史记录" : "打开历史记录"} onClick={handleHistoryToggle}>
             <History className="h-4 w-4" />
           </ToolbarButton>
-          <ToolbarButton ariaLabel="开始新对话">
+          <ToolbarButton ariaLabel="开始新对话" disabled={isRunning} onClick={() => void createNewSession()}>
             <SquarePen className="h-4 w-4" />
           </ToolbarButton>
         </div>
       </div>
+      {errorMessage ? (
+        <div className="border-b border-[#f1d4d4] bg-[#fff5f5] px-3 py-2 text-xs text-[#b42318] dark:border-[#452426] dark:bg-[#221416] dark:text-[#fca5a5]">
+          {errorMessage}
+        </div>
+      ) : null}
+      <ActionMenu anchorRect={isHistoryOpen ? historyAnchorRect : null} onClose={handleHistoryClose}>
+        <div className="space-y-1">
+          {sessions.map((session) => {
+            const isActive = session.id === activeSessionId;
+            return (
+              <ActionMenuItem
+                key={session.id}
+                active={isActive}
+                disabled={isRunning}
+                onClick={() => handleSessionSelect(session.id)}
+              >
+                {session.title}
+              </ActionMenuItem>
+            );
+          })}
+        </div>
+      </ActionMenu>
       <AgentMessageList messages={run.messages} />
       <AgentComposer
         contextTags={contextTags}

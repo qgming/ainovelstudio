@@ -7,7 +7,7 @@ import { BookPanelResizeHandle } from "../components/book/BookPanelResizeHandle"
 import { BookWorkspaceLoadingState } from "../components/book/BookWorkspaceLoadingState";
 import { BookTreePanel } from "../components/book/BookTreePanel";
 import { BookWorkspaceEmptyState } from "../components/book/BookWorkspaceEmptyState";
-import { BookWorkspaceActionMenu } from "../components/book/BookWorkspaceActionMenu";
+import { ActionMenu, ActionMenuItem } from "../components/common/ActionMenu";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
 import { getStoredWorkspaceSnapshot } from "../lib/bookWorkspace/api";
@@ -31,6 +31,12 @@ import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const AUTO_SAVE_DELAY_MS = 800;
 type ResizeHandle = "left" | "right" | null;
+type AnchorRect = {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -94,7 +100,7 @@ export function BookPage() {
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
   const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
   const updateDraft = useBookWorkspaceStore((state) => state.updateDraft);
-  const [isBookMenuOpen, setIsBookMenuOpen] = useState(false);
+  const [bookMenuAnchorRect, setBookMenuAnchorRect] = useState<AnchorRect | null>(null);
   const [panelLayout, setPanelLayout] = useState<BookPanelLayout>(
     () => getStoredBookPanelLayout() ?? DEFAULT_BOOK_PANEL_LAYOUT,
   );
@@ -318,7 +324,7 @@ export function BookPage() {
                   onCreateFile={openCreateFileDialog}
                   onCreateFolder={openCreateFolderDialog}
                   onDelete={requestDelete}
-                  onOpenBookMenu={() => setIsBookMenuOpen(true)}
+                  onOpenBookMenu={(anchorRect) => setBookMenuAnchorRect(anchorRect)}
                   onRefresh={() => void refreshWorkspace()}
                   onRename={openRenameDialog}
                   onSelectFile={(path) => void selectFile(path)}
@@ -367,20 +373,30 @@ export function BookPage() {
         )}
       </div>
 
-      {isBookMenuOpen ? (
-        <BookWorkspaceActionMenu
-          busy={isBusy}
-          onClose={() => setIsBookMenuOpen(false)}
-          onCreateBook={() => {
-            setIsBookMenuOpen(false);
-            openCreateBookDialog();
-          }}
-          onOpenBook={() => {
-            setIsBookMenuOpen(false);
-            void openWorkspace();
-          }}
-        />
-      ) : null}
+      <ActionMenu anchorRect={bookMenuAnchorRect} onClose={() => setBookMenuAnchorRect(null)}>
+        <div className="space-y-1">
+          <ActionMenuItem
+            ariaLabel="选择书籍"
+            disabled={isBusy}
+            onClick={() => {
+              setBookMenuAnchorRect(null);
+              void openWorkspace();
+            }}
+          >
+            选择书籍
+          </ActionMenuItem>
+          <ActionMenuItem
+            ariaLabel="新建书籍"
+            disabled={isBusy}
+            onClick={() => {
+              setBookMenuAnchorRect(null);
+              openCreateBookDialog();
+            }}
+          >
+            新建书籍
+          </ActionMenuItem>
+        </div>
+      </ActionMenu>
 
       {promptState ? (
         <PromptDialog
@@ -409,5 +425,6 @@ export function BookPage() {
     </section>
   );
 }
+
 
 
