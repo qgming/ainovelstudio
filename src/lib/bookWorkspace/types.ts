@@ -8,6 +8,21 @@ export type TreeNode = {
   path: string;
 };
 
+export type WorkspaceSearchMatchType = "directory_name" | "file_name" | "content";
+
+export type WorkspaceSearchMatch = {
+  lineNumber?: number;
+  lineText?: string;
+  matchType: WorkspaceSearchMatchType;
+  path: string;
+};
+
+export type WorkspaceLineResult = {
+  lineNumber: number;
+  path: string;
+  text: string;
+};
+
 export type WorkspaceSnapshot = {
   rootPath: string;
   selectedFilePath: string | null;

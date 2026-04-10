@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { TreeNode, WorkspaceSnapshot } from "./types";
+import type {
+  TreeNode,
+  WorkspaceLineResult,
+  WorkspaceSearchMatch,
+  WorkspaceSnapshot,
+} from "./types";
 
 const WORKSPACE_STORAGE_KEY = "ainovelstudio-book-workspace";
 
@@ -66,6 +71,28 @@ export function readWorkspaceTextFile(rootPath: string, path: string) {
 
 export function writeWorkspaceTextFile(rootPath: string, path: string, contents: string) {
   return invoke<void>("write_text_file", { rootPath, path, contents });
+}
+
+export function searchWorkspaceContent(rootPath: string, query: string, limit?: number) {
+  return invoke<WorkspaceSearchMatch[]>("search_workspace_content", { limit, query, rootPath });
+}
+
+export function readWorkspaceTextLine(rootPath: string, path: string, lineNumber: number) {
+  return invoke<WorkspaceLineResult>("read_text_file_line", { lineNumber, path, rootPath });
+}
+
+export function replaceWorkspaceTextLine(
+  rootPath: string,
+  path: string,
+  lineNumber: number,
+  contents: string,
+) {
+  return invoke<WorkspaceLineResult>("replace_text_file_line", {
+    contents,
+    lineNumber,
+    path,
+    rootPath,
+  });
 }
 
 export function createBookWorkspace(parentPath: string, bookName: string) {

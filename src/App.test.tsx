@@ -138,15 +138,17 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("link", { name: "设置" }));
 
     expect(await screen.findByLabelText("默认 AGENTS 编辑器")).toBeInTheDocument();
+    expect(screen.getByText("AGENTS.md")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "工具库" }));
 
     await waitFor(() => {
-      expect(screen.getByText(/内置工具 · 已启用 7/)).toBeInTheDocument();
+      expect(screen.getByText(/内置工具 · 已启用 9/)).toBeInTheDocument();
     });
 
     expect(screen.getByText("读取文件")).toBeInTheDocument();
-    expect(screen.getByText("写入文件")).toBeInTheDocument();
+    expect(screen.getByText("行编辑")).toBeInTheDocument();
+    expect(screen.getByText("内容搜索")).toBeInTheDocument();
     expect(screen.getByText("读取目录树")).toBeInTheDocument();
   });
 
@@ -210,4 +212,6 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "第1章-开篇.md" })).toBeInTheDocument();
   });
 });
+
+
 

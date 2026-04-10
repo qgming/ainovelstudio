@@ -31,7 +31,8 @@
     "targets": "all",
     "resources": {
       "resources/skills": "skills",
-      "resources/agents": "agents"
+      "resources/agents": "agents",
+      "resources/config": "config"
     },
     "icon": [
       "icons/icon.png",
@@ -40,4 +41,3 @@
     ]
   }
 }
-

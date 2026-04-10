@@ -169,17 +169,24 @@ export function SettingPage() {
     setAgentsDirty(value !== defaultAgentMarkdown);
   }
 
-  function handleSaveAgents() {
-    const normalized = agentsDraft.trim() ? agentsDraft : DEFAULT_MAIN_AGENT_MARKDOWN;
-    updateDefaultAgentMarkdown(normalized);
-    setAgentsDraft(normalized);
-    setAgentsDirty(false);
+  async function handleSaveAgents() {
+    const normalized = agentsDraft.trim() ? agentsDraft : defaultAgentMarkdown || DEFAULT_MAIN_AGENT_MARKDOWN;
+    try {
+      await updateDefaultAgentMarkdown(normalized);
+      setAgentsDraft(normalized);
+      setAgentsDirty(false);
+    } catch {
+      // 错误状态由 store 统一维护，这里保留当前草稿以便继续编辑。
+    }
   }
 
-  function handleResetAgents() {
-    resetDefaultAgentMarkdown();
-    setAgentsDraft(DEFAULT_MAIN_AGENT_MARKDOWN);
-    setAgentsDirty(false);
+  async function handleResetAgents() {
+    try {
+      await resetDefaultAgentMarkdown();
+      setAgentsDirty(false);
+    } catch {
+      // 重置失败时保留当前草稿，避免覆盖用户输入。
+    }
   }
 
   function renderSectionContent() {
@@ -230,6 +237,7 @@ export function SettingPage() {
                 <button
                   key={key}
                   type="button"
+                  aria-label={title}
                   onClick={() => setActiveSection(key)}
                   className={[
                     "flex h-10 w-full items-center gap-3 border-b border-[#e2e8f0] px-3 text-left transition dark:border-[#20242b]",
@@ -253,3 +261,4 @@ export function SettingPage() {
     </PageShell>
   );
 }
+

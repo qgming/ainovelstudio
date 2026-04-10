@@ -1,4 +1,5 @@
 mod agents;
+mod config;
 mod skills;
 mod workspace;
 
@@ -17,10 +18,17 @@ pub fn run() {
             agents::create_agent,
             agents::delete_installed_agent,
             agents::import_agent_zip,
+            config::initialize_default_agent_config,
+            config::read_default_agent_config,
+            config::write_default_agent_config,
+            config::reset_default_agent_config,
             workspace::pick_book_directory,
             workspace::read_workspace_tree,
             workspace::read_text_file,
             workspace::write_text_file,
+            workspace::search_workspace_content,
+            workspace::read_text_file_line,
+            workspace::replace_text_file_line,
             workspace::create_book_workspace,
             workspace::create_workspace_directory,
             workspace::create_workspace_text_file,

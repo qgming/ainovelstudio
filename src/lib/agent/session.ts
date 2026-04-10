@@ -239,6 +239,23 @@ function buildAiSdkTools(
     });
   }
 
+  if (enabledSet.has("line_edit") && workspaceTools.line_edit) {
+    const wsTool = workspaceTools.line_edit;
+    toolSet.line_edit = defineTool({
+      description: wsTool.description,
+      inputSchema: z.object({
+        action: z.enum(["get", "replace"]).describe("get 表示读取该行，replace 表示替换该行"),
+        contents: z.string().optional().describe("当 action=replace 时要写入该行的新文本，不能包含换行符"),
+        lineNumber: z.number().int().positive().describe("1 开始的目标行号"),
+        path: z.string().describe("目标文件路径"),
+      }),
+      execute: async (input: { action: "get" | "replace"; contents?: string; lineNumber: number; path: string }) => {
+        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        return result.data ?? result.summary;
+      },
+    });
+  }
+
   if (enabledSet.has("write_file") && workspaceTools.write_file) {
     const wsTool = workspaceTools.write_file;
     toolSet.write_file = defineTool({
@@ -294,6 +311,21 @@ function buildAiSdkTools(
       execute: async (input: { path: string }) => {
         const result = await wsTool.execute(input);
         return result.summary;
+      },
+    });
+  }
+
+  if (enabledSet.has("search_workspace_content") && workspaceTools.search_workspace_content) {
+    const wsTool = workspaceTools.search_workspace_content;
+    toolSet.search_workspace_content = defineTool({
+      description: wsTool.description,
+      inputSchema: z.object({
+        limit: z.number().int().positive().max(200).optional().describe("最多返回多少条结果，默认 50"),
+        query: z.string().describe("要搜索的关键词，会匹配文件夹名、文件名和正文内容"),
+      }),
+      execute: async (input: { limit?: number; query: string }) => {
+        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        return result.data ?? result.summary;
       },
     });
   }

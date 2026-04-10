@@ -1,11 +1,21 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../lib/agent/promptContext";
 import { BUILTIN_TOOLS } from "../lib/agent/toolDefs";
+
+const { mockInvoke } = vi.hoisted(() => ({
+  mockInvoke: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: mockInvoke,
+}));
+
 import { useAgentSettingsStore } from "./agentSettingsStore";
 
 describe("agent settings store", () => {
   beforeEach(() => {
     localStorage.clear();
+    mockInvoke.mockReset();
     useAgentSettingsStore.getState().reset();
   });
 
@@ -45,48 +55,73 @@ describe("agent settings store", () => {
     expect(stored.enabledTools.write_file).toBe(true);
   });
 
-  it("支持单独持久化默认 AGENTS", () => {
-    const customMarkdown = "# 主代理\n\n- 优先直接给出可执行结果。";
+  it("initialize 从配置文件加载默认 AGENTS", async () => {
+    mockInvoke.mockResolvedValue({
+      initializedFromBuiltin: true,
+      markdown: "# 文件主代理\n\n- 从配置目录加载。",
+      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
+    });
 
-    useAgentSettingsStore.getState().updateDefaultAgentMarkdown(customMarkdown);
+    await useAgentSettingsStore.getState().initialize();
 
     const state = useAgentSettingsStore.getState();
-    const stored = JSON.parse(localStorage.getItem("ainovelstudio-agent-settings") ?? "{}");
-
-    expect(state.defaultAgentMarkdown).toBe(customMarkdown);
-    expect(stored.defaultAgentMarkdown).toBe(customMarkdown);
+    expect(mockInvoke).toHaveBeenCalledWith("initialize_default_agent_config");
+    expect(state.defaultAgentMarkdown).toBe("# 文件主代理\n\n- 从配置目录加载。");
+    expect(state.configFilePath).toContain("config/AGENTS.md");
+    expect(state.status).toBe("ready");
   });
 
-  it("resetConfig 只重置模型配置，不影响默认 AGENTS", () => {
+  it("updateDefaultAgentMarkdown 写回配置文件", async () => {
+    mockInvoke.mockResolvedValue({
+      initializedFromBuiltin: false,
+      markdown: "# 自定义主代理\n\n- 只使用文件保存。",
+      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
+    });
+
+    await useAgentSettingsStore.getState().updateDefaultAgentMarkdown("# 自定义主代理\n\n- 只使用文件保存。");
+
+    expect(mockInvoke).toHaveBeenCalledWith("write_default_agent_config", {
+      content: "# 自定义主代理\n\n- 只使用文件保存。",
+    });
+    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toBe("# 自定义主代理\n\n- 只使用文件保存。");
+  });
+
+  it("resetConfig 只重置模型配置，不影响当前 AGENTS 内容", () => {
+    useAgentSettingsStore.setState({ defaultAgentMarkdown: "# 文件主代理" });
     useAgentSettingsStore.getState().updateConfig({ model: "custom-model" });
-    useAgentSettingsStore.getState().updateDefaultAgentMarkdown("# 自定义主代理");
 
     useAgentSettingsStore.getState().resetConfig();
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("");
-    expect(state.defaultAgentMarkdown).toBe("# 自定义主代理");
+    expect(state.defaultAgentMarkdown).toBe("# 文件主代理");
   });
 
-  it("resetDefaultAgentMarkdown 恢复内置默认内容", () => {
-    useAgentSettingsStore.getState().updateDefaultAgentMarkdown("# 临时主代理");
+  it("resetDefaultAgentMarkdown 恢复配置目录中的默认内容", async () => {
+    mockInvoke.mockResolvedValue({
+      initializedFromBuiltin: false,
+      markdown: DEFAULT_MAIN_AGENT_MARKDOWN,
+      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
+    });
 
-    useAgentSettingsStore.getState().resetDefaultAgentMarkdown();
+    await useAgentSettingsStore.getState().resetDefaultAgentMarkdown();
 
+    expect(mockInvoke).toHaveBeenCalledWith("reset_default_agent_config");
     expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toBe(DEFAULT_MAIN_AGENT_MARKDOWN);
   });
 
-  it("reset 恢复默认值", () => {
+  it("reset 恢复本地默认值", () => {
     useAgentSettingsStore.getState().toggleTool("write_file");
     useAgentSettingsStore.getState().updateConfig({ model: "custom-model" });
-    useAgentSettingsStore.getState().updateDefaultAgentMarkdown("# 自定义主代理");
+    useAgentSettingsStore.setState({ defaultAgentMarkdown: "# 文件主代理", status: "ready" });
 
     useAgentSettingsStore.getState().reset();
 
     const state = useAgentSettingsStore.getState();
     expect(state.enabledTools.write_file).toBe(true);
     expect(state.config.model).toBe("");
-    expect(state.defaultAgentMarkdown).toBe(DEFAULT_MAIN_AGENT_MARKDOWN);
+    expect(state.defaultAgentMarkdown).toBe("");
     expect(localStorage.getItem("ainovelstudio-agent-settings")).toBeNull();
   });
 });
+

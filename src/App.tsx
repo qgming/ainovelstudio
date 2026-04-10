@@ -8,6 +8,7 @@ import { BookPage } from "./pages/BookPage";
 import { SettingPage } from "./pages/SettingPage";
 import { SkillDetailPage } from "./pages/SkillDetailPage";
 import { SkillsPage } from "./pages/SkillsPage";
+import { useAgentSettingsStore } from "./stores/agentSettingsStore";
 import { useThemeStore } from "./stores/themeStore";
 import { useSkillsStore } from "./stores/skillsStore";
 import { useSubAgentStore } from "./stores/subAgentStore";
@@ -16,12 +17,14 @@ function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const initializeAgents = useSubAgentStore((state) => state.initialize);
+  const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
 
   useEffect(() => {
     initializeTheme();
     void initializeSkills();
     void initializeAgents();
-  }, [initializeAgents, initializeSkills, initializeTheme]);
+    void initializeAgentSettings();
+  }, [initializeAgentSettings, initializeAgents, initializeSkills, initializeTheme]);
 
   return (
     <div className="h-screen overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">

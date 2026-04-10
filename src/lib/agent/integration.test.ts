@@ -198,15 +198,16 @@ describe("agent session (streaming)", () => {
     }
 
     const request = mockStreamFn.mock.calls[0][0];
-    expect(request.system).toContain("## s03 已启用工具");
-    expect(request.system).toContain("## s05 默认 AGENTS.md");
+    expect(request.system).toContain("## s02 已启用工具");
+    expect(request.system).toContain("## s04 主代理人设");
     expect(request.system).toContain("# 自定义主代理");
     expect(request.system).not.toContain(DEFAULT_MAIN_AGENT_MARKDOWN);
-    expect(request.messages[0].content).toContain("# 当前轮输入流水线");
-    expect(request.messages[0].content).toContain("=== DYNAMIC_BOUNDARY ===");
+    expect(request.messages[0].content).toContain("# 当前轮上下文");
     expect(request.messages[0].content).toContain("## s10 当前轮动态上下文");
     expect(request.messages[0].content).toContain("- 当前工作区：C:/books/北境余烬");
     expect(request.messages[0].content).toContain("- 当前激活文件：章节/第一章.md");
+    expect(request.messages[0].content).toContain("- 当前文件类型：章节/正文稿件");
+    expect(request.messages[0].content).toContain("- 本轮任务类型：分析/诊断");
     expect(request.messages[0].content).toContain("## s12 用户请求");
     expect(request.messages[0].content).toContain("帮我整理这一章的冲突节奏");
   });
@@ -522,6 +523,8 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).toContain("## s11 子任务摘要（剧情代理）");
   });
 });
+
+
 
 
 

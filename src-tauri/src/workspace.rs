@@ -35,9 +35,30 @@ struct HiddenIndexFile {
     updated_at: u64,
 }
 
+#[derive(Serialize)]
+pub struct WorkspaceSearchMatch {
+    #[serde(rename = "lineNumber", skip_serializing_if = "Option::is_none")]
+    line_number: Option<usize>,
+    #[serde(rename = "lineText", skip_serializing_if = "Option::is_none")]
+    line_text: Option<String>,
+    #[serde(rename = "matchType")]
+    match_type: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+pub struct WorkspaceLineResult {
+    #[serde(rename = "lineNumber")]
+    line_number: usize,
+    path: String,
+    text: String,
+}
+
 type CommandResult<T> = Result<T, String>;
 
 const INVALID_NAME_CHARS: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+const DEFAULT_SEARCH_LIMIT: usize = 50;
+const MAX_SEARCH_LIMIT: usize = 200;
 
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
@@ -59,6 +80,15 @@ fn relative_path(root: &Path, path: &Path) -> String {
         .unwrap_or_else(|_| normalize_path(path))
 }
 
+fn display_relative_path(root: &Path, path: &Path) -> String {
+    let relative = relative_path(root, path);
+    if relative.is_empty() {
+        ".".into()
+    } else {
+        relative
+    }
+}
+
 fn file_extension(path: &Path) -> Option<String> {
     path.extension()
         .map(|extension| format!(".{}", extension.to_string_lossy().to_lowercase()))
@@ -69,6 +99,154 @@ fn current_timestamp() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn normalize_search_query(value: &str) -> CommandResult<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("搜索关键词不能为空。".into());
+    }
+    Ok(trimmed.to_lowercase())
+}
+
+fn normalize_search_limit(limit: Option<usize>) -> usize {
+    limit
+        .unwrap_or(DEFAULT_SEARCH_LIMIT)
+        .clamp(1, MAX_SEARCH_LIMIT)
+}
+
+fn detect_line_ending(contents: &str) -> &'static str {
+    if contents.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    }
+}
+
+fn split_text_lines(contents: &str) -> (Vec<String>, bool) {
+    let normalized = contents.replace("\r\n", "\n");
+    let had_trailing_newline = normalized.ends_with('\n');
+    let mut lines = normalized
+        .split('\n')
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>();
+
+    if had_trailing_newline {
+        let _ = lines.pop();
+    }
+
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+
+    (lines, had_trailing_newline)
+}
+
+fn validate_single_line_text(value: &str) -> CommandResult<String> {
+    if value.contains('\n') || value.contains('\r') {
+        return Err("替换行内容时不能包含换行符。".into());
+    }
+    Ok(value.to_string())
+}
+
+fn resolve_line_index(lines: &[String], line_number: usize) -> CommandResult<usize> {
+    if line_number == 0 {
+        return Err("行号必须从 1 开始。".into());
+    }
+
+    let index = line_number - 1;
+    if index >= lines.len() {
+        return Err(format!("目标文件只有 {} 行，无法访问第 {} 行。", lines.len(), line_number));
+    }
+
+    Ok(index)
+}
+
+fn push_search_match(
+    matches: &mut Vec<WorkspaceSearchMatch>,
+    match_type: &str,
+    path: String,
+    line_number: Option<usize>,
+    line_text: Option<String>,
+    limit: usize,
+) -> bool {
+    if matches.len() >= limit {
+        return true;
+    }
+
+    matches.push(WorkspaceSearchMatch {
+        line_number,
+        line_text,
+        match_type: match_type.into(),
+        path,
+    });
+
+    matches.len() >= limit
+}
+
+fn collect_workspace_search_matches(
+    root: &Path,
+    current: &Path,
+    query: &str,
+    limit: usize,
+    matches: &mut Vec<WorkspaceSearchMatch>,
+) -> CommandResult<()> {
+    for entry in fs::read_dir(current).map_err(error_to_string)? {
+        let path = entry.map_err(error_to_string)?.path();
+        let name = entry_name(&path);
+        if name == "index.json" {
+            continue;
+        }
+
+        let lowered_name = name.to_lowercase();
+        let display_path = display_relative_path(root, &path);
+
+        if path.is_dir() {
+            if lowered_name.contains(query)
+                && push_search_match(matches, "directory_name", display_path.clone(), None, None, limit)
+            {
+                return Ok(());
+            }
+
+            collect_workspace_search_matches(root, &path, query, limit, matches)?;
+            if matches.len() >= limit {
+                return Ok(());
+            }
+            continue;
+        }
+
+        if lowered_name.contains(query)
+            && push_search_match(matches, "file_name", display_path.clone(), None, None, limit)
+        {
+            return Ok(());
+        }
+
+        if matches.len() >= limit {
+            return Ok(());
+        }
+        let Ok(contents) = fs::read_to_string(&path) else {
+            continue;
+        };
+
+        for (index, line) in contents.lines().enumerate() {
+            if !line.to_lowercase().contains(query) {
+                continue;
+            }
+
+            if push_search_match(
+                matches,
+                "content",
+                display_path.clone(),
+                Some(index + 1),
+                Some(line.to_string()),
+                limit,
+            ) {
+                return Ok(());
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn ensure_root_directory(root_path: &str) -> CommandResult<PathBuf> {
@@ -82,8 +260,22 @@ fn ensure_root_directory(root_path: &str) -> CommandResult<PathBuf> {
     fs::canonicalize(root).map_err(error_to_string)
 }
 
+fn resolve_path_from_root(root: &Path, path: &str) -> PathBuf {
+    let trimmed = path.trim();
+    if trimmed.is_empty() || trimmed == "." {
+        return root.to_path_buf();
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if candidate.is_absolute() {
+        candidate
+    } else {
+        root.join(candidate)
+    }
+}
+
 fn ensure_existing_path_in_root(root: &Path, path: &str) -> CommandResult<PathBuf> {
-    let target = PathBuf::from(path);
+    let target = resolve_path_from_root(root, path);
     if !target.exists() {
         return Err("目标路径不存在。".into());
     }
@@ -99,7 +291,7 @@ fn ensure_existing_path_in_root(root: &Path, path: &str) -> CommandResult<PathBu
 }
 
 fn ensure_parent_directory_in_root(root: &Path, parent_path: &str) -> CommandResult<PathBuf> {
-    let parent = PathBuf::from(parent_path);
+    let parent = resolve_path_from_root(root, parent_path);
     if !parent.exists() || !parent.is_dir() {
         return Err("父级目录不存在。".into());
     }
@@ -387,6 +579,88 @@ pub fn write_text_file(rootPath: String, path: String, contents: String) -> Comm
         return Err("只能写入文件内容。".into());
     }
     fs::write(file_path, contents).map_err(error_to_string)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn search_workspace_content(
+    rootPath: String,
+    query: String,
+    limit: Option<usize>,
+) -> CommandResult<Vec<WorkspaceSearchMatch>> {
+    let root_path = ensure_root_directory(&rootPath)?;
+    let normalized_query = normalize_search_query(&query)?;
+    let normalized_limit = normalize_search_limit(limit);
+    let mut matches = Vec::new();
+
+    collect_workspace_search_matches(
+        &root_path,
+        &root_path,
+        &normalized_query,
+        normalized_limit,
+        &mut matches,
+    )?;
+
+    Ok(matches)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn read_text_file_line(
+    rootPath: String,
+    path: String,
+    lineNumber: usize,
+) -> CommandResult<WorkspaceLineResult> {
+    let root_path = ensure_root_directory(&rootPath)?;
+    let file_path = ensure_existing_path_in_root(&root_path, &path)?;
+    if !file_path.is_file() {
+        return Err("只能读取文件中的指定行。".into());
+    }
+
+    let contents = fs::read_to_string(&file_path).map_err(error_to_string)?;
+    let (lines, _) = split_text_lines(&contents);
+    let index = resolve_line_index(&lines, lineNumber)?;
+
+    Ok(WorkspaceLineResult {
+        line_number: lineNumber,
+        path: display_relative_path(&root_path, &file_path),
+        text: lines[index].clone(),
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn replace_text_file_line(
+    rootPath: String,
+    path: String,
+    lineNumber: usize,
+    contents: String,
+) -> CommandResult<WorkspaceLineResult> {
+    let root_path = ensure_root_directory(&rootPath)?;
+    let file_path = ensure_existing_path_in_root(&root_path, &path)?;
+    if !file_path.is_file() {
+        return Err("只能替换文件中的指定行。".into());
+    }
+
+    let next_line = validate_single_line_text(&contents)?;
+    let raw = fs::read_to_string(&file_path).map_err(error_to_string)?;
+    let line_ending = detect_line_ending(&raw);
+    let (mut lines, had_trailing_newline) = split_text_lines(&raw);
+    let index = resolve_line_index(&lines, lineNumber)?;
+    lines[index] = next_line.clone();
+
+    let mut next_contents = lines.join(line_ending);
+    if had_trailing_newline {
+        next_contents.push_str(line_ending);
+    }
+
+    fs::write(&file_path, next_contents).map_err(error_to_string)?;
+
+    Ok(WorkspaceLineResult {
+        line_number: lineNumber,
+        path: display_relative_path(&root_path, &file_path),
+        text: next_line,
+    })
 }
 
 #[tauri::command]

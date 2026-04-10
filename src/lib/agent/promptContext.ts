@@ -2,29 +2,12 @@ import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { BUILTIN_TOOLS } from "./toolDefs";
 
+// 最小后备文本，正常流程会从 AGENTS.md 文件加载完整人设
 export const DEFAULT_MAIN_AGENT_MARKDOWN = [
   "# 主代理",
   "",
-  "你是 AI Novel Studio 的主代理，负责直接与用户对话，并统筹工作区、工具、技能与子代理能力。",
-  "",
-  "## 主从协作",
-  "- 日常默认由主代理直接响应用户，不要把普通对话自动转交给子代理。",
-  "- 只有在任务明显需要专项视角、用户明确要求，或某个启用子代理与任务高度匹配时，才委派子代理。",
-  "- 子代理只提供局部分析、建议或草稿，最终结论与最终输出始终由主代理整合。",
-  "",
-  "## 上下文使用顺序",
-  "1. 本轮用户请求与用户明确约束",
-  "2. 当前轮动态上下文：激活文件、工具结果、工作区状态",
-  "3. 已启用工具",
-  "4. 已启用技能",
-  "5. 默认 AGENTS.md",
-  "6. 可委派子代理目录",
-  "",
-  "## 输出要求",
-  "- 默认使用简体中文，优先直接给出成稿、答案、修改版或下一步动作。",
-  "- 只提炼和当前任务直接相关的信息，不要机械复述整段上下文。",
-  "- 当上下文不足以安全完成任务时，先指出缺口，再进行最小提问或最小读取。",
-  "- 当参考了工具结果或子代理结论时，只输出整合后的判断，不输出流水账。",
+  "你是神笔写作客户端的写作总控Agent。优先自己完成任务，在信息充足时直接交付可用内容。",
+  "默认使用简体中文，优先给成稿或结构化结论，不输出空泛方法论。",
 ].join("\n");
 
 type BuildSystemPromptInput = {
@@ -48,6 +31,12 @@ type PromptSection = {
   body: string | null | undefined;
   key: string;
   title: string;
+};
+
+type TaskProfile = {
+  caution: string;
+  label: string;
+  outputHint: string;
 };
 
 function joinSections(sections: Array<string | null | undefined>) {
@@ -115,6 +104,87 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
     .join("\n");
 }
 
+function inferTaskProfile(prompt: string): TaskProfile {
+  if (/(续写|扩写|补写|写一段|写一章|正文|场景|scene|chapter)/i.test(prompt)) {
+    return {
+      label: "创作/续写",
+      outputHint: "优先给可直接使用的正文内容，再补极简说明。",
+      caution:
+        "不要凭空改动既有设定；连续性敏感处优先核对人物、时态与剧情事实。",
+    };
+  }
+
+  if (/(润色|改写|重写|精修|压缩|降重|优化表达|优化文风)/i.test(prompt)) {
+    return {
+      label: "改写/润色",
+      outputHint: "优先给修改后文本，必要时再附简短修改说明。",
+      caution: "默认保留原意、信息量与文风，不要无故重置结构或删掉有效细节。",
+    };
+  }
+
+  if (
+    /(大纲|设定|世界观|人物卡|角色卡|策划|规划|拆纲|outline|plot|节拍)/i.test(
+      prompt,
+    )
+  ) {
+    return {
+      label: "设定/规划",
+      outputHint: "优先给结构化方案，如大纲、设定条目、角色卡或步骤清单。",
+      caution: "保持内部逻辑闭环，避免设定互相冲突或只有概念没有落地细节。",
+    };
+  }
+
+  if (/(审稿|点评|评审|review|打分|找问题|挑错)/i.test(prompt)) {
+    return {
+      label: "审稿/评估",
+      outputHint: "优先给问题与结论，再给修改建议或风险排序。",
+      caution: "聚焦真实问题，不要用空泛表扬稀释判断。",
+    };
+  }
+
+  if (/(分析|总结|梳理|解释|诊断|节奏|冲突|主题|动机)/i.test(prompt)) {
+    return {
+      label: "分析/诊断",
+      outputHint: "优先给结论、结构化观察和依据，避免先讲泛泛方法。",
+      caution: "基于已知内容推断；未读取的情节与设定不要当成事实引用。",
+    };
+  }
+
+  if (/(翻译|translate|本地化)/i.test(prompt)) {
+    return {
+      label: "翻译/转写",
+      outputHint: "优先给译文或转换结果，必要时补充少量术语说明。",
+      caution: "注意语气、叙述视角和专有名词的一致性。",
+    };
+  }
+
+  return {
+    label: "通用协作",
+    outputHint: "优先给最接近用户目标的可执行结果或下一步动作。",
+    caution: "如需依赖工作区事实，先最小读取再继续，不要假设未见内容。",
+  };
+}
+
+function inferFileKind(activeFilePath: string | null) {
+  if (!activeFilePath) {
+    return "未指定";
+  }
+
+  if (/(章|chapter|scene|正文|draft)/i.test(activeFilePath)) {
+    return "章节/正文稿件";
+  }
+
+  if (/(大纲|outline|plot|beats|storyline)/i.test(activeFilePath)) {
+    return "大纲/剧情规划";
+  }
+
+  if (/(设定|人物|角色|世界观|资料|wiki|notes)/i.test(activeFilePath)) {
+    return "设定/资料文档";
+  }
+
+  return "通用工作区文件";
+}
+
 export function buildSystemPrompt({
   defaultAgentMarkdown,
   enabledAgents,
@@ -137,65 +207,32 @@ export function buildSystemPrompt({
       : "- 当前没有可委派的子代理。";
 
   return joinSections([
-    "# 主代理系统流水线",
-    "以下 section 由稳定来源按顺序组装。越靠前优先级越高；后段只在与当前任务相关时参考。",
+    "# 主代理系统上下文",
     renderPromptSections([
       {
-        key: "s00",
-        title: "装配顺序",
-        body: [
-          "1. 核心身份与响应原则",
-          "2. 已启用工具",
-          "3. 已启用技能",
-          "4. 默认 AGENTS.md",
-          "5. 可委派子代理目录",
-          "6. 委派策略",
-          "7. 本轮动态上下文与用户请求（见当前轮输入流水线）",
-        ].join("\n"),
-      },
-      {
         key: "s01",
-        title: "核心身份",
-        body: "你是神笔写作客户端中的Agent助手。你的职责是整合用户请求、工作区上下文、工具能力、技能规则与子代理资源，并直接向用户给出最终可执行结果。",
+        title: "运行环境",
+        body: "你正在 AI Novel Studio 写作软件中运行。以下是当前可用的工具、技能和子代理资源。",
       },
       {
         key: "s02",
-        title: "响应原则",
-        body: [
-          "- 先遵循当前用户请求与用户明确约束。",
-          "- 优先整合上下文并直接完成任务，不要机械复述资源内容。",
-          "- 若上下文不足以安全完成任务，先说明缺口，再进行最小补充或最小读取。",
-          "- 回答默认使用简体中文。",
-        ].join("\n"),
-      },
-      {
-        key: "s03",
         title: "已启用工具",
         body: buildToolPromptBlock(enabledToolIds),
       },
       {
-        key: "s04",
+        key: "s03",
         title: "已启用技能",
         body: skillBlock,
       },
       {
-        key: "s05",
-        title: "默认 AGENTS.md",
+        key: "s04",
+        title: "主代理人设",
         body: normalizedDefaultAgent,
       },
       {
-        key: "s06",
+        key: "s05",
         title: "可委派子代理目录",
         body: agentBlock,
-      },
-      {
-        key: "s07",
-        title: "委派策略",
-        body: [
-          "- 日常默认由主代理直接响应用户。",
-          "- 只有在用户明确要求、任务明显需要专项能力，或某个子代理与任务高度匹配时，才委派子代理。",
-          "- 即使发生委派，也只把子代理结论当作输入材料，最终答复仍由主代理统一输出。",
-        ].join("\n"),
       },
     ]),
   ]);
@@ -260,8 +297,12 @@ export function buildSubAgentSystem(
         body: [
           "AGENTS.md：",
           agent.body,
-          agent.toolsPreview ? `TOOLS.md 摘要：\n${agent.toolsPreview}` : "TOOLS.md 摘要：\n- 当前没有额外 TOOLS 摘要。",
-          agent.memoryPreview ? `MEMORY.md 摘要：\n${agent.memoryPreview}` : "MEMORY.md 摘要：\n- 当前没有额外 MEMORY 摘要。",
+          agent.toolsPreview
+            ? `TOOLS.md 摘要：\n${agent.toolsPreview}`
+            : "TOOLS.md 摘要：\n- 当前没有额外 TOOLS 摘要。",
+          agent.memoryPreview
+            ? `MEMORY.md 摘要：\n${agent.memoryPreview}`
+            : "MEMORY.md 摘要：\n- 当前没有额外 MEMORY 摘要。",
         ].join("\n\n"),
       },
       {
@@ -273,17 +314,11 @@ export function buildSubAgentSystem(
           "- 输出将由父代理继续整合，因此优先给高密度结论。",
         ].join("\n"),
       },
-      enabledSkills.length > 0
-        ? {
-            key: "s05",
-            title: "可参考技能",
-            body: skillBlock,
-          }
-        : {
-            key: "s05",
-            title: "可参考技能",
-            body: "- 当前没有额外技能。",
-          },
+      {
+        key: "s05",
+        title: "可参考技能",
+        body: skillBlock,
+      },
     ]),
   ]);
 }
@@ -294,10 +329,11 @@ export function buildUserTurnContent({
   prompt,
   subagentAnalysis,
 }: BuildUserTurnContentInput) {
+  const taskProfile = inferTaskProfile(prompt);
+  const fileKind = inferFileKind(activeFilePath);
+
   return joinSections([
-    "# 当前轮输入流水线",
-    "以下内容是本轮动态上下文与用户输入，只对当前轮生效。",
-    "=== DYNAMIC_BOUNDARY ===",
+    "# 当前轮上下文",
     renderPromptSections([
       {
         key: "s10",
@@ -309,6 +345,10 @@ export function buildUserTurnContent({
           activeFilePath
             ? `- 当前激活文件：${activeFilePath}`
             : "- 当前没有激活文件。",
+          `- 当前文件类型：${fileKind}`,
+          `- 本轮任务类型：${taskProfile.label}`,
+          `- 优先输出：${taskProfile.outputHint}`,
+          `- 处理提醒：${taskProfile.caution}`,
           subagentAnalysis?.text
             ? `- 本轮已收到子任务摘要：${subagentAnalysis.agentName}`
             : "- 本轮默认由主代理直接处理。",
@@ -333,5 +373,3 @@ export function buildUserTurnContent({
     ]),
   ]);
 }
-
-

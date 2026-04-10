@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { getStoredAgentConfig, getStoredDefaultAgentMarkdown, getStoredEnabledTools, useAgentSettingsStore } from "./agentSettingsStore";
+import {
+  getStoredAgentConfig,
+  getStoredDefaultAgentMarkdown,
+  getStoredEnabledTools,
+  useAgentSettingsStore,
+} from "./agentSettingsStore";
 import { runAgentTurn } from "../lib/agent/session";
 import { createWorkspaceToolset } from "../lib/agent/tools";
 import type { AgentMessage, AgentPart, AgentRun } from "../lib/agent/types";
@@ -59,24 +64,30 @@ function buildAssistantPlaceholderMessage(): AgentMessage {
   };
 }
 
-/** 将流式 part 合并到 assistant message 的 parts 数组 */
+async function ensureMainAgentMarkdown() {
+  const settings = useAgentSettingsStore.getState();
+  if (settings.defaultAgentMarkdown.trim()) {
+    return settings.defaultAgentMarkdown;
+  }
+
+  await settings.initialize();
+  return useAgentSettingsStore.getState().defaultAgentMarkdown || getStoredDefaultAgentMarkdown();
+}
+
 function mergePart(parts: AgentPart[], part: AgentPart): AgentPart[] {
   const nextParts = parts[0]?.type === "placeholder" ? [] : parts;
 
   if (part.type === "text-delta") {
     const last = nextParts[nextParts.length - 1];
     if (last && last.type === "text") {
-      // 追加到已有 text part
       return [...nextParts.slice(0, -1), { ...last, text: last.text + part.delta }];
     }
-    // 新建 text part
     return [...nextParts, { type: "text", text: part.delta }];
   }
 
   if (part.type === "reasoning") {
     const last = nextParts[nextParts.length - 1];
     if (last && last.type === "reasoning") {
-      // 追加到已有 reasoning part 的 detail
       return [...nextParts.slice(0, -1), { ...last, detail: last.detail + part.detail }];
     }
     return [...nextParts, part];
@@ -149,10 +160,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       const enabledSkills = getEnabledSkills(useSkillsStore.getState());
       const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
       const enabledToolsMap = useAgentSettingsStore.getState().enabledTools ?? getStoredEnabledTools();
-      const defaultAgentMarkdown = useAgentSettingsStore.getState().defaultAgentMarkdown ?? getStoredDefaultAgentMarkdown();
+      const defaultAgentMarkdown = await ensureMainAgentMarkdown();
       const enabledToolIds = Object.entries(enabledToolsMap)
-        .filter(([, v]) => v)
-        .map(([k]) => k);
+        .filter(([, value]) => value)
+        .map(([toolId]) => toolId);
 
       const workspaceTools = workspaceState.rootPath
         ? createWorkspaceToolset({
@@ -237,8 +248,3 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
   setInput: (value) => set({ input: value }),
 }));
-
-
-
-
-
