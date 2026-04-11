@@ -9,6 +9,8 @@ type CommandResult<T> = Result<T, String>;
 
 const ACTIVE_SESSION_KEY: &str = "chat.active_session_id";
 const DRAFT_KEY_PREFIX: &str = "chat.draft.";
+const SKILLS_PREFERENCES_KEY: &str = "skills.preferences";
+const AGENTS_PREFERENCES_KEY: &str = "agents.preferences";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,6 +67,12 @@ pub struct ChatSessionPatch {
     last_message_at: Option<Option<String>>,
 }
 
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TogglePreferences {
+    enabled_by_id: std::collections::HashMap<String, bool>,
+}
+
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
 }
@@ -91,6 +99,12 @@ fn draft_key(session_id: &str) -> String {
 
 fn parse_json(raw: &str, fallback: Value) -> Value {
     serde_json::from_str(raw).unwrap_or(fallback)
+}
+
+fn parse_preferences(value: Option<Value>) -> TogglePreferences {
+    value
+        .and_then(|raw| serde_json::from_value::<TogglePreferences>(raw).ok())
+        .unwrap_or_default()
 }
 
 fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSessionSummary> {
@@ -335,12 +349,57 @@ fn next_message_seq(connection: &rusqlite::Connection, session_id: &str) -> Comm
 }
 
 #[tauri::command]
+pub fn read_skill_preferences(app: AppHandle) -> CommandResult<TogglePreferences> {
+    let connection = open_database(&app)?;
+    Ok(parse_preferences(get_state_value(&connection, SKILLS_PREFERENCES_KEY)?))
+}
+
+#[tauri::command]
+pub fn write_skill_preferences(
+    app: AppHandle,
+    preferences: TogglePreferences,
+) -> CommandResult<TogglePreferences> {
+    let connection = open_database(&app)?;
+    let value = serde_json::to_value(&preferences).map_err(error_to_string)?;
+    set_state_value(&connection, SKILLS_PREFERENCES_KEY, &value)?;
+    Ok(preferences)
+}
+
+#[tauri::command]
+pub fn clear_skill_preferences(app: AppHandle) -> CommandResult<()> {
+    let connection = open_database(&app)?;
+    delete_state_value(&connection, SKILLS_PREFERENCES_KEY)
+}
+
+#[tauri::command]
+pub fn read_agent_preferences(app: AppHandle) -> CommandResult<TogglePreferences> {
+    let connection = open_database(&app)?;
+    Ok(parse_preferences(get_state_value(&connection, AGENTS_PREFERENCES_KEY)?))
+}
+
+#[tauri::command]
+pub fn write_agent_preferences(
+    app: AppHandle,
+    preferences: TogglePreferences,
+) -> CommandResult<TogglePreferences> {
+    let connection = open_database(&app)?;
+    let value = serde_json::to_value(&preferences).map_err(error_to_string)?;
+    set_state_value(&connection, AGENTS_PREFERENCES_KEY, &value)?;
+    Ok(preferences)
+}
+
+#[tauri::command]
+pub fn clear_agent_preferences(app: AppHandle) -> CommandResult<()> {
+    let connection = open_database(&app)?;
+    delete_state_value(&connection, AGENTS_PREFERENCES_KEY)
+}
+
+#[tauri::command]
 pub fn initialize_chat_storage(app: AppHandle) -> CommandResult<ChatBootstrap> {
     let connection = open_database(&app)?;
     let session_id = ensure_active_session(&connection)?;
     build_bootstrap(&connection, session_id)
 }
-
 #[tauri::command]
 pub fn create_chat_session(app: AppHandle) -> CommandResult<ChatBootstrap> {
     let connection = open_database(&app)?;
@@ -488,3 +547,5 @@ pub fn delete_chat_message(
         .map_err(error_to_string)?;
     apply_patch(&connection, &sessionId, sessionPatch)
 }
+
+

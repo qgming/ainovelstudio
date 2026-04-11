@@ -1,16 +1,18 @@
 import { create } from "zustand";
 import {
+  clearAgentPreferences,
   createAgent,
   deleteInstalledAgent,
   importAgentZip,
   initializeBuiltinAgents,
   pickAgentArchive,
+  readAgentPreferences,
   scanInstalledAgents,
+  writeAgentPreferences,
   type AgentManifest,
   type AgentSourceKind,
+  type TogglePreferences,
 } from "../lib/agents/api";
-
-const STORAGE_KEY = "ainovelstudio-agents-preferences";
 
 export type AgentValidation = AgentManifest["validation"];
 export type AgentSource = AgentSourceKind;
@@ -21,10 +23,29 @@ export type ResolvedAgent = AgentManifest & {
   sourceLabel: string;
 };
 
-
 type AgentPreferences = {
   enabledById: Record<string, boolean>;
 };
+
+function emptyPreferences(): AgentPreferences {
+  return { enabledById: {} };
+}
+
+function normalizePreferences(preferences?: Partial<TogglePreferences> | null): AgentPreferences {
+  return {
+    enabledById:
+      preferences?.enabledById && typeof preferences.enabledById === "object" ? preferences.enabledById : {},
+  };
+}
+
+function getAgentDefaultEnabled(agent: AgentManifest) {
+  return Boolean(agent.defaultEnabled && agent.validation.isValid);
+}
+
+function isAgentEnabled(agent: AgentManifest, preferences: AgentPreferences) {
+  const explicit = preferences.enabledById[agent.id];
+  return typeof explicit === "boolean" ? explicit : getAgentDefaultEnabled(agent);
+}
 
 type SubAgentState = {
   errorMessage: string | null;
@@ -41,39 +62,11 @@ type SubAgentActions = {
   importAgentPackage: () => Promise<void>;
   initialize: () => Promise<void>;
   refresh: () => Promise<void>;
-  reset: () => void;
-  toggleAgent: (agentId: string) => void;
+  reset: () => Promise<void>;
+  toggleAgent: (agentId: string) => Promise<void>;
 };
 
 export type SubAgentStore = SubAgentState & SubAgentActions;
-
-function readPreferences(): AgentPreferences {
-  if (typeof window === "undefined") {
-    return { enabledById: {} };
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { enabledById: {} };
-    }
-
-    const parsed = JSON.parse(raw) as Partial<AgentPreferences>;
-    return {
-      enabledById: parsed.enabledById && typeof parsed.enabledById === "object" ? parsed.enabledById : {},
-    };
-  } catch {
-    return { enabledById: {} };
-  }
-}
-
-function persistPreferences(preferences: AgentPreferences) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-}
 
 function formatAgentsError(error: unknown, fallbackMessage: string) {
   if (error instanceof Error) {
@@ -118,7 +111,7 @@ function resolveFiles() {
 function resolveAgents(manifests: AgentManifest[], preferences: AgentPreferences): ResolvedAgent[] {
   return manifests.map((agent) => ({
     ...agent,
-    enabled: Boolean(preferences.enabledById[agent.id]),
+    enabled: isAgentEnabled(agent, preferences),
     files: resolveFiles(),
     sourceLabel: getSourceLabel(agent.sourceKind),
   }));
@@ -129,13 +122,17 @@ function buildInitialState(): SubAgentState {
     errorMessage: null,
     lastScannedAt: null,
     manifests: [],
-    preferences: readPreferences(),
+    preferences: emptyPreferences(),
     status: "idle",
   };
 }
 
 async function loadInstalledManifests() {
   return sortManifests(await scanInstalledAgents());
+}
+
+async function loadPreferences() {
+  return normalizePreferences(await readAgentPreferences());
 }
 
 export function getResolvedAgents(state: Pick<SubAgentState, "manifests" | "preferences">) {
@@ -146,7 +143,7 @@ export function getEnabledAgents(state: Pick<SubAgentState, "manifests" | "prefe
   return getResolvedAgents(state).filter((agent) => agent.enabled);
 }
 
-export const useSubAgentStore = create<SubAgentStore>((set) => ({
+export const useSubAgentStore = create<SubAgentStore>((set, get) => ({
   ...buildInitialState(),
   createAgent: async (name, description) => {
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
@@ -192,12 +189,13 @@ export const useSubAgentStore = create<SubAgentStore>((set) => ({
   hydrate: async () => {
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
     try {
-      const manifests = await loadInstalledManifests();
+      const [manifests, preferences] = await Promise.all([loadInstalledManifests(), loadPreferences()]);
       set((state) => ({
         ...state,
         errorMessage: null,
         lastScannedAt: Date.now(),
         manifests,
+        preferences,
         status: "ready",
       }));
     } catch (error) {
@@ -237,12 +235,13 @@ export const useSubAgentStore = create<SubAgentStore>((set) => ({
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
     try {
       await initializeBuiltinAgents();
-      const manifests = await loadInstalledManifests();
+      const [manifests, preferences] = await Promise.all([loadInstalledManifests(), loadPreferences()]);
       set((state) => ({
         ...state,
         errorMessage: null,
         lastScannedAt: Date.now(),
         manifests,
+        preferences,
         status: "ready",
       }));
     } catch (error) {
@@ -257,12 +256,13 @@ export const useSubAgentStore = create<SubAgentStore>((set) => ({
   refresh: async () => {
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
     try {
-      const manifests = sortManifests(await scanInstalledAgents());
+      const [manifests, preferences] = await Promise.all([loadInstalledManifests(), loadPreferences()]);
       set((state) => ({
         ...state,
         errorMessage: null,
         lastScannedAt: Date.now(),
         manifests,
+        preferences,
         status: "ready",
       }));
     } catch (error) {
@@ -273,24 +273,66 @@ export const useSubAgentStore = create<SubAgentStore>((set) => ({
       }));
     }
   },
-  reset: () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-    set(buildInitialState());
-  },
-  toggleAgent: (agentId) =>
-    set((state) => {
-      const nextPreferences = {
-        enabledById: {
-          ...state.preferences.enabledById,
-          [agentId]: !state.preferences.enabledById[agentId],
-        },
-      };
-      persistPreferences(nextPreferences);
-      return {
+  reset: async () => {
+    const current = get();
+    try {
+      await clearAgentPreferences();
+      set((state) => ({
         ...state,
+        errorMessage: null,
+        preferences: emptyPreferences(),
+        status: current.manifests.length > 0 ? "ready" : "idle",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatAgentsError(error, "重置代理启用状态失败。"),
+        status: "error",
+      }));
+    }
+  },
+  toggleAgent: async (agentId) => {
+    const state = get();
+    const agent = state.manifests.find((item) => item.id === agentId);
+    const current = isAgentEnabled(
+      agent ??
+        ({
+          id: agentId,
+          body: "",
+          defaultEnabled: false,
+          description: "",
+          discoveredAt: 0,
+          isBuiltin: false,
+          name: agentId,
+          rawMarkdown: "",
+          sourceKind: "installed-package",
+          suggestedTools: [],
+          tags: [],
+          validation: { errors: [], isValid: true, warnings: [] },
+        } as AgentManifest),
+      state.preferences,
+    );
+    const nextPreferences = {
+      enabledById: {
+        ...state.preferences.enabledById,
+        [agentId]: !current,
+      },
+    };
+
+    try {
+      await writeAgentPreferences(nextPreferences);
+      set((currentState) => ({
+        ...currentState,
+        errorMessage: null,
         preferences: nextPreferences,
-      };
-    }),
+        status: "ready",
+      }));
+    } catch (error) {
+      set((currentState) => ({
+        ...currentState,
+        errorMessage: formatAgentsError(error, `保存代理 ${agentId} 的启用状态失败。`),
+        status: "error",
+      }));
+    }
+  },
 }));

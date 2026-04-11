@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -45,6 +45,7 @@ pub struct SkillManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     author: Option<String>,
     body: String,
+    default_enabled: bool,
     description: String,
     discovered_at: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -455,6 +456,7 @@ fn parse_skill_manifest(skill_dir: &Path, source_root: &SkillRoot) -> CommandRes
     Ok(SkillManifest {
         author,
         body: parsed_markdown.body,
+        default_enabled: source_root.is_builtin,
         description,
         discovered_at: current_timestamp(),
         frontmatter: parsed_markdown.frontmatter,
@@ -548,9 +550,13 @@ fn collect_skill_roots(app: &AppHandle) -> CommandResult<Vec<SkillRoot>> {
 }
 
 fn scan_all_skills(app: &AppHandle) -> CommandResult<Vec<SkillManifest>> {
+    let mut builtin_ids: HashSet<String> = HashSet::new();
     let mut by_id: HashMap<String, SkillManifest> = HashMap::new();
     for root in collect_skill_roots(app)? {
         for manifest in scan_skill_root(&root)? {
+            if root.is_builtin {
+                builtin_ids.insert(manifest.id.clone());
+            }
             match by_id.get(&manifest.id) {
                 Some(existing) if existing.source_kind == "installed-package" => {}
                 _ => {
@@ -560,7 +566,13 @@ fn scan_all_skills(app: &AppHandle) -> CommandResult<Vec<SkillManifest>> {
         }
     }
 
-    let mut manifests = by_id.into_values().collect::<Vec<_>>();
+    let mut manifests = by_id
+        .into_values()
+        .map(|mut manifest| {
+            manifest.default_enabled = builtin_ids.contains(&manifest.id);
+            manifest
+        })
+        .collect::<Vec<_>>();
     manifests.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
     Ok(manifests)
 }
@@ -1186,3 +1198,4 @@ pub fn import_skill_zip(app: AppHandle, zipPath: String) -> CommandResult<Vec<Sk
 
     install_skill_from_zip(&app, &zip_path)
 }
+

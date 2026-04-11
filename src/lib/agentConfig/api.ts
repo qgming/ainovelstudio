@@ -18,6 +18,3 @@ export function writeDefaultAgentConfig(content: string) {
   return invoke<DefaultAgentConfigDocument>("write_default_agent_config", { content });
 }
 
-export function resetDefaultAgentConfig() {
-  return invoke<DefaultAgentConfigDocument>("reset_default_agent_config");
-}

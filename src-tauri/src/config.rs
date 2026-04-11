@@ -123,11 +123,3 @@ pub fn write_default_agent_config(
     fs::write(&file_path, &markdown).map_err(error_to_string)?;
     Ok(build_document(file_path, markdown, false))
 }
-
-#[tauri::command]
-pub fn reset_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
-    let (file_path, _initialized) = ensure_user_default_agent_file(&app)?;
-    let markdown = read_builtin_default_agent_markdown(&app)?;
-    fs::write(&file_path, &markdown).map_err(error_to_string)?;
-    Ok(build_document(file_path, markdown, false))
-}

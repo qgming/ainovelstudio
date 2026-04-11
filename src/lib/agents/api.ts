@@ -10,7 +10,9 @@ export type AgentValidation = {
 
 export type AgentManifest = {
   author?: string;
+  agentFilePath?: string;
   body: string;
+  defaultEnabled?: boolean;
   description: string;
   discoveredAt: number;
   dispatchHint?: string;
@@ -19,9 +21,9 @@ export type AgentManifest = {
   id: string;
   installPath?: string;
   isBuiltin: boolean;
-  name: string;
   memoryFilePath?: string;
   memoryPreview?: string;
+  name: string;
   rawMarkdown: string;
   role?: string;
   sourceKind: AgentSourceKind;
@@ -31,13 +33,28 @@ export type AgentManifest = {
   toolsPreview?: string;
   validation: AgentValidation;
   version?: string;
-  agentFilePath?: string;
+};
+
+export type TogglePreferences = {
+  enabledById: Record<string, boolean>;
 };
 
 export type BuiltinAgentsInitializationResult = {
   initializedAgentIds: string[];
   skippedAgentIds: string[];
 };
+
+export function readAgentPreferences() {
+  return invoke<TogglePreferences>("read_agent_preferences");
+}
+
+export function writeAgentPreferences(preferences: TogglePreferences) {
+  return invoke<TogglePreferences>("write_agent_preferences", { preferences });
+}
+
+export function clearAgentPreferences() {
+  return invoke<void>("clear_agent_preferences");
+}
 
 export function pickAgentArchive() {
   return invoke<string | null>("pick_agent_archive");
@@ -74,3 +91,4 @@ export function deleteInstalledAgent(agentId: string) {
 export function importAgentZip(zipPath: string) {
   return invoke<AgentManifest[]>("import_agent_zip", { zipPath });
 }
+

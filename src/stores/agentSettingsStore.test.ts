@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../lib/agent/promptContext";
 import { BUILTIN_TOOLS } from "../lib/agent/toolDefs";
 
 const { mockInvoke } = vi.hoisted(() => ({
@@ -55,7 +54,7 @@ describe("agent settings store", () => {
     expect(stored.enabledTools.write_file).toBe(true);
   });
 
-  it("initialize 从配置文件加载默认 AGENTS", async () => {
+  it("initialize 从配置目录加载默认 AGENTS", async () => {
     mockInvoke.mockResolvedValue({
       initializedFromBuiltin: true,
       markdown: "# 文件主代理\n\n- 从配置目录加载。",
@@ -69,6 +68,19 @@ describe("agent settings store", () => {
     expect(state.defaultAgentMarkdown).toBe("# 文件主代理\n\n- 从配置目录加载。");
     expect(state.configFilePath).toContain("config/AGENTS.md");
     expect(state.status).toBe("ready");
+  });
+
+  it("refreshDefaultAgentMarkdown 读取用户配置目录文件", async () => {
+    mockInvoke.mockResolvedValue({
+      initializedFromBuiltin: false,
+      markdown: "# 刷新后的主代理\n\n- 来自用户配置文件。",
+      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
+    });
+
+    await useAgentSettingsStore.getState().refreshDefaultAgentMarkdown();
+
+    expect(mockInvoke).toHaveBeenCalledWith("read_default_agent_config");
+    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toContain("刷新后的主代理");
   });
 
   it("updateDefaultAgentMarkdown 写回配置文件", async () => {
@@ -97,19 +109,6 @@ describe("agent settings store", () => {
     expect(state.defaultAgentMarkdown).toBe("# 文件主代理");
   });
 
-  it("resetDefaultAgentMarkdown 恢复配置目录中的默认内容", async () => {
-    mockInvoke.mockResolvedValue({
-      initializedFromBuiltin: false,
-      markdown: DEFAULT_MAIN_AGENT_MARKDOWN,
-      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
-    });
-
-    await useAgentSettingsStore.getState().resetDefaultAgentMarkdown();
-
-    expect(mockInvoke).toHaveBeenCalledWith("reset_default_agent_config");
-    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toBe(DEFAULT_MAIN_AGENT_MARKDOWN);
-  });
-
   it("reset 恢复本地默认值", () => {
     useAgentSettingsStore.getState().toggleTool("write_file");
     useAgentSettingsStore.getState().updateConfig({ model: "custom-model" });
@@ -124,4 +123,3 @@ describe("agent settings store", () => {
     expect(localStorage.getItem("ainovelstudio-agent-settings")).toBeNull();
   });
 });
-

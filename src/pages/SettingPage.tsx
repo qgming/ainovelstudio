@@ -18,31 +18,11 @@ type SettingNavItem = {
 };
 
 const settingNavItems: SettingNavItem[] = [
-  {
-    key: "agents",
-    title: "AGENTS",
-    icon: Bot,
-  },
-  {
-    key: "basic",
-    title: "基本设置",
-    icon: Settings2,
-  },
-  {
-    key: "models",
-    title: "模型设置",
-    icon: Sparkles,
-  },
-  {
-    key: "tools",
-    title: "工具库",
-    icon: Wrench,
-  },
-  {
-    key: "about",
-    title: "关于我们",
-    icon: Info,
-  },
+  { key: "agents", title: "AGENTS", icon: Bot },
+  { key: "basic", title: "基本设置", icon: Settings2 },
+  { key: "models", title: "模型设置", icon: Sparkles },
+  { key: "tools", title: "工具库", icon: Wrench },
+  { key: "about", title: "关于我们", icon: Info },
 ];
 
 function SectionCard({ children }: { children: ReactNode }) {
@@ -146,8 +126,10 @@ export function SettingPage() {
   const config = useAgentSettingsStore((state) => state.config);
   const defaultAgentMarkdown = useAgentSettingsStore((state) => state.defaultAgentMarkdown);
   const enabledTools = useAgentSettingsStore((state) => state.enabledTools);
+  const errorMessage = useAgentSettingsStore((state) => state.errorMessage);
+  const status = useAgentSettingsStore((state) => state.status);
   const resetConfig = useAgentSettingsStore((state) => state.resetConfig);
-  const resetDefaultAgentMarkdown = useAgentSettingsStore((state) => state.resetDefaultAgentMarkdown);
+  const refreshDefaultAgentMarkdown = useAgentSettingsStore((state) => state.refreshDefaultAgentMarkdown);
   const toggleTool = useAgentSettingsStore((state) => state.toggleTool);
   const updateConfig = useAgentSettingsStore((state) => state.updateConfig);
   const updateDefaultAgentMarkdown = useAgentSettingsStore((state) => state.updateDefaultAgentMarkdown);
@@ -156,6 +138,10 @@ export function SettingPage() {
   const [activeSection, setActiveSection] = useState<SettingSectionKey>("agents");
   const [agentsDraft, setAgentsDraft] = useState(defaultAgentMarkdown);
   const [agentsDirty, setAgentsDirty] = useState(false);
+
+  useEffect(() => {
+    void refreshDefaultAgentMarkdown();
+  }, [refreshDefaultAgentMarkdown]);
 
   useEffect(() => {
     setAgentsDraft(defaultAgentMarkdown);
@@ -180,24 +166,16 @@ export function SettingPage() {
     }
   }
 
-  async function handleResetAgents() {
-    try {
-      await resetDefaultAgentMarkdown();
-      setAgentsDirty(false);
-    } catch {
-      // 重置失败时保留当前草稿，避免覆盖用户输入。
-    }
-  }
-
   function renderSectionContent() {
     if (activeSection === "agents") {
       return (
         <DefaultAgentSection
           draftContent={agentsDraft}
+          errorMessage={errorMessage}
           isDirty={agentsDirty}
           onChange={handleAgentDraftChange}
-          onReset={handleResetAgents}
           onSave={handleSaveAgents}
+          status={status}
         />
       );
     }
@@ -261,4 +239,3 @@ export function SettingPage() {
     </PageShell>
   );
 }
-

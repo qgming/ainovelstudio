@@ -91,17 +91,21 @@ function buildAgentCatalogBlock(agent: ResolvedAgent) {
 }
 
 function buildToolPromptBlock(enabledToolIds: string[]) {
-  const enabledTools = BUILTIN_TOOLS.filter((tool) =>
-    enabledToolIds.includes(tool.id),
-  );
+  const enabledTools = BUILTIN_TOOLS.filter((tool) => enabledToolIds.includes(tool.id));
 
   if (enabledTools.length === 0) {
     return "- 当前未启用任何工作区工具。";
   }
 
-  return enabledTools
-    .map((tool) => `- ${tool.name}（${tool.id}）：${tool.description}`)
-    .join("\n");
+  return [
+    "工具使用策略：",
+    "- 未知路径或未知入口时，优先使用 search_workspace_content 或 read_workspace_tree 缩小范围。",
+    "- 已知准确路径且需要全文上下文时，再使用 read_file。",
+    "- 小范围改动优先使用 line_edit；只有整份内容都准备好了才使用 write_file。",
+    "- create_file / create_folder / rename_path / delete_path 只处理结构变更，不负责正文读取。",
+    "可用工具：",
+    ...enabledTools.map((tool) => `- ${tool.name}（${tool.id}）：${tool.description}`),
+  ].join("\n");
 }
 
 function inferTaskProfile(prompt: string): TaskProfile {
@@ -373,3 +377,4 @@ export function buildUserTurnContent({
     ]),
   ]);
 }
+

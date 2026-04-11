@@ -1,21 +1,19 @@
 import { create } from "zustand";
 import {
+  clearSkillPreferences,
   createSkill,
   createSkillReferenceFile,
   deleteInstalledSkill,
   importSkillZip,
   initializeBuiltinSkills,
   pickSkillArchive,
+  readSkillPreferences,
   scanInstalledSkills,
+  writeSkillPreferences,
   type SkillManifest,
   type SkillSourceKind,
+  type TogglePreferences,
 } from "../lib/skills/api";
-
-const STORAGE_KEY = "ainovelstudio-skills-preferences";
-
-export type SkillReferenceEntry = SkillManifest["references"][number];
-export type SkillValidation = SkillManifest["validation"];
-export type SkillSource = SkillSourceKind;
 
 export type ResolvedSkill = SkillManifest & {
   enabled: boolean;
@@ -26,6 +24,26 @@ export type ResolvedSkill = SkillManifest & {
 type SkillPreferences = {
   enabledById: Record<string, boolean>;
 };
+
+function emptyPreferences(): SkillPreferences {
+  return { enabledById: {} };
+}
+
+function normalizePreferences(preferences?: Partial<TogglePreferences> | null): SkillPreferences {
+  return {
+    enabledById:
+      preferences?.enabledById && typeof preferences.enabledById === "object" ? preferences.enabledById : {},
+  };
+}
+
+function getSkillDefaultEnabled(skill: SkillManifest) {
+  return Boolean(skill.defaultEnabled && skill.validation.isValid);
+}
+
+function isSkillEnabled(skill: SkillManifest, preferences: SkillPreferences) {
+  const explicit = preferences.enabledById[skill.id];
+  return typeof explicit === "boolean" ? explicit : getSkillDefaultEnabled(skill);
+}
 
 type SkillsState = {
   errorMessage: string | null;
@@ -43,39 +61,11 @@ type SkillsActions = {
   initialize: () => Promise<void>;
   importSkillPackage: () => Promise<void>;
   refresh: () => Promise<void>;
-  reset: () => void;
-  toggleSkill: (skillId: string) => void;
+  reset: () => Promise<void>;
+  toggleSkill: (skillId: string) => Promise<void>;
 };
 
 export type SkillsStore = SkillsState & SkillsActions;
-
-function readPreferences(): SkillPreferences {
-  if (typeof window === "undefined") {
-    return { enabledById: {} };
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { enabledById: {} };
-    }
-
-    const parsed = JSON.parse(raw) as Partial<SkillPreferences>;
-    return {
-      enabledById: parsed.enabledById && typeof parsed.enabledById === "object" ? parsed.enabledById : {},
-    };
-  } catch {
-    return { enabledById: {} };
-  }
-}
-
-function persistPreferences(preferences: SkillPreferences) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-}
 
 function formatSkillsError(error: unknown, fallbackMessage: string) {
   if (error instanceof Error) {
@@ -116,7 +106,7 @@ function sortManifests(manifests: SkillManifest[]) {
 function resolveSkills(manifests: SkillManifest[], preferences: SkillPreferences): ResolvedSkill[] {
   return manifests.map((skill) => ({
     ...skill,
-    enabled: Boolean(preferences.enabledById[skill.id]),
+    enabled: isSkillEnabled(skill, preferences),
     effectivePrompt: skill.body,
     sourceLabel: getSourceLabel(skill.sourceKind),
   }));
@@ -127,13 +117,17 @@ function buildInitialState(): SkillsState {
     errorMessage: null,
     lastScannedAt: null,
     manifests: [],
-    preferences: readPreferences(),
+    preferences: emptyPreferences(),
     status: "idle",
   };
 }
 
 async function loadInstalledManifests() {
   return sortManifests(await scanInstalledSkills());
+}
+
+async function loadPreferences() {
+  return normalizePreferences(await readSkillPreferences());
 }
 
 export function getResolvedSkills(state: Pick<SkillsState, "manifests" | "preferences">) {
@@ -144,7 +138,7 @@ export function getEnabledSkills(state: Pick<SkillsState, "manifests" | "prefere
   return getResolvedSkills(state).filter((skill) => skill.enabled);
 }
 
-export const useSkillsStore = create<SkillsStore>((set) => ({
+export const useSkillsStore = create<SkillsStore>((set, get) => ({
   ...buildInitialState(),
   createReferenceFile: async (skillId, name) => {
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
@@ -152,7 +146,9 @@ export const useSkillsStore = create<SkillsStore>((set) => ({
     try {
       const manifests = sortManifests(await createSkillReferenceFile(skillId, name));
       const updatedSkill = manifests.find((item) => item.id === skillId);
-      const createdReference = updatedSkill?.references.find((entry) => entry.name === `${name}.md` || entry.path === `references/${name}.md`);
+      const createdReference = updatedSkill?.references.find(
+        (entry) => entry.name === `${name}.md` || entry.path === `references/${name}.md`,
+      );
       set((state) => ({
         ...state,
         errorMessage: null,
@@ -217,12 +213,13 @@ export const useSkillsStore = create<SkillsStore>((set) => ({
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
 
     try {
-      const manifests = await loadInstalledManifests();
+      const [manifests, preferences] = await Promise.all([loadInstalledManifests(), loadPreferences()]);
       set((state) => ({
         ...state,
         errorMessage: null,
         lastScannedAt: Date.now(),
         manifests,
+        preferences,
         status: "ready",
       }));
     } catch (error) {
@@ -239,12 +236,13 @@ export const useSkillsStore = create<SkillsStore>((set) => ({
 
     try {
       await initializeBuiltinSkills();
-      const manifests = await loadInstalledManifests();
+      const [manifests, preferences] = await Promise.all([loadInstalledManifests(), loadPreferences()]);
       set((state) => ({
         ...state,
         errorMessage: null,
         lastScannedAt: Date.now(),
         manifests,
+        preferences,
         status: "ready",
       }));
     } catch (error) {
@@ -285,12 +283,13 @@ export const useSkillsStore = create<SkillsStore>((set) => ({
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
 
     try {
-      const manifests = sortManifests(await scanInstalledSkills());
+      const [manifests, preferences] = await Promise.all([loadInstalledManifests(), loadPreferences()]);
       set((state) => ({
         ...state,
         errorMessage: null,
         lastScannedAt: Date.now(),
         manifests,
+        preferences,
         status: "ready",
       }));
     } catch (error) {
@@ -301,25 +300,67 @@ export const useSkillsStore = create<SkillsStore>((set) => ({
       }));
     }
   },
-  reset: () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-
-    set(buildInitialState());
-  },
-  toggleSkill: (skillId) =>
-    set((state) => {
-      const nextPreferences = {
-        enabledById: {
-          ...state.preferences.enabledById,
-          [skillId]: !state.preferences.enabledById[skillId],
-        },
-      };
-      persistPreferences(nextPreferences);
-      return {
+  reset: async () => {
+    const current = get();
+    try {
+      await clearSkillPreferences();
+      set((state) => ({
         ...state,
+        errorMessage: null,
+        preferences: emptyPreferences(),
+        status: current.manifests.length > 0 ? "ready" : "idle",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSkillsError(error, "重置技能启用状态失败。"),
+        status: "error",
+      }));
+    }
+  },
+  toggleSkill: async (skillId) => {
+    const state = get();
+    const skill = state.manifests.find((item) => item.id === skillId);
+    const current = isSkillEnabled(
+      skill ??
+        ({
+          id: skillId,
+          body: "",
+          defaultEnabled: false,
+          description: "",
+          discoveredAt: 0,
+          isBuiltin: false,
+          name: skillId,
+          rawMarkdown: "",
+          references: [],
+          sourceKind: "installed-package",
+          suggestedTools: [],
+          tags: [],
+          validation: { errors: [], isValid: true, warnings: [] },
+        } as SkillManifest),
+      state.preferences,
+    );
+    const nextPreferences = {
+      enabledById: {
+        ...state.preferences.enabledById,
+        [skillId]: !current,
+      },
+    };
+
+    try {
+      await writeSkillPreferences(nextPreferences);
+      set((currentState) => ({
+        ...currentState,
+        errorMessage: null,
         preferences: nextPreferences,
-      };
-    }),
+        status: "ready",
+      }));
+    } catch (error) {
+      set((currentState) => ({
+        ...currentState,
+        errorMessage: formatSkillsError(error, `保存技能 ${skillId} 的启用状态失败。`),
+        status: "error",
+      }));
+    }
+  },
 }));

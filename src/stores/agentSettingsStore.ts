@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import {
   initializeDefaultAgentConfig,
-  resetDefaultAgentConfig,
+  readDefaultAgentConfig,
   writeDefaultAgentConfig,
 } from "../lib/agentConfig/api";
 import { getDefaultEnabledTools } from "../lib/agent/toolDefs";
@@ -27,9 +27,9 @@ type AgentSettingsState = {
 
 type AgentSettingsActions = {
   initialize: () => Promise<void>;
+  refreshDefaultAgentMarkdown: () => Promise<void>;
   reset: () => void;
   resetConfig: () => void;
-  resetDefaultAgentMarkdown: () => Promise<void>;
   toggleTool: (toolId: string) => void;
   updateConfig: (nextConfig: Partial<AgentProviderConfig>) => void;
   updateDefaultAgentMarkdown: (content: string) => Promise<void>;
@@ -73,7 +73,6 @@ function readPersistedState(): PersistedState {
     if (!raw) {
       return {};
     }
-
     return JSON.parse(raw) as PersistedState;
   } catch {
     return {};
@@ -99,15 +98,15 @@ function persistState(state: Pick<AgentSettingsState, "config" | "enabledTools">
 }
 
 function formatSettingsError(error: unknown, fallbackMessage: string) {
-  if (error instanceof Error) {
+  if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
-  if (typeof error === "string" && error.trim().length > 0) {
+  if (typeof error === "string" && error.trim()) {
     return error;
   }
   if (typeof error === "object" && error !== null) {
     const message = Reflect.get(error, "message");
-    if (typeof message === "string" && message.trim().length > 0) {
+    if (typeof message === "string" && message.trim()) {
       return message;
     }
   }
@@ -153,45 +152,45 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
       }));
     }
   },
-  reset: () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
+  refreshDefaultAgentMarkdown: async () => {
+    set((state) => ({ ...state, errorMessage: null, status: "loading" }));
 
-    set(getDefaultState());
-  },
-  resetConfig: () =>
-    set((state) => {
-      const nextState = {
-        config: getDefaultConfig(),
-        enabledTools: state.enabledTools,
-      };
-      persistState(nextState);
-      return { config: nextState.config };
-    }),
-  resetDefaultAgentMarkdown: async () => {
     try {
-      const doc = await resetDefaultAgentConfig();
+      const doc = await readDefaultAgentConfig();
       set((state) => ({
         ...state,
-        configFilePath: doc.path,
-        defaultAgentMarkdown: normalizeMainAgentMarkdown(doc.markdown),
+        configFilePath: typeof doc?.path === "string" ? doc.path : null,
+        defaultAgentMarkdown: normalizeMainAgentMarkdown(doc?.markdown),
         errorMessage: null,
         status: "ready",
       }));
-      persistState({ config: get().config, enabledTools: get().enabledTools });
     } catch (error) {
       set((state) => ({
         ...state,
-        errorMessage: formatSettingsError(error, "恢复主代理 AGENTS.md 失败。"),
+        errorMessage: formatSettingsError(error, "主代理 AGENTS.md 刷新失败。"),
         status: "error",
       }));
       throw error;
     }
   },
+  reset: () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+    set(getDefaultState());
+  },
+  resetConfig: () =>
+    set((state) => {
+      const config = getDefaultConfig();
+      persistState({ config, enabledTools: state.enabledTools });
+      return { config };
+    }),
   toggleTool: (toolId) =>
     set((state) => {
-      const enabledTools = { ...state.enabledTools, [toolId]: !state.enabledTools[toolId] };
+      const enabledTools = {
+        ...state.enabledTools,
+        [toolId]: !(state.enabledTools[toolId] ?? true),
+      };
       persistState({ config: state.config, enabledTools });
       return { enabledTools };
     }),
@@ -206,12 +205,11 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
       const doc = await writeDefaultAgentConfig(content);
       set((state) => ({
         ...state,
-        configFilePath: doc.path,
-        defaultAgentMarkdown: normalizeMainAgentMarkdown(doc.markdown),
+        configFilePath: typeof doc?.path === "string" ? doc.path : null,
+        defaultAgentMarkdown: normalizeMainAgentMarkdown(doc?.markdown),
         errorMessage: null,
         status: "ready",
       }));
-      persistState({ config: get().config, enabledTools: get().enabledTools });
     } catch (error) {
       set((state) => ({
         ...state,

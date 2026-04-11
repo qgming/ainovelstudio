@@ -18,6 +18,7 @@ export type SkillValidation = {
 export type SkillManifest = {
   author?: string;
   body: string;
+  defaultEnabled?: boolean;
   description: string;
   discoveredAt: number;
   frontmatter?: Record<string, unknown>;
@@ -37,10 +38,26 @@ export type SkillManifest = {
   version?: string;
 };
 
+export type TogglePreferences = {
+  enabledById: Record<string, boolean>;
+};
+
 export type BuiltinSkillsInitializationResult = {
   initializedSkillIds: string[];
   skippedSkillIds: string[];
 };
+
+export function readSkillPreferences() {
+  return invoke<TogglePreferences>("read_skill_preferences");
+}
+
+export function writeSkillPreferences(preferences: TogglePreferences) {
+  return invoke<TogglePreferences>("write_skill_preferences", { preferences });
+}
+
+export function clearSkillPreferences() {
+  return invoke<void>("clear_skill_preferences");
+}
 
 export function pickSkillArchive() {
   return invoke<string | null>("pick_skill_archive");
@@ -85,3 +102,4 @@ export function deleteInstalledSkill(skillId: string) {
 export function importSkillZip(zipPath: string) {
   return invoke<SkillManifest[]>("import_skill_zip", { zipPath });
 }
+

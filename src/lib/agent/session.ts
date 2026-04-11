@@ -228,9 +228,9 @@ function buildAiSdkTools(
   if (enabledSet.has("read_file") && workspaceTools.read_file) {
     const wsTool = workspaceTools.read_file;
     toolSet.read_file = defineTool({
-      description: wsTool.description,
+      description: "读取完整文本文件内容。仅在你已经知道准确路径、并且需要查看全文上下文时使用；如果还不知道文件或目录在哪里，先用 search_workspace_content 或 read_workspace_tree 缩小范围。",
       inputSchema: z.object({
-        path: z.string().describe("要读取的文件路径"),
+        path: z.string().describe("工作区内的准确文本文件路径。该工具不会帮你搜索路径，因此未知路径时不要直接调用。"),
       }),
       execute: async (input: { path: string }) => {
         const result = await wsTool.execute(input);
@@ -242,12 +242,12 @@ function buildAiSdkTools(
   if (enabledSet.has("line_edit") && workspaceTools.line_edit) {
     const wsTool = workspaceTools.line_edit;
     toolSet.line_edit = defineTool({
-      description: wsTool.description,
+      description: "按行读取或替换文本。适合小范围精确修改；get 只读取单行，replace 只替换单行，不会重排其它内容。需要改多行或整篇时不要滥用它。",
       inputSchema: z.object({
-        action: z.enum(["get", "replace"]).describe("get 表示读取该行，replace 表示替换该行"),
-        contents: z.string().optional().describe("当 action=replace 时要写入该行的新文本，不能包含换行符"),
-        lineNumber: z.number().int().positive().describe("1 开始的目标行号"),
-        path: z.string().describe("目标文件路径"),
+        action: z.enum(["get", "replace"]).describe("get 读取单行内容；replace 仅替换这一行，不会跨行编辑。"),
+        contents: z.string().optional().describe("仅在 action=replace 时传入。必须是单行文本，不能包含换行符，也不应附带行号。"),
+        lineNumber: z.number().int().positive().describe("从 1 开始的目标行号。超出范围会报错，不会自动补行。"),
+        path: z.string().describe("要操作的工作区文本文件路径，必须是已经存在的文本文件。"),
       }),
       execute: async (input: { action: "get" | "replace"; contents?: string; lineNumber: number; path: string }) => {
         const result = await wsTool.execute(input as unknown as Record<string, unknown>);
@@ -259,10 +259,10 @@ function buildAiSdkTools(
   if (enabledSet.has("write_file") && workspaceTools.write_file) {
     const wsTool = workspaceTools.write_file;
     toolSet.write_file = defineTool({
-      description: wsTool.description,
+      description: "整文件覆盖写入。适用于你已经准备好文件的完整新内容时；调用后会覆盖原文件全部文本。如果只是小改动，优先使用 line_edit。",
       inputSchema: z.object({
-        path: z.string().describe("要写入的文件路径"),
-        contents: z.string().describe("要写入的内容"),
+        path: z.string().describe("要覆盖写入的目标文件路径，通常应指向已存在的文本文件。"),
+        contents: z.string().describe("文件的新完整内容。会整体覆盖旧内容，不是追加写入。"),
       }),
       execute: async (input: { path: string; contents: string }) => {
         const result = await wsTool.execute(input);
@@ -274,10 +274,10 @@ function buildAiSdkTools(
   if (enabledSet.has("create_file") && workspaceTools.create_file) {
     const wsTool = workspaceTools.create_file;
     toolSet.create_file = defineTool({
-      description: wsTool.description,
+      description: "在指定目录创建新的文本文件。适合新增文件；如果目标文件已经存在或你只是想修改旧文件内容，不要用它。",
       inputSchema: z.object({
-        parentPath: z.string().describe("父目录路径"),
-        name: z.string().describe("文件名"),
+        parentPath: z.string().describe("新文件所在的父目录路径，必须位于工作区内。"),
+        name: z.string().describe("要创建的文件名，通常应包含扩展名，如 chapter-01.md。"),
       }),
       execute: async (input: { parentPath: string; name: string }) => {
         const result = await wsTool.execute(input);
@@ -289,10 +289,10 @@ function buildAiSdkTools(
   if (enabledSet.has("create_folder") && workspaceTools.create_folder) {
     const wsTool = workspaceTools.create_folder;
     toolSet.create_folder = defineTool({
-      description: wsTool.description,
+      description: "在指定目录创建文件夹。适合补齐目录结构，不负责创建文件内容。",
       inputSchema: z.object({
-        parentPath: z.string().describe("父目录路径"),
-        name: z.string().describe("文件夹名"),
+        parentPath: z.string().describe("新文件夹所在的父目录路径，必须位于工作区内。"),
+        name: z.string().describe("要创建的文件夹名称，不要传完整路径。"),
       }),
       execute: async (input: { parentPath: string; name: string }) => {
         const result = await wsTool.execute(input);
@@ -304,9 +304,9 @@ function buildAiSdkTools(
   if (enabledSet.has("delete_path") && workspaceTools.delete_path) {
     const wsTool = workspaceTools.delete_path;
     toolSet.delete_path = defineTool({
-      description: wsTool.description,
+      description: "删除指定文件或目录。只有在你已经确认目标路径和影响范围时才使用，避免把它当清理未知内容的通用手段。",
       inputSchema: z.object({
-        path: z.string().describe("要删除的路径"),
+        path: z.string().describe("工作区内要删除的准确路径。删除目录会递归影响其下内容。"),
       }),
       execute: async (input: { path: string }) => {
         const result = await wsTool.execute(input);
@@ -318,10 +318,10 @@ function buildAiSdkTools(
   if (enabledSet.has("search_workspace_content") && workspaceTools.search_workspace_content) {
     const wsTool = workspaceTools.search_workspace_content;
     toolSet.search_workspace_content = defineTool({
-      description: wsTool.description,
+      description: "搜索工作区中的目录名、文件名和正文命中，用于定位目标、判断下一步该读哪个文件或改哪个位置。它只返回命中摘要，不返回完整文件内容。",
       inputSchema: z.object({
-        limit: z.number().int().positive().max(200).optional().describe("最多返回多少条结果，默认 50"),
-        query: z.string().describe("要搜索的关键词，会匹配文件夹名、文件名和正文内容"),
+        limit: z.number().int().positive().max(200).optional().describe("最多返回多少条结果。默认 50，最大 200；范围越大，结果越噪。"),
+        query: z.string().describe("搜索关键词，可匹配目录名、文件名和正文内容。建议传短语或关键实体，不要传整段自然语言。"),
       }),
       execute: async (input: { limit?: number; query: string }) => {
         const result = await wsTool.execute(input as unknown as Record<string, unknown>);
@@ -333,10 +333,10 @@ function buildAiSdkTools(
   if (enabledSet.has("rename_path") && workspaceTools.rename_path) {
     const wsTool = workspaceTools.rename_path;
     toolSet.rename_path = defineTool({
-      description: wsTool.description,
+      description: "重命名工作区中的文件或目录。适合改名或整理结构，不会修改文件正文。",
       inputSchema: z.object({
-        path: z.string().describe("当前路径"),
-        nextName: z.string().describe("新名称"),
+        path: z.string().describe("当前的准确路径，必须已经存在于工作区内。"),
+        nextName: z.string().describe("新的文件名或目录名，只传名称本身，不要传完整路径。"),
       }),
       execute: async (input: { path: string; nextName: string }) => {
         const result = await wsTool.execute(input);
@@ -348,7 +348,7 @@ function buildAiSdkTools(
   if (enabledSet.has("read_workspace_tree") && workspaceTools.read_workspace_tree) {
     const wsTool = workspaceTools.read_workspace_tree;
     toolSet.read_workspace_tree = defineTool({
-      description: wsTool.description,
+      description: "读取当前工作区的目录树。适合先了解目录结构、入口文件和层级关系；它不会搜索文件正文。",
       inputSchema: z.object({}),
       execute: async (_input: Record<string, never>) => {
         const result = await wsTool.execute({});
@@ -482,6 +482,8 @@ export async function* runAgentTurn({
 }
 
 export { createSystemMessage };
+
+
 
 
 

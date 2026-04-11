@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -33,6 +33,7 @@ pub struct AgentManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     author: Option<String>,
     body: String,
+    default_enabled: bool,
     description: String,
     discovered_at: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -413,6 +414,7 @@ fn parse_agent_manifest(agent_dir: &Path, source_root: &AgentRoot) -> CommandRes
     Ok(AgentManifest {
         author,
         body: parsed_markdown.body,
+        default_enabled: source_root.is_builtin,
         description,
         discovered_at: current_timestamp(),
         dispatch_hint,
@@ -511,9 +513,13 @@ fn collect_agent_roots(app: &AppHandle) -> CommandResult<Vec<AgentRoot>> {
 }
 
 fn scan_all_agents(app: &AppHandle) -> CommandResult<Vec<AgentManifest>> {
+    let mut builtin_ids: HashSet<String> = HashSet::new();
     let mut by_id: HashMap<String, AgentManifest> = HashMap::new();
     for root in collect_agent_roots(app)? {
         for manifest in scan_agent_root(&root)? {
+            if root.is_builtin {
+                builtin_ids.insert(manifest.id.clone());
+            }
             match by_id.get(&manifest.id) {
                 Some(existing) if existing.source_kind == "installed-package" => {}
                 _ => {
@@ -523,7 +529,13 @@ fn scan_all_agents(app: &AppHandle) -> CommandResult<Vec<AgentManifest>> {
         }
     }
 
-    let mut manifests = by_id.into_values().collect::<Vec<_>>();
+    let mut manifests = by_id
+        .into_values()
+        .map(|mut manifest| {
+            manifest.default_enabled = builtin_ids.contains(&manifest.id);
+            manifest
+        })
+        .collect::<Vec<_>>();
     manifests.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
     Ok(manifests)
 }
@@ -1082,3 +1094,4 @@ pub fn import_agent_zip(app: AppHandle, zipPath: String) -> CommandResult<Vec<Ag
 
     install_agent_from_zip(&app, &zip_path)
 }
+
