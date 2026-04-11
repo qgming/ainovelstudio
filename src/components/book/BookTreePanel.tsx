@@ -152,7 +152,7 @@ export function BookTreePanel({
             <FolderPlus className="h-4 w-4" />
           </ToolbarButton>
           <ToolbarButton
-            ariaLabel="在书籍根目录中新建文本文件"
+            ariaLabel="在书籍根目录中新建文件"
             busy={busy}
             onClick={() => onCreateFile(rootNode.path)}
           >

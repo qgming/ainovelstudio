@@ -183,7 +183,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
           })}
         </div>
       </ActionMenu>
-      <AgentMessageList messages={run.messages} />
+      <AgentMessageList messages={run.messages} runStatus={run.status} />
       <AgentComposer
         input={input}
         onInputChange={setInput}

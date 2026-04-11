@@ -98,11 +98,11 @@ function buildCreateFolderPrompt(parentPath: string): PromptState {
 function buildCreateFilePrompt(parentPath: string): PromptState {
   return {
     confirmLabel: "确认新建",
-    description: "输入文件名，不带扩展名时默认使用 .md。",
+    description: "输入文件名，不带扩展名时默认使用 .md，也支持 .txt 和 .json。",
     label: "文件名",
     mode: "createFile",
     parentPath,
-    title: "新建文本文件",
+    title: "新建文件",
     value: "",
   };
 }

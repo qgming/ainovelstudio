@@ -25,11 +25,7 @@ export function getExtension(name: string): string {
 
 export function isTextEditableFile(name: string): boolean {
   const extension = getExtension(name);
-  return extension === ".md" || extension === ".txt";
-}
-
-export function isHiddenSystemFile(name: string): boolean {
-  return name === "index.json";
+  return extension === ".md" || extension === ".txt" || extension === ".json";
 }
 
 export function normalizeEntryName(value: string): string {
@@ -49,10 +45,6 @@ export function validateEntryName(value: string): string | null {
 
   if (INVALID_NAME_PATTERN.test(name)) {
     return "名称不能包含 < > : \" / \\ | ? *。";
-  }
-
-  if (isHiddenSystemFile(name)) {
-    return "index.json 由系统维护，不能手动创建或重命名。";
   }
 
   return null;

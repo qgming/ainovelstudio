@@ -28,7 +28,7 @@ import { useBookWorkspaceStore } from "./stores/bookWorkspaceStore";
 import { useThemeStore } from "./stores/themeStore";
 
 const rootPath = "C:/books/北境余烬";
-const chapterPath = `${rootPath}/章节/第一卷/第1章-开篇.md`;
+const chapterPath = `${rootPath}/04_正文/第一卷/第001章_待命名.md`;
 const chatBootstrap = {
   sessions: [
     {
@@ -54,7 +54,7 @@ const tree = {
   children: [
     {
       kind: "file",
-      name: "第1章-开篇.md",
+      name: "第001章_待命名.md",
       path: chapterPath,
       extension: ".md",
     },
@@ -253,6 +253,6 @@ describe("App shell", () => {
     });
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "第1章-开篇.md" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "第001章_待命名.md" })).toBeInTheDocument();
   });
 });

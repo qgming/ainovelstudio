@@ -36,6 +36,35 @@ function hasProviderConfig(config: AgentProviderConfig) {
   return Boolean(config.apiKey.trim() && config.baseURL.trim() && config.model.trim());
 }
 
+function createAbortError() {
+  return new DOMException("Agent execution aborted.", "AbortError");
+}
+
+async function withAbort<T>(abortSignal: AbortSignal | undefined, task: () => Promise<T>): Promise<T> {
+  if (!abortSignal) {
+    return task();
+  }
+
+  if (abortSignal.aborted) {
+    throw createAbortError();
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const handleAbort = () => reject(createAbortError());
+    abortSignal.addEventListener("abort", handleAbort, { once: true });
+
+    task()
+      .then((value) => {
+        abortSignal.removeEventListener("abort", handleAbort);
+        resolve(value);
+      })
+      .catch((error) => {
+        abortSignal.removeEventListener("abort", handleAbort);
+        reject(error);
+      });
+  });
+}
+
 
 function createSubagentSnapshot({
   detail,
@@ -125,7 +154,7 @@ async function maybeRunSubAgent(params: {
 
   const subagentId = `subagent-${matchedAgent.id}-${Date.now()}`;
   const innerParts: AgentPart[] = [];
-  const subagentTools = buildAiSdkTools(workspaceTools, enabledToolIds);
+  const subagentTools = buildAiSdkTools(workspaceTools, enabledToolIds, abortSignal);
 
   onProgress?.(
     createSubagentSnapshot({
@@ -155,7 +184,7 @@ async function maybeRunSubAgent(params: {
       case "reasoning-delta":
         mappedPart = {
           type: "reasoning",
-          summary: "思考中...",
+          summary: "正在思考",
           detail: part.text,
         };
         break;
@@ -223,6 +252,7 @@ async function maybeRunSubAgent(params: {
 function buildAiSdkTools(
   workspaceTools: Record<string, AgentTool>,
   enabledToolIds: string[],
+  abortSignal?: AbortSignal,
 ): ToolSet {
   const toolSet: ToolSet = {};
   const enabledSet = new Set(enabledToolIds);
@@ -235,7 +265,7 @@ function buildAiSdkTools(
         path: z.string().describe("工作区内的准确文本文件路径。该工具不会帮你搜索路径，因此未知路径时不要直接调用。"),
       }),
       execute: async (input: { path: string }) => {
-        const result = await wsTool.execute(input);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input));
         return result.summary;
       },
     });
@@ -261,7 +291,7 @@ function buildAiSdkTools(
         path: string;
         previousLine?: string;
       }) => {
-        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input as unknown as Record<string, unknown>));
         return result.data ?? result.summary;
       },
     });
@@ -276,7 +306,7 @@ function buildAiSdkTools(
         contents: z.string().describe("文件的新完整内容。会整体覆盖旧内容，不是追加写入。"),
       }),
       execute: async (input: { path: string; contents: string }) => {
-        const result = await wsTool.execute(input);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input));
         return result.summary;
       },
     });
@@ -291,7 +321,7 @@ function buildAiSdkTools(
         name: z.string().describe("要创建的文件名，通常应包含扩展名，如 chapter-01.md。"),
       }),
       execute: async (input: { parentPath: string; name: string }) => {
-        const result = await wsTool.execute(input);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input));
         return result.summary;
       },
     });
@@ -306,7 +336,7 @@ function buildAiSdkTools(
         name: z.string().describe("要创建的文件夹名称，不要传完整路径。"),
       }),
       execute: async (input: { parentPath: string; name: string }) => {
-        const result = await wsTool.execute(input);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input));
         return result.summary;
       },
     });
@@ -320,7 +350,7 @@ function buildAiSdkTools(
         path: z.string().describe("工作区内要删除的准确路径。删除目录会递归影响其下内容。"),
       }),
       execute: async (input: { path: string }) => {
-        const result = await wsTool.execute(input);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input));
         return result.summary;
       },
     });
@@ -335,7 +365,7 @@ function buildAiSdkTools(
         query: z.string().describe("搜索关键词，可匹配目录名、文件名和正文内容。建议传短语或关键实体，不要传整段自然语言。"),
       }),
       execute: async (input: { limit?: number; query: string }) => {
-        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input as unknown as Record<string, unknown>));
         return result.data ?? result.summary;
       },
     });
@@ -350,7 +380,7 @@ function buildAiSdkTools(
         nextName: z.string().describe("新的文件夹名称或文件名，只传名称本身，不要传完整路径。"),
       }),
       execute: async (input: { path: string; nextName: string }) => {
-        const result = await wsTool.execute(input);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input));
         return result.summary;
       },
     });
@@ -362,7 +392,7 @@ function buildAiSdkTools(
       description: "读取当前工作区的目录树。适合先了解目录结构、入口文件和层级关系；它不会搜索文件正文。",
       inputSchema: z.object({}),
       execute: async (_input: Record<string, never>) => {
-        const result = await wsTool.execute({});
+        const result = await withAbort(abortSignal, () => wsTool.execute({}));
         return result.data ?? result.summary;
       },
     });
@@ -375,7 +405,7 @@ function buildAiSdkTools(
         "读取当前本地可用 skills 列表，返回 skill 的基础信息和可读取文件列表。通常在你还不确定 skillId 时先调用它。",
       inputSchema: z.object({}),
       execute: async (_input: Record<string, never>) => {
-        const result = await wsTool.execute({});
+        const result = await withAbort(abortSignal, () => wsTool.execute({}));
         return result.data ?? result.summary;
       },
     });
@@ -393,7 +423,7 @@ function buildAiSdkTools(
           .describe("技能目录内的相对路径，例如 SKILL.md 或 references/xxx.md。"),
       }),
       execute: async (input: { relativePath: string; skillId: string }) => {
-        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input as unknown as Record<string, unknown>));
         return result.summary;
       },
     });
@@ -406,7 +436,7 @@ function buildAiSdkTools(
         "读取当前本地可用 agents 列表，返回 agent 的基础信息和可读取文件列表。通常在你还不确定 agentId 时先调用它。",
       inputSchema: z.object({}),
       execute: async (_input: Record<string, never>) => {
-        const result = await wsTool.execute({});
+        const result = await withAbort(abortSignal, () => wsTool.execute({}));
         return result.data ?? result.summary;
       },
     });
@@ -424,7 +454,7 @@ function buildAiSdkTools(
           .describe("代理目录内的相对路径，例如 AGENTS.md、TOOLS.md 或 MEMORY.md。"),
       }),
       execute: async (input: { agentId: string; relativePath: string }) => {
-        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        const result = await withAbort(abortSignal, () => wsTool.execute(input as unknown as Record<string, unknown>));
         return result.summary;
       },
     });
@@ -468,7 +498,7 @@ export async function* runAgentTurn({
     return;
   }
 
-  const aiTools = buildAiSdkTools(workspaceTools, enabledToolIds);
+  const aiTools = buildAiSdkTools(workspaceTools, enabledToolIds, abortSignal);
   const system = buildSystemPrompt({
     defaultAgentMarkdown,
     enabledAgents,
@@ -527,7 +557,7 @@ export async function* runAgentTurn({
       case "reasoning-delta":
         yield {
           type: "reasoning",
-          summary: "思考中...",
+          summary: "正在思考",
           detail: part.text,
         };
         break;

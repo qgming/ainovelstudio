@@ -70,7 +70,7 @@ describe("AgentPartRenderer", () => {
       <AgentPartRenderer
         part={{
           type: "reasoning",
-          summary: "思考中...",
+          summary: "正在思考",
           detail: "正在分析请求。",
         }}
       />,

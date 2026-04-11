@@ -2,7 +2,6 @@ use serde::Serialize;
 use std::{
     fs,
     path::{Component, Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
@@ -16,23 +15,6 @@ pub struct TreeNode {
     kind: String,
     name: String,
     path: String,
-}
-
-#[derive(Serialize)]
-struct HiddenIndexItem {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    extension: Option<String>,
-    kind: String,
-    name: String,
-    path: String,
-}
-
-#[derive(Serialize)]
-struct HiddenIndexFile {
-    items: Vec<HiddenIndexItem>,
-    name: String,
-    path: String,
-    updated_at: u64,
 }
 
 #[derive(Serialize)]
@@ -92,13 +74,6 @@ fn display_relative_path(root: &Path, path: &Path) -> String {
 fn file_extension(path: &Path) -> Option<String> {
     path.extension()
         .map(|extension| format!(".{}", extension.to_string_lossy().to_lowercase()))
-}
-
-fn current_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0)
 }
 
 fn normalize_search_query(value: &str) -> CommandResult<String> {
@@ -234,9 +209,6 @@ fn collect_workspace_search_matches(
     for entry in fs::read_dir(current).map_err(error_to_string)? {
         let path = entry.map_err(error_to_string)?.path();
         let name = entry_name(&path);
-        if name == "index.json" {
-            continue;
-        }
 
         let lowered_name = name.to_lowercase();
         let display_path = display_relative_path(root, &path);
@@ -397,9 +369,6 @@ fn validate_name(value: &str) -> CommandResult<String> {
     if trimmed == "." || trimmed == ".." {
         return Err("名称不能是 . 或 ..。".into());
     }
-    if trimmed == "index.json" {
-        return Err("index.json 由系统维护，不能手动创建或重命名。".into());
-    }
     if trimmed
         .chars()
         .any(|char| INVALID_NAME_CHARS.contains(&char))
@@ -419,8 +388,8 @@ fn normalize_text_file_name(value: &str) -> CommandResult<String> {
     };
 
     let extension = file_extension(Path::new(&next_name)).unwrap_or_default();
-    if extension != ".md" && extension != ".txt" {
-        return Err("只能创建 .md 或 .txt 文件。".into());
+    if extension != ".md" && extension != ".txt" && extension != ".json" {
+        return Err("只能创建 .md、.txt 或 .json 文件。".into());
     }
 
     Ok(next_name)
@@ -442,16 +411,6 @@ fn build_rename_target_name(source_path: &Path, next_name: &str) -> CommandResul
 
 fn sort_tree_nodes(nodes: &mut [TreeNode]) {
     nodes.sort_by(|left, right| {
-        let left_rank = if left.kind == "directory" { 0 } else { 1 };
-        let right_rank = if right.kind == "directory" { 0 } else { 1 };
-        left_rank
-            .cmp(&right_rank)
-            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
-    });
-}
-
-fn sort_index_items(items: &mut [HiddenIndexItem]) {
-    items.sort_by(|left, right| {
         let left_rank = if left.kind == "directory" { 0 } else { 1 };
         let right_rank = if right.kind == "directory" { 0 } else { 1 };
         left_rank
@@ -482,9 +441,6 @@ fn build_tree(root: &Path, current: &Path) -> CommandResult<TreeNode> {
         let mut children = Vec::new();
         for entry in fs::read_dir(current).map_err(error_to_string)? {
             let child_path = entry.map_err(error_to_string)?.path();
-            if entry_name(&child_path) == "index.json" {
-                continue;
-            }
             children.push(build_tree(root, &child_path)?);
         }
         sort_tree_nodes(&mut children);
@@ -495,114 +451,96 @@ fn build_tree(root: &Path, current: &Path) -> CommandResult<TreeNode> {
     Ok(node)
 }
 
-fn write_index_file(root: &Path, current: &Path) -> CommandResult<()> {
-    let mut items = Vec::new();
-    let mut child_directories = Vec::new();
-
-    for entry in fs::read_dir(current).map_err(error_to_string)? {
-        let path = entry.map_err(error_to_string)?.path();
-        let name = entry_name(&path);
-        if name == "index.json" {
-            continue;
-        }
-
-        if path.is_dir() {
-            child_directories.push(path.clone());
-        }
-
-        items.push(HiddenIndexItem {
-            extension: if path.is_file() {
-                file_extension(&path)
-            } else {
-                None
-            },
-            kind: if path.is_dir() {
-                "directory".into()
-            } else {
-                "file".into()
-            },
-            name,
-            path: relative_path(root, &path),
-        });
-    }
-
-    sort_index_items(&mut items);
-
-    let payload = HiddenIndexFile {
-        items,
-        name: entry_name(current),
-        path: relative_path(root, current),
-        updated_at: current_timestamp(),
-    };
-
-    let json = serde_json::to_string_pretty(&payload).map_err(error_to_string)?;
-    fs::write(current.join("index.json"), json).map_err(error_to_string)?;
-
-    for child_directory in child_directories {
-        write_index_file(root, &child_directory)?;
-    }
-
-    Ok(())
-}
-
-fn refresh_workspace_indexes(root: &Path) -> CommandResult<()> {
-    write_index_file(root, root)
-}
-
-fn create_book_intro_template(book_name: &str) -> String {
+fn create_book_readme_template(book_name: &str) -> String {
     format!(
-        "# {book_name}\n\n## 作品状态\n\n- 状态：筹备中\n- 题材：待补充\n- 当前进度：第1卷 / 第1章\n\n## 文件夹架构\n\n- 章节：正文分卷与章节草稿\n- 大纲：故事总纲、分卷大纲、章节细纲\n- 设定：人物、世界、地点、势力设定\n- 草稿：灵感片段与临时文本\n- 提示词：AI 写作风格与提示约束\n\n## 当前目标\n\n- 明确主线冲突\n- 完成第一卷大纲\n- 推进开篇章节初稿\n"
+        "# 项目名称：{book_name}\n**类型**：待补充\n**AI 助理任务**：协助作者在遵循设定集的基础上，完成高质量的章节创作、逻辑校验与伏笔埋设。\n\n## ⚠️ 核心操作协议\n1. **环境初始化**：每次对话开始前，请先索引 `01_世界观设定/` 与 `02_角色设定/`。\n2. **逻辑前置**：创作新章节前，必须读取 `04_正文/创作状态追踪器.json` 以获取最新剧情坐标。\n3. **输出闭环**：每完成一章创作，需同步更新 `03_剧情大纲/伏笔与线索追踪.md`。\n\n## 当前开发里程碑\n- [ ] 设定完善（进行中）\n- [ ] 第一卷大纲定稿\n- [ ] 正文连载中\n"
     )
 }
 
 fn build_book_template(book_name: &str) -> (Vec<&'static str>, Vec<(&'static str, String)>) {
     (
         vec![
-            "章节",
-            "章节/第一卷",
-            "大纲",
-            "大纲/分卷大纲",
-            "大纲/章节细纲",
-            "大纲/章节细纲/第一卷",
-            "设定",
-            "设定/人物",
-            "设定/世界",
-            "设定/地点",
-            "设定/势力",
-            "草稿",
-            "提示词",
+            "00_系统指令",
+            "01_世界观设定",
+            "02_角色设定",
+            "03_剧情大纲",
+            "03_剧情大纲/卷次详细大纲",
+            "04_正文",
+            "04_正文/第一卷",
+            "05_素材资源",
         ],
         vec![
-            ("作品说明.md", create_book_intro_template(book_name)),
             (
-                "章节/第一卷/第1章-开篇.md",
+                "README.md",
+                create_book_readme_template(book_name),
+            ),
+            (
+                "00_系统指令/写作风格指南.md",
+                "# 写作风格指南\n\n## 1. 叙事视角\n- **主要视角**：第三人称有限视角（聚焦主角）\n- **人称偏好**：多用动作描写，少用主观感叹。\n\n## 2. 语言特征\n- **词汇量**：待补充\n- **节奏控制**：战斗场景短句为主；日常场景注重氛围渲染。\n\n## 3. 禁忌事项\n- 严禁：角色 OOC（脱离人设）、战力崩坏、无逻辑的降智行为。\n".into(),
+            ),
+            (
+                "00_系统指令/交互格式规范.md",
+                "# 交互格式规范\n\n## 1. 章节输出要求\n- 新建或续写章节时，先给出章节元信息，再输出正文。\n- 正文结束后，补充创作日志与状态更新建议。\n\n## 2. 数据更新要求\n- 涉及角色、地点、伏笔、数值变化时，必须标记建议同步更新的文件。\n- 若信息不足，应先提出缺口，不得擅自补全关键设定。\n\n## 3. 一致性要求\n- 所有命名以本仓库现有术语为准。\n- 若与历史内容冲突，优先列出冲突点再给出修正建议。\n".into(),
+            ),
+            (
+                "01_世界观设定/地理历史背景.md",
+                "# 地理历史背景\n\n## 地图与区域\n- 核心大陆：\n- 主要国家 / 势力：\n- 关键边境与交通线：\n\n## 历史脉络\n- 纪年法：\n- 重大历史事件：\n- 影响当下格局的旧案：\n".into(),
+            ),
+            (
+                "01_世界观设定/力量等级体系.md",
+                "# 力量等级体系\n\n## 1. 等级划分\n| 境界/级别 | 标志性特征 | 资源消耗 |\n| :--- | :--- | :--- |\n| 初窥门径 | 气感产生 | 基础灵石 |\n| ... | ... | ... |\n\n## 2. 战力判定原则\n- **越级挑战**：必须具备[特定道具/牺牲代价]方能生效。\n- **环境加成**：在[特定地形]下，实力增幅 [X%]。\n".into(),
+            ),
+            (
+                "01_世界观设定/核心术语对照表.md",
+                "# 核心术语对照表\n\n| 术语 | 官方定义 | 备注 |\n| :--- | :--- | :--- |\n| 待补充 | 待补充 | 待补充 |\n".into(),
+            ),
+            (
+                "02_角色设定/主角个人档案.md",
+                "# 角色档案：[角色名]\n\n## 核心属性\n- **核心动机**：[他最终想要得到什么？]\n- **性格冲突**：[例如：极度利己但无法忍受欺凌弱小]\n- **语言风格**：[例如：逻辑性极强，不使用脏话]\n\n## 状态追踪\n- **初始实力**：\n- **核心技能包**：\n- **已知弱点**：\n".into(),
+            ),
+            (
+                "02_角色设定/重要配角索引.md",
+                "# 重要配角索引\n\n## 阵营划分\n- 盟友：\n- 对手：\n- 中立角色：\n\n## 角色功能描述\n| 角色名 | 立场 | 关键作用 | 当前状态 |\n| :--- | :--- | :--- | :--- |\n| 待补充 | 待补充 | 待补充 | 待补充 |\n".into(),
+            ),
+            (
+                "02_角色设定/角色关系矩阵.json",
+                "{\n  \"version\": 1,\n  \"updatedAt\": \"\",\n  \"characters\": [],\n  \"relationships\": []\n}\n".into(),
+            ),
+            (
+                "03_剧情大纲/全书架构总纲.md",
+                "# 全书架构总纲\n\n## 故事定位\n- 主题：\n- 核心卖点：\n- 目标读者：\n\n## 主线冲突\n- 主角想达成什么：\n- 阻碍主角的核心冲突：\n- 结局方向：\n\n## 关键转折\n1. 开篇引子：\n2. 第一阶段：\n3. 中段升级：\n4. 高潮爆发：\n5. 终局收束：\n".into(),
+            ),
+            (
+                "03_剧情大纲/卷次详细大纲/01_第一卷.md",
+                "# 第一卷大纲\n\n## 本卷定位\n- 卷名：第一卷\n- 本卷目标：\n- 本卷冲突：\n\n## 情节推进\n1. 开局：\n2. 发展：\n3. 反转：\n4. 卷末落点：\n".into(),
+            ),
+            (
+                "03_剧情大纲/伏笔与线索追踪.md",
+                "# 伏笔与线索追踪\n\n| 编号 | 伏笔/线索 | 首次出现 | 当前状态 | 回收计划 |\n| :--- | :--- | :--- | :--- | :--- |\n| F-001 | 待补充 | 待补充 | 进行中 | 待补充 |\n".into(),
+            ),
+            (
+                "04_正文/章节模板.md",
+                "---\n章节: 第[X]章\n标题: [标题名]\n本章核心功能: [例如：角色成长 / 引入反派 / 揭露真相]\n前置状态索引: [关联上一章内容]\n---\n\n# 正文\n\n[此处为 AI 创作的正式章节内容]\n\n---\n## 创作日志（AI 自动填写）\n1. **角色变更**：[哪些人进场/退场]\n2. **地点迁移**：[从 A 移动到 B]\n3. **状态更新**：[主角数值或情感的变化]\n".into(),
+            ),
+            (
+                "04_正文/第一卷/第001章_待命名.md",
                 format!(
-                    "# 第1章 开篇\n\n## 章节定位\n\n- 作品：{book_name}\n- 本章目标：建立主角处境与核心悬念\n- 出场人物：\n- 场景：\n\n## 正文\n\n"
+                    "---\n章节: 第001章\n标题: [待命名]\n本章核心功能: [例如：角色成长 / 引入反派 / 揭露真相]\n前置状态索引: [关联上一章内容]\n关联项目: {book_name}\n---\n\n# 正文\n\n[此处为 AI 创作的正式章节内容]\n\n---\n## 创作日志（AI 自动填写）\n1. **角色变更**：[哪些人进场/退场]\n2. **地点迁移**：[从 A 移动到 B]\n3. **状态更新**：[主角数值或情感的变化]\n"
                 ),
             ),
             (
-                "大纲/故事总纲.md",
-                "# 故事总纲\n\n## 故事定位\n\n- 主题：\n- 核心卖点：\n- 目标读者：\n\n## 主线目标\n\n- 主角想达成什么：\n- 阻碍主角的核心冲突：\n\n## 推进节奏\n\n1. 开篇引子：\n2. 第一阶段：\n3. 中段升级：\n4. 高潮爆发：\n5. 结局方向：\n".into(),
+                "04_正文/创作状态追踪器.json",
+                format!(
+                    "{{\n  \"project\": \"{book_name}\",\n  \"currentVolume\": \"第一卷\",\n  \"currentChapter\": \"第001章\",\n  \"timelineCheckpoint\": \"开篇阶段\",\n  \"activeCharacters\": [],\n  \"activeClues\": [],\n  \"locations\": [],\n  \"lastUpdated\": \"\"\n}}\n"
+                ),
             ),
             (
-                "大纲/分卷大纲/第一卷大纲.md",
-                "# 第一卷大纲\n\n## 本卷定位\n\n- 卷名：\n- 本卷目标：\n- 本卷冲突：\n\n## 情节推进\n\n1. 开局：\n2. 发展：\n3. 反转：\n4. 卷末落点：\n".into(),
+                "05_素材资源/历史参考资料.md",
+                "# 历史参考资料\n\n## 现实原型\n- 待补充\n\n## 可借鉴元素\n- 待补充\n".into(),
             ),
             (
-                "大纲/章节细纲/第一卷/第1章细纲.md",
-                "# 第1章细纲\n\n## 本章目标\n\n- 主要事件：\n- 冲突点：\n- 信息点：\n- 结尾钩子：\n\n## 场景拆分\n\n1. 场景一：\n2. 场景二：\n3. 场景三：\n".into(),
-            ),
-            (
-                "设定/人物/主角设定.md",
-                "# 主角设定\n\n## 基本信息\n\n- 姓名：\n- 年龄：\n- 身份：\n\n## 人物核心\n\n- 表层性格：\n- 深层欲望：\n- 核心缺陷：\n- 成长方向：\n\n## 关系与冲突\n\n- 关键关系：\n- 主要矛盾：\n".into(),
-            ),
-            (
-                "设定/世界/世界观设定.md",
-                "# 世界观设定\n\n## 背景\n\n- 时代：\n- 世界基调：\n\n## 规则\n\n- 核心规则：\n- 限制条件：\n\n## 势力与地点\n\n- 主要势力：\n- 关键地点：\n".into(),
-            ),
-            (
-                "提示词/写作风格提示.md",
-                "# 写作风格提示\n\n## 叙事要求\n\n- 叙事视角：\n- 语言风格：\n- 节奏要求：\n\n## AI 写作约束\n\n- 必须突出：\n- 尽量避免：\n- 禁止出现：\n".into(),
+                "05_素材资源/场景描绘索引.md",
+                "# 场景描绘索引\n\n## 场景目录\n- 地标 / 建筑：\n- 城市 / 聚落：\n- 战场 / 秘境：\n\n## 描绘维度\n- 视觉：\n- 听觉：\n- 气味与触感：\n- 人群活动：\n".into(),
             ),
         ],
     )
@@ -627,7 +565,6 @@ fn create_book_workspace_internal(parent_path: &Path, book_name: &str) -> Comman
         fs::write(root_path.join(relative_path), contents).map_err(error_to_string)?;
     }
 
-    refresh_workspace_indexes(&root_path)?;
     Ok(root_path)
 }
 
@@ -645,7 +582,6 @@ pub async fn pick_book_directory(app: AppHandle) -> CommandResult<Option<String>
 #[allow(non_snake_case)]
 pub fn read_workspace_tree(rootPath: String) -> CommandResult<TreeNode> {
     let root_path = ensure_root_directory(&rootPath)?;
-    refresh_workspace_indexes(&root_path)?;
     build_tree(&root_path, &root_path)
 }
 
@@ -680,7 +616,6 @@ pub fn write_text_file(rootPath: String, path: String, contents: String) -> Comm
         .ok_or_else(|| "无法定位父级目录。".to_string())?;
     fs::create_dir_all(&parent_path).map_err(error_to_string)?;
     fs::write(&file_path, contents).map_err(error_to_string)?;
-    refresh_workspace_indexes(&root_path)?;
     Ok(())
 }
 
@@ -810,7 +745,6 @@ pub fn create_workspace_directory(
     }
 
     fs::create_dir_all(&next_path).map_err(error_to_string)?;
-    refresh_workspace_indexes(&root_path)?;
     Ok(normalize_path(&next_path))
 }
 
@@ -831,7 +765,6 @@ pub fn create_workspace_text_file(
     }
 
     fs::write(&next_path, "").map_err(error_to_string)?;
-    refresh_workspace_indexes(&root_path)?;
     Ok(normalize_path(&next_path))
 }
 
@@ -861,7 +794,6 @@ pub fn rename_workspace_entry(
     }
 
     fs::rename(&current_path, &target_path).map_err(error_to_string)?;
-    refresh_workspace_indexes(&root_path)?;
     Ok(normalize_path(&target_path))
 }
 
@@ -881,12 +813,13 @@ pub fn delete_workspace_entry(rootPath: String, path: String) -> CommandResult<(
         fs::remove_file(&target_path).map_err(error_to_string)?;
     }
 
-    refresh_workspace_indexes(&root_path)
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_temp_workspace() -> PathBuf {
         let nonce = SystemTime::now()
@@ -983,6 +916,62 @@ mod tests {
         .expect_err("replace_text_file_line should validate previous line");
 
         assert_eq!(error, "前一行校验失败。预期“不匹配的上一行”，实际“第一行”。");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn build_book_template_uses_engineering_structure() {
+        let (directories, files) = build_book_template("北境余烬");
+        let file_paths = files
+            .iter()
+            .map(|(path, _)| *path)
+            .collect::<Vec<_>>();
+
+        assert!(directories.contains(&"00_系统指令"));
+        assert!(directories.contains(&"04_正文/第一卷"));
+        assert!(file_paths.contains(&"README.md"));
+        assert!(file_paths.contains(&"02_角色设定/角色关系矩阵.json"));
+        assert!(file_paths.contains(&"04_正文/章节模板.md"));
+        assert!(file_paths.contains(&"04_正文/第一卷/第001章_待命名.md"));
+    }
+
+    #[test]
+    fn create_workspace_text_file_accepts_json_extension() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+
+        let created = create_workspace_text_file(
+            root_str,
+            normalize_path(&root),
+            "角色关系矩阵.json".into(),
+        )
+        .expect("create_workspace_text_file should accept json extension");
+
+        assert!(created.ends_with("/角色关系矩阵.json"));
+        assert!(root.join("角色关系矩阵.json").exists());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn read_workspace_tree_keeps_index_json_visible() {
+        let root = create_temp_workspace();
+        fs::create_dir_all(root.join("章节")).expect("failed to create chapter dir");
+        fs::write(root.join("index.json"), "{}").expect("failed to seed root index");
+        fs::write(root.join("章节").join("index.json"), "{}").expect("failed to seed child index");
+
+        let tree =
+            read_workspace_tree(normalize_path(&root)).expect("read_workspace_tree should succeed");
+
+        let child_names = tree
+            .children
+            .unwrap_or_default()
+            .into_iter()
+            .map(|child| child.name)
+            .collect::<Vec<_>>();
+
+        assert!(root.join("index.json").exists());
+        assert!(root.join("章节").join("index.json").exists());
+        assert_eq!(child_names, vec!["章节", "index.json"]);
         fs::remove_dir_all(&root).ok();
     }
 }

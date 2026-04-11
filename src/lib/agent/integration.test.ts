@@ -108,6 +108,56 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].abortSignal).toBe(abortSignal);
   });
 
+  it("停止后会中断正在等待的工具执行", async () => {
+    const abortController = new AbortController();
+    let resolveTool: ((value: { ok: true; summary: string }) => void) | null = null;
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        return;
+      })(),
+    });
+
+    const stream = runAgentTurn({
+      abortSignal: abortController.signal,
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["read_file"],
+      prompt: "读取文件",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {
+        read_file: {
+          description: "读取文件",
+          execute: async () =>
+            new Promise((resolve) => {
+              resolveTool = resolve;
+            }),
+        },
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const tool = mockStreamFn.mock.calls[0][0].tools?.read_file;
+    expect(tool).toBeDefined();
+
+    const pending = tool!.execute!({ path: "章节/第一章.md" }, {} as never);
+    abortController.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+
+    resolveTool?.({ ok: true, summary: "已读取当前章节" });
+  });
+
   it("后续轮次会把上一轮的用户与 AI 回复一起发送给模型", async () => {
     async function* mockFullStream() {
       yield { type: "text-delta" as const, text: "收到" };
@@ -618,7 +668,7 @@ describe("agent session (streaming)", () => {
       parts: [],
     });
     expect(subagentParts[3].parts).toEqual([
-      { type: "reasoning", summary: "思考中...", detail: "正在分析人物动机。" },
+      { type: "reasoning", summary: "正在思考", detail: "正在分析人物动机。" },
       {
         type: "tool-call",
         toolName: "read_file",
@@ -639,5 +689,3 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).toContain("## s11 子任务摘要（剧情代理）");
   });
 });
-
-

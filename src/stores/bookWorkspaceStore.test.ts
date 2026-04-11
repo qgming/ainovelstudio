@@ -11,7 +11,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 
 const rootPath = "C:/books/北境余烬";
-const chapterPath = `${rootPath}/章节/第一卷/第1章-开篇.md`;
+const chapterPath = `${rootPath}/04_正文/第一卷/第001章_待命名.md`;
 
 const initialTree = {
   kind: "directory",
@@ -20,17 +20,17 @@ const initialTree = {
   children: [
     {
       kind: "directory",
-      name: "章节",
-      path: `${rootPath}/章节`,
+      name: "04_正文",
+      path: `${rootPath}/04_正文`,
       children: [
         {
           kind: "directory",
           name: "第一卷",
-          path: `${rootPath}/章节/第一卷`,
+          path: `${rootPath}/04_正文/第一卷`,
           children: [
             {
               kind: "file",
-              name: "第1章-开篇.md",
+              name: "第001章_待命名.md",
               path: chapterPath,
               extension: ".md",
             },

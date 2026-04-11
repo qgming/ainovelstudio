@@ -59,7 +59,7 @@ describe("AgentMessageList scroll", () => {
   });
 
   it("贴近底部时会在流式更新中继续自动跟随", async () => {
-    const view = render(<AgentMessageList messages={createMessages("第一段")} />);
+    const view = render(<AgentMessageList messages={createMessages("第一段")} runStatus="completed" />);
     const scroller = view.container.firstElementChild as HTMLDivElement;
     const metrics = attachScrollMetrics(scroller, {
       clientHeight: 200,
@@ -69,7 +69,7 @@ describe("AgentMessageList scroll", () => {
 
     fireEvent.scroll(scroller);
     metrics.setScrollHeight(560);
-    view.rerender(<AgentMessageList messages={createMessages("第一段\n\n第二段")} />);
+    view.rerender(<AgentMessageList messages={createMessages("第一段\n\n第二段")} runStatus="completed" />);
 
     await waitFor(() => {
       expect(metrics.getScrollTop()).toBe(560);
@@ -77,7 +77,7 @@ describe("AgentMessageList scroll", () => {
   });
 
   it("手动上滑后流式更新不会强制拉回到底部", async () => {
-    const view = render(<AgentMessageList messages={createMessages("第一段")} />);
+    const view = render(<AgentMessageList messages={createMessages("第一段")} runStatus="completed" />);
     const scroller = view.container.firstElementChild as HTMLDivElement;
     const metrics = attachScrollMetrics(scroller, {
       clientHeight: 200,
@@ -87,7 +87,7 @@ describe("AgentMessageList scroll", () => {
 
     fireEvent.scroll(scroller);
     metrics.setScrollHeight(560);
-    view.rerender(<AgentMessageList messages={createMessages("第一段\n\n第二段")} />);
+    view.rerender(<AgentMessageList messages={createMessages("第一段\n\n第二段")} runStatus="completed" />);
 
     await waitFor(() => {
       expect(metrics.getScrollTop()).toBe(120);

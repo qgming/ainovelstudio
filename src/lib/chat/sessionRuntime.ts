@@ -71,7 +71,7 @@ export function buildAssistantPlaceholderMessage(meta?: AgentMessageMeta): Agent
     role: "assistant",
     author: "主代理",
     meta,
-    parts: [{ type: "placeholder", text: "思考中..." }],
+    parts: [{ type: "placeholder", text: "正在思考" }],
   };
 }
 

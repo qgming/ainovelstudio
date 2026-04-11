@@ -346,7 +346,7 @@ describe("BookAgentPanel", () => {
     expect(screen.getByText("read_file")).toBeInTheDocument();
   });
 
-  it("发送后立即显示思考中占位", () => {
+  it("发送后立即在底部显示正在思考", () => {
     useAgentStore.setState({
       run: {
         id: "run-test",
@@ -363,7 +363,7 @@ describe("BookAgentPanel", () => {
             id: "assistant-1",
             role: "assistant",
             author: "主代理",
-            parts: [{ type: "placeholder", text: "思考中..." }],
+            parts: [{ type: "placeholder", text: "正在思考" }],
           },
         ],
       },
@@ -371,7 +371,37 @@ describe("BookAgentPanel", () => {
 
     render(<BookAgentPanel width={420} />);
 
-    expect(screen.getByText("思考中...")).toBeInTheDocument();
+    expect(screen.getByText("正在思考")).toBeInTheDocument();
+  });
+
+  it("调用工具期间仍在底部持续显示正在思考", () => {
+    useAgentStore.setState({
+      run: {
+        id: "run-test",
+        status: "running",
+        title: "",
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [
+              {
+                type: "tool-call",
+                toolName: "read_file",
+                status: "running",
+                inputSummary: '{"path":"章节/第一章.md"}',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    expect(screen.getByText("read_file")).toBeInTheDocument();
+    expect(screen.getByText("正在思考")).toBeInTheDocument();
   });
 
   it("支持 Markdown 渲染用户与 assistant 文本", () => {
@@ -429,7 +459,7 @@ describe("BookAgentPanel", () => {
                 parts: [
                   {
                     type: "reasoning",
-                    summary: "思考中...",
+                    summary: "正在思考",
                     detail: "正在分析冲突走向，准备判断主角动机是否需要提前铺垫，并整理后续节奏。",
                   },
                   {
@@ -483,7 +513,7 @@ describe("BookAgentPanel", () => {
                 name: "剧情代理",
                 status: "running",
                 summary: "已委托给剧情代理",
-                parts: [{ type: "reasoning", summary: "思考中...", detail: "正在分析请求。" }],
+                parts: [{ type: "reasoning", summary: "正在思考", detail: "正在分析请求。" }],
               },
             ],
           },
@@ -513,7 +543,7 @@ describe("BookAgentPanel", () => {
                 summary: "剧情代理已完成分析",
                 detail: "建议提前铺垫主角动机。",
                 parts: [
-                  { type: "reasoning", summary: "思考中...", detail: "正在分析请求。" },
+                  { type: "reasoning", summary: "正在思考", detail: "正在分析请求。" },
                   { type: "text", text: "建议先补一段主角迟疑。" },
                 ],
               },

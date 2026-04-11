@@ -13,8 +13,9 @@ import { BookPage } from "./BookPage";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const rootPath = "C:/books/北境余烬";
-const chapterPath = `${rootPath}/章节/第一卷/第1章-开篇.md`;
-const secondVolumePath = `${rootPath}/章节/第二卷/第2章-并行线.md`;
+const chapterPath = `${rootPath}/04_正文/第一卷/第001章_待命名.md`;
+const secondVolumePath = `${rootPath}/04_正文/第二卷/第002章_并行线.md`;
+const trackerPath = `${rootPath}/04_正文/创作状态追踪器.json`;
 const tree = {
   kind: "directory",
   name: "北境余烬",
@@ -22,17 +23,17 @@ const tree = {
   children: [
     {
       kind: "directory",
-      name: "章节",
-      path: `${rootPath}/章节`,
+      name: "04_正文",
+      path: `${rootPath}/04_正文`,
       children: [
         {
           kind: "directory",
           name: "第一卷",
-          path: `${rootPath}/章节/第一卷`,
+          path: `${rootPath}/04_正文/第一卷`,
           children: [
             {
               kind: "file",
-              name: "第1章-开篇.md",
+              name: "第001章_待命名.md",
               path: chapterPath,
               extension: ".md",
             },
@@ -41,22 +42,28 @@ const tree = {
         {
           kind: "directory",
           name: "第二卷",
-          path: `${rootPath}/章节/第二卷`,
+          path: `${rootPath}/04_正文/第二卷`,
           children: [
             {
               kind: "file",
-              name: "第2章-并行线.md",
+              name: "第002章_并行线.md",
               path: secondVolumePath,
               extension: ".md",
             },
           ],
         },
+        {
+          kind: "file",
+          name: "创作状态追踪器.json",
+          path: trackerPath,
+          extension: ".json",
+        },
       ],
     },
     {
       kind: "directory",
-      name: "大纲",
-      path: `${rootPath}/大纲`,
+      name: "03_剧情大纲",
+      path: `${rootPath}/03_剧情大纲`,
       children: [],
     },
   ],
@@ -70,7 +77,7 @@ function setupInvokeMock() {
       case "read_workspace_tree":
         return tree;
       case "read_text_file":
-        return "这是章节初稿";
+        return payload?.path === trackerPath ? '{"currentChapter":"第001章"}' : "这是章节初稿";
       case "write_text_file":
         return undefined;
       case "create_book_workspace":
@@ -113,7 +120,7 @@ describe("BookPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
-    fireEvent.click(await screen.findByRole("button", { name: "第1章-开篇.md" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
 
     expect(await screen.findByRole("textbox", { name: "文件编辑器" })).toHaveValue("这是章节初稿");
 
@@ -133,6 +140,29 @@ describe("BookPage", () => {
     );
   });
 
+  it("可以打开并编辑 json 文件", async () => {
+    render(<BookPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "创作状态追踪器.json" }));
+
+    expect(await screen.findByRole("textbox", { name: "文件编辑器" })).toHaveValue(
+      '{"currentChapter":"第001章"}',
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "文件编辑器" }), {
+      target: { value: '{"currentChapter":"第002章"}' },
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("write_text_file", {
+        contents: '{"currentChapter":"第002章"}',
+        path: trackerPath,
+        rootPath,
+      });
+    });
+  });
+
   it("打开文件时不会收起同级已展开的文件夹", async () => {
     render(<BookPage />);
 
@@ -140,12 +170,12 @@ describe("BookPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
     fireEvent.click(screen.getByRole("button", { name: "第二卷" }));
 
-    expect(await screen.findByText("第2章-并行线.md")).toBeInTheDocument();
+    expect(await screen.findByText("第002章_并行线.md")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "第1章-开篇.md" }));
+    fireEvent.click(screen.getByRole("button", { name: "第001章_待命名.md" }));
 
     expect(await screen.findByRole("textbox", { name: "文件编辑器" })).toHaveValue("这是章节初稿");
-    expect(screen.getByText("第2章-并行线.md")).toBeInTheDocument();
+    expect(screen.getByText("第002章_并行线.md")).toBeInTheDocument();
   });
 
   it("文件树节点通过更多菜单收纳目录与文件操作", async () => {
@@ -162,7 +192,7 @@ describe("BookPage", () => {
     expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "关闭菜单" }));
-    fireEvent.click(screen.getByRole("button", { name: "第1章-开篇.md 更多操作" }));
+    fireEvent.click(screen.getByRole("button", { name: "第001章_待命名.md 更多操作" }));
 
     expect(screen.queryByRole("menuitem", { name: "新建文件夹" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "新建文件" })).not.toBeInTheDocument();
@@ -200,7 +230,7 @@ describe("BookPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
-    fireEvent.click(await screen.findByRole("button", { name: "第1章-开篇.md" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
 
     const saveButton = await screen.findByRole("button", { name: "保存当前文件" });
     expect(saveButton).toHaveTextContent("");
@@ -208,6 +238,24 @@ describe("BookPage", () => {
     expect(saveButton.className).toContain("w-8");
     expect(saveButton.className).toContain("rounded-[8px]");
     expect(saveButton.className).toContain("hover:bg-[#edf1f6]");
+  });
+
+  it("markdown 文件可切换到预览渲染视图", async () => {
+    render(<BookPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "文件编辑器" }), {
+      target: { value: "# 开篇\n\n- 第一幕" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "切换到 Markdown 预览" }));
+
+    expect(screen.queryByRole("textbox", { name: "文件编辑器" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "开篇" })).toBeInTheDocument();
+    expect(screen.getByText("第一幕").tagName).toBe("LI");
   });
 
   it("已打开书籍后可从顶部重新打开书籍菜单并再次选择书籍", async () => {
@@ -268,7 +316,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     expect(await screen.findByRole("textbox", { name: "文件编辑器" })).toHaveValue("这是章节初稿");
-    expect(screen.getByRole("heading", { name: "第1章-开篇.md" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "第001章_待命名.md" })).toBeInTheDocument();
   });
 
   it("会恢复本地保存的三栏宽度", async () => {
