@@ -54,27 +54,27 @@ describe("agent settings store", () => {
     expect(stored.enabledTools.write_file).toBe(true);
   });
 
-  it("initialize 从配置目录加载默认 AGENTS", async () => {
+  it("initialize 从本地目录加载默认 AGENTS", async () => {
     mockInvoke.mockResolvedValue({
       initializedFromBuiltin: true,
-      markdown: "# 文件主代理\n\n- 从配置目录加载。",
-      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
+      markdown: "# 文件主代理\n\n- 从本地目录加载。",
+      path: "C:/Program Files/ainovelstudio/resources/config/AGENTS.md",
     });
 
     await useAgentSettingsStore.getState().initialize();
 
     const state = useAgentSettingsStore.getState();
     expect(mockInvoke).toHaveBeenCalledWith("initialize_default_agent_config");
-    expect(state.defaultAgentMarkdown).toBe("# 文件主代理\n\n- 从配置目录加载。");
-    expect(state.configFilePath).toContain("config/AGENTS.md");
+    expect(state.defaultAgentMarkdown).toBe("# 文件主代理\n\n- 从本地目录加载。");
+    expect(state.configFilePath).toContain("resources/config/AGENTS.md");
     expect(state.status).toBe("ready");
   });
 
-  it("refreshDefaultAgentMarkdown 读取用户配置目录文件", async () => {
+  it("refreshDefaultAgentMarkdown 读取本地目录文件", async () => {
     mockInvoke.mockResolvedValue({
-      initializedFromBuiltin: false,
-      markdown: "# 刷新后的主代理\n\n- 来自用户配置文件。",
-      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
+      initializedFromBuiltin: true,
+      markdown: "# 刷新后的主代理\n\n- 来自本地目录文件。",
+      path: "C:/Program Files/ainovelstudio/resources/config/AGENTS.md",
     });
 
     await useAgentSettingsStore.getState().refreshDefaultAgentMarkdown();
@@ -85,17 +85,21 @@ describe("agent settings store", () => {
 
   it("updateDefaultAgentMarkdown 写回配置文件", async () => {
     mockInvoke.mockResolvedValue({
-      initializedFromBuiltin: false,
-      markdown: "# 自定义主代理\n\n- 只使用文件保存。",
-      path: "C:/Users/test/AppData/Roaming/ainovelstudio/config/AGENTS.md",
+      initializedFromBuiltin: true,
+      markdown: "# 自定义主代理\n\n- 直接写回本地目录文件。",
+      path: "C:/Program Files/ainovelstudio/resources/config/AGENTS.md",
     });
 
-    await useAgentSettingsStore.getState().updateDefaultAgentMarkdown("# 自定义主代理\n\n- 只使用文件保存。");
+    await useAgentSettingsStore
+      .getState()
+      .updateDefaultAgentMarkdown("# 自定义主代理\n\n- 直接写回本地目录文件。");
 
     expect(mockInvoke).toHaveBeenCalledWith("write_default_agent_config", {
-      content: "# 自定义主代理\n\n- 只使用文件保存。",
+      content: "# 自定义主代理\n\n- 直接写回本地目录文件。",
     });
-    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toBe("# 自定义主代理\n\n- 只使用文件保存。");
+    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toBe(
+      "# 自定义主代理\n\n- 直接写回本地目录文件。",
+    );
   });
 
   it("resetConfig 只重置模型配置，不影响当前 AGENTS 内容", () => {

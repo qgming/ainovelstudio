@@ -4,6 +4,8 @@ import { PageShell } from "../components/PageShell";
 import { DefaultAgentSection } from "../components/settings/DefaultAgentSection";
 import { ModelProviderCard } from "../components/settings/ModelProviderCard";
 import { Switch } from "../components/ui/Switch";
+import appIcon from "../assets/icon.png";
+import packageJson from "../../package.json";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../lib/agent/promptContext";
 import { BUILTIN_TOOLS } from "../lib/agent/toolDefs";
 import { useAgentSettingsStore } from "../stores/agentSettingsStore";
@@ -24,6 +26,9 @@ const settingNavItems: SettingNavItem[] = [
   { key: "tools", title: "工具库", icon: Wrench },
   { key: "about", title: "关于我们", icon: Info },
 ];
+
+const APP_VERSION = packageJson.version;
+const OFFICIAL_WEBSITE = "https://www.qgming.com";
 
 function SectionCard({ children }: { children: ReactNode }) {
   return <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">{children}</section>;
@@ -110,13 +115,32 @@ function ToolLibrarySection({
 function AboutSection() {
   return (
     <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">
-      <div className="space-y-2 px-3 py-3 text-sm text-[#475569] dark:text-zinc-300">
-        <div className="flex items-center gap-3 text-[#111827] dark:text-[#f3f4f6]">
-          <Info className="h-4 w-4 shrink-0" />
-          <h2 className="text-[15px] font-semibold tracking-[-0.03em]">AI Novel Studio</h2>
+      <div className="px-4 py-5">
+        <div className="flex items-center gap-4">
+          <img src={appIcon} alt="神笔写作 Logo" className="h-14 w-14 shrink-0 rounded-[14px] object-contain" />
+          <div className="min-w-0">
+            <h2 className="truncate text-[22px] font-semibold tracking-[-0.04em] text-[#0f172a] dark:text-white">
+              神笔写作
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-[#64748b] dark:text-zinc-400">版本 {APP_VERSION}</p>
+          </div>
         </div>
-        <p>面向创作工作流的桌面端写作环境，聚合图书工作区、模型配置、默认 AGENTS 与 Agent 工具能力。</p>
-        <p>当前设置页采用左侧导航、右侧编辑的双栏布局，方便集中维护主对话和模型行为。</p>
+      </div>
+
+      <div className="border-t border-[#e2e8f0] dark:border-[#20242b]" />
+
+      <div className="px-4 py-4">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm leading-6 text-[#64748b] dark:text-zinc-400">官网</p>
+          <a
+            href={OFFICIAL_WEBSITE}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-9 shrink-0 items-center rounded-[10px] border border-[#dbe3ee] px-3 text-sm font-medium text-[#0f172a] transition hover:border-[#cbd5e1] dark:border-[#2b313b] dark:text-zinc-100 dark:hover:border-[#334155]"
+          >
+            打开官网
+          </a>
+        </div>
       </div>
     </section>
   );

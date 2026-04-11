@@ -178,6 +178,19 @@ describe("App shell", () => {
     expect(screen.getByText("读取目录树")).toBeInTheDocument();
   });
 
+  it("设置页关于我们展示神笔写作品牌信息", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("link", { name: "设置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "关于我们" }));
+
+    expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
+    expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
+    expect(screen.getByText("版本 0.1.1")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
+    expect(screen.queryByText("www.qgming.com")).not.toBeInTheDocument();
+  });
+
   it("设置页也可以通过全局状态切换主题", async () => {
     render(<App />);
 

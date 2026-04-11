@@ -64,7 +64,14 @@ fn read_builtin_default_agent_markdown(app: &AppHandle) -> CommandResult<String>
     Ok(normalize_markdown(DEFAULT_AGENT_TEMPLATE))
 }
 
-fn ensure_user_default_agent_file(app: &AppHandle) -> CommandResult<(PathBuf, bool)> {
+fn resolve_default_agent_file(app: &AppHandle) -> CommandResult<(PathBuf, bool)> {
+    if let Some(root) = resolve_builtin_config_root(app) {
+        let file_path = root.join(DEFAULT_AGENT_FILE_NAME);
+        if file_path.exists() && file_path.is_file() {
+            return Ok((file_path, true));
+        }
+    }
+
     let user_root = ensure_user_config_root(app)?;
     let file_path = user_root.join(DEFAULT_AGENT_FILE_NAME);
     if file_path.exists() {
@@ -92,7 +99,7 @@ fn build_document(
 pub fn initialize_default_agent_config(
     app: AppHandle,
 ) -> CommandResult<DefaultAgentConfigDocument> {
-    let (file_path, initialized_from_builtin) = ensure_user_default_agent_file(&app)?;
+    let (file_path, initialized_from_builtin) = resolve_default_agent_file(&app)?;
     let markdown = fs::read_to_string(&file_path)
         .map(|content| normalize_markdown(&content))
         .map_err(error_to_string)?;
@@ -105,11 +112,15 @@ pub fn initialize_default_agent_config(
 
 #[tauri::command]
 pub fn read_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
-    let (file_path, _initialized) = ensure_user_default_agent_file(&app)?;
+    let (file_path, initialized_from_builtin) = resolve_default_agent_file(&app)?;
     let markdown = fs::read_to_string(&file_path)
         .map(|content| normalize_markdown(&content))
         .map_err(error_to_string)?;
-    Ok(build_document(file_path, markdown, false))
+    Ok(build_document(
+        file_path,
+        markdown,
+        initialized_from_builtin,
+    ))
 }
 
 #[tauri::command]
@@ -118,8 +129,12 @@ pub fn write_default_agent_config(
     app: AppHandle,
     content: String,
 ) -> CommandResult<DefaultAgentConfigDocument> {
-    let (file_path, _initialized) = ensure_user_default_agent_file(&app)?;
+    let (file_path, initialized_from_builtin) = resolve_default_agent_file(&app)?;
     let markdown = normalize_markdown(&content);
     fs::write(&file_path, &markdown).map_err(error_to_string)?;
-    Ok(build_document(file_path, markdown, false))
+    Ok(build_document(
+        file_path,
+        markdown,
+        initialized_from_builtin,
+    ))
 }
