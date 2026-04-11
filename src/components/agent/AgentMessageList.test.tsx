@@ -2,23 +2,188 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BookAgentPanel } from "../book/BookAgentPanel";
 import { useAgentStore } from "../../stores/agentStore";
+import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
+import { useSkillsStore } from "../../stores/skillsStore";
+import { useSubAgentStore } from "../../stores/subAgentStore";
 
 describe("BookAgentPanel", () => {
   beforeEach(() => {
     useAgentStore.getState().reset();
+    useBookWorkspaceStore.setState({
+      activeFilePath: null,
+      confirmState: null,
+      draftContent: "",
+      errorMessage: null,
+      expandedPaths: [],
+      hasInitialized: false,
+      isBusy: false,
+      isDirty: false,
+      promptState: null,
+      rootNode: null,
+      rootPath: null,
+    });
+    useSkillsStore.setState({
+      errorMessage: null,
+      lastScannedAt: null,
+      manifests: [],
+      preferences: { enabledById: {} },
+      status: "idle",
+    });
+    useSubAgentStore.setState({
+      errorMessage: null,
+      lastScannedAt: null,
+      manifests: [],
+      preferences: { enabledById: {} },
+      status: "idle",
+    });
   });
 
   it("初始状态下渲染新的顶部结构和输入框", () => {
     render(<BookAgentPanel width={420} />);
 
     expect(screen.getByRole("button", { name: "Agent 面板" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开工作区上下文" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开历史记录" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始新对话" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择技能或子 Agent" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择工作区文件" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送消息" })).toBeInTheDocument();
+    expect(screen.getByText("Enter 发送，Shift + Enter 换行")).toBeInTheDocument();
     expect(screen.queryByText("未配置模型")).not.toBeInTheDocument();
     expect(screen.queryByText("空闲")).not.toBeInTheDocument();
     expect(screen.queryByText("思考")).not.toBeInTheDocument();
     expect(screen.queryByText("read_file")).not.toBeInTheDocument();
+  });
+
+  it("点击工作区上下文按钮后显示当前启用的技能和子代理信息", () => {
+    useBookWorkspaceStore.setState({
+      activeFilePath: "章节/第一章.md",
+      rootPath: "C:/books/北境余烬",
+    });
+    useSkillsStore.setState({
+      manifests: [
+        {
+          id: "plot-skill",
+          name: "剧情规划",
+          description: "拆解章节冲突与节奏。",
+          body: "",
+          discoveredAt: 1,
+          isBuiltin: true,
+          rawMarkdown: "",
+          references: [],
+          sourceKind: "builtin-package",
+          suggestedTools: [],
+          tags: ["plot"],
+          validation: { errors: [], isValid: true, warnings: [] },
+          defaultEnabled: true,
+        },
+      ],
+      preferences: { enabledById: {} },
+    });
+    useSubAgentStore.setState({
+      manifests: [
+        {
+          id: "writer-agent",
+          name: "续写代理",
+          description: "负责续写章节。",
+          body: "",
+          discoveredAt: 1,
+          isBuiltin: true,
+          rawMarkdown: "",
+          role: "擅长续写与润色",
+          sourceKind: "builtin-package",
+          suggestedTools: [],
+          tags: ["writer"],
+          validation: { errors: [], isValid: true, warnings: [] },
+          defaultEnabled: true,
+        },
+      ],
+      preferences: { enabledById: {} },
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "打开工作区上下文" }));
+
+    expect(screen.getByText("工作区")).toBeInTheDocument();
+    expect(screen.getByText("北境余烬")).toBeInTheDocument();
+    expect(screen.getByText("章节/第一章.md")).toBeInTheDocument();
+    expect(screen.getByText("剧情规划")).toBeInTheDocument();
+    expect(screen.getByText("续写代理")).toBeInTheDocument();
+    expect(screen.queryByText("这里汇总本轮会话可见的工作区信息、启用技能与子代理。")).not.toBeInTheDocument();
+    expect(screen.queryByText("上下文标签")).not.toBeInTheDocument();
+  });
+
+  it("支持在底部操作栏选择技能、子 Agent 和工作区文件", () => {
+    useBookWorkspaceStore.setState({
+      rootNode: {
+        kind: "directory",
+        name: "北境余烬",
+        path: "北境余烬",
+        children: [
+          {
+            kind: "directory",
+            name: "章节",
+            path: "章节",
+            children: [{ kind: "file", name: "第一章.md", path: "章节/第一章.md" }],
+          },
+        ],
+      },
+    });
+    useSkillsStore.setState({
+      manifests: [
+        {
+          id: "plot-skill",
+          name: "剧情规划",
+          description: "拆解章节冲突与节奏。",
+          body: "",
+          discoveredAt: 1,
+          isBuiltin: true,
+          rawMarkdown: "",
+          references: [],
+          sourceKind: "builtin-package",
+          suggestedTools: [],
+          tags: ["plot"],
+          validation: { errors: [], isValid: true, warnings: [] },
+          defaultEnabled: true,
+        },
+      ],
+      preferences: { enabledById: {} },
+    });
+    useSubAgentStore.setState({
+      manifests: [
+        {
+          id: "writer-agent",
+          name: "续写代理",
+          description: "负责续写章节。",
+          body: "",
+          discoveredAt: 1,
+          isBuiltin: true,
+          rawMarkdown: "",
+          role: "擅长续写与润色",
+          sourceKind: "builtin-package",
+          suggestedTools: [],
+          tags: ["writer"],
+          validation: { errors: [], isValid: true, warnings: [] },
+          defaultEnabled: true,
+        },
+      ],
+      preferences: { enabledById: {} },
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择技能或子 Agent" }));
+    fireEvent.click(screen.getByRole("button", { name: /剧情规划/ }));
+    fireEvent.click(screen.getByRole("button", { name: /续写代理/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "选择工作区文件" }));
+    fireEvent.click(screen.getByRole("button", { name: "章节" }));
+    fireEvent.click(screen.getByRole("button", { name: "第一章.md" }));
+
+    expect(screen.getByRole("button", { name: "移除 剧情规划" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除 续写代理" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除 第一章.md" })).toBeInTheDocument();
   });
 
 

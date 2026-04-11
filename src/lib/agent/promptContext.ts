@@ -1,5 +1,6 @@
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
+import type { ManualTurnContextPayload } from "./manualTurnContext";
 import { BUILTIN_TOOLS } from "./toolDefs";
 
 // 最小后备文本，正常流程会从 AGENTS.md 文件加载完整人设
@@ -19,6 +20,7 @@ type BuildSystemPromptInput = {
 
 type BuildUserTurnContentInput = {
   activeFilePath: string | null;
+  manualContext?: ManualTurnContextPayload | null;
   workspaceRootPath?: string | null;
   prompt: string;
   subagentAnalysis?: {
@@ -189,6 +191,54 @@ function inferFileKind(activeFilePath: string | null) {
   return "通用工作区文件";
 }
 
+function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null) {
+  if (!manualContext) {
+    return null;
+  }
+
+  const blocks: string[] = [];
+
+  if (manualContext.skills.length > 0) {
+    blocks.push(
+      [
+        "### 手动指定技能",
+        ...manualContext.skills.map((skill) => `- ${skill.name}：${skill.description}`),
+      ].join("\n"),
+    );
+  }
+
+  if (manualContext.agents.length > 0) {
+    blocks.push(
+      [
+        "### 手动指定子代理",
+        ...manualContext.agents.map((agent) =>
+          `- ${agent.name}${agent.role ? `（${agent.role}）` : ""}：${agent.description}`,
+        ),
+      ].join("\n"),
+    );
+  }
+
+  if (manualContext.files.length > 0) {
+    blocks.push(
+      [
+        "### 手动指定文件",
+        ...manualContext.files.map((file) =>
+          [`#### ${file.name}`, `- 路径：${file.path}`, "```text", file.content, "```"].join("\n"),
+        ),
+      ].join("\n\n"),
+    );
+  }
+
+  if (blocks.length === 0) {
+    return null;
+  }
+
+  return [
+    "以下资源由用户在本轮手动指定，应优先纳入分析与执行上下文。",
+    ...blocks,
+  ].join("\n\n");
+}
+
 export function buildSystemPrompt({
   defaultAgentMarkdown,
   enabledAgents,
@@ -329,6 +379,7 @@ export function buildSubAgentSystem(
 
 export function buildUserTurnContent({
   activeFilePath,
+  manualContext,
   workspaceRootPath,
   prompt,
   subagentAnalysis,
@@ -371,6 +422,11 @@ export function buildUserTurnContent({
           },
       {
         key: "s12",
+        title: "手动指定上下文",
+        body: buildManualContextBlock(manualContext),
+      },
+      {
+        key: "s13",
         title: "用户请求",
         body: prompt.trim(),
       },

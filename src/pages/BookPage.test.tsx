@@ -148,6 +148,28 @@ describe("BookPage", () => {
     expect(screen.getByText("第2章-并行线.md")).toBeInTheDocument();
   });
 
+  it("文件树节点通过更多菜单收纳目录与文件操作", async () => {
+    render(<BookPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "第一卷 更多操作" }));
+
+    expect(screen.getByRole("menuitem", { name: "新建文件夹" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "新建文件" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭菜单" }));
+    fireEvent.click(screen.getByRole("button", { name: "第1章-开篇.md 更多操作" }));
+
+    expect(screen.queryByRole("menuitem", { name: "新建文件夹" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "新建文件" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
+  });
+
   it("支持刷新当前书籍以及单按钮切换全部展开和全部收起", async () => {
     render(<BookPage />);
 

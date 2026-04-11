@@ -1,14 +1,6 @@
-import type { ReactNode } from "react";
-import {
-  ChevronRight,
-  FilePenLine,
-  FileText,
-  FolderClosed,
-  FolderOpen,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { useState } from "react";
+import { ChevronRight, Ellipsis, FileText, FolderClosed, FolderOpen } from "lucide-react";
+import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../common/ActionMenu";
 import { isTextEditableFile } from "../../lib/bookWorkspace/paths";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
 
@@ -25,28 +17,13 @@ type BookTreeItemProps = {
   onToggleDirectory: (path: string) => void;
 };
 
-function ActionButton({
-  label,
-  onClick,
-  children,
-}: {
-  children: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      className="inline-flex h-7 w-7 items-center justify-center text-[#94a3b8] opacity-0 transition group-hover:opacity-100 hover:bg-[#eff6ff] hover:text-[#0b84e7] dark:text-[#758295] dark:hover:bg-[#162131] dark:hover:text-[#7cc4ff]"
-    >
-      {children}
-    </button>
-  );
+function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
+  return {
+    bottom: rect.bottom,
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+  };
 }
 
 export function BookTreeItem({
@@ -65,6 +42,22 @@ export function BookTreeItem({
   const isExpanded = isDirectory && expandedPaths.includes(node.path);
   const isSelected = activeFilePath === node.path;
   const isEditable = !isDirectory && isTextEditableFile(node.name);
+  const [menuAnchorRect, setMenuAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
+
+  const closeMenu = () => {
+    setMenuAnchorRect(null);
+  };
+
+  const openMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    const nextAnchorRect = toAnchorRect(event.currentTarget.getBoundingClientRect());
+    setMenuAnchorRect((current) => (current ? null : nextAnchorRect));
+  };
+
+  const runMenuAction = (action: () => void) => {
+    closeMenu();
+    action();
+  };
 
   return (
     <div>
@@ -127,49 +120,33 @@ export function BookTreeItem({
             {node.name}
           </span>
         </button>
-        {isDirectory ? (
-          <div className="flex shrink-0 items-center gap-0">
-            <ActionButton
-              label={`在${node.name}中新建文件夹`}
-              onClick={() => onCreateFolder(node.path)}
-            >
-              <FolderClosed className="h-3.5 w-3.5" />
-            </ActionButton>
-            <ActionButton
-              label={`在${node.name}中新建文本文件`}
-              onClick={() => onCreateFile(node.path)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </ActionButton>
-            <ActionButton
-              label={`重命名${node.name}`}
-              onClick={() => onRename(node)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </ActionButton>
-            <ActionButton
-              label={`删除${node.name}`}
-              onClick={() => onDelete(node)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </ActionButton>
+        <button
+          type="button"
+          aria-label={`${node.name} 更多操作`}
+          onClick={openMenu}
+          className={[
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[#94a3b8] transition hover:bg-[#eff6ff] hover:text-[#0b84e7] dark:text-[#758295] dark:hover:bg-[#162131] dark:hover:text-[#7cc4ff]",
+            menuAnchorRect || isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+          ].join(" ")}
+        >
+          <Ellipsis className="h-4 w-4" />
+        </button>
+        <ActionMenu anchorRect={menuAnchorRect} onClose={closeMenu} width={180}>
+          <div className="space-y-1">
+            {isDirectory ? (
+              <>
+                <ActionMenuItem onClick={() => runMenuAction(() => onCreateFolder(node.path))}>
+                  新建文件夹
+                </ActionMenuItem>
+                <ActionMenuItem onClick={() => runMenuAction(() => onCreateFile(node.path))}>
+                  新建文件
+                </ActionMenuItem>
+              </>
+            ) : null}
+            <ActionMenuItem onClick={() => runMenuAction(() => onRename(node))}>重命名</ActionMenuItem>
+            <ActionMenuItem onClick={() => runMenuAction(() => onDelete(node))}>删除</ActionMenuItem>
           </div>
-        ) : (
-          <div className="flex shrink-0 items-center gap-0">
-            <ActionButton
-              label={`重命名${node.name}`}
-              onClick={() => onRename(node)}
-            >
-              <FilePenLine className="h-3.5 w-3.5" />
-            </ActionButton>
-            <ActionButton
-              label={`删除${node.name}`}
-              onClick={() => onDelete(node)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </ActionButton>
-          </div>
-        )}
+        </ActionMenu>
       </div>
       {isDirectory && isExpanded ? (
         <div className="space-y-1">

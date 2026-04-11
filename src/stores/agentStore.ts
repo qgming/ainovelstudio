@@ -9,6 +9,7 @@ import {
   switchChatSession,
   updateChatMessage,
 } from "../lib/chat/api";
+import { readWorkspaceTextFile } from "../lib/bookWorkspace/api";
 import type { ChatBootstrap, ChatSessionSummary } from "../lib/chat/types";
 import {
   buildAssistantPlaceholderMessage,
@@ -29,6 +30,7 @@ import {
   getStoredEnabledTools,
   useAgentSettingsStore,
 } from "./agentSettingsStore";
+import { resolveManualTurnContext, type ManualTurnContextSelection } from "../lib/agent/manualTurnContext";
 import { runAgentTurn } from "../lib/agent/session";
 import { createWorkspaceToolset } from "../lib/agent/tools";
 import type { AgentMessage, AgentRun, AgentRunStatus, AgentPart } from "../lib/agent/types";
@@ -60,7 +62,7 @@ type AgentStoreActions = {
   initialize: () => Promise<void>;
   openHistory: () => void;
   reset: () => void;
-  sendMessage: () => Promise<void>;
+  sendMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
   setInput: (value: string) => void;
   stopMessage: () => void;
   switchSession: (sessionId: string) => Promise<void>;
@@ -260,7 +262,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       get().abortController?.abort();
       set(buildInitialState());
     },
-    sendMessage: async () => {
+    sendMessage: async (selection) => {
       if (get().run.status === "running") {
         return;
       }
@@ -286,6 +288,17 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       const enabledToolIds = Object.entries(enabledToolsMap)
         .filter(([, value]) => value)
         .map(([toolId]) => toolId);
+      const manualContext = selection
+        ? await resolveManualTurnContext({
+            activeFilePath: workspaceState.activeFilePath,
+            draftContent: workspaceState.draftContent,
+            enabledAgents,
+            enabledSkills,
+            readFile: readWorkspaceTextFile,
+            selection,
+            workspaceRootPath: workspaceState.rootPath,
+          })
+        : null;
       const messageMeta = buildMessageMeta(workspaceState.rootPath, workspaceState.activeFilePath);
       const userMessage = buildUserMessage(nextInput, messageMeta);
       const assistantMessage = buildAssistantPlaceholderMessage(messageMeta);
@@ -351,6 +364,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           enabledAgents,
           enabledSkills,
           enabledToolIds,
+          manualContext,
           prompt: nextInput,
           providerConfig,
           workspaceTools,

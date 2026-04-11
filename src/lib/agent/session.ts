@@ -8,6 +8,7 @@ import type { AgentTool } from "./runtime";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { selectSubAgentForPrompt } from "./delegation";
 import { buildConversationMessages } from "./messageContext";
+import type { ManualTurnContextPayload } from "./manualTurnContext";
 import { buildSubAgentSystem, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 
 type RunAgentTurnInput = {
@@ -20,6 +21,7 @@ type RunAgentTurnInput = {
   enabledSkills: ResolvedSkill[];
   /** 启用的工具 ID 列表 */
   enabledToolIds: string[];
+  manualContext?: ManualTurnContextPayload | null;
   prompt: string;
   providerConfig: AgentProviderConfig;
   /** workspace 工具集 */
@@ -382,6 +384,7 @@ export async function* runAgentTurn({
   enabledAgents,
   enabledSkills,
   enabledToolIds,
+  manualContext,
   prompt,
   providerConfig,
   workspaceTools,
@@ -425,6 +428,7 @@ export async function* runAgentTurn({
 
   const userContent = buildUserTurnContent({
     activeFilePath,
+    manualContext,
     workspaceRootPath,
     prompt,
     subagentAnalysis: maybeSubAgent

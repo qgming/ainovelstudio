@@ -208,8 +208,56 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("- 当前激活文件：章节/第一章.md");
     expect(request.messages[0].content).toContain("- 当前文件类型：章节/正文稿件");
     expect(request.messages[0].content).toContain("- 本轮任务类型：分析/诊断");
-    expect(request.messages[0].content).toContain("## s12 用户请求");
+    expect(request.messages[0].content).toContain("## s13 用户请求");
     expect(request.messages[0].content).toContain("帮我整理这一章的冲突节奏");
+  });
+
+  it("把手动选择的技能、子代理和文件内容注入当前轮上下文", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      workspaceRootPath: "C:/books/北境余烬",
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      manualContext: {
+        skills: [{ id: "plot-skill", name: "剧情规划", description: "拆解冲突和节奏。" }],
+        agents: [{ id: "writer-agent", name: "续写代理", description: "负责续写章节。", role: "续写与润色" }],
+        files: [{ path: "设定/人物.md", name: "人物.md", content: "主角：林燃\n目标：逃离北城" }],
+      },
+      prompt: "继续写这一章",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const request = mockStreamFn.mock.calls[0][0];
+    expect(request.messages[0].content).toContain("## s12 手动指定上下文");
+    expect(request.messages[0].content).toContain("### 手动指定技能");
+    expect(request.messages[0].content).toContain("剧情规划：拆解冲突和节奏。");
+    expect(request.messages[0].content).toContain("### 手动指定子代理");
+    expect(request.messages[0].content).toContain("续写代理（续写与润色）：负责续写章节。");
+    expect(request.messages[0].content).toContain("### 手动指定文件");
+    expect(request.messages[0].content).toContain("#### 人物.md");
+    expect(request.messages[0].content).toContain("主角：林燃");
+    expect(request.messages[0].content).toContain("## s13 用户请求");
   });
 
   it("目录树工具把真实目录树返回给模型", async () => {
@@ -523,8 +571,6 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).toContain("## s11 子任务摘要（剧情代理）");
   });
 });
-
-
 
 
 

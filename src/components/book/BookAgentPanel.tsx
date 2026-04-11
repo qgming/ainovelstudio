@@ -1,11 +1,13 @@
-import { ChevronRight, History, SquarePen } from "lucide-react";
+import { Blocks, ChevronRight, History, SquarePen } from "lucide-react";
 import { useState } from "react";
 import { AgentComposer } from "../agent/AgentComposer";
+import { AgentContextOverview } from "../agent/AgentContextOverview";
 import { AgentMessageList } from "../agent/AgentMessageList";
-import { ActionMenu, ActionMenuItem } from "../common/ActionMenu";
+import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../common/ActionMenu";
 import { useAgentStore } from "../../stores/agentStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
+import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 
 type BookAgentPanelProps = {
   width: number;
@@ -16,13 +18,6 @@ type ToolbarButtonProps = {
   children: React.ReactNode;
   disabled?: boolean;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
-};
-
-type AnchorRect = {
-  bottom: number;
-  left: number;
-  right: number;
-  top: number;
 };
 
 function ToolbarButton({ ariaLabel, children, disabled = false, onClick }: ToolbarButtonProps) {
@@ -56,7 +51,7 @@ function AgentHeaderButton() {
   );
 }
 
-function toAnchorRect(rect: DOMRect): AnchorRect {
+function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
   return {
     bottom: rect.bottom,
     left: rect.left,
@@ -66,8 +61,9 @@ function toAnchorRect(rect: DOMRect): AnchorRect {
 }
 
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
+  const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
+  const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
-  const baseTags = useAgentStore((state) => state.contextTags);
   const createNewSession = useAgentStore((state) => state.createNewSession);
   const errorMessage = useAgentStore((state) => state.errorMessage);
   const input = useAgentStore((state) => state.input);
@@ -80,6 +76,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const setInput = useAgentStore((state) => state.setInput);
   const stopMessage = useAgentStore((state) => state.stopMessage);
   const switchSession = useAgentStore((state) => state.switchSession);
+  const rootPath = useBookWorkspaceStore((state) => state.rootPath);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
   const enabledSkills = getEnabledSkills({ manifests, preferences });
@@ -87,12 +84,25 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const agentPreferences = useSubAgentStore((state) => state.preferences);
   const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
   const isRunning = run.status === "running";
-  const [historyAnchorRect, setHistoryAnchorRect] = useState<AnchorRect | null>(null);
-  const contextTags = [
-    ...baseTags,
-    ...enabledSkills.slice(0, 2).map((skill) => `技能: ${skill.name}`),
-    ...enabledAgents.slice(0, 2).map((agent) => `代理: ${agent.name}`),
-  ];
+  const [contextAnchorRect, setContextAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
+  const [historyAnchorRect, setHistoryAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
+
+  const isContextOpen = contextAnchorRect !== null;
+
+  const handleContextToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (isContextOpen) {
+      setContextAnchorRect(null);
+      return;
+    }
+
+    setHistoryAnchorRect(null);
+    closeHistory();
+    setContextAnchorRect(toAnchorRect(event.currentTarget.getBoundingClientRect()));
+  };
+
+  const handleContextClose = () => {
+    setContextAnchorRect(null);
+  };
 
   const handleHistoryToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (isHistoryOpen) {
@@ -101,6 +111,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       return;
     }
 
+    setContextAnchorRect(null);
     setHistoryAnchorRect(toAnchorRect(event.currentTarget.getBoundingClientRect()));
     openHistory();
   };
@@ -123,6 +134,9 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-2 py-1.5 dark:border-[#20242b]">
         <AgentHeaderButton />
         <div className="flex shrink-0 items-center gap-1">
+          <ToolbarButton ariaLabel={isContextOpen ? "收起工作区上下文" : "打开工作区上下文"} onClick={handleContextToggle}>
+            <Blocks className="h-4 w-4" />
+          </ToolbarButton>
           <ToolbarButton ariaLabel={isHistoryOpen ? "收起历史记录" : "打开历史记录"} onClick={handleHistoryToggle}>
             <History className="h-4 w-4" />
           </ToolbarButton>
@@ -136,6 +150,22 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
           {errorMessage}
         </div>
       ) : null}
+      <ActionMenu anchorRect={contextAnchorRect} onClose={handleContextClose} width={320}>
+        <AgentContextOverview
+          activeFilePath={activeFilePath}
+          enabledAgents={enabledAgents.map((agent) => ({
+            description: agent.role || agent.description,
+            id: agent.id,
+            name: agent.name,
+          }))}
+          enabledSkills={enabledSkills.map((skill) => ({
+            description: skill.description,
+            id: skill.id,
+            name: skill.name,
+          }))}
+          rootPath={rootPath}
+        />
+      </ActionMenu>
       <ActionMenu anchorRect={isHistoryOpen ? historyAnchorRect : null} onClose={handleHistoryClose}>
         <div className="space-y-1">
           {sessions.map((session) => {
@@ -155,13 +185,27 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       </ActionMenu>
       <AgentMessageList messages={run.messages} />
       <AgentComposer
-        contextTags={contextTags}
         input={input}
         onInputChange={setInput}
         onStop={stopMessage}
-        onSubmit={() => {
-          void sendMessage();
+        onSubmit={(selection) => {
+          void sendMessage(selection);
         }}
+        resources={[
+          ...enabledSkills.map((skill) => ({
+            description: skill.description,
+            id: skill.id,
+            kind: "skill" as const,
+            name: skill.name,
+          })),
+          ...enabledAgents.map((agent) => ({
+            description: agent.role || agent.description,
+            id: agent.id,
+            kind: "agent" as const,
+            name: agent.name,
+          })),
+        ]}
+        rootNode={rootNode}
         runStatus={run.status}
       />
     </aside>
