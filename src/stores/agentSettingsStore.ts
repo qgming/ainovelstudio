@@ -82,10 +82,15 @@ function readPersistedState(): PersistedState {
 function readState(): AgentSettingsState {
   const defaults = getDefaultState();
   const parsed = readPersistedState();
+  const enabledTools = { ...(parsed.enabledTools ?? {}) };
+  if ("rename_path" in enabledTools && !("rename" in enabledTools)) {
+    enabledTools.rename = Boolean(enabledTools.rename_path);
+  }
+
   return {
     ...defaults,
     config: { ...defaults.config, ...(parsed.config ?? parsed) },
-    enabledTools: { ...defaults.enabledTools, ...(parsed.enabledTools ?? {}) },
+    enabledTools: { ...defaults.enabledTools, ...enabledTools },
   };
 }
 

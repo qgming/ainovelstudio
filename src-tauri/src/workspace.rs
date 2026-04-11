@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::AppHandle;
@@ -46,7 +46,7 @@ pub struct WorkspaceSearchMatch {
     path: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct WorkspaceLineResult {
     #[serde(rename = "lineNumber")]
     line_number: usize,
@@ -149,21 +149,57 @@ fn validate_single_line_text(value: &str) -> CommandResult<String> {
     Ok(value.to_string())
 }
 
-fn resolve_line_index(lines: &[String], line_number: usize) -> CommandResult<usize> {
+fn validate_line_number(line_number: usize) -> CommandResult<usize> {
     if line_number == 0 {
         return Err("行号必须从 1 开始。".into());
     }
 
-    let index = line_number - 1;
-    if index >= lines.len() {
-        return Err(format!(
-            "目标文件只有 {} 行，无法访问第 {} 行。",
-            lines.len(),
-            line_number
-        ));
+    Ok(line_number - 1)
+}
+
+fn line_text_or_empty(lines: &[String], index: usize) -> &str {
+    lines.get(index).map(String::as_str).unwrap_or("")
+}
+
+fn validate_optional_context_line(value: Option<String>) -> CommandResult<Option<String>> {
+    match value {
+        Some(line) => validate_single_line_text(&line).map(Some),
+        None => Ok(None),
+    }
+}
+
+fn validate_adjacent_context(
+    lines: &[String],
+    target_index: usize,
+    previous_line: Option<&str>,
+    next_line: Option<&str>,
+) -> CommandResult<()> {
+    if let Some(expected_previous) = previous_line {
+        let actual_previous = if target_index == 0 {
+            ""
+        } else {
+            line_text_or_empty(lines, target_index - 1)
+        };
+
+        if actual_previous != expected_previous {
+            return Err(format!(
+                "前一行校验失败。预期“{}”，实际“{}”。",
+                expected_previous, actual_previous
+            ));
+        }
     }
 
-    Ok(index)
+    if let Some(expected_next) = next_line {
+        let actual_next = line_text_or_empty(lines, target_index + 1);
+        if actual_next != expected_next {
+            return Err(format!(
+                "后一行校验失败。预期“{}”，实际“{}”。",
+                expected_next, actual_next
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn push_search_match(
@@ -292,6 +328,24 @@ fn resolve_path_from_root(root: &Path, path: &str) -> PathBuf {
     }
 }
 
+fn normalize_candidate_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = normalized.pop();
+            }
+            Component::Normal(part) => normalized.push(part),
+        }
+    }
+
+    normalized
+}
+
 fn ensure_existing_path_in_root(root: &Path, path: &str) -> CommandResult<PathBuf> {
     let target = resolve_path_from_root(root, path);
     if !target.exists() {
@@ -306,6 +360,17 @@ fn ensure_existing_path_in_root(root: &Path, path: &str) -> CommandResult<PathBu
     }
 
     Ok(canonical_target)
+}
+
+fn ensure_path_in_root(root: &Path, path: &str) -> CommandResult<PathBuf> {
+    let target = normalize_candidate_path(&resolve_path_from_root(root, path));
+    let canonical_root = fs::canonicalize(root).map_err(error_to_string)?;
+
+    if !target.starts_with(&canonical_root) {
+        return Err("目标路径不在当前书籍目录内。".into());
+    }
+
+    Ok(target)
 }
 
 fn ensure_parent_directory_in_root(root: &Path, parent_path: &str) -> CommandResult<PathBuf> {
@@ -599,11 +664,24 @@ pub fn read_text_file(rootPath: String, path: String) -> CommandResult<String> {
 #[allow(non_snake_case)]
 pub fn write_text_file(rootPath: String, path: String, contents: String) -> CommandResult<()> {
     let root_path = ensure_root_directory(&rootPath)?;
-    let file_path = ensure_existing_path_in_root(&root_path, &path)?;
-    if !file_path.is_file() {
+    let file_path = ensure_path_in_root(&root_path, &path)?;
+
+    if file_path == root_path {
         return Err("只能写入文件内容。".into());
     }
-    fs::write(file_path, contents).map_err(error_to_string)
+
+    if file_path.exists() && !file_path.is_file() {
+        return Err("只能写入文件内容。".into());
+    }
+
+    let parent_path = file_path
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "无法定位父级目录。".to_string())?;
+    fs::create_dir_all(&parent_path).map_err(error_to_string)?;
+    fs::write(&file_path, contents).map_err(error_to_string)?;
+    refresh_workspace_indexes(&root_path)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -644,12 +722,12 @@ pub fn read_text_file_line(
 
     let contents = fs::read_to_string(&file_path).map_err(error_to_string)?;
     let (lines, _) = split_text_lines(&contents);
-    let index = resolve_line_index(&lines, lineNumber)?;
+    let index = validate_line_number(lineNumber)?;
 
     Ok(WorkspaceLineResult {
         line_number: lineNumber,
         path: display_relative_path(&root_path, &file_path),
-        text: lines[index].clone(),
+        text: line_text_or_empty(&lines, index).to_string(),
     })
 }
 
@@ -660,6 +738,8 @@ pub fn replace_text_file_line(
     path: String,
     lineNumber: usize,
     contents: String,
+    previousLine: Option<String>,
+    nextLine: Option<String>,
 ) -> CommandResult<WorkspaceLineResult> {
     let root_path = ensure_root_directory(&rootPath)?;
     let file_path = ensure_existing_path_in_root(&root_path, &path)?;
@@ -668,10 +748,22 @@ pub fn replace_text_file_line(
     }
 
     let next_line = validate_single_line_text(&contents)?;
+    let previous_line = validate_optional_context_line(previousLine)?;
+    let next_context_line = validate_optional_context_line(nextLine)?;
     let raw = fs::read_to_string(&file_path).map_err(error_to_string)?;
     let line_ending = detect_line_ending(&raw);
     let (mut lines, had_trailing_newline) = split_text_lines(&raw);
-    let index = resolve_line_index(&lines, lineNumber)?;
+    let index = validate_line_number(lineNumber)?;
+    validate_adjacent_context(
+        &lines,
+        index,
+        previous_line.as_deref(),
+        next_context_line.as_deref(),
+    )?;
+
+    if index >= lines.len() {
+        lines.resize(index + 1, String::new());
+    }
     lines[index] = next_line.clone();
 
     let mut next_contents = lines.join(line_ending);
@@ -790,4 +882,107 @@ pub fn delete_workspace_entry(rootPath: String, path: String) -> CommandResult<(
     }
 
     refresh_workspace_indexes(&root_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_temp_workspace() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("ainovelstudio-workspace-test-{nonce}"));
+        fs::create_dir_all(&root).expect("failed to create temp workspace");
+        root
+    }
+
+    #[test]
+    fn write_text_file_creates_missing_directories_and_file() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+
+        write_text_file(
+            root_str,
+            "章节/第一卷/第1章.md".into(),
+            "# 新章节\n\n这里是正文。".into(),
+        )
+        .expect("write_text_file should create missing directories and file");
+
+        let created_file = root.join("章节").join("第一卷").join("第1章.md");
+        let content = fs::read_to_string(&created_file).expect("created file should be readable");
+        assert_eq!(content, "# 新章节\n\n这里是正文。");
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn write_text_file_rejects_paths_outside_root() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+
+        let error = write_text_file(root_str, "../escape.md".into(), "oops".into())
+            .expect_err("write_text_file should reject escaping root");
+
+        assert_eq!(error, "目标路径不在当前书籍目录内。");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn read_text_file_line_supports_any_positive_line_number() {
+        let root = create_temp_workspace();
+        let file_path = root.join("章节.md");
+        fs::write(&file_path, "第一行\n第二行").expect("failed to seed file");
+
+        let result = read_text_file_line(normalize_path(&root), "章节.md".into(), 5)
+            .expect("read_text_file_line should support out-of-range positive lines");
+
+        assert_eq!(result.line_number, 5);
+        assert_eq!(result.text, "");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn replace_text_file_line_extends_missing_lines() {
+        let root = create_temp_workspace();
+        let file_path = root.join("章节.md");
+        fs::write(&file_path, "第一行\n第二行").expect("failed to seed file");
+
+        let result = replace_text_file_line(
+            normalize_path(&root),
+            "章节.md".into(),
+            5,
+            "第五行".into(),
+            Some("".into()),
+            Some("".into()),
+        )
+        .expect("replace_text_file_line should allow writing to any positive line");
+
+        let content = fs::read_to_string(&file_path).expect("updated file should be readable");
+        assert_eq!(result.line_number, 5);
+        assert_eq!(result.text, "第五行");
+        assert_eq!(content, "第一行\n第二行\n\n\n第五行");
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn replace_text_file_line_validates_adjacent_lines() {
+        let root = create_temp_workspace();
+        let file_path = root.join("章节.md");
+        fs::write(&file_path, "第一行\n第二行\n第三行").expect("failed to seed file");
+
+        let error = replace_text_file_line(
+            normalize_path(&root),
+            "章节.md".into(),
+            2,
+            "新的第二行".into(),
+            Some("不匹配的上一行".into()),
+            Some("第三行".into()),
+        )
+        .expect_err("replace_text_file_line should validate previous line");
+
+        assert_eq!(error, "前一行校验失败。预期“不匹配的上一行”，实际“第一行”。");
+        fs::remove_dir_all(&root).ok();
+    }
 }

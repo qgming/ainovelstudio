@@ -22,6 +22,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import App from "./App";
+import { BUILTIN_TOOLS } from "./lib/agent/toolDefs";
 import { useAgentStore } from "./stores/agentStore";
 import { useBookWorkspaceStore } from "./stores/bookWorkspaceStore";
 import { useThemeStore } from "./stores/themeStore";
@@ -169,7 +170,9 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "工具库" }));
 
     await waitFor(() => {
-      expect(screen.getByText(/内置工具 · 已启用 9/)).toBeInTheDocument();
+      expect(
+        screen.getByText(new RegExp(`内置工具 · 已启用 ${BUILTIN_TOOLS.length}`)),
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText("读取文件")).toBeInTheDocument();

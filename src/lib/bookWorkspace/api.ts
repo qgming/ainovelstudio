@@ -86,11 +86,17 @@ export function replaceWorkspaceTextLine(
   path: string,
   lineNumber: number,
   contents: string,
+  context?: {
+    nextLine?: string;
+    previousLine?: string;
+  },
 ) {
   return invoke<WorkspaceLineResult>("replace_text_file_line", {
     contents,
     lineNumber,
+    nextLine: context?.nextLine,
     path,
+    previousLine: context?.previousLine,
     rootPath,
   });
 }

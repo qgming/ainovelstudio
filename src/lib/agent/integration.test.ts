@@ -330,6 +330,74 @@ describe("agent session (streaming)", () => {
     ]);
   });
 
+  it("skills 列表工具把结构化结果返回给模型", async () => {
+    const parts: AgentPart[] = [];
+
+    async function* mockFullStream() {
+      yield { type: "tool-call" as const, toolName: "list_skills", input: {} };
+      yield {
+        type: "tool-result" as const,
+        toolName: "list_skills",
+        output: [
+          {
+            id: "chapter-write",
+            name: "章节写作",
+            description: "写作章节正文",
+            sourceKind: "builtin-package",
+            files: ["SKILL.md", "references/voice.md"],
+          },
+        ],
+      };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["list_skills"],
+      prompt: "列出本地技能",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {
+        list_skills: {
+          description: "列出技能",
+          execute: async () => ({
+            ok: true,
+            summary: "已读取技能列表",
+            data: [],
+          }),
+        },
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    expect(mockStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockStreamFn.mock.calls[0][0].tools?.list_skills).toBeDefined();
+    expect(parts).toEqual([
+      { type: "tool-call", toolName: "list_skills", status: "running", inputSummary: "{}" },
+      {
+        type: "tool-result",
+        toolName: "list_skills",
+        status: "completed",
+        outputSummary:
+          '[{"id":"chapter-write","name":"章节写作","description":"写作章节正文","sourceKind":"builtin-package","files":["SKILL.md","references/voice.md"]}]',
+      },
+    ]);
+  });
+
   it("连续多个同名工具调用时，每个完成状态都能正确回填", async () => {
     const parts: AgentPart[] = [];
 
@@ -571,6 +639,5 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).toContain("## s11 子任务摘要（剧情代理）");
   });
 });
-
 
 

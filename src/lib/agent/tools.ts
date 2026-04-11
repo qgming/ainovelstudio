@@ -10,6 +10,8 @@ import {
   searchWorkspaceContent,
   writeWorkspaceTextFile,
 } from "../bookWorkspace/api";
+import { readAgentFileContent, scanInstalledAgents } from "../agents/api";
+import { readSkillFileContent, scanInstalledSkills } from "../skills/api";
 import type { WorkspaceSearchMatch } from "../bookWorkspace/types";
 import type { AgentTool, ToolResult } from "./runtime";
 
@@ -43,6 +45,11 @@ function formatSearchSummary(query: string, matches: WorkspaceSearchMatch[]) {
     }),
   ].join("\n");
 }
+
+type LocalResourceToolContext = {
+  refreshAgents?: () => Promise<void>;
+  refreshSkills?: () => Promise<void>;
+};
 
 export function createWorkspaceToolset({ onWorkspaceMutated, rootPath }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
@@ -84,7 +91,12 @@ export function createWorkspaceToolset({ onWorkspaceMutated, rootPath }: Workspa
 
         if (action === "replace") {
           const contents = String(input.contents ?? "");
-          const result = await replaceWorkspaceTextLine(rootPath, path, lineNumber, contents);
+          const previousLine = input.previousLine == null ? undefined : String(input.previousLine);
+          const nextLine = input.nextLine == null ? undefined : String(input.nextLine);
+          const result = await replaceWorkspaceTextLine(rootPath, path, lineNumber, contents, {
+            nextLine,
+            previousLine,
+          });
           await onWorkspaceMutated?.();
           return ok(
             `已更新 ${result.path} 第 ${result.lineNumber} 行：${formatLinePreview(result.text)}`,
@@ -114,8 +126,8 @@ export function createWorkspaceToolset({ onWorkspaceMutated, rootPath }: Workspa
         return ok(`已读取工作区 ${tree.name}`, tree);
       },
     },
-    rename_path: {
-      description: "重命名工作区文件或目录",
+    rename: {
+      description: "重命名工作区文件夹或文件",
       execute: async (input) => {
         const path = String(input.path ?? "");
         const nextName = String(input.nextName ?? "");
@@ -144,6 +156,62 @@ export function createWorkspaceToolset({ onWorkspaceMutated, rootPath }: Workspa
         await writeWorkspaceTextFile(rootPath, path, contents);
         await onWorkspaceMutated?.();
         return ok(`已写入 ${path}`);
+      },
+    },
+  };
+}
+
+export function createLocalResourceToolset({
+  refreshAgents,
+  refreshSkills,
+}: LocalResourceToolContext = {}): Record<string, AgentTool> {
+  return {
+    list_agents: {
+      description: "列出当前本地可用代理",
+      execute: async () => {
+        await refreshAgents?.();
+        const agents = await scanInstalledAgents();
+        const data = agents.map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+          description: agent.description,
+          sourceKind: agent.sourceKind,
+          files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+        }));
+        return ok(`已读取 ${data.length} 个代理`, data);
+      },
+    },
+    list_skills: {
+      description: "列出当前本地可用技能",
+      execute: async () => {
+        await refreshSkills?.();
+        const skills = await scanInstalledSkills();
+        const data = skills.map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          sourceKind: skill.sourceKind,
+          files: ["SKILL.md", ...skill.references.map((entry) => entry.path)],
+        }));
+        return ok(`已读取 ${data.length} 个技能`, data);
+      },
+    },
+    read_agent_file: {
+      description: "读取指定代理文件",
+      execute: async (input) => {
+        const agentId = String(input.agentId ?? "");
+        const relativePath = String(input.relativePath ?? "");
+        const content = await readAgentFileContent(agentId, relativePath);
+        return ok(content);
+      },
+    },
+    read_skill_file: {
+      description: "读取指定技能文件",
+      execute: async (input) => {
+        const skillId = String(input.skillId ?? "");
+        const relativePath = String(input.relativePath ?? "");
+        const content = await readSkillFileContent(skillId, relativePath);
+        return ok(content);
       },
     },
   };

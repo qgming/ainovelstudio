@@ -17,12 +17,12 @@ export const BUILTIN_TOOLS: ToolDef[] = [
   {
     id: "write_file",
     name: "写入文件",
-    description: "整文件覆盖写入；只有准备好完整新内容时再用，小改动优先行编辑。",
+    description: "整文件覆盖写入；缺失目录或新文件会自动创建，小改动优先行编辑。",
   },
   {
     id: "line_edit",
     name: "行编辑",
-    description: "按行读取或替换文本；适合小范围修改，replace 仅支持单行且 contents 不能换行。",
+    description: "按行读取或替换文本；支持任意行号读取，replace 可自动补空行，并建议带前后文校验防止误改。",
   },
   {
     id: "search_workspace_content",
@@ -45,14 +45,34 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     description: "删除指定文件或目录；执行前应再次确认目标路径和影响范围。",
   },
   {
-    id: "rename_path",
+    id: "rename",
     name: "重命名",
-    description: "重命名工作区文件或目录；适合改名，不会修改文件正文。",
+    description: "重命名工作区文件夹或文件；适合改名，不会修改文件正文。",
   },
   {
     id: "read_workspace_tree",
     name: "读取目录树",
     description: "读取当前工作区目录结构；适合浏览层级和入口，不搜索正文。",
+  },
+  {
+    id: "list_skills",
+    name: "列出技能",
+    description: "读取当前本地可用 skills 列表，返回技能 ID、名称、描述和来源。",
+  },
+  {
+    id: "read_skill_file",
+    name: "读取技能文件",
+    description: "读取指定 skill 内文件内容，如 SKILL.md 或 references/*.md。",
+  },
+  {
+    id: "list_agents",
+    name: "列出代理",
+    description: "读取当前本地可用 agents 列表，返回代理 ID、名称、描述和来源。",
+  },
+  {
+    id: "read_agent_file",
+    name: "读取代理文件",
+    description: "读取指定 agent 内文件内容，如 AGENTS.md、TOOLS.md、MEMORY.md。",
   },
 ];
 

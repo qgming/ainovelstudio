@@ -244,14 +244,23 @@ function buildAiSdkTools(
   if (enabledSet.has("line_edit") && workspaceTools.line_edit) {
     const wsTool = workspaceTools.line_edit;
     toolSet.line_edit = defineTool({
-      description: "按行读取或替换文本。适合小范围精确修改；get 只读取单行，replace 只替换单行，不会重排其它内容。需要改多行或整篇时不要滥用它。",
+      description: "按行读取或替换文本。适合小范围精确修改；get 可读取任意正整数行号，超出文件末尾时返回空行。replace 会替换指定行，必要时自动补空行；为避免改错位置，替换前应传入前一行和后一行做校验。",
       inputSchema: z.object({
         action: z.enum(["get", "replace"]).describe("get 读取单行内容；replace 仅替换这一行，不会跨行编辑。"),
         contents: z.string().optional().describe("仅在 action=replace 时传入。必须是单行文本，不能包含换行符，也不应附带行号。"),
-        lineNumber: z.number().int().positive().describe("从 1 开始的目标行号。超出范围会报错，不会自动补行。"),
+        lineNumber: z.number().int().positive().describe("从 1 开始的目标行号。get 支持任意正整数；replace 超出文件末尾时会自动补空行到目标位置。"),
+        nextLine: z.string().optional().describe("仅在 action=replace 时使用。目标行后一行的当前内容，用于防止行号漂移导致误改；如果后一行不存在，传空字符串。"),
         path: z.string().describe("要操作的工作区文本文件路径，必须是已经存在的文本文件。"),
+        previousLine: z.string().optional().describe("仅在 action=replace 时使用。目标行前一行的当前内容，用于防止行号漂移导致误改；如果前一行不存在，传空字符串。"),
       }),
-      execute: async (input: { action: "get" | "replace"; contents?: string; lineNumber: number; path: string }) => {
+      execute: async (input: {
+        action: "get" | "replace";
+        contents?: string;
+        lineNumber: number;
+        nextLine?: string;
+        path: string;
+        previousLine?: string;
+      }) => {
         const result = await wsTool.execute(input as unknown as Record<string, unknown>);
         return result.data ?? result.summary;
       },
@@ -261,9 +270,9 @@ function buildAiSdkTools(
   if (enabledSet.has("write_file") && workspaceTools.write_file) {
     const wsTool = workspaceTools.write_file;
     toolSet.write_file = defineTool({
-      description: "整文件覆盖写入。适用于你已经准备好文件的完整新内容时；调用后会覆盖原文件全部文本。如果只是小改动，优先使用 line_edit。",
+      description: "整文件覆盖写入。适用于你已经准备好文件的完整新内容时；调用后会覆盖原文件全部文本。若目标目录或文件不存在，会自动创建；如果只是小改动，优先使用 line_edit。",
       inputSchema: z.object({
-        path: z.string().describe("要覆盖写入的目标文件路径，通常应指向已存在的文本文件。"),
+        path: z.string().describe("要覆盖写入的目标文件路径。若上级目录或文件不存在，会在工作区内自动创建。"),
         contents: z.string().describe("文件的新完整内容。会整体覆盖旧内容，不是追加写入。"),
       }),
       execute: async (input: { path: string; contents: string }) => {
@@ -332,13 +341,13 @@ function buildAiSdkTools(
     });
   }
 
-  if (enabledSet.has("rename_path") && workspaceTools.rename_path) {
-    const wsTool = workspaceTools.rename_path;
-    toolSet.rename_path = defineTool({
-      description: "重命名工作区中的文件或目录。适合改名或整理结构，不会修改文件正文。",
+  if (enabledSet.has("rename") && workspaceTools.rename) {
+    const wsTool = workspaceTools.rename;
+    toolSet.rename = defineTool({
+      description: "重命名工作区中的文件夹或文件。既支持文件夹重命名，也支持文件名重命名；只改名称，不修改文件正文。",
       inputSchema: z.object({
-        path: z.string().describe("当前的准确路径，必须已经存在于工作区内。"),
-        nextName: z.string().describe("新的文件名或目录名，只传名称本身，不要传完整路径。"),
+        path: z.string().describe("当前的准确路径，必须已经存在于工作区内；可以是文件夹，也可以是文件。"),
+        nextName: z.string().describe("新的文件夹名称或文件名，只传名称本身，不要传完整路径。"),
       }),
       execute: async (input: { path: string; nextName: string }) => {
         const result = await wsTool.execute(input);
@@ -355,6 +364,68 @@ function buildAiSdkTools(
       execute: async (_input: Record<string, never>) => {
         const result = await wsTool.execute({});
         return result.data ?? result.summary;
+      },
+    });
+  }
+
+  if (enabledSet.has("list_skills") && workspaceTools.list_skills) {
+    const wsTool = workspaceTools.list_skills;
+    toolSet.list_skills = defineTool({
+      description:
+        "读取当前本地可用 skills 列表，返回 skill 的基础信息和可读取文件列表。通常在你还不确定 skillId 时先调用它。",
+      inputSchema: z.object({}),
+      execute: async (_input: Record<string, never>) => {
+        const result = await wsTool.execute({});
+        return result.data ?? result.summary;
+      },
+    });
+  }
+
+  if (enabledSet.has("read_skill_file") && workspaceTools.read_skill_file) {
+    const wsTool = workspaceTools.read_skill_file;
+    toolSet.read_skill_file = defineTool({
+      description:
+        "读取指定 skill 内文件内容。先用 list_skills 确认 skillId 与可读文件，再读取如 SKILL.md 或 references/*.md。",
+      inputSchema: z.object({
+        skillId: z.string().describe("目标技能 ID。建议先通过 list_skills 获取，避免传错。"),
+        relativePath: z
+          .string()
+          .describe("技能目录内的相对路径，例如 SKILL.md 或 references/xxx.md。"),
+      }),
+      execute: async (input: { relativePath: string; skillId: string }) => {
+        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        return result.summary;
+      },
+    });
+  }
+
+  if (enabledSet.has("list_agents") && workspaceTools.list_agents) {
+    const wsTool = workspaceTools.list_agents;
+    toolSet.list_agents = defineTool({
+      description:
+        "读取当前本地可用 agents 列表，返回 agent 的基础信息和可读取文件列表。通常在你还不确定 agentId 时先调用它。",
+      inputSchema: z.object({}),
+      execute: async (_input: Record<string, never>) => {
+        const result = await wsTool.execute({});
+        return result.data ?? result.summary;
+      },
+    });
+  }
+
+  if (enabledSet.has("read_agent_file") && workspaceTools.read_agent_file) {
+    const wsTool = workspaceTools.read_agent_file;
+    toolSet.read_agent_file = defineTool({
+      description:
+        "读取指定 agent 内文件内容。先用 list_agents 确认 agentId，再读取 AGENTS.md、TOOLS.md 或 MEMORY.md。",
+      inputSchema: z.object({
+        agentId: z.string().describe("目标代理 ID。建议先通过 list_agents 获取，避免传错。"),
+        relativePath: z
+          .string()
+          .describe("代理目录内的相对路径，例如 AGENTS.md、TOOLS.md 或 MEMORY.md。"),
+      }),
+      execute: async (input: { agentId: string; relativePath: string }) => {
+        const result = await wsTool.execute(input as unknown as Record<string, unknown>);
+        return result.summary;
       },
     });
   }

@@ -84,12 +84,14 @@ function StatusPill({ status }: { status: "idle" | "running" | "completed" | "fa
 }
 
 function AccordionCard({
+  collapseOnContentClick = false,
   children,
   icon: Icon,
   label,
   status,
   summary,
 }: {
+  collapseOnContentClick?: boolean;
   children: React.ReactNode;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
@@ -115,7 +117,22 @@ function AccordionCard({
         {status ? <StatusPill status={status} /> : null}
       </button>
       {open ? (
-        <div className="border-t border-[#e2e8f0] px-3 py-2.5 dark:border-[#20242b]">
+        <div
+          role={collapseOnContentClick ? "button" : undefined}
+          tabIndex={collapseOnContentClick ? 0 : undefined}
+          onClick={collapseOnContentClick ? () => setOpen(false) : undefined}
+          onKeyDown={
+            collapseOnContentClick
+              ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setOpen(false);
+                  }
+                }
+              : undefined
+          }
+          className={`border-t border-[#e2e8f0] px-3 py-2.5 dark:border-[#20242b] ${collapseOnContentClick ? "cursor-pointer" : ""}`.trim()}
+        >
           {children}
         </div>
       ) : null}
@@ -123,9 +140,9 @@ function AccordionCard({
   );
 }
 
-function MarkdownText({ text }: { text: string }) {
+function MarkdownText({ className = "", text }: { className?: string; text: string }) {
   return (
-    <div className="agent-markdown text-sm leading-6 text-inherit">
+    <div className={`agent-markdown text-sm leading-6 text-inherit ${className}`.trim()}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -173,6 +190,20 @@ function MarkdownText({ text }: { text: string }) {
       </ReactMarkdown>
     </div>
   );
+}
+
+function formatStructuredText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return text;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+  } catch {
+    return text;
+  }
 }
 
 function buildSubagentTimeline(parts: AgentPart[]) {
@@ -237,28 +268,29 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
 
   if (part.type === "reasoning") {
     return (
-      <AccordionCard icon={Brain} label="思考" summary={part.summary}>
-        <p className="text-sm font-medium text-[#1f3656] dark:text-[#c8d7ee]">{part.summary}</p>
-        <p className="mt-1.5 text-sm leading-6 text-[#51627c] dark:text-[#95a7c1]">
-          {part.detail}
-        </p>
+      <AccordionCard collapseOnContentClick icon={Brain} label="思考" summary={part.summary}>
+        <MarkdownText className="text-[#51627c] dark:text-[#95a7c1]" text={[part.summary, part.detail].filter(Boolean).join("\n\n")} />
       </AccordionCard>
     );
   }
 
   if (part.type === "tool-call") {
+    const formattedInput = formatStructuredText(part.inputSummary);
+    const formattedOutput = part.outputSummary ? formatStructuredText(part.outputSummary) : null;
+
     return (
       <AccordionCard
+        collapseOnContentClick
         icon={Wrench}
         label={part.toolName}
         summary={part.status === "running" ? part.inputSummary : part.outputSummary ?? part.inputSummary}
         status={part.status}
       >
         <div className="space-y-2 text-sm leading-6 text-[#607089] dark:text-[#98a6bc]">
-          <p>{part.inputSummary}</p>
-          {part.outputSummary ? (
-            <div className="rounded-[8px] bg-[#f4f7fb] px-2.5 py-2 text-[#42536b] dark:bg-[#1a1f27] dark:text-[#c1cede]">
-              {part.outputSummary}
+          <MarkdownText text={formattedInput} />
+          {formattedOutput ? (
+            <div className="px-0 py-0 text-[#42536b] dark:text-[#c1cede]">
+              <MarkdownText text={formattedOutput} />
             </div>
           ) : null}
         </div>

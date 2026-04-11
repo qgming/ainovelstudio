@@ -32,7 +32,7 @@ import {
 } from "./agentSettingsStore";
 import { resolveManualTurnContext, type ManualTurnContextSelection } from "../lib/agent/manualTurnContext";
 import { runAgentTurn } from "../lib/agent/session";
-import { createWorkspaceToolset } from "../lib/agent/tools";
+import { createLocalResourceToolset, createWorkspaceToolset } from "../lib/agent/tools";
 import type { AgentMessage, AgentRun, AgentRunStatus, AgentPart } from "../lib/agent/types";
 import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 import { getEnabledSkills, useSkillsStore } from "./skillsStore";
@@ -314,6 +314,14 @@ export const useAgentStore = create<AgentStore>((set, get) => {
             rootPath: workspaceState.rootPath,
           })
         : {};
+      const localResourceTools = createLocalResourceToolset({
+        refreshAgents: async () => {
+          await useSubAgentStore.getState().refresh();
+        },
+        refreshSkills: async () => {
+          await useSkillsStore.getState().refresh();
+        },
+      });
 
       const persistSummary = async (promise: Promise<ChatSessionSummary>) => {
         try {
@@ -367,7 +375,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           manualContext,
           prompt: nextInput,
           providerConfig,
-          workspaceTools,
+          workspaceTools: { ...workspaceTools, ...localResourceTools },
         });
 
         for await (const part of stream) {

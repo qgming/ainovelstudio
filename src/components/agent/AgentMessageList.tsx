@@ -6,19 +6,45 @@ type AgentMessageListProps = {
   messages: AgentMessage[];
 };
 
+const BOTTOM_THRESHOLD = 24;
+
+function isNearBottom(element: HTMLDivElement) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_THRESHOLD;
+}
+
 export function AgentMessageList({ messages }: AgentMessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const lastMessageId = messages.at(-1)?.id ?? null;
 
-  // 消息变化时自动滚动到底部
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) {
+    if (el && shouldAutoScrollRef.current) {
       el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
 
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || lastMessageId === null) {
+      return;
+    }
+
+    shouldAutoScrollRef.current = true;
+    el.scrollTop = el.scrollHeight;
+  }, [lastMessageId]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) {
+      return;
+    }
+
+    shouldAutoScrollRef.current = isNearBottom(el);
+  };
+
   return (
-    <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+    <div ref={scrollRef} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
       <div className="space-y-4">
         {messages.map((message) => {
           const isUser = message.role === "user";

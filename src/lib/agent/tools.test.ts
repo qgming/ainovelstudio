@@ -1,25 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  mockReadAgentFileContent,
   mockCreateWorkspaceDirectory,
   mockCreateWorkspaceTextFile,
   mockDeleteWorkspaceEntry,
+  mockReadSkillFileContent,
   mockReadWorkspaceTextFile,
   mockReadWorkspaceTextLine,
   mockReadWorkspaceTree,
   mockRenameWorkspaceEntry,
   mockReplaceWorkspaceTextLine,
+  mockScanInstalledAgents,
+  mockScanInstalledSkills,
   mockSearchWorkspaceContent,
   mockWriteWorkspaceTextFile,
 } = vi.hoisted(() => ({
+  mockReadAgentFileContent: vi.fn(),
   mockCreateWorkspaceDirectory: vi.fn(),
   mockCreateWorkspaceTextFile: vi.fn(),
   mockDeleteWorkspaceEntry: vi.fn(),
+  mockReadSkillFileContent: vi.fn(),
   mockReadWorkspaceTextFile: vi.fn(),
   mockReadWorkspaceTextLine: vi.fn(),
   mockReadWorkspaceTree: vi.fn(),
   mockRenameWorkspaceEntry: vi.fn(),
   mockReplaceWorkspaceTextLine: vi.fn(),
+  mockScanInstalledAgents: vi.fn(),
+  mockScanInstalledSkills: vi.fn(),
   mockSearchWorkspaceContent: vi.fn(),
   mockWriteWorkspaceTextFile: vi.fn(),
 }));
@@ -37,18 +45,32 @@ vi.mock("../bookWorkspace/api", () => ({
   writeWorkspaceTextFile: mockWriteWorkspaceTextFile,
 }));
 
-import { createWorkspaceToolset } from "./tools";
+vi.mock("../agents/api", () => ({
+  readAgentFileContent: mockReadAgentFileContent,
+  scanInstalledAgents: mockScanInstalledAgents,
+}));
+
+vi.mock("../skills/api", () => ({
+  readSkillFileContent: mockReadSkillFileContent,
+  scanInstalledSkills: mockScanInstalledSkills,
+}));
+
+import { createLocalResourceToolset, createWorkspaceToolset } from "./tools";
 
 describe("createWorkspaceToolset", () => {
   beforeEach(() => {
     mockCreateWorkspaceDirectory.mockReset();
     mockCreateWorkspaceTextFile.mockReset();
     mockDeleteWorkspaceEntry.mockReset();
+    mockReadAgentFileContent.mockReset();
+    mockReadSkillFileContent.mockReset();
     mockReadWorkspaceTextFile.mockReset();
     mockReadWorkspaceTextLine.mockReset();
     mockReadWorkspaceTree.mockReset();
     mockRenameWorkspaceEntry.mockReset();
     mockReplaceWorkspaceTextLine.mockReset();
+    mockScanInstalledAgents.mockReset();
+    mockScanInstalledSkills.mockReset();
     mockSearchWorkspaceContent.mockReset();
     mockWriteWorkspaceTextFile.mockReset();
   });
@@ -115,7 +137,9 @@ describe("createWorkspaceToolset", () => {
       action: "replace",
       contents: "新的行内容",
       lineNumber: 8,
+      nextLine: "下一行内容",
       path: "章节/第一卷/第1章.md",
+      previousLine: "上一行内容",
     });
 
     expect(mockReplaceWorkspaceTextLine).toHaveBeenCalledWith(
@@ -123,6 +147,10 @@ describe("createWorkspaceToolset", () => {
       "章节/第一卷/第1章.md",
       8,
       "新的行内容",
+      {
+        nextLine: "下一行内容",
+        previousLine: "上一行内容",
+      },
     );
     expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
@@ -133,6 +161,147 @@ describe("createWorkspaceToolset", () => {
         path: "章节/第一卷/第1章.md",
         text: "新的行内容",
       },
+    });
+  });
+
+  it("行读取支持任意正整数行号", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextLine.mockResolvedValue({
+      lineNumber: 99,
+      path: "章节/第一卷/第1章.md",
+      text: "",
+    });
+
+    const result = await toolset.line_edit.execute({
+      action: "get",
+      lineNumber: 99,
+      path: "章节/第一卷/第1章.md",
+    });
+
+    expect(mockReadWorkspaceTextLine).toHaveBeenCalledWith(rootPath, "章节/第一卷/第1章.md", 99);
+    expect(result).toEqual({
+      ok: true,
+      summary: "章节/第一卷/第1章.md 第 99 行：(空行)",
+      data: {
+        lineNumber: 99,
+        path: "章节/第一卷/第1章.md",
+        text: "",
+      },
+    });
+  });
+
+  it("rename 工具支持文件夹或文件重命名", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockRenameWorkspaceEntry.mockResolvedValue("章节/序章.md");
+
+    const result = await toolset.rename.execute({
+      nextName: "序章.md",
+      path: "章节/第一章.md",
+    });
+
+    expect(mockRenameWorkspaceEntry).toHaveBeenCalledWith(rootPath, "章节/第一章.md", "序章.md");
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已重命名为 章节/序章.md",
+    });
+  });
+
+  it("资源工具可以列出本地 skills", async () => {
+    const refreshSkills = vi.fn().mockResolvedValue(undefined);
+    mockScanInstalledSkills.mockResolvedValue([
+      {
+        id: "chapter-write",
+        name: "章节写作",
+        description: "写作章节正文",
+        sourceKind: "builtin-package",
+        references: [{ path: "references/voice.md" }],
+      },
+    ]);
+    const toolset = createLocalResourceToolset({ refreshSkills });
+
+    const result = await toolset.list_skills.execute({});
+
+    expect(refreshSkills).toHaveBeenCalledTimes(1);
+    expect(mockScanInstalledSkills).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已读取 1 个技能",
+      data: [
+        {
+          id: "chapter-write",
+          name: "章节写作",
+          description: "写作章节正文",
+          sourceKind: "builtin-package",
+          files: ["SKILL.md", "references/voice.md"],
+        },
+      ],
+    });
+  });
+
+  it("资源工具可以读取指定 skill 文件", async () => {
+    mockReadSkillFileContent.mockResolvedValue("# SKILL");
+    const toolset = createLocalResourceToolset();
+
+    const result = await toolset.read_skill_file.execute({
+      skillId: "chapter-write",
+      relativePath: "SKILL.md",
+    });
+
+    expect(mockReadSkillFileContent).toHaveBeenCalledWith("chapter-write", "SKILL.md");
+    expect(result).toEqual({
+      ok: true,
+      summary: "# SKILL",
+    });
+  });
+
+  it("资源工具可以列出本地 agents", async () => {
+    const refreshAgents = vi.fn().mockResolvedValue(undefined);
+    mockScanInstalledAgents.mockResolvedValue([
+      {
+        id: "writer",
+        name: "写作代理",
+        description: "负责续写章节",
+        sourceKind: "installed-package",
+      },
+    ]);
+    const toolset = createLocalResourceToolset({ refreshAgents });
+
+    const result = await toolset.list_agents.execute({});
+
+    expect(refreshAgents).toHaveBeenCalledTimes(1);
+    expect(mockScanInstalledAgents).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已读取 1 个代理",
+      data: [
+        {
+          id: "writer",
+          name: "写作代理",
+          description: "负责续写章节",
+          sourceKind: "installed-package",
+          files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+        },
+      ],
+    });
+  });
+
+  it("资源工具可以读取指定 agent 文件", async () => {
+    mockReadAgentFileContent.mockResolvedValue("# AGENT");
+    const toolset = createLocalResourceToolset();
+
+    const result = await toolset.read_agent_file.execute({
+      agentId: "writer",
+      relativePath: "AGENTS.md",
+    });
+
+    expect(mockReadAgentFileContent).toHaveBeenCalledWith("writer", "AGENTS.md");
+    expect(result).toEqual({
+      ok: true,
+      summary: "# AGENT",
     });
   });
 });
