@@ -256,8 +256,8 @@ export function SettingPage() {
           </div>
         </aside>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div>{renderSectionContent()}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto">{renderSectionContent()}</div>
         </div>
       </div>
     </PageShell>
