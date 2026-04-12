@@ -1,6 +1,11 @@
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
+import {
+  renderPlanItems,
+  type PlanningIntervention,
+  type PlanningState,
+} from "./planning";
 import { BUILTIN_TOOLS } from "./toolDefs";
 
 // 最小后备文本，正常流程会从 AGENTS.md 文件加载完整人设
@@ -21,6 +26,8 @@ type BuildSystemPromptInput = {
 type BuildUserTurnContentInput = {
   activeFilePath: string | null;
   manualContext?: ManualTurnContextPayload | null;
+  planningIntervention?: PlanningIntervention | null;
+  planningState?: PlanningState | null;
   workspaceRootPath?: string | null;
   prompt: string;
   subagentAnalysis?: {
@@ -101,6 +108,8 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
 
   return [
     "工具使用策略：",
+    "- 多步任务先调用 todo 写出当前计划，并在每完成一步后及时更新。",
+    "- todo 只维护当前会话里的短计划，不要把它当长期任务系统。",
     "- 当任务需要子代理隔离上下文执行时，主动调用 task 工具，而不是在主上下文里展开长链路。",
     "- 未知路径或未知入口时，优先使用 search_workspace_content 或 read_workspace_tree 缩小范围。",
     "- 已知准确路径且需要全文上下文时，再使用 read_file。",
@@ -109,6 +118,30 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
     "可用工具：",
     ...enabledTools.map((tool) => `- ${tool.name}（${tool.id}）：${tool.description}`),
   ].join("\n");
+}
+
+function buildPlanningStateBlock(planningState?: PlanningState | null) {
+  if (!planningState || planningState.items.length === 0) {
+    return null;
+  }
+
+  return [
+    `- 连续未更新轮数：${planningState.roundsSinceUpdate}`,
+    "当前计划：",
+    renderPlanItems(planningState.items),
+  ].join("\n");
+}
+
+function buildPlanningInterventionBlock(planningIntervention?: PlanningIntervention | null) {
+  if (!planningIntervention) {
+    return null;
+  }
+
+  if (planningIntervention.reason === "stale_plan") {
+    return "提醒：当前计划已经连续几轮没有更新，可能与当前执行不再一致。继续前请先用 todo 刷新当前短计划。";
+  }
+
+  return "提醒：本轮请求看起来包含多个步骤。继续执行前，请先用 todo 写出当前短计划，并在完成关键步骤后及时更新。";
 }
 
 function inferTaskProfile(prompt: string): TaskProfile {
@@ -381,6 +414,8 @@ export function buildSubAgentSystem(
 export function buildUserTurnContent({
   activeFilePath,
   manualContext,
+  planningIntervention,
+  planningState,
   workspaceRootPath,
   prompt,
   subagentAnalysis,
@@ -423,11 +458,21 @@ export function buildUserTurnContent({
           },
       {
         key: "s12",
+        title: "计划执行提醒",
+        body: buildPlanningInterventionBlock(planningIntervention),
+      },
+      {
+        key: "s13",
+        title: "当前计划状态",
+        body: buildPlanningStateBlock(planningState),
+      },
+      {
+        key: "s14",
         title: "手动指定上下文",
         body: buildManualContextBlock(manualContext),
       },
       {
-        key: "s13",
+        key: "s15",
         title: "用户请求",
         body: prompt.trim(),
       },

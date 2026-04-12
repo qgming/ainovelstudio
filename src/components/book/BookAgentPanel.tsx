@@ -69,6 +69,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const input = useAgentStore((state) => state.input);
   const isHistoryOpen = useAgentStore((state) => state.isHistoryOpen);
   const openHistory = useAgentStore((state) => state.openHistory);
+  const planningState = useAgentStore((state) => state.planningState);
   const closeHistory = useAgentStore((state) => state.closeHistory);
   const run = useAgentStore((state) => state.run);
   const sendMessage = useAgentStore((state) => state.sendMessage);
@@ -188,6 +189,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         input={input}
         onInputChange={setInput}
         onStop={stopMessage}
+        planningState={planningState}
         onSubmit={(selection) => {
           void sendMessage(selection);
         }}

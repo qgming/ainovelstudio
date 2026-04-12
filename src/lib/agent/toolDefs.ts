@@ -10,6 +10,11 @@ export type ToolDef = {
 
 export const BUILTIN_TOOLS: ToolDef[] = [
   {
+    id: "todo",
+    name: "待办计划",
+    description: "更新当前会话的显式计划状态；同一时间最多保留一个进行中的步骤。",
+  },
+  {
     id: "task",
     name: "子任务派发",
     description: "将局部任务派发给子代理在独立上下文中执行，并返回摘要结果。",

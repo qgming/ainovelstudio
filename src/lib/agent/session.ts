@@ -10,6 +10,7 @@ import { selectSubAgentForPrompt } from "./delegation";
 import { buildConversationMessages } from "./messageContext";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
 import { buildSubAgentSystem, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
+import { getPlanningIntervention, type PlanningState } from "./planning";
 
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
@@ -22,6 +23,7 @@ type RunAgentTurnInput = {
   /** 启用的工具 ID 列表 */
   enabledToolIds: string[];
   manualContext?: ManualTurnContextPayload | null;
+  planningState?: PlanningState | null;
   prompt: string;
   providerConfig: AgentProviderConfig;
   /** workspace 工具集 */
@@ -332,6 +334,30 @@ function buildAiSdkTools(
           return result.data ?? result.summary;
         },
       }),
+    todo: (tool) =>
+      defineTool({
+        description:
+          "更新当前会话里的短计划。适合把正在做的几步显式写出来，并保持同一时间最多一个 in_progress。",
+        inputSchema: z.object({
+          items: z.array(
+            z.object({
+              content: z.string().min(1).describe("这一步要做什么。"),
+              status: z.enum(["pending", "in_progress", "completed"]).default("pending"),
+              activeForm: z.string().optional().describe("当步骤进行中时更自然的进行时描述。"),
+            }),
+          ).describe("当前整份计划。允许整份重写；同一时间最多一个 in_progress。"),
+        }),
+        execute: async (input: {
+          items: Array<{
+            activeForm?: string;
+            content: string;
+            status?: "pending" | "in_progress" | "completed";
+          }>;
+        }) => {
+          const result = await withAbort(abortSignal, () => tool.execute(input as unknown as Record<string, unknown>));
+          return result.data ?? result.summary;
+        },
+      }),
     list_skills: (tool) =>
       defineTool({
         description:
@@ -465,6 +491,7 @@ export async function* runAgentTurn({
   enabledSkills,
   enabledToolIds,
   manualContext,
+  planningState,
   prompt,
   providerConfig,
   workspaceTools,
@@ -516,9 +543,12 @@ export async function* runAgentTurn({
     enabledToolIds,
   });
 
+  const planningIntervention = getPlanningIntervention(planningState, prompt);
   const userContent = buildUserTurnContent({
     activeFilePath,
     manualContext,
+    planningIntervention,
+    planningState,
     workspaceRootPath,
     prompt,
     subagentAnalysis: null,

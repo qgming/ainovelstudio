@@ -13,6 +13,7 @@ import {
 import { readAgentFileContent, scanInstalledAgents } from "../agents/api";
 import { readSkillFileContent, scanInstalledSkills } from "../skills/api";
 import type { WorkspaceSearchMatch } from "../bookWorkspace/types";
+import { renderPlanItems, type PlanItem, type PlanItemStatus } from "./planning";
 import type { AgentTool, ToolResult } from "./runtime";
 
 type WorkspaceToolContext = {
@@ -50,6 +51,40 @@ type LocalResourceToolContext = {
   refreshAgents?: () => Promise<void>;
   refreshSkills?: () => Promise<void>;
 };
+
+function normalizePlanItemStatus(value: unknown): PlanItemStatus {
+  return value === "completed" || value === "in_progress" || value === "pending" ? value : "pending";
+}
+
+function normalizeTodoItems(items: unknown): PlanItem[] {
+  if (!Array.isArray(items)) {
+    throw new Error("todo.items 必须是数组。");
+  }
+
+  const validated = items.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new Error(`todo.items[${index}] 必须是对象。`);
+    }
+
+    const content = String(item.content ?? "").trim();
+    if (!content) {
+      throw new Error(`todo.items[${index}].content 不能为空。`);
+    }
+
+    return {
+      activeForm: String(item.activeForm ?? "").trim(),
+      content,
+      status: normalizePlanItemStatus(item.status),
+    };
+  });
+
+  const inProgressCount = validated.filter((item) => item.status === "in_progress").length;
+  if (inProgressCount > 1) {
+    throw new Error("Only one item can be in_progress");
+  }
+
+  return validated;
+}
 
 export function createWorkspaceToolset({ onWorkspaceMutated, rootPath }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
@@ -166,6 +201,17 @@ export function createLocalResourceToolset({
   refreshSkills,
 }: LocalResourceToolContext = {}): Record<string, AgentTool> {
   return {
+    todo: {
+      description: "更新当前会话中的待办计划",
+      execute: async (input) => {
+        const items = normalizeTodoItems(input.items);
+        const rendered = renderPlanItems(items);
+        return ok(rendered || "当前计划已清空。", {
+          items,
+          rendered,
+        });
+      },
+    },
     list_agents: {
       description: "列出当前本地可用代理",
       execute: async () => {

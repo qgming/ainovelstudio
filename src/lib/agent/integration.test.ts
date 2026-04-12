@@ -319,7 +319,7 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("- 当前激活文件：章节/第一章.md");
     expect(request.messages[0].content).toContain("- 当前文件类型：章节/正文稿件");
     expect(request.messages[0].content).toContain("- 本轮任务类型：分析/诊断");
-    expect(request.messages[0].content).toContain("## s13 用户请求");
+    expect(request.messages[0].content).toContain("## s15 用户请求");
     expect(request.messages[0].content).toContain("帮我整理这一章的冲突节奏");
   });
 
@@ -360,7 +360,7 @@ describe("agent session (streaming)", () => {
     }
 
     const request = mockStreamFn.mock.calls[0][0];
-    expect(request.messages[0].content).toContain("## s12 手动指定上下文");
+    expect(request.messages[0].content).toContain("## s14 手动指定上下文");
     expect(request.messages[0].content).toContain("### 手动指定技能");
     expect(request.messages[0].content).toContain("剧情规划：拆解冲突和节奏。");
     expect(request.messages[0].content).toContain("### 手动指定子代理");
@@ -368,7 +368,123 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("### 手动指定文件");
     expect(request.messages[0].content).toContain("#### 人物.md");
     expect(request.messages[0].content).toContain("主角：林燃");
-    expect(request.messages[0].content).toContain("## s13 用户请求");
+    expect(request.messages[0].content).toContain("## s15 用户请求");
+  });
+
+  it("多步任务但没有计划时，会在当前轮上下文里注入先规划提醒", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      workspaceRootPath: "C:/books/北境余烬",
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      planningState: { items: [], roundsSinceUpdate: 0 },
+      prompt: "先定位问题，再修复并跑测试",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const content = mockStreamFn.mock.calls[0][0].messages[mockStreamFn.mock.calls[0][0].messages.length - 1]?.content;
+    expect(content).toContain("## s12 计划执行提醒");
+    expect(content).toContain("请先用 todo 写出当前短计划");
+    expect(content).not.toContain("## s13 当前计划状态");
+  });
+
+  it("计划连续多轮未更新时，会在当前轮上下文里注入刷新提醒", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      workspaceRootPath: "C:/books/北境余烬",
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      planningState: {
+        items: [{ content: "修复问题", status: "in_progress", activeForm: "正在修复问题" }],
+        roundsSinceUpdate: 3,
+      },
+      prompt: "继续分析这个问题",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const content = mockStreamFn.mock.calls[0][0].messages[mockStreamFn.mock.calls[0][0].messages.length - 1]?.content;
+    expect(content).toContain("## s12 计划执行提醒");
+    expect(content).toContain("请先用 todo 刷新当前短计划");
+    expect(content).toContain("## s13 当前计划状态");
+    expect(content).toContain("[>] 修复问题");
+  });
+
+  it("普通请求不会注入额外的 planning reminder", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      workspaceRootPath: "C:/books/北境余烬",
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      planningState: { items: [], roundsSinceUpdate: 0 },
+      prompt: "解释这个函数",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const content = mockStreamFn.mock.calls[0][0].messages[mockStreamFn.mock.calls[0][0].messages.length - 1]?.content;
+    expect(content).not.toContain("## s12 计划执行提醒");
   });
 
   it("目录树工具把真实目录树返回给模型", async () => {
@@ -769,7 +885,7 @@ describe("agent session (streaming)", () => {
       summary: "剧情代理 子任务已完成",
       detail: "建议先补一段主角迟疑。",
     });
-    expect(subagentParts[5].parts.at(-1)).toEqual({ type: "text", text: "建议先补一段主角迟疑。" });
+    expect(subagentParts[5].parts[subagentParts[5].parts.length - 1]).toEqual({ type: "text", text: "建议先补一段主角迟疑。" });
     expect(parts).toContainEqual({
       type: "tool-call",
       toolName: "task",
@@ -787,7 +903,7 @@ describe("agent session (streaming)", () => {
     expect(taskResult?.outputSummary).toContain('"agentName":"剧情代理"');
     expect(taskResult?.outputSummary).toContain('"summary":"建议先补一段主角迟疑。"');
     expect(taskResult?.outputSummary).toContain('"subagentId":"subagent-plot-agent-');
-    expect(parts.at(-1)).toEqual({ type: "text-delta", delta: "主代理已整合子代理建议。" });
+    expect(parts[parts.length - 1]).toEqual({ type: "text-delta", delta: "主代理已整合子代理建议。" });
     expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain("## s11 子任务摘要（剧情代理）");

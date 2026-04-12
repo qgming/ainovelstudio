@@ -32,6 +32,7 @@ import {
 } from "./agentSettingsStore";
 import { resolveManualTurnContext, type ManualTurnContextSelection } from "../lib/agent/manualTurnContext";
 import { formatProviderError } from "../lib/agent/errorFormatting";
+import { derivePlanningState, type PlanningState } from "../lib/agent/planning";
 import { runAgentTurn } from "../lib/agent/session";
 import { createLocalResourceToolset, createWorkspaceToolset } from "../lib/agent/tools";
 import type { AgentMessage, AgentRun, AgentRunStatus, AgentPart } from "../lib/agent/types";
@@ -51,6 +52,7 @@ type AgentStoreState = {
   isHistoryOpen: boolean;
   isHydrated: boolean;
   messagesBySession: Record<string, AgentMessage[]>;
+  planningState: PlanningState;
   run: AgentRun;
   sessions: ChatSessionSummary[];
   status: AgentStoreStatus;
@@ -82,6 +84,7 @@ function buildInitialState(): AgentStoreState {
     isHistoryOpen: false,
     isHydrated: false,
     messagesBySession: {},
+    planningState: { items: [], roundsSinceUpdate: 0 },
     run: buildInitialRun(),
     sessions: [],
     status: "idle",
@@ -121,6 +124,7 @@ function applyBootstrap(state: AgentStoreState, bootstrap: ChatBootstrap): Parti
     ? bootstrap.sessions.find((session) => session.id === bootstrap.activeSessionId) ?? null
     : null;
   const activeMessages = bootstrap.activeSessionId ? nextMessagesBySession[bootstrap.activeSessionId] ?? [] : [];
+  const planningState = derivePlanningState(activeMessages);
 
   return {
     activeSessionId: bootstrap.activeSessionId,
@@ -129,6 +133,7 @@ function applyBootstrap(state: AgentStoreState, bootstrap: ChatBootstrap): Parti
     input: bootstrap.activeSessionId ? nextDraftsBySession[bootstrap.activeSessionId] ?? "" : "",
     isHydrated: true,
     messagesBySession: nextMessagesBySession,
+    planningState,
     run: activeSummary
       ? buildRun(activeSummary.id, activeSummary.title, activeSummary.status, activeMessages)
       : buildInitialRun(),
@@ -155,6 +160,7 @@ function ensureSessionState(
     draftsBySession,
     input,
     messagesBySession,
+    planningState: derivePlanningState(messages),
     run: buildRun(sessionId, deriveSessionTitle(messages), status, messages),
   };
 }
@@ -301,6 +307,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           })
         : null;
       const messageMeta = buildMessageMeta(workspaceState.rootPath, workspaceState.activeFilePath);
+      const planningState = derivePlanningState(conversationHistory);
       const userMessage = buildUserMessage(nextInput, messageMeta);
       const assistantMessage = buildAssistantPlaceholderMessage(messageMeta);
       let latestMessages = [...conversationHistory, userMessage, assistantMessage];
@@ -374,6 +381,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           enabledSkills,
           enabledToolIds,
           manualContext,
+          planningState,
           prompt: nextInput,
           providerConfig,
           workspaceTools: { ...workspaceTools, ...localResourceTools },

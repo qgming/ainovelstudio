@@ -304,4 +304,40 @@ describe("createWorkspaceToolset", () => {
       summary: "# AGENT",
     });
   });
+
+  it("todo 工具会校验并返回当前会话计划", async () => {
+    const toolset = createLocalResourceToolset();
+
+    const result = await toolset.todo.execute({
+      items: [
+        { content: "Read the failing test", status: "completed" },
+        { content: "Patch the regression", status: "in_progress", activeForm: "Patching the regression" },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      summary: ["[x] Read the failing test", "[>] Patch the regression"].join("\n"),
+      data: {
+        items: [
+          { content: "Read the failing test", status: "completed", activeForm: "" },
+          { content: "Patch the regression", status: "in_progress", activeForm: "Patching the regression" },
+        ],
+        rendered: ["[x] Read the failing test", "[>] Patch the regression"].join("\n"),
+      },
+    });
+  });
+
+  it("todo 工具限制同一时间最多一个 in_progress", async () => {
+    const toolset = createLocalResourceToolset();
+
+    await expect(
+      toolset.todo.execute({
+        items: [
+          { content: "Step A", status: "in_progress" },
+          { content: "Step B", status: "in_progress" },
+        ],
+      }),
+    ).rejects.toThrow("Only one item can be in_progress");
+  });
 });
