@@ -293,12 +293,41 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
               <MarkdownText text={formattedOutput} />
             </div>
           ) : null}
+          {part.validationError ? (
+            <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
+              {part.validationError}
+            </div>
+          ) : null}
         </div>
       </AccordionCard>
     );
   }
 
   if (part.type === "tool-result") {
+    if (!part.validationError) {
+      return null;
+    }
+
+    const formattedOutput = formatStructuredText(part.outputSummary);
+    return (
+      <AccordionCard
+        collapseOnContentClick
+        icon={Wrench}
+        label={`${part.toolName} 结果异常`}
+        summary={part.validationError}
+        status={part.status}
+      >
+        <div className="space-y-2 text-sm leading-6 text-[#607089] dark:text-[#98a6bc]">
+          <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
+            {part.validationError}
+          </div>
+          {formattedOutput ? <MarkdownText text={formattedOutput} /> : null}
+        </div>
+      </AccordionCard>
+    );
+  }
+
+  if (part.type !== "subagent") {
     return null;
   }
 

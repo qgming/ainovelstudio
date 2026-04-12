@@ -14,6 +14,8 @@ export type AgentPart =
       status: AgentRunStatus;
       inputSummary: string;
       outputSummary?: string;
+      output?: unknown;
+      validationError?: string;
     }
   | {
       type: "tool-result";
@@ -21,6 +23,8 @@ export type AgentPart =
       toolCallId: string;
       status: AgentRunStatus;
       outputSummary: string;
+      output?: unknown;
+      validationError?: string;
     }
   | {
       type: "subagent";

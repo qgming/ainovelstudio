@@ -272,7 +272,15 @@ describe("agent session (streaming)", () => {
     const request = mockStreamFn.mock.calls[0][0];
     expect(request.messages[1]).toEqual({
       role: "assistant",
-      content: "工具结果（read_file）：主角：林燃；目标：逃离北城\n\n我已经提炼出主角目标。",
+      content: [
+        "工具调用 [call-history-1] read_file",
+        "输入摘要：{\"path\":\"设定/人物.md\"}",
+        "",
+        "工具结果 [call-history-1] read_file",
+        "输出摘要：主角：林燃；目标：逃离北城",
+        "",
+        "我已经提炼出主角目标。",
+      ].join("\n"),
     });
   });
 
@@ -545,17 +553,24 @@ describe("agent session (streaming)", () => {
     }
 
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockStreamFn.mock.calls[0][0].system).toContain("优先传相对工作区根目录的路径");
     expect(mockStreamFn.mock.calls[0][0].tools?.read_workspace_tree).toBeDefined();
-    expect(parts).toEqual([
+      expect(parts).toEqual([
       { type: "tool-call", toolName: "read_workspace_tree", toolCallId: "call-tree-1", status: "running", inputSummary: "{}" },
-      {
-        type: "tool-result",
-        toolName: "read_workspace_tree",
-        toolCallId: "call-tree-1",
-        status: "completed",
-        outputSummary:
-          '{"kind":"directory","name":"北境余烬","path":"C:/books/北境余烬","children":[{"kind":"directory","name":"章节","path":"C:/books/北境余烬/章节"}]}',
-      },
+        {
+          type: "tool-result",
+          toolName: "read_workspace_tree",
+          toolCallId: "call-tree-1",
+          status: "completed",
+          output: {
+            kind: "directory",
+            name: "北境余烬",
+            path: "C:/books/北境余烬",
+            children: [{ kind: "directory", name: "章节", path: "C:/books/北境余烬/章节" }],
+          },
+          outputSummary:
+            '{"kind":"directory","name":"北境余烬","path":"C:/books/北境余烬","children":[{"kind":"directory","name":"章节","path":"C:/books/北境余烬/章节"}]}',
+        },
     ]);
   });
 
@@ -616,16 +631,25 @@ describe("agent session (streaming)", () => {
 
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn.mock.calls[0][0].tools?.list_skills).toBeDefined();
-    expect(parts).toEqual([
+      expect(parts).toEqual([
       { type: "tool-call", toolName: "list_skills", toolCallId: "call-skills-1", status: "running", inputSummary: "{}" },
-      {
-        type: "tool-result",
-        toolName: "list_skills",
-        toolCallId: "call-skills-1",
-        status: "completed",
-        outputSummary:
-          '[{"id":"chapter-write","name":"章节写作","description":"写作章节正文","sourceKind":"builtin-package","files":["SKILL.md","references/voice.md"]}]',
-      },
+        {
+          type: "tool-result",
+          toolName: "list_skills",
+          toolCallId: "call-skills-1",
+          status: "completed",
+          output: [
+            {
+              id: "chapter-write",
+              name: "章节写作",
+              description: "写作章节正文",
+              sourceKind: "builtin-package",
+              files: ["SKILL.md", "references/voice.md"],
+            },
+          ],
+          outputSummary:
+            '[{"id":"chapter-write","name":"章节写作","description":"写作章节正文","sourceKind":"builtin-package","files":["SKILL.md","references/voice.md"]}]',
+        },
     ]);
   });
 
@@ -692,6 +716,7 @@ describe("agent session (streaming)", () => {
         toolName: "read_file",
         toolCallId: "call-read-2",
         status: "completed",
+        output: "已读取第二章",
         outputSummary: "已读取第二章",
       },
       {
@@ -699,7 +724,68 @@ describe("agent session (streaming)", () => {
         toolName: "read_file",
         toolCallId: "call-read-1",
         status: "completed",
+        output: "已读取第一章",
         outputSummary: "已读取第一章",
+      },
+    ]);
+  });
+
+  it("tool-result 缺少 toolCallId 时不会错误回填已有工具调用", async () => {
+    const parts: AgentPart[] = [];
+
+    async function* mockFullStream() {
+      yield { type: "tool-call" as const, toolName: "read_file", toolCallId: "call-read-1", input: { path: "章节/第一章.md" } };
+      yield { type: "tool-result" as const, toolName: "read_file", toolCallId: "", output: "异常结果" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["read_file"],
+      prompt: "测试异常结果",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {
+        read_file: {
+          description: "读取文件",
+          execute: async () => ({
+            ok: true,
+            summary: "已读取文件",
+          }),
+        },
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    expect(parts).toEqual([
+      {
+        type: "tool-call",
+        toolName: "read_file",
+        toolCallId: "call-read-1",
+        status: "running",
+        inputSummary: '{"path":"章节/第一章.md"}',
+      },
+      {
+        type: "tool-result",
+        toolName: "read_file",
+        toolCallId: "",
+        status: "completed",
+        output: "异常结果",
+        outputSummary: "异常结果",
       },
     ]);
   });
@@ -877,6 +963,7 @@ describe("agent session (streaming)", () => {
         toolCallId: "sub-call-1",
         status: "completed",
         inputSummary: '{"path":"章节/第一章.md"}',
+        output: "已读取当前章节",
         outputSummary: "已读取当前章节",
       },
     ]);
@@ -899,6 +986,10 @@ describe("agent session (streaming)", () => {
     );
     expect(taskResult).toBeDefined();
     expect(taskResult?.status).toBe("completed");
+    expect(taskResult?.output).toMatchObject({
+      agentId: "plot-agent",
+      agentName: "剧情代理",
+    });
     expect(taskResult?.outputSummary).toContain('"agentId":"plot-agent"');
     expect(taskResult?.outputSummary).toContain('"agentName":"剧情代理"');
     expect(taskResult?.outputSummary).toContain('"summary":"建议先补一段主角迟疑。"');

@@ -11,6 +11,7 @@ import { buildConversationMessages } from "./messageContext";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
 import { buildSubAgentSystem, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 import { getPlanningIntervention, type PlanningState } from "./planning";
+import { createToolResultPart, mergeToolResultPart } from "./toolParts";
 
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
@@ -112,20 +113,7 @@ function mergeSubagentInnerParts(parts: AgentPart[], part: AgentPart): AgentPart
   }
 
   if (part.type === "tool-result") {
-    for (let index = parts.length - 1; index >= 0; index -= 1) {
-      const candidate = parts[index];
-      if (candidate?.type === "tool-call" && candidate.toolCallId === part.toolCallId && candidate.status === "running") {
-        return [
-          ...parts.slice(0, index),
-          {
-            ...candidate,
-            status: part.status,
-            outputSummary: part.outputSummary,
-          },
-          ...parts.slice(index + 1),
-        ];
-      }
-    }
+    return mergeToolResultPart(parts, part);
   }
 
   return [...parts, part];
@@ -209,13 +197,11 @@ async function runSubAgentTask(params: {
         };
         break;
       case "tool-result":
-        mappedPart = {
-          type: "tool-result",
+        mappedPart = createToolResultPart({
           toolName: part.toolName,
           toolCallId: part.toolCallId,
-          status: "completed",
-          outputSummary: typeof part.output === "string" ? part.output : JSON.stringify(part.output),
-        };
+          output: part.output,
+        });
         break;
       default:
         break;
@@ -268,9 +254,9 @@ function buildAiSdkTools(
   const builders: Record<string, ToolBuilder> = {
     create_file: (tool) =>
       defineTool({
-        description: "在指定目录创建新的文本文件。适合新增文件；如果目标文件已经存在或你只是想修改旧文件内容，不要用它。",
+        description: "在指定目录创建新的文本文件。适合新增文件；如果目标文件已经存在或你只是想修改旧文件内容，不要用它。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          parentPath: z.string().describe("新文件所在的父目录路径，必须位于工作区内。"),
+          parentPath: z.string().describe("新文件所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 03_剧情大纲。"),
           name: z.string().describe("要创建的文件名，通常应包含扩展名，如 chapter-01.md。"),
         }),
         execute: async (input: { parentPath: string; name: string }) => {
@@ -280,9 +266,9 @@ function buildAiSdkTools(
       }),
     create_folder: (tool) =>
       defineTool({
-        description: "在指定目录创建文件夹。适合补齐目录结构，不负责创建文件内容。",
+        description: "在指定目录创建文件夹。适合补齐目录结构，不负责创建文件内容。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          parentPath: z.string().describe("新文件夹所在的父目录路径，必须位于工作区内。"),
+          parentPath: z.string().describe("新文件夹所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 03_剧情大纲。"),
           name: z.string().describe("要创建的文件夹名称，不要传完整路径。"),
         }),
         execute: async (input: { parentPath: string; name: string }) => {
@@ -292,9 +278,9 @@ function buildAiSdkTools(
       }),
     delete_path: (tool) =>
       defineTool({
-        description: "删除指定文件或目录。只有在你已经确认目标路径和影响范围时才使用，避免把它当清理未知内容的通用手段。",
+        description: "删除指定文件或目录。只有在你已经确认目标路径和影响范围时才使用，避免把它当清理未知内容的通用手段。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          path: z.string().describe("工作区内要删除的准确路径。删除目录会递归影响其下内容。"),
+          path: z.string().describe("工作区内要删除的准确路径。优先使用相对工作区根目录的路径；删除目录会递归影响其下内容。"),
         }),
         execute: async (input: { path: string }) => {
           const result = await withAbort(abortSignal, () => tool.execute(input));
@@ -303,13 +289,13 @@ function buildAiSdkTools(
       }),
     line_edit: (tool) =>
       defineTool({
-        description: "按行读取或替换文本。适合小范围精确修改；get 可读取任意正整数行号，超出文件末尾时返回空行。replace 会替换指定行，必要时自动补空行；为避免改错位置，替换前应传入前一行和后一行做校验。",
+        description: "按行读取或替换文本。适合小范围精确修改；get 可读取任意正整数行号，超出文件末尾时返回空行。replace 会替换指定行，必要时自动补空行；为避免改错位置，替换前应传入前一行和后一行做校验。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
           action: z.enum(["get", "replace"]).describe("get 读取单行内容；replace 仅替换这一行，不会跨行编辑。"),
           contents: z.string().optional().describe("仅在 action=replace 时传入。必须是单行文本，不能包含换行符，也不应附带行号。"),
           lineNumber: z.number().int().positive().describe("从 1 开始的目标行号。get 支持任意正整数；replace 超出文件末尾时会自动补空行到目标位置。"),
           nextLine: z.string().optional().describe("仅在 action=replace 时使用。目标行后一行的当前内容，用于防止行号漂移导致误改；如果后一行不存在，传空字符串。"),
-          path: z.string().describe("要操作的工作区文本文件路径，必须是已经存在的文本文件。"),
+          path: z.string().describe("要操作的工作区文本文件路径，必须是已经存在的文本文件。优先使用相对工作区根目录的路径，例如 03_剧情大纲/全书架构总纲.md。"),
           previousLine: z.string().optional().describe("仅在 action=replace 时使用。目标行前一行的当前内容，用于防止行号漂移导致误改；如果前一行不存在，传空字符串。"),
         }),
         execute: async (input: {
@@ -385,9 +371,9 @@ function buildAiSdkTools(
       }),
     read_file: (tool) =>
       defineTool({
-        description: "读取完整文本文件内容。仅在你已经知道准确路径、并且需要查看全文上下文时使用；如果还不知道文件或目录在哪里，先用 search_workspace_content 或 read_workspace_tree 缩小范围。",
+        description: "读取完整文本文件内容。仅在你已经知道准确路径、并且需要查看全文上下文时使用；如果还不知道文件或目录在哪里，先用 search_workspace_content 或 read_workspace_tree 缩小范围。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          path: z.string().describe("工作区内的准确文本文件路径。该工具不会帮你搜索路径，因此未知路径时不要直接调用。"),
+          path: z.string().describe("工作区内的准确文本文件路径。优先使用相对工作区根目录的路径，例如 03_剧情大纲/全书架构总纲.md；该工具不会帮你搜索路径，因此未知路径时不要直接调用。"),
         }),
         execute: async (input: { path: string }) => {
           const result = await withAbort(abortSignal, () => tool.execute(input));
@@ -420,9 +406,9 @@ function buildAiSdkTools(
       }),
     rename: (tool) =>
       defineTool({
-        description: "重命名工作区中的文件夹或文件。既支持文件夹重命名，也支持文件名重命名；只改名称，不修改文件正文。",
+        description: "重命名工作区中的文件夹或文件。既支持文件夹重命名，也支持文件名重命名；只改名称，不修改文件正文。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          path: z.string().describe("当前的准确路径，必须已经存在于工作区内；可以是文件夹，也可以是文件。"),
+          path: z.string().describe("当前的准确路径，必须已经存在于工作区内；可以是文件夹，也可以是文件。优先使用相对工作区根目录的路径。"),
           nextName: z.string().describe("新的文件夹名称或文件名，只传名称本身，不要传完整路径。"),
         }),
         execute: async (input: { path: string; nextName: string }) => {
@@ -444,9 +430,9 @@ function buildAiSdkTools(
       }),
     write_file: (tool) =>
       defineTool({
-        description: "整文件覆盖写入。适用于你已经准备好文件的完整新内容时；调用后会覆盖原文件全部文本。若目标目录或文件不存在，会自动创建；如果只是小改动，优先使用 line_edit。",
+        description: "整文件覆盖写入。适用于你已经准备好文件的完整新内容时；调用后会覆盖原文件全部文本。若目标目录或文件不存在，会自动创建；如果只是小改动，优先使用 line_edit。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          path: z.string().describe("要覆盖写入的目标文件路径。若上级目录或文件不存在，会在工作区内自动创建。"),
+          path: z.string().describe("要覆盖写入的目标文件路径。优先使用相对工作区根目录的路径，例如 03_剧情大纲/全书架构总纲.md；若上级目录或文件不存在，会在工作区内自动创建。"),
           contents: z.string().describe("文件的新完整内容。会整体覆盖旧内容，不是追加写入。"),
         }),
         execute: async (input: { path: string; contents: string }) => {
@@ -594,13 +580,11 @@ export async function* runAgentTurn({
         break;
 
       case "tool-result":
-        yield {
-          type: "tool-result",
+        yield createToolResultPart({
           toolName: part.toolName,
           toolCallId: part.toolCallId,
-          status: "completed",
-          outputSummary: typeof part.output === "string" ? part.output : JSON.stringify(part.output),
-        };
+          output: part.output,
+        });
         break;
 
       default:
@@ -624,8 +608,6 @@ export async function* runAgentTurn({
 }
 
 export { createSystemMessage };
-
-
 
 
 

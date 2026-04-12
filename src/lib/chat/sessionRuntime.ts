@@ -1,4 +1,5 @@
 import type { AgentMessage, AgentMessageMeta, AgentPart, AgentRun, AgentRunStatus } from "../agent/types";
+import { mergeToolResultPart } from "../agent/toolParts";
 import type { ChatSessionPatch } from "./types";
 
 const DEFAULT_TITLE = "新对话";
@@ -122,20 +123,7 @@ export function mergePart(parts: AgentPart[], part: AgentPart): AgentPart[] {
   }
 
   if (part.type === "tool-result") {
-    for (let index = nextParts.length - 1; index >= 0; index -= 1) {
-      const candidate = nextParts[index];
-      if (candidate?.type === "tool-call" && candidate.toolCallId === part.toolCallId && candidate.status === "running") {
-        return [
-          ...nextParts.slice(0, index),
-          {
-            ...candidate,
-            status: part.status,
-            outputSummary: part.outputSummary,
-          },
-          ...nextParts.slice(index + 1),
-        ];
-      }
-    }
+    return mergeToolResultPart(nextParts, part);
   }
 
   return [...nextParts, part];

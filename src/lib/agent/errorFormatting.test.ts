@@ -11,7 +11,9 @@ describe("formatProviderError", () => {
       url: "https://api.example.com/v1/chat/completions",
     });
 
-    expect(formatProviderError(error, "模型调用失败。")).toContain("模型调用失败：无法连接到模型服务。");
+    expect(formatProviderError(error, "模型调用失败。")).toContain(
+      "模型调用失败：connect ECONNREFUSED 127.0.0.1:11434",
+    );
     expect(formatProviderError(error, "模型调用失败。")).toContain(
       "请求地址：https://api.example.com/v1/chat/completions",
     );
@@ -49,9 +51,22 @@ describe("formatProviderError", () => {
       model: "gpt-4.1",
     });
 
-    expect(formatted).toContain("模型调用失败：无法连接到模型服务。");
+    expect(formatted).toContain("模型调用失败：ENOTFOUND: getaddrinfo ENOTFOUND api.example.com");
     expect(formatted).toContain("请求地址：https://api.example.com/v1");
     expect(formatted).toContain("模型：gpt-4.1");
     expect(formatted).toContain("底层原因：ENOTFOUND: getaddrinfo ENOTFOUND api.example.com");
+  });
+
+  it("没有底层 cause 时仍显示真实 message，而不是泛化成连接失败", () => {
+    const error = new Error("fetch failed");
+
+    const formatted = formatProviderError(error, "模型调用失败。", {
+      baseURL: "https://api.qgming.com/v1",
+      model: "gpt-5.4",
+    });
+
+    expect(formatted).toContain("fetch failed");
+    expect(formatted).toContain("请求地址：https://api.qgming.com/v1");
+    expect(formatted).toContain("模型：gpt-5.4");
   });
 });

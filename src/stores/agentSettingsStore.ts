@@ -4,9 +4,11 @@ import {
   readDefaultAgentConfig,
   writeDefaultAgentConfig,
 } from "../lib/agentConfig/api";
+import { clearAgentSettings, readAgentSettings, writeAgentSettings } from "../lib/agentSettings/api";
 import { getDefaultEnabledTools } from "../lib/agent/toolDefs";
 
 const STORAGE_KEY = "ainovelstudio-agent-settings";
+let initializePromise: Promise<void> | null = null;
 
 export type AgentProviderConfig = {
   apiKey: string;
@@ -41,6 +43,36 @@ type PersistedState = {
   config?: Partial<AgentProviderConfig>;
   enabledTools?: Record<string, boolean>;
 };
+
+function normalizeEnabledTools(enabledTools?: Record<string, boolean>) {
+  const normalized = { ...(enabledTools ?? {}) };
+  if ("rename_path" in normalized && !("rename" in normalized)) {
+    normalized.rename = Boolean(normalized.rename_path);
+  }
+  return normalized;
+}
+
+function normalizePersistedState(parsed?: PersistedState | null) {
+  const defaults = getDefaultState();
+  return {
+    config: { ...defaults.config, ...(parsed?.config ?? parsed ?? {}) },
+    enabledTools: { ...defaults.enabledTools, ...normalizeEnabledTools(parsed?.enabledTools) },
+  };
+}
+
+async function migrateLegacyLocalStorage() {
+  const parsed = readPersistedState();
+  if (!parsed.config && !parsed.enabledTools) {
+    return null;
+  }
+
+  const normalized = normalizePersistedState(parsed);
+  await writeAgentSettings(normalized);
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(STORAGE_KEY);
+  }
+  return normalized;
+}
 
 function getDefaultConfig(): AgentProviderConfig {
   return {
@@ -80,26 +112,31 @@ function readPersistedState(): PersistedState {
 }
 
 function readState(): AgentSettingsState {
-  const defaults = getDefaultState();
-  const parsed = readPersistedState();
-  const enabledTools = { ...(parsed.enabledTools ?? {}) };
-  if ("rename_path" in enabledTools && !("rename" in enabledTools)) {
-    enabledTools.rename = Boolean(enabledTools.rename_path);
-  }
-
-  return {
-    ...defaults,
-    config: { ...defaults.config, ...(parsed.config ?? parsed) },
-    enabledTools: { ...defaults.enabledTools, ...enabledTools },
-  };
+  return getDefaultState();
 }
 
-function persistState(state: Pick<AgentSettingsState, "config" | "enabledTools">) {
-  if (typeof window === "undefined") {
-    return;
+async function loadPersistedAgentSettings() {
+  const persisted = await readAgentSettings();
+  if (persisted) {
+    return normalizePersistedState({
+      config: persisted.config,
+      enabledTools: persisted.enabledTools,
+    });
   }
+  return migrateLegacyLocalStorage();
+}
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+async function persistAgentSettings(state: Pick<AgentSettingsState, "config" | "enabledTools">) {
+  await writeAgentSettings({
+    config: state.config,
+    enabledTools: state.enabledTools,
+  });
+}
+
+function persistAgentSettingsInBackground(state: Pick<AgentSettingsState, "config" | "enabledTools">, onError: (message: string) => void) {
+  void persistAgentSettings(state).catch((error) => {
+    onError(formatSettingsError(error, "保存 Agent 设置失败。"));
+  });
 }
 
 function formatSettingsError(error: unknown, fallbackMessage: string) {
@@ -123,39 +160,56 @@ function normalizeMainAgentMarkdown(markdown: unknown) {
 }
 
 export function getStoredAgentConfig() {
-  return readState().config;
+  return useAgentSettingsStore.getState().config;
 }
 
 export function getStoredDefaultAgentMarkdown() {
-  return readState().defaultAgentMarkdown;
+  return useAgentSettingsStore.getState().defaultAgentMarkdown;
 }
 
 export function getStoredEnabledTools() {
-  return readState().enabledTools;
+  return useAgentSettingsStore.getState().enabledTools;
 }
 
 export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
   ...readState(),
   initialize: async () => {
-    set((state) => ({ ...state, errorMessage: null, status: "loading" }));
-
-    try {
-      const doc = await initializeDefaultAgentConfig();
-      set((state) => ({
-        ...state,
-        configFilePath: typeof doc?.path === "string" ? doc.path : null,
-        defaultAgentMarkdown: normalizeMainAgentMarkdown(doc?.markdown),
-        errorMessage: null,
-        status: "ready",
-      }));
-      persistState({ config: get().config, enabledTools: get().enabledTools });
-    } catch (error) {
-      set((state) => ({
-        ...state,
-        errorMessage: formatSettingsError(error, "主代理 AGENTS.md 加载失败。"),
-        status: "error",
-      }));
+    if (get().status === "ready") {
+      return;
     }
+    if (initializePromise) {
+      return initializePromise;
+    }
+
+    initializePromise = (async () => {
+      set((state) => ({ ...state, errorMessage: null, status: "loading" }));
+
+      try {
+        const [doc, persisted] = await Promise.all([
+          initializeDefaultAgentConfig(),
+          loadPersistedAgentSettings(),
+        ]);
+        set((state) => ({
+          ...state,
+          config: persisted?.config ?? state.config,
+          enabledTools: persisted?.enabledTools ?? state.enabledTools,
+          configFilePath: typeof doc?.path === "string" ? doc.path : null,
+          defaultAgentMarkdown: normalizeMainAgentMarkdown(doc?.markdown),
+          errorMessage: null,
+          status: "ready",
+        }));
+      } catch (error) {
+        set((state) => ({
+          ...state,
+          errorMessage: formatSettingsError(error, "主代理 AGENTS.md 加载失败。"),
+          status: "error",
+        }));
+      }
+    })().finally(() => {
+      initializePromise = null;
+    });
+
+    return initializePromise;
   },
   refreshDefaultAgentMarkdown: async () => {
     set((state) => ({ ...state, errorMessage: null, status: "loading" }));
@@ -179,16 +233,26 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
     }
   },
   reset: () => {
+    initializePromise = null;
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
     }
+    void clearAgentSettings().catch((error) => {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSettingsError(error, "重置 Agent 设置失败。"),
+      }));
+    });
     set(getDefaultState());
   },
   resetConfig: () =>
     set((state) => {
       const config = getDefaultConfig();
-      persistState({ config, enabledTools: state.enabledTools });
-      return { config };
+      const nextState = { config, enabledTools: state.enabledTools };
+      persistAgentSettingsInBackground(nextState, (message) => {
+        set((current) => ({ ...current, errorMessage: message }));
+      });
+      return { config, errorMessage: null };
     }),
   toggleTool: (toolId) =>
     set((state) => {
@@ -196,14 +260,20 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
         ...state.enabledTools,
         [toolId]: !(state.enabledTools[toolId] ?? true),
       };
-      persistState({ config: state.config, enabledTools });
-      return { enabledTools };
+      const nextState = { config: state.config, enabledTools };
+      persistAgentSettingsInBackground(nextState, (message) => {
+        set((current) => ({ ...current, errorMessage: message }));
+      });
+      return { enabledTools, errorMessage: null };
     }),
   updateConfig: (nextConfig) =>
     set((state) => {
       const config = { ...state.config, ...nextConfig };
-      persistState({ config, enabledTools: state.enabledTools });
-      return { config };
+      const nextState = { config, enabledTools: state.enabledTools };
+      persistAgentSettingsInBackground(nextState, (message) => {
+        set((current) => ({ ...current, errorMessage: message }));
+      });
+      return { config, errorMessage: null };
     }),
   updateDefaultAgentMarkdown: async (content) => {
     try {

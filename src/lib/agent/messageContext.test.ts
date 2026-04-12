@@ -34,7 +34,7 @@ describe("buildConversationMessages", () => {
     expect(messages[20]).toEqual({ role: "user", content: "当前问题" });
   });
 
-  it("过滤思考和工具调用，但保留工具结果进入后续上下文", () => {
+  it("assistant 历史会保留 toolCallId 语义，并从合并后的 tool-call 合成结构化结果块", () => {
     const messages = buildConversationMessages(
       [
         {
@@ -42,9 +42,15 @@ describe("buildConversationMessages", () => {
           role: "assistant",
           author: "主代理",
           parts: [
-            { type: "reasoning", summary: "正在思考", detail: "分析章节结构。" },
-            { type: "tool-call", toolName: "read_file", toolCallId: "call-1", status: "completed", inputSummary: "{\"path\":\"设定.md\"}" },
-            { type: "tool-result", toolName: "read_file", toolCallId: "call-1", status: "completed", outputSummary: "已读取设定.md" },
+            {
+              type: "tool-call",
+              toolName: "read_file",
+              toolCallId: "call-1",
+              status: "completed",
+              inputSummary: "{\"path\":\"设定.md\"}",
+              output: { protagonist: "林燃", goal: "逃离北城" },
+              outputSummary: "主角：林燃；目标：逃离北城",
+            },
             { type: "text", text: "我已整理完关键设定。" },
           ],
         },
@@ -54,7 +60,43 @@ describe("buildConversationMessages", () => {
 
     expect(messages[0]).toEqual({
       role: "assistant",
-      content: "工具结果（read_file）：已读取设定.md\n\n我已整理完关键设定。",
+      content: [
+        "工具调用 [call-1] read_file",
+        "输入摘要：{\"path\":\"设定.md\"}",
+        "",
+        "工具结果 [call-1] read_file",
+        "输出摘要：{\"protagonist\":\"林燃\",\"goal\":\"逃离北城\"}",
+        "",
+        "我已整理完关键设定。",
+      ].join("\n"),
+    });
+  });
+
+  it("异常 tool-result 不会丢失，并会保留校验错误", () => {
+    const messages = buildConversationMessages(
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          author: "主代理",
+          parts: [
+            {
+              type: "tool-result",
+              toolName: "read_file",
+              toolCallId: "",
+              status: "failed",
+              outputSummary: "读取失败",
+              validationError: "toolCallId 缺失。",
+            },
+          ],
+        },
+      ],
+      "继续",
+    );
+
+    expect(messages[0]).toEqual({
+      role: "assistant",
+      content: "工具结果 [] read_file\n输出摘要：读取失败\n校验异常：toolCallId 缺失。",
     });
   });
 });

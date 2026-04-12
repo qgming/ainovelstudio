@@ -11,6 +11,7 @@ const ACTIVE_SESSION_KEY: &str = "chat.active_session_id";
 const DRAFT_KEY_PREFIX: &str = "chat.draft.";
 const SKILLS_PREFERENCES_KEY: &str = "skills.preferences";
 const AGENTS_PREFERENCES_KEY: &str = "agents.preferences";
+const AGENT_SETTINGS_KEY: &str = "agent.settings";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,6 +74,23 @@ pub struct TogglePreferences {
     enabled_by_id: std::collections::HashMap<String, bool>,
 }
 
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentProviderConfig {
+    api_key: String,
+    base_url: String,
+    max_output_tokens: u32,
+    model: String,
+    temperature: f64,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSettingsDocument {
+    config: AgentProviderConfig,
+    enabled_tools: std::collections::HashMap<String, bool>,
+}
+
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
 }
@@ -105,6 +123,10 @@ fn parse_preferences(value: Option<Value>) -> TogglePreferences {
     value
         .and_then(|raw| serde_json::from_value::<TogglePreferences>(raw).ok())
         .unwrap_or_default()
+}
+
+fn parse_agent_settings(value: Option<Value>) -> Option<AgentSettingsDocument> {
+    value.and_then(|raw| serde_json::from_value::<AgentSettingsDocument>(raw).ok())
 }
 
 fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSessionSummary> {
@@ -395,6 +417,29 @@ pub fn clear_agent_preferences(app: AppHandle) -> CommandResult<()> {
 }
 
 #[tauri::command]
+pub fn read_agent_settings(app: AppHandle) -> CommandResult<Option<AgentSettingsDocument>> {
+    let connection = open_database(&app)?;
+    Ok(parse_agent_settings(get_state_value(&connection, AGENT_SETTINGS_KEY)?))
+}
+
+#[tauri::command]
+pub fn write_agent_settings(
+    app: AppHandle,
+    settings: AgentSettingsDocument,
+) -> CommandResult<AgentSettingsDocument> {
+    let connection = open_database(&app)?;
+    let value = serde_json::to_value(&settings).map_err(error_to_string)?;
+    set_state_value(&connection, AGENT_SETTINGS_KEY, &value)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+pub fn clear_agent_settings(app: AppHandle) -> CommandResult<()> {
+    let connection = open_database(&app)?;
+    delete_state_value(&connection, AGENT_SETTINGS_KEY)
+}
+
+#[tauri::command]
 pub fn initialize_chat_storage(app: AppHandle) -> CommandResult<ChatBootstrap> {
     let connection = open_database(&app)?;
     let session_id = ensure_active_session(&connection)?;
@@ -547,5 +592,4 @@ pub fn delete_chat_message(
         .map_err(error_to_string)?;
     apply_patch(&connection, &sessionId, sessionPatch)
 }
-
 

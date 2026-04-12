@@ -90,8 +90,23 @@ function buildContextLines(url: string, model: string, responseDetail: string, c
   ].filter(Boolean);
 }
 
-function isGenericNetworkMessage(message: string) {
-  return /network error|fetch failed|failed to fetch/i.test(message);
+function buildErrorTitle(
+  message: string,
+  fallbackMessage: string,
+  responseDetail: string,
+  causeDetail: string,
+  statusCode?: number,
+) {
+  if (statusCode) {
+    return `模型调用失败（HTTP ${statusCode}）。`;
+  }
+
+  const detail = responseDetail || causeDetail || message;
+  if (detail) {
+    return `模型调用失败：${detail}`;
+  }
+
+  return fallbackMessage;
 }
 
 export function formatProviderError(
@@ -101,16 +116,20 @@ export function formatProviderError(
 ) {
   if (APICallError.isInstance(error)) {
     const message = error.message.trim();
-    const title = error.statusCode
-      ? `模型调用失败（HTTP ${error.statusCode}）。`
-      : isGenericNetworkMessage(message)
-        ? "模型调用失败：无法连接到模型服务。"
-        : `模型调用失败：${message || fallbackMessage}`;
+    const responseDetail = extractResponseDetail(error.responseBody);
+    const causeDetail = extractCauseDetail(error.cause);
+    const title = buildErrorTitle(
+      message,
+      fallbackMessage,
+      responseDetail,
+      causeDetail,
+      error.statusCode,
+    );
     const detailLines = buildContextLines(
       error.url || context?.baseURL?.trim() || "",
       extractModelName(error.requestBodyValues, context),
-      extractResponseDetail(error.responseBody),
-      extractCauseDetail(error.cause),
+      responseDetail,
+      causeDetail,
     );
     return [title, ...detailLines].join("\n");
   }
@@ -118,13 +137,13 @@ export function formatProviderError(
   if (error instanceof Error) {
     const message = error.message.trim();
     const cause = (error as Error & { cause?: unknown }).cause;
-    const title =
-      !message ? fallbackMessage : isGenericNetworkMessage(message) ? "模型调用失败：无法连接到模型服务。" : message;
+    const causeDetail = extractCauseDetail(cause);
+    const title = !causeDetail && message ? message : buildErrorTitle(message, fallbackMessage, "", causeDetail);
     const detailLines = buildContextLines(
       context?.baseURL?.trim() || "",
       context?.model?.trim() || "",
       "",
-      extractCauseDetail(cause),
+      causeDetail,
     );
     return [title, ...detailLines].filter(Boolean).join("\n");
   }

@@ -25,9 +25,7 @@ import {
   sortSessionSummaries,
 } from "../lib/chat/sessionRuntime";
 import {
-  getStoredAgentConfig,
   getStoredDefaultAgentMarkdown,
-  getStoredEnabledTools,
   useAgentSettingsStore,
 } from "./agentSettingsStore";
 import { resolveManualTurnContext, type ManualTurnContextSelection } from "../lib/agent/manualTurnContext";
@@ -194,6 +192,11 @@ async function ensureMainAgentMarkdown() {
   return useAgentSettingsStore.getState().defaultAgentMarkdown || getStoredDefaultAgentMarkdown();
 }
 
+async function ensureAgentSettingsReady() {
+  await useAgentSettingsStore.getState().initialize();
+  return useAgentSettingsStore.getState();
+}
+
 export const useAgentStore = create<AgentStore>((set, get) => {
   async function ensureActiveSession() {
     if (get().activeSessionId) {
@@ -284,13 +287,15 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         return;
       }
 
+      await ensureAgentSettingsReady();
+
       const abortController = new AbortController();
       const conversationHistory = get().messagesBySession[sessionId] ?? [];
       const workspaceState = useBookWorkspaceStore.getState();
-      const providerConfig = useAgentSettingsStore.getState().config ?? getStoredAgentConfig();
+      const providerConfig = useAgentSettingsStore.getState().config;
       const enabledSkills = getEnabledSkills(useSkillsStore.getState());
       const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
-      const enabledToolsMap = useAgentSettingsStore.getState().enabledTools ?? getStoredEnabledTools();
+      const enabledToolsMap = useAgentSettingsStore.getState().enabledTools;
       const defaultAgentMarkdown = await ensureMainAgentMarkdown();
       const enabledToolIds = Object.entries(enabledToolsMap)
         .filter(([, value]) => value)
@@ -485,7 +490,6 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     },
   };
 });
-
 
 
 
