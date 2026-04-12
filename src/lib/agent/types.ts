@@ -2,6 +2,20 @@ export type AgentRunStatus = "idle" | "running" | "completed" | "failed";
 
 export type StatusTone = "neutral" | "warning" | "success" | "danger";
 
+export type AgentUsage = {
+  recordedAt: string;
+  provider: string;
+  modelId: string;
+  finishReason: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  noCacheTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+};
+
 export type AgentPart =
   | { type: "placeholder"; text: string }
   | { type: "text"; text: string }
@@ -39,6 +53,7 @@ export type AgentPart =
 export type AgentMessageMeta = {
   activeFilePath?: string | null;
   workspaceRootPath?: string | null;
+  usage?: AgentUsage | null;
 };
 
 export type AgentMessage = {

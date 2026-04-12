@@ -12,6 +12,7 @@ import type { ManualTurnContextPayload } from "./manualTurnContext";
 import { buildSubAgentSystem, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 import { getPlanningIntervention, type PlanningState } from "./planning";
 import { createToolResultPart, mergeToolResultPart } from "./toolParts";
+import type { AgentUsage } from "./types";
 
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
@@ -29,6 +30,7 @@ type RunAgentTurnInput = {
   providerConfig: AgentProviderConfig;
   /** workspace 工具集 */
   workspaceTools: Record<string, AgentTool>;
+  onUsage?: (usage: AgentUsage) => void;
   /** 可选：用于测试注入的流式调用 */
   _streamFn?: typeof streamAgentText;
   /** 可选：用于测试注入的子代理流式调用 */
@@ -481,6 +483,7 @@ export async function* runAgentTurn({
   prompt,
   providerConfig,
   workspaceTools,
+  onUsage,
   _streamFn = streamAgentText,
   _subagentStreamFn = streamAgentText,
 }: RunAgentTurnInput): AsyncGenerator<AgentPart> {
@@ -605,10 +608,14 @@ export async function* runAgentTurn({
       yield snapshot;
     }
   }
+
+  const usage = await result.usagePromise;
+  if (usage) {
+    onUsage?.(usage);
+  }
 }
 
 export { createSystemMessage };
-
 
 
 

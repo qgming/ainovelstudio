@@ -1,8 +1,9 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Bot, Info, MoonStar, Settings2, Sparkles, Wrench, type LucideIcon } from "lucide-react";
+import { Activity, Bot, Info, MoonStar, Settings2, Sparkles, Wrench, type LucideIcon } from "lucide-react";
 import { PageShell } from "../components/PageShell";
 import { DefaultAgentSection } from "../components/settings/DefaultAgentSection";
 import { ModelProviderCard } from "../components/settings/ModelProviderCard";
+import { UsageAnalyticsSection } from "../components/settings/UsageAnalyticsSection";
 import { Switch } from "../components/ui/Switch";
 import appIcon from "../assets/icon.png";
 import packageJson from "../../package.json";
@@ -11,7 +12,7 @@ import { BUILTIN_TOOLS } from "../lib/agent/toolDefs";
 import { useAgentSettingsStore } from "../stores/agentSettingsStore";
 import { useThemeStore } from "../stores/themeStore";
 
-type SettingSectionKey = "agents" | "basic" | "models" | "tools" | "about";
+type SettingSectionKey = "agents" | "usage" | "basic" | "models" | "tools" | "about";
 
 type SettingNavItem = {
   icon: LucideIcon;
@@ -21,6 +22,7 @@ type SettingNavItem = {
 
 const settingNavItems: SettingNavItem[] = [
   { key: "agents", title: "AGENTS", icon: Bot },
+  { key: "usage", title: "用量统计", icon: Activity },
   { key: "basic", title: "基本设置", icon: Settings2 },
   { key: "models", title: "模型设置", icon: Sparkles },
   { key: "tools", title: "工具库", icon: Wrench },
@@ -208,6 +210,10 @@ export function SettingPage() {
       return <ThemeSection theme={theme} toggleTheme={toggleTheme} />;
     }
 
+    if (activeSection === "usage") {
+      return <UsageAnalyticsSection />;
+    }
+
     if (activeSection === "models") {
       return <ModelProviderCard config={config} onChange={updateConfig} onReset={resetConfig} />;
     }
@@ -242,7 +248,7 @@ export function SettingPage() {
                   aria-label={title}
                   onClick={() => setActiveSection(key)}
                   className={[
-                    "flex h-10 w-full items-center gap-3 border-b border-[#e2e8f0] px-3 text-left transition dark:border-[#20242b]",
+                    "flex h-11 w-full items-center gap-3 border-b border-[#e2e8f0] px-3 text-left transition dark:border-[#20242b]",
                     isActive
                       ? "bg-[#eaf3ff] text-[#0f172a] dark:bg-[#162131] dark:text-[#f8fbff]"
                       : "text-[#334155] hover:bg-[#eef2f7] dark:text-[#cbd5e1] dark:hover:bg-[#171b21]",

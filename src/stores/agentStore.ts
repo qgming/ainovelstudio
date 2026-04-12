@@ -33,7 +33,7 @@ import { formatProviderError } from "../lib/agent/errorFormatting";
 import { derivePlanningState, type PlanningState } from "../lib/agent/planning";
 import { runAgentTurn } from "../lib/agent/session";
 import { createLocalResourceToolset, createWorkspaceToolset } from "../lib/agent/tools";
-import type { AgentMessage, AgentRun, AgentRunStatus, AgentPart } from "../lib/agent/types";
+import type { AgentMessage, AgentRun, AgentRunStatus, AgentPart, AgentUsage } from "../lib/agent/types";
 import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 import { getEnabledSkills, useSkillsStore } from "./skillsStore";
 import { getEnabledAgents, useSubAgentStore } from "./subAgentStore";
@@ -366,6 +366,26 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         }, 350);
       };
 
+      const attachUsageToAssistant = (usage: AgentUsage) => {
+        set((state) => {
+          const messages = [...(state.messagesBySession[sessionId] ?? [])];
+          const lastMessage = messages[messages.length - 1];
+          if (!lastMessage || lastMessage.id !== assistantMessage.id) {
+            return state;
+          }
+
+          messages[messages.length - 1] = {
+            ...lastMessage,
+            meta: {
+              ...(lastMessage.meta ?? {}),
+              usage,
+            },
+          };
+          latestMessages = messages;
+          return ensureSessionState(state, sessionId, messages, "", "running");
+        });
+      };
+
       set((state) => ({
         abortController,
         ...ensureSessionState(state, sessionId, latestMessages, "", "running"),
@@ -386,6 +406,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           enabledSkills,
           enabledToolIds,
           manualContext,
+          onUsage: attachUsageToAssistant,
           planningState,
           prompt: nextInput,
           providerConfig,
@@ -490,6 +511,5 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     },
   };
 });
-
 
 

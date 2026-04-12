@@ -2,6 +2,7 @@ import { generateText, isLoopFinished, streamText, tool as defineTool } from "ai
 import type { ModelMessage, ToolSet } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
+import type { AgentUsage } from "./types";
 
 const CONNECTION_TEST_SYSTEM = "你是连接测试助手。请用一句自然语言简短回复。";
 const CONNECTION_TEST_PROMPT = "请回复一句简短的话，确认你已收到这条测试消息。";
@@ -114,15 +115,30 @@ export type StreamAgentTextInput = {
   tools?: ToolSet;
 };
 
+export type StreamAgentTextResult = {
+  fullStream: ReturnType<typeof streamText>["fullStream"];
+  usagePromise?: Promise<AgentUsage | null>;
+};
+
+function normalizeUsageNumber(value: number | undefined) {
+  return value ?? 0;
+}
+
 /** 流式文本生成，返回 AI SDK streamText result */
-export function streamAgentText({ abortSignal, messages, providerConfig, system, tools }: StreamAgentTextInput) {
+export function streamAgentText({
+  abortSignal,
+  messages,
+  providerConfig,
+  system,
+  tools,
+}: StreamAgentTextInput): StreamAgentTextResult {
   const provider = createOpenAICompatible({
     name: "ainovelstudio-provider",
     apiKey: providerConfig.apiKey,
     baseURL: providerConfig.baseURL,
   });
 
-  return streamText({
+  const result = streamText({
     abortSignal,
     model: provider(providerConfig.model),
     messages,
@@ -131,6 +147,27 @@ export function streamAgentText({ abortSignal, messages, providerConfig, system,
     tools,
     stopWhen: isLoopFinished(),
   });
+
+  const usagePromise = Promise.all([result.totalUsage, result.finishReason, result.response])
+    .then(([totalUsage, finishReason, response]) => ({
+      recordedAt: Math.floor(Date.now() / 1000).toString(),
+      provider: "ainovelstudio-provider",
+      modelId: response.modelId || providerConfig.model,
+      finishReason,
+      inputTokens: normalizeUsageNumber(totalUsage.inputTokens),
+      outputTokens: normalizeUsageNumber(totalUsage.outputTokens),
+      totalTokens: normalizeUsageNumber(totalUsage.totalTokens),
+      noCacheTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.noCacheTokens),
+      cacheReadTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.cacheReadTokens),
+      cacheWriteTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.cacheWriteTokens),
+      reasoningTokens: normalizeUsageNumber(totalUsage.outputTokenDetails.reasoningTokens),
+    }))
+    .catch(() => null);
+
+  return {
+    fullStream: result.fullStream,
+    usagePromise,
+  };
 }
 
 export { defineTool };

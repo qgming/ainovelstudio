@@ -3,6 +3,7 @@ mod chat;
 mod config;
 mod db;
 mod skills;
+mod usage;
 mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,6 +42,7 @@ pub fn run() {
             config::initialize_default_agent_config,
             config::read_default_agent_config,
             config::write_default_agent_config,
+            usage::read_usage_logs,
             workspace::pick_book_directory,
             workspace::read_workspace_tree,
             workspace::read_text_file,
