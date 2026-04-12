@@ -27,7 +27,7 @@ describe("modelGateway", () => {
   });
 
   it("真实测试通过时返回校验结果", async () => {
-    mockGenerateText.mockResolvedValue({ text: "CONNECTION_OK" });
+    mockGenerateText.mockResolvedValue({ text: "你好，我已收到测试消息。", content: [] });
 
     await expect(
       testAgentProviderConnection({
@@ -38,8 +38,8 @@ describe("modelGateway", () => {
         temperature: 0.7,
       }),
     ).resolves.toEqual({
-      expectedReply: "CONNECTION_OK",
-      reply: "CONNECTION_OK",
+      hasContent: true,
+      reply: "你好，我已收到测试消息。",
     });
 
     expect(mockGenerateText).toHaveBeenCalledWith(
@@ -52,7 +52,7 @@ describe("modelGateway", () => {
   });
 
   it("模型返回非预期答案时判定失败", async () => {
-    mockGenerateText.mockResolvedValue({ text: "你好" });
+    mockGenerateText.mockResolvedValue({ text: "   ", reasoningText: undefined, content: [] });
 
     await expect(
       testAgentProviderConnection({
@@ -62,6 +62,27 @@ describe("modelGateway", () => {
         model: "gpt-4.1",
         temperature: 0.7,
       }),
-    ).rejects.toThrow("模型返回校验失败：你好");
+    ).rejects.toThrow("模型未返回有效内容。");
+  });
+
+  it("文本为空但 reasoningText 有内容时也判定成功", async () => {
+    mockGenerateText.mockResolvedValue({
+      text: "",
+      reasoningText: "测试成功，模型已响应。",
+      content: [{ type: "reasoning", text: "测试成功，模型已响应。" }],
+    });
+
+    await expect(
+      testAgentProviderConnection({
+        apiKey: "sk-test",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "gpt-4.1",
+        temperature: 0.7,
+      }),
+    ).resolves.toEqual({
+      hasContent: true,
+      reply: "测试成功，模型已响应。",
+    });
   });
 });

@@ -58,8 +58,8 @@ describe("ModelProviderCard", () => {
 
   it("测试成功时显示成功 toast", async () => {
     mockTestAgentProviderConnection.mockResolvedValue({
-      expectedReply: "CONNECTION_OK",
-      reply: "CONNECTION_OK",
+      hasContent: true,
+      reply: "你好，我已收到测试消息。",
     });
 
     render(
@@ -86,11 +86,11 @@ describe("ModelProviderCard", () => {
       temperature: 0.7,
     });
     expect(await screen.findByRole("status")).toHaveTextContent("测试成功");
-    expect(screen.getByText(/CONNECTION_OK/)).toBeInTheDocument();
+    expect(screen.getByText(/模型连接正常。/)).toBeInTheDocument();
   });
 
   it("测试失败时显示失败 toast", async () => {
-    mockTestAgentProviderConnection.mockRejectedValue(new Error("模型返回校验失败：你好"));
+    mockTestAgentProviderConnection.mockRejectedValue(new Error("模型未返回有效内容。"));
 
     render(
       <ModelProviderCard
@@ -108,6 +108,6 @@ describe("ModelProviderCard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "测试链接" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("测试失败：模型返回校验失败：你好");
+    expect(await screen.findByRole("alert")).toHaveTextContent("测试失败：模型未返回有效内容。");
   });
 });

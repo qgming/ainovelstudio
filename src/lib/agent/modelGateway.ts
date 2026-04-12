@@ -1,11 +1,10 @@
-import { generateText, streamText, tool as defineTool, stepCountIs } from "ai";
+import { generateText, isLoopFinished, streamText, tool as defineTool } from "ai";
 import type { ModelMessage, ToolSet } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 
-const CONNECTION_TEST_REPLY = "CONNECTION_OK";
-const CONNECTION_TEST_SYSTEM = "你是连接测试助手。你必须且只能回复 CONNECTION_OK。";
-const CONNECTION_TEST_PROMPT = "请只回复 CONNECTION_OK，不要输出任何额外内容。";
+const CONNECTION_TEST_SYSTEM = "你是连接测试助手。请用一句自然语言简短回复。";
+const CONNECTION_TEST_PROMPT = "请回复一句简短的话，确认你已收到这条测试消息。";
 const CONNECTION_TEST_MAX_TOKENS = 32;
 
 export type AgentTextGenerationInput = {
@@ -23,7 +22,6 @@ export async function generateAgentText({ prompt, providerConfig, system }: Agen
   });
 
   const { text } = await generateText({
-    maxOutputTokens: providerConfig.maxOutputTokens,
     model: provider(providerConfig.model),
     prompt,
     system,
@@ -41,6 +39,29 @@ function normalizeProbeReply(text: string) {
     .trim()
     .replace(/^[`"'“”‘’]+|[`"'“”‘’]+$/gu, "")
     .trim();
+}
+
+function extractProbeReply(result: {
+  text: string;
+  reasoningText?: string;
+  content?: Array<{ type?: string; text?: string }>;
+}) {
+  const textReply = normalizeProbeReply(result.text);
+  if (textReply) {
+    return textReply;
+  }
+
+  const reasoningReply = normalizeProbeReply(result.reasoningText ?? "");
+  if (reasoningReply) {
+    return reasoningReply;
+  }
+
+  const contentReply = normalizeProbeReply(
+    (result.content ?? [])
+      .map((part) => (part.type === "text" || part.type === "reasoning" ? part.text ?? "" : ""))
+      .join("\n"),
+  );
+  return contentReply;
 }
 
 function assertProviderConfig(providerConfig: AgentProviderConfig) {
@@ -66,7 +87,7 @@ export async function testAgentProviderConnection(providerConfig: AgentProviderC
     baseURL: providerConfig.baseURL,
   });
 
-  const { text } = await generateText({
+  const result = await generateText({
     maxOutputTokens: CONNECTION_TEST_MAX_TOKENS,
     model: provider(providerConfig.model),
     prompt: CONNECTION_TEST_PROMPT,
@@ -74,14 +95,14 @@ export async function testAgentProviderConnection(providerConfig: AgentProviderC
     temperature: 0,
   });
 
-  const normalizedReply = normalizeProbeReply(text);
-  if (normalizedReply !== CONNECTION_TEST_REPLY) {
-    throw new Error(`模型返回校验失败：${text.trim() || "空响应"}`);
+  const normalizedReply = extractProbeReply(result);
+  if (!normalizedReply) {
+    throw new Error("模型未返回有效内容。");
   }
 
   return {
-    expectedReply: CONNECTION_TEST_REPLY,
-    reply: text.trim(),
+    hasContent: true,
+    reply: normalizedReply,
   };
 }
 
@@ -103,13 +124,12 @@ export function streamAgentText({ abortSignal, messages, providerConfig, system,
 
   return streamText({
     abortSignal,
-    maxOutputTokens: providerConfig.maxOutputTokens,
     model: provider(providerConfig.model),
     messages,
     system,
     temperature: providerConfig.temperature,
     tools,
-    stopWhen: stepCountIs(5),
+    stopWhen: isLoopFinished(),
   });
 }
 

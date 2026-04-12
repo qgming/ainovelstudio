@@ -101,6 +101,7 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
 
   return [
     "工具使用策略：",
+    "- 当任务需要子代理隔离上下文执行时，主动调用 task 工具，而不是在主上下文里展开长链路。",
     "- 未知路径或未知入口时，优先使用 search_workspace_content 或 read_workspace_tree 缩小范围。",
     "- 已知准确路径且需要全文上下文时，再使用 read_file。",
     "- 小范围改动优先使用 line_edit；只有整份内容都准备好了才使用 write_file。",

@@ -31,6 +31,7 @@ import {
   useAgentSettingsStore,
 } from "./agentSettingsStore";
 import { resolveManualTurnContext, type ManualTurnContextSelection } from "../lib/agent/manualTurnContext";
+import { formatProviderError } from "../lib/agent/errorFormatting";
 import { runAgentTurn } from "../lib/agent/session";
 import { createLocalResourceToolset, createWorkspaceToolset } from "../lib/agent/tools";
 import type { AgentMessage, AgentRun, AgentRunStatus, AgentPart } from "../lib/agent/types";
@@ -425,7 +426,10 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         }
 
         const systemMessage = buildSystemMessage(
-          error instanceof Error ? error.message : "Agent 执行失败，请稍后重试。",
+          formatProviderError(error, "Agent 执行失败，请稍后重试。", {
+            baseURL: providerConfig.baseURL,
+            model: providerConfig.model,
+          }),
           messageMeta,
         );
         latestMessages = [...latestMessages, systemMessage];

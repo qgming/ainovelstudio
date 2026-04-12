@@ -27,6 +27,7 @@ describe("AgentPartRenderer", () => {
         part={{
           type: "tool-call",
           toolName: "read_file",
+          toolCallId: "call-render-1",
           status: "completed",
           inputSummary: "- 章节/第一章.md",
           outputSummary: "```json\n{\"ok\":true}\n```",
@@ -48,6 +49,7 @@ describe("AgentPartRenderer", () => {
         part={{
           type: "tool-call",
           toolName: "read_workspace_tree",
+          toolCallId: "call-render-2",
           status: "completed",
           inputSummary: '{"path":"章节/第一章.md","deep":true}',
           outputSummary: '{"name":"北境余烬","children":[{"name":"章节"}]}',

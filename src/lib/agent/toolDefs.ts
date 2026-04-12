@@ -10,6 +10,11 @@ export type ToolDef = {
 
 export const BUILTIN_TOOLS: ToolDef[] = [
   {
+    id: "task",
+    name: "子任务派发",
+    description: "将局部任务派发给子代理在独立上下文中执行，并返回摘要结果。",
+  },
+  {
     id: "read_file",
     name: "读取文件",
     description: "读取完整文本文件；已知路径且需要全文上下文时使用，定位阶段优先先搜索。",

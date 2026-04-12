@@ -124,7 +124,7 @@ export function mergePart(parts: AgentPart[], part: AgentPart): AgentPart[] {
   if (part.type === "tool-result") {
     for (let index = nextParts.length - 1; index >= 0; index -= 1) {
       const candidate = nextParts[index];
-      if (candidate?.type === "tool-call" && candidate.toolName === part.toolName && candidate.status === "running") {
+      if (candidate?.type === "tool-call" && candidate.toolCallId === part.toolCallId && candidate.status === "running") {
         return [
           ...nextParts.slice(0, index),
           {

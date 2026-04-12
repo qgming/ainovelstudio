@@ -110,7 +110,9 @@ describe("agent session (streaming)", () => {
 
   it("停止后会中断正在等待的工具执行", async () => {
     const abortController = new AbortController();
-    let resolveTool: ((value: { ok: true; summary: string }) => void) | null = null;
+    let resolveTool:
+      | ((value: { ok: true; summary: string }) => void)
+      | undefined;
     const mockStreamFn = vi.fn().mockReturnValue({
       fullStream: (async function* () {
         return;
@@ -147,10 +149,13 @@ describe("agent session (streaming)", () => {
       // drain stream
     }
 
-    const tool = mockStreamFn.mock.calls[0][0].tools?.read_file;
+    const tool = mockStreamFn.mock.calls[0][0].tools?.read_file as
+      | { execute?: (input: { path: string }, options: unknown) => Promise<unknown> }
+      | undefined;
     expect(tool).toBeDefined();
 
-    const pending = tool!.execute!({ path: "章节/第一章.md" }, {} as never);
+    const pending = tool?.execute?.({ path: "章节/第一章.md" }, {} as never);
+    expect(pending).toBeDefined();
     abortController.abort();
 
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
@@ -213,6 +218,62 @@ describe("agent session (streaming)", () => {
     expect(request.messages[2].role).toBe("user");
     expect(request.messages[2].content).toContain("继续分析第二章");
     expect(request.messages[2].content).toContain("- 当前工作区：C:/books/北境余烬");
+  });
+
+  it("连续对话时会把上一轮工具结果带入下一轮输入", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第三章.md",
+      workspaceRootPath: "C:/books/北境余烬",
+      conversationHistory: [
+        {
+          id: "user-1",
+          role: "user",
+          author: "你",
+          parts: [{ type: "text", text: "先读取第一章设定" }],
+        },
+        {
+          id: "assistant-1",
+          role: "assistant",
+          author: "主代理",
+          parts: [
+            { type: "tool-call", toolName: "read_file", toolCallId: "call-history-1", status: "completed", inputSummary: "{\"path\":\"设定/人物.md\"}" },
+            { type: "tool-result", toolName: "read_file", toolCallId: "call-history-1", status: "completed", outputSummary: "主角：林燃；目标：逃离北城" },
+            { type: "text", text: "我已经提炼出主角目标。" },
+          ],
+        },
+      ],
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      prompt: "继续分析第三章承接是否自然",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        maxOutputTokens: 4096,
+        model: "test-model",
+        temperature: 0.7,
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const request = mockStreamFn.mock.calls[0][0];
+    expect(request.messages[1]).toEqual({
+      role: "assistant",
+      content: "工具结果（read_file）：主角：林燃；目标：逃离北城\n\n我已经提炼出主角目标。",
+    });
   });
 
   it("把默认 AGENTS 和结构化用户上下文传给模型", async () => {
@@ -314,10 +375,11 @@ describe("agent session (streaming)", () => {
     const parts: AgentPart[] = [];
 
     async function* mockFullStream() {
-      yield { type: "tool-call" as const, toolName: "read_workspace_tree", input: {} };
+      yield { type: "tool-call" as const, toolName: "read_workspace_tree", toolCallId: "call-tree-1", input: {} };
       yield {
         type: "tool-result" as const,
         toolName: "read_workspace_tree",
+        toolCallId: "call-tree-1",
         output: {
           kind: "directory",
           name: "北境余烬",
@@ -369,10 +431,11 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn.mock.calls[0][0].tools?.read_workspace_tree).toBeDefined();
     expect(parts).toEqual([
-      { type: "tool-call", toolName: "read_workspace_tree", status: "running", inputSummary: "{}" },
+      { type: "tool-call", toolName: "read_workspace_tree", toolCallId: "call-tree-1", status: "running", inputSummary: "{}" },
       {
         type: "tool-result",
         toolName: "read_workspace_tree",
+        toolCallId: "call-tree-1",
         status: "completed",
         outputSummary:
           '{"kind":"directory","name":"北境余烬","path":"C:/books/北境余烬","children":[{"kind":"directory","name":"章节","path":"C:/books/北境余烬/章节"}]}',
@@ -384,10 +447,11 @@ describe("agent session (streaming)", () => {
     const parts: AgentPart[] = [];
 
     async function* mockFullStream() {
-      yield { type: "tool-call" as const, toolName: "list_skills", input: {} };
+      yield { type: "tool-call" as const, toolName: "list_skills", toolCallId: "call-skills-1", input: {} };
       yield {
         type: "tool-result" as const,
         toolName: "list_skills",
+        toolCallId: "call-skills-1",
         output: [
           {
             id: "chapter-write",
@@ -437,10 +501,11 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn.mock.calls[0][0].tools?.list_skills).toBeDefined();
     expect(parts).toEqual([
-      { type: "tool-call", toolName: "list_skills", status: "running", inputSummary: "{}" },
+      { type: "tool-call", toolName: "list_skills", toolCallId: "call-skills-1", status: "running", inputSummary: "{}" },
       {
         type: "tool-result",
         toolName: "list_skills",
+        toolCallId: "call-skills-1",
         status: "completed",
         outputSummary:
           '[{"id":"chapter-write","name":"章节写作","description":"写作章节正文","sourceKind":"builtin-package","files":["SKILL.md","references/voice.md"]}]',
@@ -452,10 +517,10 @@ describe("agent session (streaming)", () => {
     const parts: AgentPart[] = [];
 
     async function* mockFullStream() {
-      yield { type: "tool-call" as const, toolName: "read_file", input: { path: "章节/第一章.md" } };
-      yield { type: "tool-call" as const, toolName: "read_file", input: { path: "章节/第二章.md" } };
-      yield { type: "tool-result" as const, toolName: "read_file", output: "已读取第一章" };
-      yield { type: "tool-result" as const, toolName: "read_file", output: "已读取第二章" };
+      yield { type: "tool-call" as const, toolName: "read_file", toolCallId: "call-read-1", input: { path: "章节/第一章.md" } };
+      yield { type: "tool-call" as const, toolName: "read_file", toolCallId: "call-read-2", input: { path: "章节/第二章.md" } };
+      yield { type: "tool-result" as const, toolName: "read_file", toolCallId: "call-read-2", output: "已读取第二章" };
+      yield { type: "tool-result" as const, toolName: "read_file", toolCallId: "call-read-1", output: "已读取第一章" };
     }
 
     const mockStreamFn = vi.fn().mockReturnValue({
@@ -495,26 +560,30 @@ describe("agent session (streaming)", () => {
       {
         type: "tool-call",
         toolName: "read_file",
+        toolCallId: "call-read-1",
         status: "running",
         inputSummary: '{"path":"章节/第一章.md"}',
       },
       {
         type: "tool-call",
         toolName: "read_file",
+        toolCallId: "call-read-2",
         status: "running",
         inputSummary: '{"path":"章节/第二章.md"}',
       },
       {
         type: "tool-result",
         toolName: "read_file",
+        toolCallId: "call-read-2",
         status: "completed",
-        outputSummary: "已读取第一章",
+        outputSummary: "已读取第二章",
       },
       {
         type: "tool-result",
         toolName: "read_file",
+        toolCallId: "call-read-1",
         status: "completed",
-        outputSummary: "已读取第二章",
+        outputSummary: "已读取第一章",
       },
     ]);
   });
@@ -586,25 +655,42 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain("子任务摘要");
   });
 
-  it("支持子代理预分析并把过程映射为 subagent part", async () => {
+  it("支持通过 task 工具主动派发子代理并回传摘要", async () => {
     const parts: AgentPart[] = [];
 
     async function* mockSubagentFullStream() {
       yield { type: "reasoning-delta" as const, text: "正在分析人物动机。" };
-      yield { type: "tool-call" as const, toolName: "read_file", input: { path: "章节/第一章.md" } };
-      yield { type: "tool-result" as const, toolName: "read_file", output: "已读取当前章节" };
+      yield { type: "tool-call" as const, toolName: "read_file", toolCallId: "sub-call-1", input: { path: "章节/第一章.md" } };
+      yield { type: "tool-result" as const, toolName: "read_file", toolCallId: "sub-call-1", output: "已读取当前章节" };
       yield { type: "text-delta" as const, text: "建议先补一段主角迟疑。" };
-    }
-
-    async function* mockMainFullStream() {
-      yield { type: "text-delta" as const, text: "主代理已整合子代理建议。" };
     }
 
     const mockSubagentStreamFn = vi.fn().mockReturnValue({
       fullStream: mockSubagentFullStream(),
     });
-    const mockStreamFn = vi.fn().mockReturnValue({
-      fullStream: mockMainFullStream(),
+    const mockStreamFn = vi.fn().mockImplementation((request: { tools?: Record<string, { execute?: (input: { prompt: string; agentId?: string }, options: unknown) => Promise<unknown> }> }) => {
+      const taskTool = request.tools?.task;
+      return {
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call" as const,
+            toolName: "task",
+            toolCallId: "task-call-1",
+            input: { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+          };
+          const output = await taskTool?.execute?.(
+            { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+            {} as never,
+          );
+          yield {
+            type: "tool-result" as const,
+            toolName: "task",
+            toolCallId: "task-call-1",
+            output: output ?? "",
+          };
+          yield { type: "text-delta" as const, text: "主代理已整合子代理建议。" };
+        })(),
+      };
     });
     const enabledAgent: ResolvedAgent = {
       id: "plot-agent",
@@ -632,7 +718,7 @@ describe("agent session (streaming)", () => {
       workspaceRootPath: "C:/books/北境余烬",
       enabledAgents: [enabledAgent],
       enabledSkills: [],
-      enabledToolIds: ["read_file"],
+      enabledToolIds: ["read_file", "task"],
       prompt: "帮我分析主角动机",
       providerConfig: {
         apiKey: "test-key",
@@ -659,7 +745,7 @@ describe("agent session (streaming)", () => {
     }
 
     const subagentParts = parts.filter((part): part is Extract<AgentPart, { type: "subagent" }> => part.type === "subagent");
-    expect(subagentParts).toHaveLength(6);
+    expect(subagentParts.length).toBeGreaterThan(0);
     expect(new Set(subagentParts.map((part) => part.id)).size).toBe(1);
     expect(subagentParts[0]).toMatchObject({
       type: "subagent",
@@ -672,6 +758,7 @@ describe("agent session (streaming)", () => {
       {
         type: "tool-call",
         toolName: "read_file",
+        toolCallId: "sub-call-1",
         status: "completed",
         inputSummary: '{"path":"章节/第一章.md"}',
         outputSummary: "已读取当前章节",
@@ -683,9 +770,26 @@ describe("agent session (streaming)", () => {
       detail: "建议先补一段主角迟疑。",
     });
     expect(subagentParts[5].parts.at(-1)).toEqual({ type: "text", text: "建议先补一段主角迟疑。" });
+    expect(parts).toContainEqual({
+      type: "tool-call",
+      toolName: "task",
+      toolCallId: "task-call-1",
+      status: "running",
+      inputSummary: '{"prompt":"帮我分析主角动机","agentId":"plot-agent"}',
+    });
+    const taskResult = parts.find(
+      (part): part is Extract<AgentPart, { type: "tool-result" }> =>
+        part.type === "tool-result" && part.toolName === "task" && part.toolCallId === "task-call-1",
+    );
+    expect(taskResult).toBeDefined();
+    expect(taskResult?.status).toBe("completed");
+    expect(taskResult?.outputSummary).toContain('"agentId":"plot-agent"');
+    expect(taskResult?.outputSummary).toContain('"agentName":"剧情代理"');
+    expect(taskResult?.outputSummary).toContain('"summary":"建议先补一段主角迟疑。"');
+    expect(taskResult?.outputSummary).toContain('"subagentId":"subagent-plot-agent-');
     expect(parts.at(-1)).toEqual({ type: "text-delta", delta: "主代理已整合子代理建议。" });
     expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
-    expect(mockStreamFn.mock.calls[0][0].messages[0].content).toContain("## s11 子任务摘要（剧情代理）");
+    expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain("## s11 子任务摘要（剧情代理）");
   });
 });

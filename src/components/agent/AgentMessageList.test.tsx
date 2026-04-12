@@ -246,6 +246,7 @@ describe("BookAgentPanel", () => {
               {
                 type: "tool-call",
                 toolName: "read_workspace_tree",
+                toolCallId: "call-msg-1",
                 status: "running",
                 inputSummary: "{}",
               },
@@ -275,6 +276,7 @@ describe("BookAgentPanel", () => {
               {
                 type: "tool-call",
                 toolName: "read_workspace_tree",
+                toolCallId: "call-msg-1",
                 status: "completed",
                 inputSummary: "{}",
                 outputSummary: '{"name":"北境余烬","children":[{"name":"章节"}]}',
@@ -333,7 +335,7 @@ describe("BookAgentPanel", () => {
             author: "主代理",
             parts: [
               { type: "text", text: "正在处理..." },
-              { type: "tool-call", toolName: "read_file", status: "completed", inputSummary: "读取章节" },
+              { type: "tool-call", toolName: "read_file", toolCallId: "call-msg-2", status: "completed", inputSummary: "读取章节" },
             ],
           },
         ],
@@ -389,6 +391,7 @@ describe("BookAgentPanel", () => {
               {
                 type: "tool-call",
                 toolName: "read_file",
+                toolCallId: "call-msg-3",
                 status: "running",
                 inputSummary: '{"path":"章节/第一章.md"}',
               },
@@ -465,6 +468,7 @@ describe("BookAgentPanel", () => {
                   {
                     type: "tool-call",
                     toolName: "read_file",
+                    toolCallId: "call-msg-4",
                     status: "completed",
                     inputSummary: '{"path":"章节/第一章.md"}',
                     outputSummary: "已读取当前章节，发现主角在入城段落之后直接进入冲突，缺少迟疑和动机铺垫。",

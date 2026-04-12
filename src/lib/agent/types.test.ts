@@ -7,6 +7,7 @@ describe("agent domain", () => {
     const toolPart: AgentPart = {
       type: "tool-call",
       toolName: "read_file",
+      toolCallId: "call-1",
       status: "completed",
       inputSummary: "读取当前活动章节",
     };

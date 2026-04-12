@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Cable, KeyRound, Link2, LoaderCircle, PlugZap } from "lucide-react";
 import { Toast, type ToastTone } from "../common/Toast";
+import { formatProviderError } from "../../lib/agent/errorFormatting";
 import { testAgentProviderConnection } from "../../lib/agent/modelGateway";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 
@@ -34,14 +35,17 @@ export function ModelProviderCard({ config, onChange, onReset }: ModelProviderCa
     setToast(null);
 
     try {
-      const result = await testAgentProviderConnection(config);
+      await testAgentProviderConnection(config);
       setToast({
         title: "测试成功",
-        description: `模型已正确返回校验结果：${result.expectedReply}`,
+        description: "模型连接正常。",
         tone: "success",
       });
     } catch (error) {
-      const description = error instanceof Error && error.message.trim() ? error.message : "模型连接测试失败。";
+      const description = formatProviderError(error, "模型连接测试失败。", {
+        baseURL: config.baseURL,
+        model: config.model,
+      });
       setToast({
         title: "测试失败",
         description,

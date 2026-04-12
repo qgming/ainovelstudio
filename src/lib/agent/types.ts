@@ -7,8 +7,21 @@ export type AgentPart =
   | { type: "text"; text: string }
   | { type: "text-delta"; delta: string }
   | { type: "reasoning"; summary: string; detail: string; collapsed?: boolean }
-  | { type: "tool-call"; toolName: string; status: AgentRunStatus; inputSummary: string; outputSummary?: string }
-  | { type: "tool-result"; toolName: string; status: AgentRunStatus; outputSummary: string }
+  | {
+      type: "tool-call";
+      toolName: string;
+      toolCallId: string;
+      status: AgentRunStatus;
+      inputSummary: string;
+      outputSummary?: string;
+    }
+  | {
+      type: "tool-result";
+      toolName: string;
+      toolCallId: string;
+      status: AgentRunStatus;
+      outputSummary: string;
+    }
   | {
       type: "subagent";
       id: string;
