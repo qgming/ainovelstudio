@@ -77,6 +77,7 @@ export function AgentComposer({
 }: AgentComposerProps) {
   const isRunning = runStatus === "running";
   const showPlan = planningState.items.length > 0;
+  const hasStalePlan = planningState.roundsSinceUpdate >= 3;
   const completedCount = countCompletedItems(planningState.items);
   const [isPlanExpanded, setIsPlanExpanded] = useState(true);
   const [resourceAnchorRect, setResourceAnchorRect] =
@@ -199,7 +200,7 @@ export function AgentComposer({
 
       {showPlan ? (
         <div className="border-b border-[#e7edf5] px-3 py-1 dark:border-[#232833]">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex min-h-8 items-center justify-between gap-3">
             <div className="min-w-0 text-[13px] font-medium text-[#526074] dark:text-[#98a4b6]">
               共 {planningState.items.length} 个任务，已经完成 {completedCount}{" "}
               个
@@ -219,8 +220,8 @@ export function AgentComposer({
             </button>
           </div>
           {isPlanExpanded ? (
-            <div className="mt-3 max-h-[168px] overflow-y-auto pr-1 [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin] dark:[scrollbar-color:#2f3540_transparent]">
-              <div className="border-t border-[#e7edf5] pt-3 dark:border-[#232833]">
+            <div className="max-h-[168px] overflow-y-auto pt-2 pr-1 [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin] dark:[scrollbar-color:#2f3540_transparent]">
+              <div className="border-t border-[#e7edf5] pt-2 dark:border-[#232833]">
                 <div className="space-y-3">
                   {planningState.items.map((item, index) => (
                     <div
@@ -247,7 +248,7 @@ export function AgentComposer({
                               : "text-[#1f2937] dark:text-[#eef2f7]"
                           }`}
                         >
-                          {item.content}
+                          {index + 1}. {item.content}
                         </div>
                         {item.status === "in_progress" && item.activeForm ? (
                           <div className="mt-0.5 text-xs leading-5 text-[#7b8798] dark:text-[#657184]">
@@ -258,6 +259,12 @@ export function AgentComposer({
                     </div>
                   ))}
                 </div>
+                {hasStalePlan ? (
+                  <div className="mt-3 rounded-[10px] border border-[#e7edf5] bg-[#f3f6fb] px-3 py-2 text-xs leading-5 text-[#526074] dark:border-[#232833] dark:bg-[#161b22] dark:text-[#98a4b6]">
+                    <span className="font-medium">{planningState.roundsSinceUpdate} 轮未更新</span>
+                    ，连续几轮没有刷新计划，建议让 agent 同步一下最新进展。
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}

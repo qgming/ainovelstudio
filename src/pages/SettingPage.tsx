@@ -9,7 +9,7 @@ import appIcon from "../assets/icon.png";
 import packageJson from "../../package.json";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../lib/agent/promptContext";
 import { BUILTIN_TOOLS } from "../lib/agent/toolDefs";
-import { useAgentSettingsStore } from "../stores/agentSettingsStore";
+import { getDefaultAgentProviderConfig, useAgentSettingsStore } from "../stores/agentSettingsStore";
 import { useThemeStore } from "../stores/themeStore";
 
 type SettingSectionKey = "agents" | "usage" | "basic" | "models" | "tools" | "about";
@@ -153,17 +153,24 @@ export function SettingPage() {
   const defaultAgentMarkdown = useAgentSettingsStore((state) => state.defaultAgentMarkdown);
   const enabledTools = useAgentSettingsStore((state) => state.enabledTools);
   const errorMessage = useAgentSettingsStore((state) => state.errorMessage);
+  const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
+  const saveConfig = useAgentSettingsStore((state) => state.saveConfig);
   const status = useAgentSettingsStore((state) => state.status);
-  const resetConfig = useAgentSettingsStore((state) => state.resetConfig);
   const refreshDefaultAgentMarkdown = useAgentSettingsStore((state) => state.refreshDefaultAgentMarkdown);
   const toggleTool = useAgentSettingsStore((state) => state.toggleTool);
-  const updateConfig = useAgentSettingsStore((state) => state.updateConfig);
   const updateDefaultAgentMarkdown = useAgentSettingsStore((state) => state.updateDefaultAgentMarkdown);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const [activeSection, setActiveSection] = useState<SettingSectionKey>("agents");
   const [agentsDraft, setAgentsDraft] = useState(defaultAgentMarkdown);
   const [agentsDirty, setAgentsDirty] = useState(false);
+  const [modelDraft, setModelDraft] = useState(config);
+  const [modelDirty, setModelDirty] = useState(false);
+  const [isSavingModel, setIsSavingModel] = useState(false);
+
+  useEffect(() => {
+    void initializeAgentSettings();
+  }, [initializeAgentSettings]);
 
   useEffect(() => {
     void refreshDefaultAgentMarkdown();
@@ -173,6 +180,11 @@ export function SettingPage() {
     setAgentsDraft(defaultAgentMarkdown);
     setAgentsDirty(false);
   }, [defaultAgentMarkdown]);
+
+  useEffect(() => {
+    setModelDraft(config);
+    setModelDirty(false);
+  }, [config]);
 
   const enabledCount = useMemo(() => Object.values(enabledTools).filter(Boolean).length, [enabledTools]);
 
@@ -189,6 +201,38 @@ export function SettingPage() {
       setAgentsDirty(false);
     } catch {
       // 错误状态由 store 统一维护，这里保留当前草稿以便继续编辑。
+    }
+  }
+
+  function handleModelDraftChange(patch: Partial<typeof modelDraft>) {
+    setModelDraft((current) => {
+      const next = { ...current, ...patch };
+      setModelDirty(
+        next.apiKey !== config.apiKey ||
+          next.baseURL !== config.baseURL ||
+          next.model !== config.model,
+      );
+      return next;
+    });
+  }
+
+  function handleResetModel() {
+    const next = getDefaultAgentProviderConfig();
+    setModelDraft(next);
+    setModelDirty(
+      next.apiKey !== config.apiKey ||
+        next.baseURL !== config.baseURL ||
+        next.model !== config.model,
+    );
+  }
+
+  async function handleSaveModel() {
+    setIsSavingModel(true);
+    try {
+      await saveConfig(modelDraft);
+      setModelDirty(false);
+    } finally {
+      setIsSavingModel(false);
     }
   }
 
@@ -215,7 +259,16 @@ export function SettingPage() {
     }
 
     if (activeSection === "models") {
-      return <ModelProviderCard config={config} onChange={updateConfig} onReset={resetConfig} />;
+      return (
+        <ModelProviderCard
+          config={modelDraft}
+          isDirty={modelDirty}
+          isSaving={isSavingModel}
+          onChange={handleModelDraftChange}
+          onReset={handleResetModel}
+          onSave={handleSaveModel}
+        />
+      );
     }
 
     if (activeSection === "tools") {

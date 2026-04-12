@@ -27,7 +27,7 @@ function ToolbarButton({ ariaLabel, children, disabled = false, onClick }: Toolb
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-9 w-9 items-center justify-center rounded-[10px] text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
+      className="flex h-8 w-8 items-center justify-center rounded-[8px] p-0 text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
     >
       {children}
     </button>
@@ -39,7 +39,7 @@ function AgentHeaderButton() {
     <button
       type="button"
       aria-label="Agent 面板"
-      className="flex h-9 min-w-0 items-center gap-1 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
+      className="flex h-8 min-w-0 items-center gap-0.5 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
     >
       <ChevronRight className="h-4 w-4 shrink-0 text-black dark:text-white" />
       <div className="min-w-0">
@@ -132,9 +132,9 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       style={{ width }}
       className="flex h-full shrink-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]"
     >
-      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-2 py-1.5 dark:border-[#20242b]">
+      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-2 py-1 dark:border-[#20242b]">
         <AgentHeaderButton />
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5">
           <ToolbarButton ariaLabel={isContextOpen ? "收起工作区上下文" : "打开工作区上下文"} onClick={handleContextToggle}>
             <Blocks className="h-4 w-4" />
           </ToolbarButton>

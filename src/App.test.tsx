@@ -24,6 +24,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 import App from "./App";
 import { BUILTIN_TOOLS } from "./lib/agent/toolDefs";
 import { useAgentStore } from "./stores/agentStore";
+import { useAgentSettingsStore } from "./stores/agentSettingsStore";
 import { useBookWorkspaceStore } from "./stores/bookWorkspaceStore";
 import { useThemeStore } from "./stores/themeStore";
 
@@ -70,6 +71,8 @@ describe("App shell", () => {
     useBookWorkspaceStore.getState().resetState();
     useAgentStore.getState().reset();
     mockInvoke.mockReset();
+    mockInvoke.mockResolvedValue(undefined);
+    useAgentSettingsStore.getState().reset();
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "initialize_chat_storage") {
         return chatBootstrap;
@@ -181,6 +184,50 @@ describe("App shell", () => {
     expect(screen.getByText("读取目录树")).toBeInTheDocument();
   });
 
+  it("设置页会主动初始化模型配置并回填已保存的 key、url 和 model", async () => {
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "initialize_chat_storage") {
+        return chatBootstrap;
+      }
+      if (command === "initialize_default_agent_config") {
+        return {
+          initializedFromBuiltin: true,
+          markdown: "# 文件主代理",
+          path: "C:/Program Files/ainovelstudio/resources/config/AGENTS.md",
+        };
+      }
+      if (command === "read_default_agent_config") {
+        return {
+          initializedFromBuiltin: true,
+          markdown: "# 文件主代理",
+          path: "C:/Program Files/ainovelstudio/resources/config/AGENTS.md",
+        };
+      }
+      if (command === "read_agent_settings") {
+        return {
+          config: {
+            apiKey: "saved-key",
+            baseURL: "https://example.com/v1",
+            model: "saved-model",
+          },
+          enabledTools: {},
+        };
+      }
+      return undefined;
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("link", { name: "设置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "模型设置" }));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("https://example.com/v1")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("saved-model")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("saved-key")).toBeInTheDocument();
+    });
+  });
+
   it("设置页关于我们展示神笔写作品牌信息", async () => {
     render(<App />);
 
@@ -256,3 +303,5 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "第001章_待命名.md" })).toBeInTheDocument();
   });
 });
+
+

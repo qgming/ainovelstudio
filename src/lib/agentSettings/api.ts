@@ -3,9 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export type AgentProviderConfigDocument = {
   apiKey: string;
   baseURL: string;
-  maxOutputTokens: number;
   model: string;
-  temperature: number;
 };
 
 export type AgentSettingsDocument = {

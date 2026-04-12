@@ -27,7 +27,6 @@ function mockCommand(command: string, value: unknown) {
 
 describe("agent settings store", () => {
   beforeEach(() => {
-    localStorage.clear();
     mockInvoke.mockReset();
     mockInvoke.mockResolvedValue(undefined);
     useAgentSettingsStore.getState().reset();
@@ -46,9 +45,7 @@ describe("agent settings store", () => {
       config: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "gpt-4o-mini",
-        temperature: 0.7,
       },
       enabledTools: {},
     });
@@ -57,8 +54,6 @@ describe("agent settings store", () => {
       baseURL: "https://example.com/v1",
       apiKey: "test-key",
       model: "gpt-4o-mini",
-      temperature: 0.7,
-      maxOutputTokens: 4096,
     });
     await Promise.resolve();
 
@@ -67,8 +62,6 @@ describe("agent settings store", () => {
         config: expect.objectContaining({
           baseURL: "https://example.com/v1",
           model: "gpt-4o-mini",
-          temperature: 0.7,
-          maxOutputTokens: 4096,
         }),
       }),
     });
@@ -78,10 +71,8 @@ describe("agent settings store", () => {
     mockCommand("write_agent_settings", {
       config: {
         apiKey: "",
-        baseURL: "https://api.openai.com/v1",
-        maxOutputTokens: 4096,
+        baseURL: "",
         model: "",
-        temperature: 0.7,
       },
       enabledTools: { read_file: false },
     });
@@ -100,15 +91,7 @@ describe("agent settings store", () => {
     });
   });
 
-  it("initialize 从 SQLite 读取已有设置，并忽略旧 localStorage", async () => {
-    localStorage.setItem(
-      "ainovelstudio-agent-settings",
-      JSON.stringify({
-        config: { model: "legacy-model" },
-        enabledTools: { write_file: false },
-      }),
-    );
-
+  it("initialize 从 SQLite 读取已有设置", async () => {
     mockInvoke.mockImplementation((command: string) => {
       if (command === "initialize_default_agent_config") {
         return Promise.resolve({
@@ -123,9 +106,7 @@ describe("agent settings store", () => {
           config: {
             apiKey: "sqlite-key",
             baseURL: "https://example.com/v1",
-            maxOutputTokens: 8192,
             model: "sqlite-model",
-            temperature: 0.3,
           },
           enabledTools: { read_file: false },
         });
@@ -144,28 +125,11 @@ describe("agent settings store", () => {
     expect(state.config.model).toBe("sqlite-model");
     expect(state.enabledTools.read_file).toBe(false);
     expect(state.enabledTools.write_file).toBe(true);
-    expect(localStorage.getItem("ainovelstudio-agent-settings")).not.toBeNull();
     expect(mockInvoke).not.toHaveBeenCalledWith("write_agent_settings", expect.anything());
   });
 
-  it("initialize 会把旧 localStorage 迁移到 SQLite 并清理旧 key", async () => {
-    localStorage.setItem(
-      "ainovelstudio-agent-settings",
-      JSON.stringify({
-        config: {
-          apiKey: "legacy-key",
-          baseURL: "https://legacy.example/v1",
-          model: "legacy-model",
-          temperature: 0.2,
-          maxOutputTokens: 2048,
-        },
-        enabledTools: {
-          rename_path: false,
-        },
-      }),
-    );
-
-    mockInvoke.mockImplementation((command: string, payload?: unknown) => {
+  it("initialize 遇到缺少字段的旧 SQLite 设置时，仍会按默认值补齐并保留已有 key/url/model", async () => {
+    mockInvoke.mockImplementation((command: string) => {
       if (command === "initialize_default_agent_config") {
         return Promise.resolve({
           initializedFromBuiltin: true,
@@ -175,11 +139,13 @@ describe("agent settings store", () => {
       }
 
       if (command === "read_agent_settings") {
-        return Promise.resolve(null);
-      }
-
-      if (command === "write_agent_settings") {
-        return Promise.resolve((payload as { settings: unknown }).settings);
+        return Promise.resolve({
+          config: {
+            apiKey: "sqlite-key",
+            baseURL: "https://example.com/v1",
+            model: "sqlite-model",
+          },
+        });
       }
 
       if (command === "clear_agent_settings") {
@@ -192,19 +158,39 @@ describe("agent settings store", () => {
     await useAgentSettingsStore.getState().initialize();
 
     const state = useAgentSettingsStore.getState();
-    expect(state.config.model).toBe("legacy-model");
-    expect(state.enabledTools.rename).toBe(false);
-    expect(localStorage.getItem("ainovelstudio-agent-settings")).toBeNull();
-    expect(mockInvoke).toHaveBeenCalledWith("write_agent_settings", {
-      settings: expect.objectContaining({
-        config: expect.objectContaining({
-          apiKey: "legacy-key",
-          model: "legacy-model",
-        }),
-        enabledTools: expect.objectContaining({
-          rename: false,
-        }),
-      }),
+    expect(state.config.apiKey).toBe("sqlite-key");
+    expect(state.config.baseURL).toBe("https://example.com/v1");
+    expect(state.config.model).toBe("sqlite-model");
+  });
+
+  it("initialize 在 SQLite 没有设置时保持默认值", async () => {
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "initialize_default_agent_config") {
+        return Promise.resolve({
+          initializedFromBuiltin: true,
+          markdown: "# 文件主代理",
+          path: "C:/Program Files/ainovelstudio/resources/config/AGENTS.md",
+        });
+      }
+
+      if (command === "read_agent_settings") {
+        return Promise.resolve(null);
+      }
+
+      if (command === "clear_agent_settings") {
+        return Promise.resolve();
+      }
+
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    await useAgentSettingsStore.getState().initialize();
+
+    const state = useAgentSettingsStore.getState();
+    expect(state.config).toEqual({
+      apiKey: "",
+      baseURL: "",
+      model: "",
     });
   });
 
@@ -283,10 +269,8 @@ describe("agent settings store", () => {
     mockCommand("write_agent_settings", {
       config: {
         apiKey: "",
-        baseURL: "https://api.openai.com/v1",
-        maxOutputTokens: 4096,
+        baseURL: "",
         model: "",
-        temperature: 0.7,
       },
       enabledTools: {},
     });
@@ -301,8 +285,11 @@ describe("agent settings store", () => {
     expect(state.defaultAgentMarkdown).toBe("# 文件主代理");
   });
 
-  it("reset 恢复默认值并清理旧 localStorage", () => {
-    localStorage.setItem("ainovelstudio-agent-settings", JSON.stringify({ config: { model: "legacy-model" } }));
+  it("默认模型配置不注入 Base URL", () => {
+    expect(useAgentSettingsStore.getState().config.baseURL).toBe("");
+  });
+
+  it("reset 恢复默认值", () => {
     mockCommand("clear_agent_settings", undefined);
 
     useAgentSettingsStore.getState().toggleTool("write_file");
@@ -315,6 +302,7 @@ describe("agent settings store", () => {
     expect(state.enabledTools.write_file).toBe(true);
     expect(state.config.model).toBe("");
     expect(state.defaultAgentMarkdown).toBe("");
-    expect(localStorage.getItem("ainovelstudio-agent-settings")).toBeNull();
   });
 });
+
+

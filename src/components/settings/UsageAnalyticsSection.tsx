@@ -31,8 +31,19 @@ function parseEpoch(value: string) {
   return Number(value) * 1000;
 }
 
+function padDatePart(value: number) {
+  return value.toString().padStart(2, "0");
+}
+
+export function toLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = padDatePart(date.getMonth() + 1);
+  const day = padDatePart(date.getDate());
+  return `${year}-${month}-${day}`;
+}
+
 function toDateKey(value: string) {
-  return new Date(parseEpoch(value)).toISOString().slice(0, 10);
+  return toLocalDateKey(new Date(parseEpoch(value)));
 }
 
 function formatDateTime(value: string) {
@@ -53,7 +64,19 @@ function resolveRangeStart(range: TimeRangeKey) {
   return now - (dayCount - 1) * DAY_MS;
 }
 
-function buildHeatmapDays(logs: UsageLogEntry[]) {
+export function resolveHeatmapLevel(requestCount: number, maxCount: number): HeatmapDay["level"] {
+  if (requestCount <= 0 || maxCount <= 0) {
+    return 0;
+  }
+
+  if (maxCount === 1) {
+    return 1;
+  }
+
+  return Math.min(4, Math.max(1, Math.ceil((requestCount / maxCount) * 4))) as HeatmapDay["level"];
+}
+
+export function buildHeatmapDays(logs: UsageLogEntry[]) {
   const byDay = new Map<string, { requestCount: number; tokenTotal: number }>();
   for (const log of logs) {
     const dateKey = toDateKey(log.recordedAt || log.createdAt);
@@ -72,13 +95,12 @@ function buildHeatmapDays(logs: UsageLogEntry[]) {
 
   for (let index = 0; index < HEATMAP_DAY_COUNT; index += 1) {
     const current = new Date(start.getTime() + index * DAY_MS);
-    const dateKey = current.toISOString().slice(0, 10);
+    const dateKey = toLocalDateKey(current);
     const dayEntry = byDay.get(dateKey) ?? { requestCount: 0, tokenTotal: 0 };
-    const normalized = maxCount <= 0 ? 0 : Math.ceil((dayEntry.requestCount / maxCount) * 4);
     days.push({
       dateKey,
       dayLabel: current.toLocaleDateString("zh-CN", { day: "2-digit", month: "2-digit" }),
-      level: Math.min(4, normalized) as HeatmapDay["level"],
+      level: resolveHeatmapLevel(dayEntry.requestCount, maxCount),
       requestCount: dayEntry.requestCount,
       tokenTotal: dayEntry.tokenTotal,
     });

@@ -6,8 +6,6 @@ import type { AgentUsage } from "./types";
 
 const CONNECTION_TEST_SYSTEM = "你是连接测试助手。请用一句自然语言简短回复。";
 const CONNECTION_TEST_PROMPT = "请回复一句简短的话，确认你已收到这条测试消息。";
-const CONNECTION_TEST_MAX_TOKENS = 32;
-
 export type AgentTextGenerationInput = {
   prompt: string;
   providerConfig: AgentProviderConfig;
@@ -26,7 +24,6 @@ export async function generateAgentText({ prompt, providerConfig, system }: Agen
     model: provider(providerConfig.model),
     prompt,
     system,
-    temperature: providerConfig.temperature,
   });
 
   return text;
@@ -65,6 +62,18 @@ function extractProbeReply(result: {
   return contentReply;
 }
 
+async function consumeProbeStream(fullStream: ReturnType<typeof streamText>["fullStream"]) {
+  let textReply = "";
+
+  for await (const part of fullStream) {
+    if (part.type === "text-delta") {
+      textReply += part.text;
+    }
+  }
+
+  return normalizeProbeReply(textReply);
+}
+
 function assertProviderConfig(providerConfig: AgentProviderConfig) {
   if (!providerConfig.baseURL.trim()) {
     throw new Error("请先填写 Base URL。");
@@ -81,29 +90,17 @@ function assertProviderConfig(providerConfig: AgentProviderConfig) {
 
 export async function testAgentProviderConnection(providerConfig: AgentProviderConfig) {
   assertProviderConfig(providerConfig);
-
-  const provider = createOpenAICompatible({
-    name: "ainovelstudio-provider",
-    apiKey: providerConfig.apiKey,
-    baseURL: providerConfig.baseURL,
-  });
-
-  const result = await generateText({
-    maxOutputTokens: CONNECTION_TEST_MAX_TOKENS,
-    model: provider(providerConfig.model),
-    prompt: CONNECTION_TEST_PROMPT,
+  const result = streamAgentText({
+    messages: [{ role: "user", content: CONNECTION_TEST_PROMPT }],
+    providerConfig,
     system: CONNECTION_TEST_SYSTEM,
-    temperature: 0,
   });
 
-  const normalizedReply = extractProbeReply(result);
-  if (!normalizedReply) {
-    throw new Error("模型未返回有效内容。");
-  }
+  const reply = await consumeProbeStream(result.fullStream);
 
   return {
     hasContent: true,
-    reply: normalizedReply,
+    reply: reply || "连接成功",
   };
 }
 
@@ -143,7 +140,6 @@ export function streamAgentText({
     model: provider(providerConfig.model),
     messages,
     system,
-    temperature: providerConfig.temperature,
     tools,
     stopWhen: isLoopFinished(),
   });

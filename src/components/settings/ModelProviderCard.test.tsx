@@ -21,19 +21,21 @@ describe("ModelProviderCard", () => {
       <ModelProviderCard
         config={{
           apiKey: "sk-test",
-          baseURL: "https://api.openai.com/v1",
-          maxOutputTokens: 4096,
+          baseURL: "",
           model: "gpt-4.1",
-          temperature: 0.7,
         }}
+        isDirty={false}
         onChange={() => undefined}
         onReset={() => undefined}
+        onSave={() => undefined}
       />,
     );
 
     expect(screen.getByText("Base URL")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("https://example.com/v1")).toBeInTheDocument();
     expect(screen.getByText("API Key")).toBeInTheDocument();
     expect(screen.getByText("Model")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
     expect(screen.queryByText("Temperature")).not.toBeInTheDocument();
     expect(screen.queryByText("Max Tokens")).not.toBeInTheDocument();
   });
@@ -44,12 +46,12 @@ describe("ModelProviderCard", () => {
         config={{
           apiKey: "",
           baseURL: "https://example.com/v1",
-          maxOutputTokens: 4096,
           model: "",
-          temperature: 0.7,
         }}
+        isDirty={false}
         onChange={() => undefined}
         onReset={() => undefined}
+        onSave={() => undefined}
       />,
     );
 
@@ -67,12 +69,12 @@ describe("ModelProviderCard", () => {
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
-          maxOutputTokens: 4096,
           model: "gpt-4.1",
-          temperature: 0.7,
         }}
+        isDirty={true}
         onChange={() => undefined}
         onReset={() => undefined}
+        onSave={() => undefined}
       />,
     );
 
@@ -81,9 +83,7 @@ describe("ModelProviderCard", () => {
     expect(mockTestAgentProviderConnection).toHaveBeenCalledWith({
       apiKey: "sk-test",
       baseURL: "https://example.com/v1",
-      maxOutputTokens: 4096,
       model: "gpt-4.1",
-      temperature: 0.7,
     });
     expect(await screen.findByRole("status")).toHaveTextContent("测试成功");
     expect(screen.getByText(/模型连接正常。/)).toBeInTheDocument();
@@ -97,17 +97,64 @@ describe("ModelProviderCard", () => {
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
-          maxOutputTokens: 4096,
           model: "gpt-4.1",
-          temperature: 0.7,
         }}
+        isDirty={true}
         onChange={() => undefined}
         onReset={() => undefined}
+        onSave={() => undefined}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "测试链接" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("测试失败：模型未返回有效内容。");
+  });
+
+  it("点击保存按钮时触发保存回调", () => {
+    const handleSave = vi.fn();
+
+    render(
+      <ModelProviderCard
+        config={{
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+        }}
+        isDirty={true}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={handleSave}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(handleSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("支持切换 API Key 明文显示", () => {
+    render(
+      <ModelProviderCard
+        config={{
+          apiKey: "sk-secret",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+        }}
+        isDirty={false}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    const input = screen.getByDisplayValue("sk-secret");
+    expect(input).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "显示 API Key" }));
+    expect(input).toHaveAttribute("type", "text");
+
+    fireEvent.click(screen.getByRole("button", { name: "隐藏 API Key" }));
+    expect(input).toHaveAttribute("type", "password");
   });
 });

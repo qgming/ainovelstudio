@@ -77,17 +77,20 @@ pub struct TogglePreferences {
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentProviderConfig {
+    #[serde(default)]
     api_key: String,
+    #[serde(default, rename = "baseURL")]
     base_url: String,
-    max_output_tokens: u32,
+    #[serde(default)]
     model: String,
-    temperature: f64,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSettingsDocument {
+    #[serde(default)]
     config: AgentProviderConfig,
+    #[serde(default)]
     enabled_tools: std::collections::HashMap<String, bool>,
 }
 
@@ -592,4 +595,3 @@ pub fn delete_chat_message(
         .map_err(error_to_string)?;
     apply_patch(&connection, &sessionId, sessionPatch)
 }
-

@@ -7,15 +7,12 @@ import {
 import { clearAgentSettings, readAgentSettings, writeAgentSettings } from "../lib/agentSettings/api";
 import { getDefaultEnabledTools } from "../lib/agent/toolDefs";
 
-const STORAGE_KEY = "ainovelstudio-agent-settings";
 let initializePromise: Promise<void> | null = null;
 
 export type AgentProviderConfig = {
   apiKey: string;
   baseURL: string;
-  maxOutputTokens: number;
   model: string;
-  temperature: number;
 };
 
 type AgentSettingsState = {
@@ -32,6 +29,7 @@ type AgentSettingsActions = {
   refreshDefaultAgentMarkdown: () => Promise<void>;
   reset: () => void;
   resetConfig: () => void;
+  saveConfig: (config: AgentProviderConfig) => Promise<void>;
   toggleTool: (toolId: string) => void;
   updateConfig: (nextConfig: Partial<AgentProviderConfig>) => void;
   updateDefaultAgentMarkdown: (content: string) => Promise<void>;
@@ -39,49 +37,16 @@ type AgentSettingsActions = {
 
 export type AgentSettingsStore = AgentSettingsState & AgentSettingsActions;
 
-type PersistedState = {
-  config?: Partial<AgentProviderConfig>;
-  enabledTools?: Record<string, boolean>;
-};
-
-function normalizeEnabledTools(enabledTools?: Record<string, boolean>) {
-  const normalized = { ...(enabledTools ?? {}) };
-  if ("rename_path" in normalized && !("rename" in normalized)) {
-    normalized.rename = Boolean(normalized.rename_path);
-  }
-  return normalized;
-}
-
-function normalizePersistedState(parsed?: PersistedState | null) {
-  const defaults = getDefaultState();
-  return {
-    config: { ...defaults.config, ...(parsed?.config ?? parsed ?? {}) },
-    enabledTools: { ...defaults.enabledTools, ...normalizeEnabledTools(parsed?.enabledTools) },
-  };
-}
-
-async function migrateLegacyLocalStorage() {
-  const parsed = readPersistedState();
-  if (!parsed.config && !parsed.enabledTools) {
-    return null;
-  }
-
-  const normalized = normalizePersistedState(parsed);
-  await writeAgentSettings(normalized);
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(STORAGE_KEY);
-  }
-  return normalized;
-}
-
 function getDefaultConfig(): AgentProviderConfig {
   return {
     apiKey: "",
-    baseURL: "https://api.openai.com/v1",
-    maxOutputTokens: 4096,
+    baseURL: "",
     model: "",
-    temperature: 0.7,
   };
+}
+
+export function getDefaultAgentProviderConfig(): AgentProviderConfig {
+  return getDefaultConfig();
 }
 
 function getDefaultState(): AgentSettingsState {
@@ -95,35 +60,21 @@ function getDefaultState(): AgentSettingsState {
   };
 }
 
-function readPersistedState(): PersistedState {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-    return JSON.parse(raw) as PersistedState;
-  } catch {
-    return {};
-  }
-}
-
 function readState(): AgentSettingsState {
   return getDefaultState();
 }
 
 async function loadPersistedAgentSettings() {
   const persisted = await readAgentSettings();
-  if (persisted) {
-    return normalizePersistedState({
-      config: persisted.config,
-      enabledTools: persisted.enabledTools,
-    });
+  if (!persisted) {
+    return null;
   }
-  return migrateLegacyLocalStorage();
+
+  const defaults = getDefaultState();
+  return {
+    config: { ...defaults.config, ...persisted.config },
+    enabledTools: { ...defaults.enabledTools, ...(persisted.enabledTools ?? {}) },
+  };
 }
 
 async function persistAgentSettings(state: Pick<AgentSettingsState, "config" | "enabledTools">) {
@@ -234,9 +185,6 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
   },
   reset: () => {
     initializePromise = null;
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
     void clearAgentSettings().catch((error) => {
       set((state) => ({
         ...state,
@@ -254,6 +202,15 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
       });
       return { config, errorMessage: null };
     }),
+  saveConfig: async (config) => {
+    const nextState = { config, enabledTools: get().enabledTools };
+    await persistAgentSettings(nextState);
+    set((state) => ({
+      ...state,
+      config,
+      errorMessage: null,
+    }));
+  },
   toggleTool: (toolId) =>
     set((state) => {
       const enabledTools = {

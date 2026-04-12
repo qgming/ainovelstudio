@@ -17,9 +17,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "",
         baseURL: "",
-        maxOutputTokens: 4096,
         model: "",
-        temperature: 0.7,
       },
       workspaceTools: {},
     });
@@ -56,9 +54,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -93,9 +89,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -129,9 +123,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {
         read_file: {
@@ -196,9 +188,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -257,9 +247,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -304,9 +292,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -355,9 +341,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -399,9 +383,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -440,9 +422,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -479,9 +459,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {},
       _streamFn: mockStreamFn,
@@ -526,9 +504,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {
         read_workspace_tree: {
@@ -608,9 +584,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {
         list_skills: {
@@ -676,9 +650,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {
         read_file: {
@@ -751,9 +723,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {
         read_file: {
@@ -829,9 +799,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {
         read_file: {
@@ -925,9 +893,7 @@ describe("agent session (streaming)", () => {
       providerConfig: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
-        maxOutputTokens: 4096,
         model: "test-model",
-        temperature: 0.7,
       },
       workspaceTools: {
         read_file: {
@@ -1000,3 +966,5 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain("## s11 子任务摘要（剧情代理）");
   });
 });
+
+
