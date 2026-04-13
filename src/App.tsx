@@ -43,8 +43,11 @@ function AppShell() {
       }
       isClosingRef.current = true;
       event.preventDefault();
-      await hardStopCurrentRun("app_close");
-      await appWindow.close();
+      try {
+        await hardStopCurrentRun("app_close");
+      } finally {
+        await appWindow.destroy();
+      }
     }).then((dispose) => {
       unlisten = dispose;
     });

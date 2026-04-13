@@ -5,6 +5,7 @@ const { mockInvoke, mockWindow } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
   mockWindow: {
     close: vi.fn(),
+    destroy: vi.fn(),
     isMaximized: vi.fn().mockResolvedValue(false),
     maximize: vi.fn(),
     minimize: vi.fn(),
@@ -81,6 +82,7 @@ describe("App shell", () => {
       return undefined;
     });
     mockWindow.close.mockReset();
+    mockWindow.destroy.mockReset();
     mockWindow.isMaximized.mockReset();
     mockWindow.isMaximized.mockResolvedValue(false);
     mockWindow.maximize.mockReset();
@@ -164,7 +166,7 @@ describe("App shell", () => {
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(abort).toHaveBeenCalledTimes(1);
     expect(mockInvoke).toHaveBeenCalledWith("cancel_tool_requests", { requestIds: ["tool-read-1", "tool-search-2"] });
-    expect(mockWindow.close).toHaveBeenCalledTimes(1);
+    expect(mockWindow.destroy).toHaveBeenCalledTimes(1);
   });
 
   it("可以切换到代理页", async () => {
@@ -350,5 +352,4 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "第001章_待命名.md" })).toBeInTheDocument();
   });
 });
-
 
