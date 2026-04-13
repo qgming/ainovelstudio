@@ -759,6 +759,65 @@ describe("agent session (streaming)", () => {
     ]);
   });
 
+  it("move_path 工具会暴露给模型并返回迁移结果", async () => {
+    async function* mockFullStream() {
+      yield { type: "text-delta" as const, text: "收到" };
+    }
+
+    const executeMock = vi.fn().mockResolvedValue({
+      ok: true,
+      summary: "已迁移到 归档/第一卷/第001章.md",
+    });
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["move_path"],
+      prompt: "把章节移动到归档目录",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {
+        move_path: {
+          description: "迁移文件或文件夹",
+          execute: executeMock,
+        },
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    expect(mockStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockStreamFn.mock.calls[0][0].system).toContain("move_path");
+    const tool = mockStreamFn.mock.calls[0][0].tools?.move_path as
+      | { execute?: (input: { path: string; targetParentPath: string }, options: unknown) => Promise<unknown> }
+      | undefined;
+    expect(tool).toBeDefined();
+
+    await expect(
+      tool?.execute?.(
+        { path: "草稿/第001章.md", targetParentPath: "归档/第一卷" },
+        {} as never,
+      ),
+    ).resolves.toBe("已迁移到 归档/第一卷/第001章.md");
+
+    expect(executeMock).toHaveBeenCalledWith(
+      { path: "草稿/第001章.md", targetParentPath: "归档/第一卷" },
+      expect.objectContaining({
+        requestId: expect.stringMatching(/^tool-move_path-/),
+      }),
+    );
+  });
+
   it("skills 列表工具把结构化结果返回给模型", async () => {
     const parts: AgentPart[] = [];
 
@@ -1178,5 +1237,4 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain("## s11 子任务摘要（剧情代理）");
   });
 });
-
 

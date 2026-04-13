@@ -436,6 +436,13 @@ fn build_rename_target_name(source_path: &Path, next_name: &str) -> CommandResul
     Ok(format!("{validated}{current_extension}"))
 }
 
+fn build_move_target_path(source_path: &Path, target_parent_path: &Path) -> CommandResult<PathBuf> {
+    let entry_name = source_path
+        .file_name()
+        .ok_or_else(|| "无法解析当前路径名称。".to_string())?;
+    Ok(target_parent_path.join(entry_name))
+}
+
 fn sort_tree_nodes(nodes: &mut [TreeNode]) {
     nodes.sort_by(|left, right| {
         let left_rank = if left.kind == "directory" { 0 } else { 1 };
@@ -1024,6 +1031,61 @@ fn rename_workspace_entry_internal(
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub fn move_workspace_entry(
+    rootPath: String,
+    path: String,
+    targetParentPath: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<String> {
+    move_workspace_entry_internal(
+        &rootPath,
+        &path,
+        &targetParentPath,
+        requestId.as_deref(),
+        &registry,
+    )
+}
+
+fn move_workspace_entry_internal(
+    root_path: &str,
+    path: &str,
+    target_parent_path: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<String> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        let source_path = ensure_existing_path_in_root(&root_path, path)?;
+
+        if source_path == root_path {
+            return Err("不能迁移书籍根目录。".into());
+        }
+
+        let target_parent = ensure_parent_directory_in_root(&root_path, target_parent_path)?;
+        let target_path = build_move_target_path(&source_path, &target_parent)?;
+
+        if source_path == target_path {
+            return Err("目标位置未变化。".into());
+        }
+
+        if source_path.is_dir() && target_parent.starts_with(&source_path) {
+            return Err("不能将文件夹迁移到其自身或子目录中。".into());
+        }
+
+        if target_path.exists() {
+            return Err("目标位置已存在同名文件或文件夹。".into());
+        }
+
+        check_cancellation(registry, request_id)?;
+        fs::rename(&source_path, &target_path).map_err(error_to_string)?;
+        Ok(normalize_path(&target_path))
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 pub fn delete_workspace_entry(
     rootPath: String,
     path: String,
@@ -1216,6 +1278,56 @@ mod tests {
     }
 
     #[test]
+    fn move_workspace_entry_moves_file_to_target_directory() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+        let source_dir = root.join("第一卷");
+        let target_dir = root.join("第二卷");
+        fs::create_dir_all(&source_dir).expect("failed to create source directory");
+        fs::create_dir_all(&target_dir).expect("failed to create target directory");
+        let source_file = source_dir.join("第001章.md");
+        fs::write(&source_file, "章节正文").expect("failed to seed source file");
+        let registry = ToolCancellationRegistry::default();
+
+        let moved_path = move_workspace_entry_internal(
+            &root_str,
+            "第一卷/第001章.md",
+            "第二卷",
+            None,
+            &registry,
+        )
+        .expect("move_workspace_entry should move file to target directory");
+
+        assert!(moved_path.ends_with("/第二卷/第001章.md"));
+        assert!(!source_file.exists());
+        assert!(target_dir.join("第001章.md").exists());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn move_workspace_entry_rejects_moving_directory_into_descendant() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+        let source_dir = root.join("卷一");
+        let nested_dir = source_dir.join("章节");
+        fs::create_dir_all(&nested_dir).expect("failed to create nested directory");
+        let registry = ToolCancellationRegistry::default();
+
+        let error = move_workspace_entry_internal(
+            &root_str,
+            "卷一",
+            "卷一/章节",
+            None,
+            &registry,
+        )
+        .expect_err("move should reject moving a directory into its descendant");
+
+        assert_eq!(error, "不能将文件夹迁移到其自身或子目录中。");
+        assert!(source_dir.exists());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
     fn cancelled_write_text_file_does_not_create_file() {
         let root = create_temp_workspace();
         let root_str = normalize_path(&root);
@@ -1254,6 +1366,34 @@ mod tests {
 
         assert_eq!(error, "Tool execution aborted.");
         assert!(!root.join("新建章节.md").exists());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn cancelled_move_workspace_entry_does_not_move_file() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+        let source_dir = root.join("第一卷");
+        let target_dir = root.join("第二卷");
+        fs::create_dir_all(&source_dir).expect("failed to create source directory");
+        fs::create_dir_all(&target_dir).expect("failed to create target directory");
+        let source_file = source_dir.join("第002章.md");
+        fs::write(&source_file, "保留内容").expect("failed to seed file");
+        let registry = ToolCancellationRegistry::default();
+        registry.cancel("req-move-cancel");
+
+        let error = move_workspace_entry_internal(
+            &root_str,
+            "第一卷/第002章.md",
+            "第二卷",
+            Some("req-move-cancel"),
+            &registry,
+        )
+        .expect_err("cancelled move should abort before moving file");
+
+        assert_eq!(error, "Tool execution aborted.");
+        assert!(source_file.exists());
+        assert!(!target_dir.join("第002章.md").exists());
         fs::remove_dir_all(&root).ok();
     }
 

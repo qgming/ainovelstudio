@@ -2,6 +2,7 @@ import {
   createWorkspaceDirectory,
   createWorkspaceTextFile,
   deleteWorkspaceEntry,
+  moveWorkspaceEntry,
   readWorkspaceTextFile,
   readWorkspaceTextLine,
   readWorkspaceTree,
@@ -180,6 +181,16 @@ export function createWorkspaceToolset({ onWorkspaceMutated, rootPath }: Workspa
         const nextPath = await renameWorkspaceEntry(rootPath, path, nextName, getAbortContext(context));
         await onWorkspaceMutated?.();
         return ok(`已重命名为 ${nextPath}`);
+      },
+    },
+    move_path: {
+      description: "迁移工作区文件夹或文件到指定目录",
+      execute: async (input, context) => {
+        const path = String(input.path ?? "");
+        const targetParentPath = String(input.targetParentPath ?? "");
+        const nextPath = await moveWorkspaceEntry(rootPath, path, targetParentPath, getAbortContext(context));
+        await onWorkspaceMutated?.();
+        return ok(`已迁移到 ${nextPath}`);
       },
     },
     search_workspace_content: {

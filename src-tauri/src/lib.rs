@@ -114,6 +114,7 @@ pub fn run() {
             workspace::create_workspace_directory,
             workspace::create_workspace_text_file,
             workspace::rename_workspace_entry,
+            workspace::move_workspace_entry,
             workspace::delete_workspace_entry,
             skills::pick_skill_archive,
             skills::scan_installed_skills,

@@ -448,6 +448,18 @@ function buildAiSdkTools(
           return result.summary;
         },
       }),
+    move_path: (toolName, tool) =>
+      defineTool({
+        description: "将工作区中的文件夹或文件迁移到另一个已存在的目录。只改位置，不改名称，也不修改文件正文。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
+        inputSchema: z.object({
+          path: z.string().describe("当前的准确路径，必须已经存在于工作区内；可以是文件夹，也可以是文件。优先使用相对工作区根目录的路径。"),
+          targetParentPath: z.string().describe("目标父目录路径，必须已经存在于工作区内。只传目标目录，不要包含文件或文件夹自己的名称。"),
+        }),
+        execute: async (input: { path: string; targetParentPath: string }) => {
+          const result = await runTool(toolName, tool, input);
+          return result.summary;
+        },
+      }),
     search_workspace_content: (toolName, tool) =>
       defineTool({
         description: "搜索工作区中的目录名、文件名和正文命中，用于定位目标、判断下一步该读哪个文件或改哪个位置。它只返回命中摘要，不返回完整文件内容。",
@@ -653,7 +665,6 @@ export async function* runAgentTurn({
 }
 
 export { createSystemMessage };
-
 
 
 

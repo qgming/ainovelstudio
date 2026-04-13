@@ -60,6 +60,11 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     description: "重命名工作区文件夹或文件；适合改名，不会修改文件正文。",
   },
   {
+    id: "move_path",
+    name: "迁移路径",
+    description: "将文件或文件夹迁移到指定目录；适合跨目录整理结构，不会修改文件正文。",
+  },
+  {
     id: "read_workspace_tree",
     name: "读取目录树",
     description: "读取当前工作区目录结构；适合浏览层级和入口，不搜索正文。",

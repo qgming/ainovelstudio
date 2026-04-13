@@ -148,7 +148,7 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
     "- 涉及工作区路径时，默认优先传相对工作区根目录的路径，不要传绝对路径；例如用 `03_剧情大纲/全书架构总纲.md`，不要用 `C:/.../全书架构总纲.md`。",
     "- 已知准确路径且需要全文上下文时，再使用 read_file。",
     "- 小范围改动优先使用 line_edit；只有整份内容都准备好了才使用 write_file。",
-    "- create_file / create_folder / rename / delete_path 只处理结构变更，不负责正文读取。",
+    "- create_file / create_folder / rename / move_path / delete_path 只处理结构变更，不负责正文读取。",
     "当前已启用工具目录：",
     ...enabledTools.map((tool) => `- ${tool.name}（${tool.id}）`),
   ].join("\n");

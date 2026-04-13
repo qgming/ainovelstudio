@@ -192,6 +192,10 @@ export function renameWorkspaceEntry(rootPath: string, path: string, nextName: s
   return invokeWithCancellation<string>("rename_workspace_entry", { rootPath, path, nextName }, options);
 }
 
+export function moveWorkspaceEntry(rootPath: string, path: string, targetParentPath: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("move_workspace_entry", { rootPath, path, targetParentPath }, options);
+}
+
 export function deleteWorkspaceEntry(rootPath: string, path: string, options?: InvokeCancellationOptions) {
   return invokeWithCancellation<void>("delete_workspace_entry", { rootPath, path }, options);
 }

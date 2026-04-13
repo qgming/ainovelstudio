@@ -5,6 +5,7 @@ const {
   mockCreateWorkspaceDirectory,
   mockCreateWorkspaceTextFile,
   mockDeleteWorkspaceEntry,
+  mockMoveWorkspaceEntry,
   mockReadSkillFileContent,
   mockReadWorkspaceTextFile,
   mockReadWorkspaceTextLine,
@@ -20,6 +21,7 @@ const {
   mockCreateWorkspaceDirectory: vi.fn(),
   mockCreateWorkspaceTextFile: vi.fn(),
   mockDeleteWorkspaceEntry: vi.fn(),
+  mockMoveWorkspaceEntry: vi.fn(),
   mockReadSkillFileContent: vi.fn(),
   mockReadWorkspaceTextFile: vi.fn(),
   mockReadWorkspaceTextLine: vi.fn(),
@@ -36,6 +38,7 @@ vi.mock("../bookWorkspace/api", () => ({
   createWorkspaceDirectory: mockCreateWorkspaceDirectory,
   createWorkspaceTextFile: mockCreateWorkspaceTextFile,
   deleteWorkspaceEntry: mockDeleteWorkspaceEntry,
+  moveWorkspaceEntry: mockMoveWorkspaceEntry,
   readWorkspaceTextFile: mockReadWorkspaceTextFile,
   readWorkspaceTextLine: mockReadWorkspaceTextLine,
   readWorkspaceTree: mockReadWorkspaceTree,
@@ -62,6 +65,7 @@ describe("createWorkspaceToolset", () => {
     mockCreateWorkspaceDirectory.mockReset();
     mockCreateWorkspaceTextFile.mockReset();
     mockDeleteWorkspaceEntry.mockReset();
+    mockMoveWorkspaceEntry.mockReset();
     mockReadAgentFileContent.mockReset();
     mockReadSkillFileContent.mockReset();
     mockReadWorkspaceTextFile.mockReset();
@@ -87,7 +91,7 @@ describe("createWorkspaceToolset", () => {
       contents: "新内容",
     });
 
-    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(rootPath, "章节/第一章.md", "新内容");
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(rootPath, "章节/第一章.md", "新内容", undefined);
     expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ ok: true, summary: "已写入 章节/第一章.md" });
   });
@@ -111,7 +115,7 @@ describe("createWorkspaceToolset", () => {
 
     const result = await toolset.search_workspace_content.execute({ query: "钟声", limit: 5 });
 
-    expect(mockSearchWorkspaceContent).toHaveBeenCalledWith(rootPath, "钟声", 5);
+    expect(mockSearchWorkspaceContent).toHaveBeenCalledWith(rootPath, "钟声", 5, undefined);
     expect(result).toEqual({
       ok: true,
       summary: [
@@ -151,6 +155,7 @@ describe("createWorkspaceToolset", () => {
         nextLine: "下一行内容",
         previousLine: "上一行内容",
       },
+      undefined,
     );
     expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
@@ -179,7 +184,7 @@ describe("createWorkspaceToolset", () => {
       path: "章节/第一卷/第1章.md",
     });
 
-    expect(mockReadWorkspaceTextLine).toHaveBeenCalledWith(rootPath, "章节/第一卷/第1章.md", 99);
+    expect(mockReadWorkspaceTextLine).toHaveBeenCalledWith(rootPath, "章节/第一卷/第1章.md", 99, undefined);
     expect(result).toEqual({
       ok: true,
       summary: "章节/第一卷/第1章.md 第 99 行：(空行)",
@@ -202,11 +207,35 @@ describe("createWorkspaceToolset", () => {
       path: "章节/第一章.md",
     });
 
-    expect(mockRenameWorkspaceEntry).toHaveBeenCalledWith(rootPath, "章节/第一章.md", "序章.md");
+    expect(mockRenameWorkspaceEntry).toHaveBeenCalledWith(rootPath, "章节/第一章.md", "序章.md", undefined);
     expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       ok: true,
       summary: "已重命名为 章节/序章.md",
+    });
+  });
+
+  it("move_path 工具支持迁移文件或文件夹到指定目录", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockMoveWorkspaceEntry.mockResolvedValue("归档/第一卷/第001章.md");
+
+    const result = await toolset.move_path.execute({
+      path: "草稿/第001章.md",
+      targetParentPath: "归档/第一卷",
+    });
+
+    expect(mockMoveWorkspaceEntry).toHaveBeenCalledWith(
+      rootPath,
+      "草稿/第001章.md",
+      "归档/第一卷",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已迁移到 归档/第一卷/第001章.md",
     });
   });
 
@@ -251,7 +280,7 @@ describe("createWorkspaceToolset", () => {
       relativePath: "SKILL.md",
     });
 
-    expect(mockReadSkillFileContent).toHaveBeenCalledWith("chapter-write", "SKILL.md");
+    expect(mockReadSkillFileContent).toHaveBeenCalledWith("chapter-write", "SKILL.md", undefined);
     expect(result).toEqual({
       ok: true,
       summary: "# SKILL",
@@ -298,7 +327,7 @@ describe("createWorkspaceToolset", () => {
       relativePath: "AGENTS.md",
     });
 
-    expect(mockReadAgentFileContent).toHaveBeenCalledWith("writer", "AGENTS.md");
+    expect(mockReadAgentFileContent).toHaveBeenCalledWith("writer", "AGENTS.md", undefined);
     expect(result).toEqual({
       ok: true,
       summary: "# AGENT",
