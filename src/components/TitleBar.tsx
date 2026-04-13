@@ -1,5 +1,6 @@
 import { Minus, Copy, Square, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import appIcon from "../assets/icon.png";
 
@@ -45,7 +46,7 @@ export function TitleBar() {
   }
 
   async function handleCloseWindow() {
-    await appWindow.close();
+    await invoke("terminate_application");
   }
 
   return (

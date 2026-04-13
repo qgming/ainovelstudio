@@ -127,7 +127,7 @@ describe("App shell", () => {
     expect(mockWindow.maximize).toHaveBeenCalledTimes(1);
     expect(mockWindow.unmaximize).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(mockWindow.close).toHaveBeenCalledTimes(1);
+      expect(mockInvoke).toHaveBeenCalledWith("terminate_application");
     });
 
     await waitFor(() => {
@@ -135,23 +135,11 @@ describe("App shell", () => {
     });
   });
 
-  it("关闭请求会先中断当前运行再关闭窗口", async () => {
+  it("关闭请求会直接退出应用", async () => {
     let closeHandler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined;
     mockWindow.onCloseRequested.mockImplementation(async (handler: (event: { preventDefault: () => void }) => Promise<void>) => {
       closeHandler = handler;
       return () => {};
-    });
-
-    const abort = vi.fn();
-    useAgentStore.setState({
-      abortController: { abort, signal: { aborted: false } } as unknown as AbortController,
-      inflightToolRequestIds: ["tool-read-1", "tool-search-2"],
-      run: {
-        id: "run-test",
-        status: "running",
-        title: "",
-        messages: [],
-      },
     });
 
     render(<App />);
@@ -164,9 +152,7 @@ describe("App shell", () => {
     await closeHandler?.({ preventDefault });
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(abort).toHaveBeenCalledTimes(1);
-    expect(mockInvoke).toHaveBeenCalledWith("cancel_tool_requests", { requestIds: ["tool-read-1", "tool-search-2"] });
-    expect(mockWindow.destroy).toHaveBeenCalledTimes(1);
+    expect(mockInvoke).toHaveBeenCalledWith("terminate_application");
   });
 
   it("可以切换到代理页", async () => {

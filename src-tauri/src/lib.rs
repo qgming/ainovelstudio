@@ -1,4 +1,5 @@
 mod agents;
+mod app_control;
 mod chat;
 mod config;
 mod db;
@@ -7,6 +8,7 @@ mod usage;
 mod workspace;
 
 use std::{collections::HashSet, sync::Mutex};
+use crate::app_control::terminate_application;
 
 pub struct ToolCancellationRegistry {
     cancelled: Mutex<HashSet<String>>,
@@ -69,6 +71,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             workspace::cancel_tool_request,
             workspace::cancel_tool_requests,
+            terminate_application,
             agents::pick_agent_archive,
             agents::scan_installed_agents,
             agents::initialize_builtin_agents,

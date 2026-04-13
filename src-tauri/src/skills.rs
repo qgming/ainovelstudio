@@ -1074,6 +1074,7 @@ pub async fn pick_skill_archive(app: AppHandle) -> CommandResult<Option<String>>
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub fn scan_installed_skills(
     app: AppHandle,
     requestId: Option<String>,

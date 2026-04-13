@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
@@ -23,8 +24,6 @@ function AppShell() {
   const initializeAgents = useSubAgentStore((state) => state.initialize);
   const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
   const initializeAgentHistory = useAgentStore((state) => state.initialize);
-  const hardStopCurrentRun = useAgentStore((state) => state.hardStopCurrentRun);
-  const isClosingRef = useRef(false);
 
   useEffect(() => {
     initializeTheme();
@@ -38,16 +37,8 @@ function AppShell() {
     let unlisten: (() => void) | null = null;
 
     void appWindow.onCloseRequested(async (event) => {
-      if (isClosingRef.current) {
-        return;
-      }
-      isClosingRef.current = true;
       event.preventDefault();
-      try {
-        await hardStopCurrentRun("app_close");
-      } finally {
-        await appWindow.destroy();
-      }
+      await invoke("terminate_application");
     }).then((dispose) => {
       unlisten = dispose;
     });
@@ -55,7 +46,7 @@ function AppShell() {
     return () => {
       unlisten?.();
     };
-  }, [hardStopCurrentRun]);
+  }, []);
 
   return (
     <div className="h-screen overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">
