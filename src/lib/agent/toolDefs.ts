@@ -82,7 +82,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
   {
     id: "read_agent_file",
     name: "读取代理文件",
-    description: "读取指定 agent 内文件内容，如 AGENTS.md、TOOLS.md、MEMORY.md。",
+    description: "读取指定 agent 内文件内容，如 manifest.json、AGENTS.md、TOOLS.md、MEMORY.md。",
   },
 ];
 

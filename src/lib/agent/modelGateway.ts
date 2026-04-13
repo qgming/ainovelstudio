@@ -1,4 +1,4 @@
-import { APICallError, generateText, isLoopFinished, streamText, tool as defineTool } from "ai";
+import { APICallError, generateText, isLoopFinished, stepCountIs, streamText, tool as defineTool } from "ai";
 import type { ModelMessage, ToolSet } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
@@ -472,6 +472,7 @@ export async function testAgentProviderConnection(providerConfig: AgentProviderC
 
 export type StreamAgentTextInput = {
   abortSignal?: AbortSignal;
+  maxSteps?: number;
   messages: ModelMessage[];
   providerConfig: AgentProviderConfig;
   system: string;
@@ -487,9 +488,73 @@ function normalizeUsageNumber(value: number | undefined) {
   return value ?? 0;
 }
 
+function createAbortAwareUsagePromise(params: {
+  abortSignal?: AbortSignal;
+  finishReasonPromise: PromiseLike<string>;
+  providerConfig: AgentProviderConfig;
+  responsePromise: PromiseLike<{ modelId?: string }>;
+  totalUsagePromise: PromiseLike<{
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    inputTokenDetails: {
+      noCacheTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    };
+    outputTokenDetails: {
+      reasoningTokens?: number;
+    };
+  }>;
+}): Promise<AgentUsage | null> {
+  const { abortSignal, finishReasonPromise, providerConfig, responsePromise, totalUsagePromise } = params;
+
+  if (abortSignal?.aborted) {
+    return Promise.resolve(null);
+  }
+
+  const usagePromise = Promise.all([
+    Promise.resolve(totalUsagePromise),
+    Promise.resolve(finishReasonPromise),
+    Promise.resolve(responsePromise),
+  ])
+    .then(([totalUsage, finishReason, response]) => ({
+      recordedAt: Math.floor(Date.now() / 1000).toString(),
+      provider: "ainovelstudio-provider",
+      modelId: response.modelId || providerConfig.model,
+      finishReason,
+      inputTokens: normalizeUsageNumber(totalUsage.inputTokens),
+      outputTokens: normalizeUsageNumber(totalUsage.outputTokens),
+      totalTokens: normalizeUsageNumber(totalUsage.totalTokens),
+      noCacheTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.noCacheTokens),
+      cacheReadTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.cacheReadTokens),
+      cacheWriteTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.cacheWriteTokens),
+      reasoningTokens: normalizeUsageNumber(totalUsage.outputTokenDetails.reasoningTokens),
+    }))
+    .catch(() => null);
+
+  if (!abortSignal) {
+    return usagePromise;
+  }
+
+  return new Promise<AgentUsage | null>((resolve) => {
+    const handleAbort = () => {
+      abortSignal.removeEventListener("abort", handleAbort);
+      resolve(null);
+    };
+
+    abortSignal.addEventListener("abort", handleAbort, { once: true });
+    void usagePromise.then((usage) => {
+      abortSignal.removeEventListener("abort", handleAbort);
+      resolve(usage);
+    });
+  });
+}
+
 /** 流式文本生成，返回 AI SDK streamText result */
 export function streamAgentText({
   abortSignal,
+  maxSteps,
   messages,
   providerConfig,
   system,
@@ -507,24 +572,16 @@ export function streamAgentText({
     messages,
     system,
     tools,
-    stopWhen: isLoopFinished(),
+    stopWhen: typeof maxSteps === "number" && maxSteps > 0 ? [isLoopFinished(), stepCountIs(maxSteps)] : isLoopFinished(),
   });
 
-  const usagePromise = Promise.all([result.totalUsage, result.finishReason, result.response])
-    .then(([totalUsage, finishReason, response]) => ({
-      recordedAt: Math.floor(Date.now() / 1000).toString(),
-      provider: "ainovelstudio-provider",
-      modelId: response.modelId || providerConfig.model,
-      finishReason,
-      inputTokens: normalizeUsageNumber(totalUsage.inputTokens),
-      outputTokens: normalizeUsageNumber(totalUsage.outputTokens),
-      totalTokens: normalizeUsageNumber(totalUsage.totalTokens),
-      noCacheTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.noCacheTokens),
-      cacheReadTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.cacheReadTokens),
-      cacheWriteTokens: normalizeUsageNumber(totalUsage.inputTokenDetails.cacheWriteTokens),
-      reasoningTokens: normalizeUsageNumber(totalUsage.outputTokenDetails.reasoningTokens),
-    }))
-    .catch(() => null);
+  const usagePromise = createAbortAwareUsagePromise({
+    abortSignal,
+    finishReasonPromise: result.finishReason,
+    providerConfig,
+    responsePromise: result.response,
+    totalUsagePromise: result.totalUsage,
+  });
 
   return {
     fullStream: result.fullStream,

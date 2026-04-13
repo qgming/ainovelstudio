@@ -56,6 +56,52 @@ export function buildRun(id: string, title: string, status: AgentRunStatus, mess
   };
 }
 
+export function normalizeRecoveredStatus(status: AgentRunStatus): AgentRunStatus {
+  return status === "running" ? "idle" : status;
+}
+
+function normalizeRecoveredPart(part: AgentPart): AgentPart | null {
+  if (part.type === "placeholder") {
+    return null;
+  }
+
+  if ((part.type === "tool-call" || part.type === "tool-result") && part.status === "running") {
+    return {
+      ...part,
+      status: "failed",
+      outputSummary: part.outputSummary ?? "已中断",
+    };
+  }
+
+  if (part.type === "subagent") {
+    return {
+      ...part,
+      status: part.status === "running" ? "failed" : part.status,
+      detail: part.status === "running"
+        ? part.detail ?? "执行已中断。"
+        : part.detail,
+      parts: normalizeRecoveredMessageParts(part.parts),
+    };
+  }
+
+  return part;
+}
+
+export function normalizeRecoveredMessageParts(parts: AgentPart[]) {
+  return parts
+    .map((part) => normalizeRecoveredPart(part))
+    .filter((part): part is AgentPart => part !== null);
+}
+
+export function normalizeRecoveredMessages(messages: AgentMessage[]) {
+  return messages
+    .map((message) => ({
+      ...message,
+      parts: normalizeRecoveredMessageParts(message.parts),
+    }))
+    .filter((message) => message.parts.length > 0);
+}
+
 export function buildUserMessage(text: string, meta?: AgentMessageMeta): AgentMessage {
   return {
     id: `user-${Date.now()}`,

@@ -1,4 +1,55 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { InvokeCancellationOptions } from "../bookWorkspace/api";
+
+async function invokeWithCancellation<T>(
+  command: string,
+  payload: Record<string, unknown>,
+  options?: InvokeCancellationOptions,
+) {
+  const requestId = options?.requestId;
+  const abortSignal = options?.abortSignal;
+
+  if (!requestId || !abortSignal) {
+    return invoke<T>(command, payload);
+  }
+
+  if (abortSignal.aborted) {
+    await invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
+    throw new DOMException("Tool execution aborted.", "AbortError");
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const handleAbort = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      abortSignal.removeEventListener("abort", handleAbort);
+      void invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
+      reject(new DOMException("Tool execution aborted.", "AbortError"));
+    };
+
+    abortSignal.addEventListener("abort", handleAbort, { once: true });
+    void invoke<T>(command, { ...payload, requestId })
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        abortSignal.removeEventListener("abort", handleAbort);
+        resolve(value);
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        abortSignal.removeEventListener("abort", handleAbort);
+        reject(error);
+      });
+  });
+}
 
 export type AgentSourceKind = "builtin-package" | "installed-package";
 
@@ -16,15 +67,14 @@ export type AgentManifest = {
   description: string;
   discoveredAt: number;
   dispatchHint?: string;
-  frontmatter?: Record<string, unknown>;
-  frontmatterRaw?: string;
   id: string;
   installPath?: string;
   isBuiltin: boolean;
+  manifestFilePath?: string;
+  maxTurns?: number;
   memoryFilePath?: string;
   memoryPreview?: string;
   name: string;
-  rawMarkdown: string;
   role?: string;
   sourceKind: AgentSourceKind;
   suggestedTools: string[];
@@ -60,8 +110,8 @@ export function pickAgentArchive() {
   return invoke<string | null>("pick_agent_archive");
 }
 
-export function scanInstalledAgents() {
-  return invoke<AgentManifest[]>("scan_installed_agents");
+export function scanInstalledAgents(options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<AgentManifest[]>("scan_installed_agents", {}, options);
 }
 
 export function initializeBuiltinAgents() {
@@ -72,8 +122,8 @@ export function readAgentDetail(agentId: string) {
   return invoke<AgentManifest>("read_agent_detail", { agentId });
 }
 
-export function readAgentFileContent(agentId: string, relativePath: string) {
-  return invoke<string>("read_agent_file_content", { agentId, relativePath });
+export function readAgentFileContent(agentId: string, relativePath: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("read_agent_file_content", { agentId, relativePath }, options);
 }
 
 export function writeAgentFileContent(agentId: string, relativePath: string, content: string) {

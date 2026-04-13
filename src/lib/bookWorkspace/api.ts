@@ -6,6 +6,61 @@ import type {
   WorkspaceSnapshot,
 } from "./types";
 
+export type InvokeCancellationOptions = {
+  abortSignal?: AbortSignal;
+  requestId?: string;
+};
+
+async function invokeWithCancellation<T>(
+  command: string,
+  payload: Record<string, unknown>,
+  options?: InvokeCancellationOptions,
+) {
+  const requestId = options?.requestId;
+  const abortSignal = options?.abortSignal;
+
+  if (!requestId || !abortSignal) {
+    return invoke<T>(command, payload);
+  }
+
+  if (abortSignal.aborted) {
+    await invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
+    throw new DOMException("Tool execution aborted.", "AbortError");
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const handleAbort = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      abortSignal.removeEventListener("abort", handleAbort);
+      void invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
+      reject(new DOMException("Tool execution aborted.", "AbortError"));
+    };
+
+    abortSignal.addEventListener("abort", handleAbort, { once: true });
+    void invoke<T>(command, { ...payload, requestId })
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        abortSignal.removeEventListener("abort", handleAbort);
+        resolve(value);
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        abortSignal.removeEventListener("abort", handleAbort);
+        reject(error);
+      });
+  });
+}
+
 const WORKSPACE_STORAGE_KEY = "ainovelstudio-book-workspace";
 
 function readSnapshot(): WorkspaceSnapshot | null {
@@ -61,24 +116,24 @@ export function pickWorkspaceDirectory() {
   return invoke<string | null>("pick_book_directory");
 }
 
-export function readWorkspaceTree(rootPath: string) {
-  return invoke<TreeNode>("read_workspace_tree", { rootPath });
+export function readWorkspaceTree(rootPath: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<TreeNode>("read_workspace_tree", { rootPath }, options);
 }
 
-export function readWorkspaceTextFile(rootPath: string, path: string) {
-  return invoke<string>("read_text_file", { rootPath, path });
+export function readWorkspaceTextFile(rootPath: string, path: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("read_text_file", { rootPath, path }, options);
 }
 
-export function writeWorkspaceTextFile(rootPath: string, path: string, contents: string) {
-  return invoke<void>("write_text_file", { rootPath, path, contents });
+export function writeWorkspaceTextFile(rootPath: string, path: string, contents: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<void>("write_text_file", { rootPath, path, contents }, options);
 }
 
-export function searchWorkspaceContent(rootPath: string, query: string, limit?: number) {
-  return invoke<WorkspaceSearchMatch[]>("search_workspace_content", { limit, query, rootPath });
+export function searchWorkspaceContent(rootPath: string, query: string, limit?: number, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<WorkspaceSearchMatch[]>("search_workspace_content", { limit, query, rootPath }, options);
 }
 
-export function readWorkspaceTextLine(rootPath: string, path: string, lineNumber: number) {
-  return invoke<WorkspaceLineResult>("read_text_file_line", { lineNumber, path, rootPath });
+export function readWorkspaceTextLine(rootPath: string, path: string, lineNumber: number, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<WorkspaceLineResult>("read_text_file_line", { lineNumber, path, rootPath }, options);
 }
 
 export function replaceWorkspaceTextLine(
@@ -90,33 +145,34 @@ export function replaceWorkspaceTextLine(
     nextLine?: string;
     previousLine?: string;
   },
+  options?: InvokeCancellationOptions,
 ) {
-  return invoke<WorkspaceLineResult>("replace_text_file_line", {
+  return invokeWithCancellation<WorkspaceLineResult>("replace_text_file_line", {
     contents,
     lineNumber,
     nextLine: context?.nextLine,
     path,
     previousLine: context?.previousLine,
     rootPath,
-  });
+  }, options);
 }
 
 export function createBookWorkspace(parentPath: string, bookName: string) {
   return invoke<string>("create_book_workspace", { parentPath, bookName });
 }
 
-export function createWorkspaceDirectory(rootPath: string, parentPath: string, name: string) {
-  return invoke<string>("create_workspace_directory", { rootPath, parentPath, name });
+export function createWorkspaceDirectory(rootPath: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("create_workspace_directory", { rootPath, parentPath, name }, options);
 }
 
-export function createWorkspaceTextFile(rootPath: string, parentPath: string, name: string) {
-  return invoke<string>("create_workspace_text_file", { rootPath, parentPath, name });
+export function createWorkspaceTextFile(rootPath: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("create_workspace_text_file", { rootPath, parentPath, name }, options);
 }
 
-export function renameWorkspaceEntry(rootPath: string, path: string, nextName: string) {
-  return invoke<string>("rename_workspace_entry", { rootPath, path, nextName });
+export function renameWorkspaceEntry(rootPath: string, path: string, nextName: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("rename_workspace_entry", { rootPath, path, nextName }, options);
 }
 
-export function deleteWorkspaceEntry(rootPath: string, path: string) {
-  return invoke<void>("delete_workspace_entry", { rootPath, path });
+export function deleteWorkspaceEntry(rootPath: string, path: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<void>("delete_workspace_entry", { rootPath, path }, options);
 }

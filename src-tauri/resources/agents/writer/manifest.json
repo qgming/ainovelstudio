@@ -1,0 +1,12 @@
+{
+  "id": "writer",
+  "name": "writer",
+  "description": "网文小说作者代理，负责正文创作、扩写、润色、重写与连载内容推进。",
+  "role": "writer",
+  "dispatchHint": "当用户需要创作正文、扩写片段、重写场景、润色文案、补足情绪张力或推进连载剧情时优先委派。",
+  "tags": ["writing", "writer", "正文", "扩写", "润色", "重写"],
+  "suggestedTools": ["read_file", "write_file"],
+  "defaultEnabled": true,
+  "version": "1.0.0",
+  "maxTurns": 5
+}

@@ -65,6 +65,10 @@ function countCompletedItems(items: PlanItem[]) {
   return items.filter((item) => item.status === "completed").length;
 }
 
+function hasIncompleteItems(items: PlanItem[]) {
+  return items.some((item) => item.status !== "completed");
+}
+
 export function AgentComposer({
   input,
   onInputChange,
@@ -76,7 +80,7 @@ export function AgentComposer({
   runStatus,
 }: AgentComposerProps) {
   const isRunning = runStatus === "running";
-  const showPlan = planningState.items.length > 0;
+  const showPlan = hasIncompleteItems(planningState.items);
   const hasStalePlan = planningState.roundsSinceUpdate >= 3;
   const completedCount = countCompletedItems(planningState.items);
   const [isPlanExpanded, setIsPlanExpanded] = useState(true);

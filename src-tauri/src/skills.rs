@@ -1,3 +1,4 @@
+use crate::ToolCancellationRegistry;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
@@ -6,7 +7,7 @@ use std::{
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{path::BaseDirectory, AppHandle, Manager};
+use tauri::{path::BaseDirectory, AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use zip::ZipArchive;
 
@@ -485,13 +486,20 @@ fn parse_skill_manifest(skill_dir: &Path, source_root: &SkillRoot) -> CommandRes
     })
 }
 
-fn scan_skill_root(root: &SkillRoot) -> CommandResult<Vec<SkillManifest>> {
+fn scan_skill_root(
+    root: &SkillRoot,
+    registry: Option<&ToolCancellationRegistry>,
+    request_id: Option<&str>,
+) -> CommandResult<Vec<SkillManifest>> {
     if !root.path.exists() || !root.path.is_dir() {
         return Ok(Vec::new());
     }
 
     let mut manifests = Vec::new();
     for entry in fs::read_dir(&root.path).map_err(error_to_string)? {
+        if let Some(registry) = registry {
+            registry.check(request_id)?;
+        }
         let entry = entry.map_err(error_to_string)?;
         let path = entry.path();
         if !path.is_dir() {
@@ -549,11 +557,18 @@ fn collect_skill_roots(app: &AppHandle) -> CommandResult<Vec<SkillRoot>> {
     Ok(roots)
 }
 
-fn scan_all_skills(app: &AppHandle) -> CommandResult<Vec<SkillManifest>> {
+fn scan_all_skills(
+    app: &AppHandle,
+    registry: Option<&ToolCancellationRegistry>,
+    request_id: Option<&str>,
+) -> CommandResult<Vec<SkillManifest>> {
     let mut builtin_ids: HashSet<String> = HashSet::new();
     let mut by_id: HashMap<String, SkillManifest> = HashMap::new();
     for root in collect_skill_roots(app)? {
-        for manifest in scan_skill_root(&root)? {
+        if let Some(registry) = registry {
+            registry.check(request_id)?;
+        }
+        for manifest in scan_skill_root(&root, registry, request_id)? {
             if root.is_builtin {
                 builtin_ids.insert(manifest.id.clone());
             }
@@ -733,7 +748,7 @@ fn create_skill_directory(app: &AppHandle, name: &str, description: &str) -> Com
 }
 
 fn resolve_skill_directory(app: &AppHandle, skill_id: &str) -> CommandResult<PathBuf> {
-    scan_all_skills(app)?
+    scan_all_skills(app, None, None)?
         .into_iter()
         .find(|skill| skill.id == skill_id)
         .and_then(|skill| skill.install_path)
@@ -830,7 +845,7 @@ fn sync_builtin_skills_to_user_dir(
         path: builtin_root,
         source_kind: "builtin-package",
     };
-    let builtin_manifests = scan_skill_root(&builtin_skill_root)?;
+    let builtin_manifests = scan_skill_root(&builtin_skill_root, None, None)?;
 
     let mut initialized_skill_ids = Vec::new();
     let mut skipped_skill_ids = Vec::new();
@@ -1044,7 +1059,7 @@ fn install_skill_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
 
     copy_directory_recursive(&extract_root, &target_path)?;
     let _ = fs::remove_dir_all(&temp_root);
-    scan_all_skills(app)
+    scan_all_skills(app, None, None)
 }
 
 #[tauri::command]
@@ -1059,8 +1074,15 @@ pub async fn pick_skill_archive(app: AppHandle) -> CommandResult<Option<String>>
 }
 
 #[tauri::command]
-pub fn scan_installed_skills(app: AppHandle) -> CommandResult<Vec<SkillManifest>> {
-    scan_all_skills(&app)
+pub fn scan_installed_skills(
+    app: AppHandle,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<Vec<SkillManifest>> {
+    registry.begin(requestId.as_deref());
+    let result = scan_all_skills(&app, Some(&registry), requestId.as_deref());
+    registry.finish(requestId.as_deref());
+    result
 }
 
 #[tauri::command]
@@ -1073,7 +1095,7 @@ pub fn initialize_builtin_skills(
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn read_skill_detail(app: AppHandle, skillId: String) -> CommandResult<SkillManifest> {
-    scan_all_skills(&app)?
+    scan_all_skills(&app, None, None)?
         .into_iter()
         .find(|skill| skill.id == skillId)
         .ok_or_else(|| "未找到对应技能。".into())
@@ -1097,15 +1119,26 @@ pub fn read_skill_file_content(
     app: AppHandle,
     skillId: String,
     relativePath: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<String> {
-    let skill_dir = resolve_skill_directory(&app, &skillId)?;
-    if relativePath.trim() == "SKILL.md" {
-        let file_path = resolve_skill_file_path(&skill_dir, "SKILL.md")?;
-        return fs::read_to_string(file_path).map_err(error_to_string);
-    }
+    registry.begin(requestId.as_deref());
+    let result = (|| {
+        registry.check(requestId.as_deref())?;
+        let skill_dir = resolve_skill_directory(&app, &skillId)?;
+        registry.check(requestId.as_deref())?;
+        if relativePath.trim() == "SKILL.md" {
+            let file_path = resolve_skill_file_path(&skill_dir, "SKILL.md")?;
+            registry.check(requestId.as_deref())?;
+            return fs::read_to_string(file_path).map_err(error_to_string);
+        }
 
-    let reference_file_path = resolve_reference_file_path(&skill_dir, &relativePath)?;
-    fs::read_to_string(reference_file_path).map_err(error_to_string)
+        let reference_file_path = resolve_reference_file_path(&skill_dir, &relativePath)?;
+        registry.check(requestId.as_deref())?;
+        fs::read_to_string(reference_file_path).map_err(error_to_string)
+    })();
+    registry.finish(requestId.as_deref());
+    result
 }
 
 #[tauri::command]
@@ -1123,7 +1156,7 @@ pub fn write_skill_file_content(
             if relativePath.trim() != "SKILL.md" {
                 return Err("仅支持先复制内置技能的主文件。".into());
             }
-            let manifest = scan_all_skills(&app)?
+            let manifest = scan_all_skills(&app, None, None)?
                 .into_iter()
                 .find(|skill| skill.id == skillId)
                 .ok_or_else(|| "未找到对应技能。".to_string())?;
@@ -1143,7 +1176,7 @@ pub fn write_skill_file_content(
         }
     };
     write_skill_file(&skill_dir, &relativePath, &content)?;
-    scan_all_skills(&app)
+    scan_all_skills(&app, None, None)
 }
 
 #[tauri::command]
@@ -1154,7 +1187,7 @@ pub fn create_skill(
     description: String,
 ) -> CommandResult<Vec<SkillManifest>> {
     create_skill_directory(&app, &name, &description)?;
-    scan_all_skills(&app)
+    scan_all_skills(&app, None, None)
 }
 
 #[tauri::command]
@@ -1166,7 +1199,7 @@ pub fn create_skill_reference_file(
 ) -> CommandResult<Vec<SkillManifest>> {
     let skill_dir = resolve_installed_skill_directory(&app, &skillId)?;
     create_reference_file(&skill_dir, &name)?;
-    scan_all_skills(&app)
+    scan_all_skills(&app, None, None)
 }
 
 #[tauri::command]
@@ -1177,7 +1210,7 @@ pub fn delete_installed_skill(
 ) -> CommandResult<Vec<SkillManifest>> {
     let target_path = resolve_installed_skill_directory(&app, &skillId)?;
     fs::remove_dir_all(&target_path).map_err(error_to_string)?;
-    scan_all_skills(&app)
+    scan_all_skills(&app, None, None)
 }
 
 #[tauri::command]

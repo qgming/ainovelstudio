@@ -283,7 +283,7 @@ describe("createWorkspaceToolset", () => {
           name: "写作代理",
           description: "负责续写章节",
           sourceKind: "installed-package",
-          files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+          files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
         },
       ],
     });

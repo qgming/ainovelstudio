@@ -43,7 +43,7 @@ function FileTreeButton({
   );
 }
 
-const PRIMARY_FILES = ["AGENTS.md", "TOOLS.md", "MEMORY.md"] as const;
+const PRIMARY_FILES = ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"] as const;
 
 export function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -56,7 +56,7 @@ export function AgentDetailPage() {
   const agents = getResolvedAgents({ manifests, preferences });
   const agent = agents.find((item) => item.id === agentId);
   const isInstalledAgent = agent?.sourceKind === "installed-package";
-  const [selectedPath, setSelectedPath] = useState<string>("AGENTS.md");
+  const [selectedPath, setSelectedPath] = useState<string>("manifest.json");
   const [draftContent, setDraftContent] = useState<string>("");
   const [referenceError, setReferenceError] = useState<string | null>(null);
   const [referenceLoading, setReferenceLoading] = useState(false);
@@ -65,7 +65,7 @@ export function AgentDetailPage() {
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    setSelectedPath("AGENTS.md");
+    setSelectedPath("manifest.json");
     setIsDirty(false);
   }, [agent?.id]);
 

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BookAgentPanel } from "../book/BookAgentPanel";
+import { AgentMessageList } from "./AgentMessageList";
 import { useAgentStore } from "../../stores/agentStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 import { useSkillsStore } from "../../stores/skillsStore";
@@ -68,8 +69,8 @@ describe("BookAgentPanel", () => {
           description: "拆解章节冲突与节奏。",
           body: "",
           discoveredAt: 1,
-          isBuiltin: true,
           rawMarkdown: "",
+          isBuiltin: true,
           references: [],
           sourceKind: "builtin-package",
           suggestedTools: [],
@@ -89,7 +90,8 @@ describe("BookAgentPanel", () => {
           body: "",
           discoveredAt: 1,
           isBuiltin: true,
-          rawMarkdown: "",
+          manifestFilePath: "agents/writer-agent/manifest.json",
+          maxTurns: 5,
           role: "擅长续写与润色",
           sourceKind: "builtin-package",
           suggestedTools: [],
@@ -138,8 +140,8 @@ describe("BookAgentPanel", () => {
           description: "拆解章节冲突与节奏。",
           body: "",
           discoveredAt: 1,
-          isBuiltin: true,
           rawMarkdown: "",
+          isBuiltin: true,
           references: [],
           sourceKind: "builtin-package",
           suggestedTools: [],
@@ -159,7 +161,8 @@ describe("BookAgentPanel", () => {
           body: "",
           discoveredAt: 1,
           isBuiltin: true,
-          rawMarkdown: "",
+          manifestFilePath: "agents/writer-agent/manifest.json",
+          maxTurns: 5,
           role: "擅长续写与润色",
           sourceKind: "builtin-package",
           suggestedTools: [],
@@ -185,7 +188,6 @@ describe("BookAgentPanel", () => {
     expect(screen.getByRole("button", { name: "移除 续写代理" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "移除 第一章.md" })).toBeInTheDocument();
   });
-
 
   it("点击历史按钮后在触发位置弹出会话菜单", () => {
     useAgentStore.setState({
@@ -231,6 +233,7 @@ describe("BookAgentPanel", () => {
     expect(screen.getByRole("menuitem", { name: "人物关系梳理" })).toBeInTheDocument();
     expect(screen.queryByText("历史会话")).not.toBeInTheDocument();
   });
+
   it("工具运行中与完成后使用同一个工具卡片展示状态", () => {
     useAgentStore.setState({
       run: {
@@ -564,5 +567,50 @@ describe("BookAgentPanel", () => {
   });
 });
 
+describe("AgentMessageList", () => {
+  it("runStatus 为 running 时显示思考尾巴", () => {
+    render(
+      <AgentMessageList
+        runStatus="running"
+        messages={[
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [{ type: "text", text: "正在处理" }],
+          },
+        ]}
+      />,
+    );
 
+    expect(screen.getByText("正在思考")).toBeInTheDocument();
+  });
 
+  it("runStatus 不是 running 时不显示思考尾巴", () => {
+    render(
+      <AgentMessageList
+        runStatus="idle"
+        messages={[
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [
+              {
+                type: "tool-call",
+                toolName: "read_file",
+                toolCallId: "tool-1",
+                status: "failed",
+                inputSummary: '{"path":"章节/第一章.md"}',
+                outputSummary: "已中断",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("正在思考")).not.toBeInTheDocument();
+    expect(screen.getByText("read_file")).toBeInTheDocument();
+  });
+});

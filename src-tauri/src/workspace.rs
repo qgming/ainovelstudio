@@ -1,9 +1,10 @@
+use crate::ToolCancellationRegistry;
 use serde::Serialize;
 use std::{
     fs,
     path::{Component, Path, PathBuf},
 };
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Clone, Serialize)]
@@ -143,6 +144,13 @@ fn validate_optional_context_line(value: Option<String>) -> CommandResult<Option
     }
 }
 
+fn check_cancellation(
+    registry: &ToolCancellationRegistry,
+    request_id: Option<&str>,
+) -> CommandResult<()> {
+    registry.check(request_id)
+}
+
 fn validate_adjacent_context(
     lines: &[String],
     target_index: usize,
@@ -205,8 +213,12 @@ fn collect_workspace_search_matches(
     query: &str,
     limit: usize,
     matches: &mut Vec<WorkspaceSearchMatch>,
+    registry: &ToolCancellationRegistry,
+    request_id: Option<&str>,
 ) -> CommandResult<()> {
+    check_cancellation(registry, request_id)?;
     for entry in fs::read_dir(current).map_err(error_to_string)? {
+        check_cancellation(registry, request_id)?;
         let path = entry.map_err(error_to_string)?.path();
         let name = entry_name(&path);
 
@@ -227,7 +239,7 @@ fn collect_workspace_search_matches(
                 return Ok(());
             }
 
-            collect_workspace_search_matches(root, &path, query, limit, matches)?;
+            collect_workspace_search_matches(root, &path, query, limit, matches, registry, request_id)?;
             if matches.len() >= limit {
                 return Ok(());
             }
@@ -255,6 +267,7 @@ fn collect_workspace_search_matches(
         };
 
         for (index, line) in contents.lines().enumerate() {
+            check_cancellation(registry, request_id)?;
             if !line.to_lowercase().contains(query) {
                 continue;
             }
@@ -419,7 +432,13 @@ fn sort_tree_nodes(nodes: &mut [TreeNode]) {
     });
 }
 
-fn build_tree(root: &Path, current: &Path) -> CommandResult<TreeNode> {
+fn build_tree(
+    root: &Path,
+    current: &Path,
+    registry: &ToolCancellationRegistry,
+    request_id: Option<&str>,
+) -> CommandResult<TreeNode> {
+    check_cancellation(registry, request_id)?;
     let metadata = fs::metadata(current).map_err(error_to_string)?;
     let mut node = TreeNode {
         children: None,
@@ -440,8 +459,9 @@ fn build_tree(root: &Path, current: &Path) -> CommandResult<TreeNode> {
     if metadata.is_dir() {
         let mut children = Vec::new();
         for entry in fs::read_dir(current).map_err(error_to_string)? {
+            check_cancellation(registry, request_id)?;
             let child_path = entry.map_err(error_to_string)?.path();
-            children.push(build_tree(root, &child_path)?);
+            children.push(build_tree(root, &child_path, registry, request_id)?);
         }
         sort_tree_nodes(&mut children);
         let _ = root;
@@ -569,6 +589,16 @@ fn create_book_workspace_internal(parent_path: &Path, book_name: &str) -> Comman
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
+pub fn cancel_tool_request(
+    requestId: String,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<()> {
+    registry.cancel(&requestId);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn pick_book_directory(app: AppHandle) -> CommandResult<Option<String>> {
     Ok(app
         .dialog()
@@ -580,9 +610,18 @@ pub async fn pick_book_directory(app: AppHandle) -> CommandResult<Option<String>
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn read_workspace_tree(rootPath: String) -> CommandResult<TreeNode> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    build_tree(&root_path, &root_path)
+pub fn read_workspace_tree(
+    rootPath: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<TreeNode> {
+    registry.begin(requestId.as_deref());
+    let result = (|| {
+        let root_path = ensure_root_directory(&rootPath)?;
+        build_tree(&root_path, &root_path, &registry, requestId.as_deref())
+    })();
+    registry.finish(requestId.as_deref());
+    result
 }
 
 #[tauri::command]
@@ -625,21 +664,30 @@ pub fn search_workspace_content(
     rootPath: String,
     query: String,
     limit: Option<usize>,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<Vec<WorkspaceSearchMatch>> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let normalized_query = normalize_search_query(&query)?;
-    let normalized_limit = normalize_search_limit(limit);
-    let mut matches = Vec::new();
+    registry.begin(requestId.as_deref());
+    let result = (|| {
+        let root_path = ensure_root_directory(&rootPath)?;
+        let normalized_query = normalize_search_query(&query)?;
+        let normalized_limit = normalize_search_limit(limit);
+        let mut matches = Vec::new();
 
-    collect_workspace_search_matches(
-        &root_path,
-        &root_path,
-        &normalized_query,
-        normalized_limit,
-        &mut matches,
-    )?;
+        collect_workspace_search_matches(
+            &root_path,
+            &root_path,
+            &normalized_query,
+            normalized_limit,
+            &mut matches,
+            &registry,
+            requestId.as_deref(),
+        )?;
 
-    Ok(matches)
+        Ok(matches)
+    })();
+    registry.finish(requestId.as_deref());
+    result
 }
 
 #[tauri::command]

@@ -15,13 +15,14 @@ function createAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
     memoryPreview: "记住当前故事走向",
     suggestedTools: ["read_file"],
     enabled: true,
-    files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+    files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
     sourceKind: "builtin-package",
     dispatchHint: "当用户询问剧情推进时",
     validation: { errors: [], isValid: true, warnings: [] },
     discoveredAt: Date.now(),
     isBuiltin: true,
-    rawMarkdown: "# 剧情代理",
+    manifestFilePath: "agents/plot-agent/manifest.json",
+    maxTurns: 5,
     ...overrides,
   };
 }

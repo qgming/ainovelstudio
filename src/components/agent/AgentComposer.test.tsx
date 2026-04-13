@@ -38,7 +38,7 @@ describe("AgentComposer", () => {
         onStop={vi.fn()}
         onSubmit={vi.fn()}
         planningState={{
-          items: [{ content: "Inspect the runtime", status: "completed", activeForm: "" }],
+          items: [{ content: "Inspect the runtime", status: "in_progress", activeForm: "Inspecting the runtime" }],
           roundsSinceUpdate: 0,
         }}
         resources={[]}
@@ -51,8 +51,46 @@ describe("AgentComposer", () => {
     fireEvent.click(toggle);
 
     expect(screen.queryByText("1. Inspect the runtime")).not.toBeInTheDocument();
-    expect(screen.getByText("点击右上角按钮可重新展开当前计划。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开待办计划" })).toBeInTheDocument();
+  });
+
+  it("没有任务时不显示待办计划", () => {
+    render(
+      <AgentComposer
+        input=""
+        onInputChange={vi.fn()}
+        onStop={vi.fn()}
+        onSubmit={vi.fn()}
+        planningState={{ items: [], roundsSinceUpdate: 0 }}
+        resources={[]}
+        rootNode={null}
+        runStatus="idle"
+      />,
+    );
+
+    expect(screen.queryByText(/共 .* 个任务/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /待办计划/ })).not.toBeInTheDocument();
+  });
+
+  it("所有任务完成时不显示待办计划", () => {
+    render(
+      <AgentComposer
+        input=""
+        onInputChange={vi.fn()}
+        onStop={vi.fn()}
+        onSubmit={vi.fn()}
+        planningState={{
+          items: [{ content: "Inspect the runtime", status: "completed", activeForm: "" }],
+          roundsSinceUpdate: 0,
+        }}
+        resources={[]}
+        rootNode={null}
+        runStatus="idle"
+      />,
+    );
+
+    expect(screen.queryByText(/共 .* 个任务/)).not.toBeInTheDocument();
+    expect(screen.queryByText("1. Inspect the runtime")).not.toBeInTheDocument();
   });
 
   it("回车发送时会带上当前手动选择", () => {

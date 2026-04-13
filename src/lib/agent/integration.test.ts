@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "./promptContext";
 import { runAgentTurn } from "./session";
 import type { AgentPart } from "./types";
 
 describe("agent session (streaming)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("未配置 provider 时 yield 提示文本", async () => {
     const parts: AgentPart[] = [];
 
@@ -153,6 +157,211 @@ describe("agent session (streaming)", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
 
     resolveTool?.({ ok: true, summary: "已读取当前章节" });
+  });
+
+  it("工具执行时会透传 requestId 并上报开始结束状态", async () => {
+    const events: Array<{ requestId: string; status: "start" | "finish" }> = [];
+    const executeMock = vi.fn().mockResolvedValue({
+      ok: true,
+      summary: "已读取当前章节",
+    });
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        return;
+      })(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["read_file"],
+      prompt: "读取文件",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {
+        read_file: {
+          description: "读取文件",
+          execute: executeMock,
+        },
+      },
+      onToolRequestStateChange: (event) => {
+        events.push(event);
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const tool = mockStreamFn.mock.calls[0][0].tools?.read_file as
+      | { execute?: (input: { path: string }, options: unknown) => Promise<unknown> }
+      | undefined;
+    await tool?.execute?.({ path: "章节/第一章.md" }, {} as never);
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(executeMock).toHaveBeenCalledWith(
+      { path: "章节/第一章.md" },
+      expect.objectContaining({
+        abortSignal: undefined,
+        requestId: expect.stringMatching(/^tool-read_file-/),
+      }),
+    );
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ status: "start" });
+    expect(events[1]).toMatchObject({ status: "finish" });
+    expect(events[0]?.requestId).toBe(events[1]?.requestId);
+  });
+
+  it("停止后不会等待 usage 收尾", async () => {
+    vi.useFakeTimers();
+    const abortController = new AbortController();
+    let releaseUsage: (() => void) | undefined;
+    const usagePromise = new Promise<{
+      recordedAt: string;
+      provider: string;
+      modelId: string;
+      finishReason: string;
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      noCacheTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+      reasoningTokens: number;
+    }>((resolve) => {
+      releaseUsage = () =>
+        resolve({
+          recordedAt: "1",
+          provider: "ainovelstudio-provider",
+          modelId: "test-model",
+          finishReason: "stop",
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          noCacheTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          reasoningTokens: 0,
+        });
+    });
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: "text-delta" as const, text: "第一段" };
+      })(),
+      usagePromise,
+    });
+
+    const stream = runAgentTurn({
+      abortSignal: abortController.signal,
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      prompt: "停止测试",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    const first = await stream.next();
+    expect(first.value).toEqual({ type: "text-delta", delta: "第一段" });
+
+    abortController.abort();
+    const nextPromise = stream.next();
+    const rejection = expect(nextPromise).rejects.toMatchObject({ name: "AbortError" });
+    await vi.runAllTimersAsync();
+    await rejection;
+
+    releaseUsage?.();
+  });
+
+  it("停止后不会继续 flush 子代理残留快照", async () => {
+    const abortController = new AbortController();
+    let released = false;
+    const mockSubagentStreamFn = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: "reasoning-delta" as const, text: "正在分析。" };
+        abortController.abort();
+        released = true;
+        yield { type: "text-delta" as const, text: "不应继续输出" };
+      })(),
+      usagePromise: Promise.resolve(null),
+    });
+    const mockStreamFn = vi.fn().mockImplementation((request: { tools?: Record<string, { execute?: (input: { prompt: string; agentId?: string }, options: unknown) => Promise<unknown> }> }) => {
+      const taskTool = request.tools?.task;
+      return {
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call" as const,
+            toolName: "task",
+            toolCallId: "task-call-stop-1",
+            input: { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+          };
+          await taskTool?.execute?.({ prompt: "帮我分析主角动机", agentId: "plot-agent" }, {} as never);
+        })(),
+        usagePromise: Promise.resolve(null),
+      };
+    });
+    const enabledAgent: ResolvedAgent = {
+      id: "plot-agent",
+      name: "剧情代理",
+      description: "负责剧情推进",
+      role: "剧情",
+      tags: ["剧情", "动机"],
+      sourceLabel: "内置",
+      body: "专注处理剧情与人物动机。",
+      toolsPreview: "可读取章节文件",
+      memoryPreview: "记住当前故事走向",
+      suggestedTools: ["read_file"],
+      enabled: true,
+      files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
+      sourceKind: "builtin-package",
+      dispatchHint: "当用户询问剧情推进时",
+      validation: { errors: [], isValid: true, warnings: [] },
+      discoveredAt: 1,
+      isBuiltin: true,
+      manifestFilePath: "agents/plot-agent/manifest.json",
+      maxTurns: 5,
+    };
+
+    const stream = runAgentTurn({
+      abortSignal: abortController.signal,
+      activeFilePath: "章节/第一章.md",
+      enabledAgents: [enabledAgent],
+      enabledSkills: [],
+      enabledToolIds: ["task"],
+      prompt: "帮我分析主角动机",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    const parts: AgentPart[] = [];
+    await expect(
+      (async () => {
+        for await (const part of stream) {
+          parts.push(part);
+        }
+      })(),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(released).toBe(true);
+    expect(parts.some((part) => part.type === "subagent" && part.status === "completed")).toBe(false);
+    expect(parts.some((part) => part.type === "subagent" && part.parts.some((inner) => inner.type === "text" && inner.text.includes("不应继续输出")))).toBe(false);
   });
 
   it("后续轮次会把上一轮的用户与 AI 回复一起发送给模型", async () => {
@@ -781,13 +990,14 @@ describe("agent session (streaming)", () => {
       memoryPreview: "记住当前故事走向",
       suggestedTools: ["read_file"],
       enabled: true,
-      files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+      files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
       sourceKind: "builtin-package",
       dispatchHint: "当用户询问剧情推进时",
       validation: { errors: [], isValid: true, warnings: [] },
-      discoveredAt: Date.now(),
+      discoveredAt: 1,
       isBuiltin: true,
-      rawMarkdown: "# 剧情代理",
+      manifestFilePath: "agents/plot-agent/manifest.json",
+      maxTurns: 5,
     };
 
     const stream = runAgentTurn({
@@ -874,13 +1084,14 @@ describe("agent session (streaming)", () => {
       memoryPreview: "记住当前故事走向",
       suggestedTools: ["read_file"],
       enabled: true,
-      files: ["AGENTS.md", "TOOLS.md", "MEMORY.md"],
+      files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
       sourceKind: "builtin-package",
       dispatchHint: "当用户询问剧情推进时",
       validation: { errors: [], isValid: true, warnings: [] },
-      discoveredAt: Date.now(),
+      discoveredAt: 1,
       isBuiltin: true,
-      rawMarkdown: "# 剧情代理",
+      manifestFilePath: "agents/plot-agent/manifest.json",
+      maxTurns: 5,
     };
 
     const stream = runAgentTurn({
@@ -962,6 +1173,7 @@ describe("agent session (streaming)", () => {
     expect(taskResult?.outputSummary).toContain('"subagentId":"subagent-plot-agent-');
     expect(parts[parts.length - 1]).toEqual({ type: "text-delta", delta: "主代理已整合子代理建议。" });
     expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockSubagentStreamFn.mock.calls[0][0].maxSteps).toBe(5);
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain("## s11 子任务摘要（剧情代理）");
   });

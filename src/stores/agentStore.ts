@@ -10,6 +10,7 @@ import {
   updateChatMessage,
 } from "../lib/chat/api";
 import { readWorkspaceTextFile } from "../lib/bookWorkspace/api";
+import { invoke } from "@tauri-apps/api/core";
 import type { ChatBootstrap, ChatSessionSummary } from "../lib/chat/types";
 import {
   buildAssistantPlaceholderMessage,
@@ -22,6 +23,8 @@ import {
   deriveSessionTitle,
   isPlaceholderOnly,
   mergePart,
+  normalizeRecoveredMessages,
+  normalizeRecoveredStatus,
   sortSessionSummaries,
 } from "../lib/chat/sessionRuntime";
 import {
@@ -47,6 +50,7 @@ type AgentStoreState = {
   draftsBySession: Record<string, string>;
   errorMessage: string | null;
   input: string;
+  inflightToolRequestIds: string[];
   isHistoryOpen: boolean;
   isHydrated: boolean;
   messagesBySession: Record<string, AgentMessage[]>;
@@ -79,6 +83,7 @@ function buildInitialState(): AgentStoreState {
     draftsBySession: {},
     errorMessage: null,
     input: "",
+    inflightToolRequestIds: [],
     isHistoryOpen: false,
     isHydrated: false,
     messagesBySession: {},
@@ -105,7 +110,11 @@ function upsertSessionSummary(sessions: ChatSessionSummary[], summary: ChatSessi
 }
 
 function applyBootstrap(state: AgentStoreState, bootstrap: ChatBootstrap): Partial<AgentStoreState> {
-  const validIds = new Set(bootstrap.sessions.map((session) => session.id));
+  const normalizedSessions = bootstrap.sessions.map((session) => ({
+    ...session,
+    status: normalizeRecoveredStatus(session.status),
+  }));
+  const validIds = new Set(normalizedSessions.map((session) => session.id));
   const nextMessagesBySession = Object.fromEntries(
     Object.entries(state.messagesBySession).filter(([sessionId]) => validIds.has(sessionId)),
   ) as Record<string, AgentMessage[]>;
@@ -114,12 +123,12 @@ function applyBootstrap(state: AgentStoreState, bootstrap: ChatBootstrap): Parti
   ) as Record<string, string>;
 
   if (bootstrap.activeSessionId) {
-    nextMessagesBySession[bootstrap.activeSessionId] = bootstrap.activeSessionMessages;
+    nextMessagesBySession[bootstrap.activeSessionId] = normalizeRecoveredMessages(bootstrap.activeSessionMessages);
     nextDraftsBySession[bootstrap.activeSessionId] = bootstrap.activeSessionDraft;
   }
 
   const activeSummary = bootstrap.activeSessionId
-    ? bootstrap.sessions.find((session) => session.id === bootstrap.activeSessionId) ?? null
+    ? normalizedSessions.find((session) => session.id === bootstrap.activeSessionId) ?? null
     : null;
   const activeMessages = bootstrap.activeSessionId ? nextMessagesBySession[bootstrap.activeSessionId] ?? [] : [];
   const planningState = derivePlanningState(activeMessages);
@@ -129,13 +138,14 @@ function applyBootstrap(state: AgentStoreState, bootstrap: ChatBootstrap): Parti
     draftsBySession: nextDraftsBySession,
     errorMessage: null,
     input: bootstrap.activeSessionId ? nextDraftsBySession[bootstrap.activeSessionId] ?? "" : "",
+    inflightToolRequestIds: [],
     isHydrated: true,
     messagesBySession: nextMessagesBySession,
     planningState,
     run: activeSummary
       ? buildRun(activeSummary.id, activeSummary.title, activeSummary.status, activeMessages)
       : buildInitialRun(),
-    sessions: bootstrap.sessions,
+    sessions: normalizedSessions,
     status: "ready",
   };
 }
@@ -170,15 +180,37 @@ type AgentStoreSetter = (
 
 function applyPersistedSummary(set: AgentStoreSetter, summary: ChatSessionSummary) {
   set((state) => {
-    const sessions = upsertSessionSummary(state.sessions, summary);
-    if (state.activeSessionId !== summary.id) {
+    const normalizedSummary = {
+      ...summary,
+      status: normalizeRecoveredStatus(summary.status),
+    };
+    const sessions = upsertSessionSummary(state.sessions, normalizedSummary);
+    if (state.activeSessionId !== normalizedSummary.id) {
       return { sessions };
     }
 
     return {
-      run: buildRun(summary.id, summary.title, summary.status, state.messagesBySession[summary.id] ?? []),
+      run: buildRun(
+        normalizedSummary.id,
+        normalizedSummary.title,
+        normalizedSummary.status,
+        state.messagesBySession[normalizedSummary.id] ?? [],
+      ),
       sessions,
     };
+  });
+}
+
+function trackInflightToolRequest(
+  set: AgentStoreSetter,
+  requestId: string,
+  action: "start" | "finish",
+) {
+  set((state) => {
+    const nextIds = action === "start"
+      ? Array.from(new Set([...state.inflightToolRequestIds, requestId]))
+      : state.inflightToolRequestIds.filter((id) => id !== requestId);
+    return { inflightToolRequestIds: nextIds };
   });
 }
 
@@ -388,6 +420,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
 
       set((state) => ({
         abortController,
+        inflightToolRequestIds: [],
         ...ensureSessionState(state, sessionId, latestMessages, "", "running"),
       }));
       void setChatDraft(sessionId, "");
@@ -411,6 +444,9 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           prompt: nextInput,
           providerConfig,
           workspaceTools: { ...workspaceTools, ...localResourceTools },
+          onToolRequestStateChange: ({ requestId, status }) => {
+            trackInflightToolRequest(set, requestId, status === "start" ? "start" : "finish");
+          },
         });
 
         for await (const part of stream) {
@@ -436,7 +472,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           persistTimer = null;
         }
         await persistChain;
-        set((state) => ({ abortController: null, ...ensureSessionState(state, sessionId, latestMessages, "", "completed") }));
+        set((state) => ({ abortController: null, inflightToolRequestIds: [], ...ensureSessionState(state, sessionId, latestMessages, "", "completed") }));
         await flushAssistant("completed");
       } catch (error) {
         if (persistTimer) {
@@ -449,12 +485,12 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           const assistant = latestMessages[latestMessages.length - 1];
           if (assistant && isPlaceholderOnly(assistant)) {
             latestMessages = latestMessages.filter((message) => message.id !== assistant.id);
-            set((state) => ({ abortController: null, ...ensureSessionState(state, sessionId, latestMessages, "", "idle") }));
+            set((state) => ({ abortController: null, inflightToolRequestIds: [], ...ensureSessionState(state, sessionId, latestMessages, "", "idle") }));
             await persistSummary(deleteChatMessage(sessionId, assistant.id, buildSessionPatch(latestMessages, "idle")));
             return;
           }
 
-          set((state) => ({ abortController: null, ...ensureSessionState(state, sessionId, latestMessages, "", "idle") }));
+          set((state) => ({ abortController: null, inflightToolRequestIds: [], ...ensureSessionState(state, sessionId, latestMessages, "", "idle") }));
           await flushAssistant("idle");
           return;
         }
@@ -467,7 +503,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           messageMeta,
         );
         latestMessages = [...latestMessages, systemMessage];
-        set((state) => ({ abortController: null, ...ensureSessionState(state, sessionId, latestMessages, "", "failed") }));
+        set((state) => ({ abortController: null, inflightToolRequestIds: [], ...ensureSessionState(state, sessionId, latestMessages, "", "failed") }));
         await persistSummary(appendChatMessage(sessionId, systemMessage, buildSessionPatch(latestMessages, "failed")));
       }
     },
@@ -490,7 +526,12 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       }
     },
     stopMessage: () => {
+      const requestIds = get().inflightToolRequestIds;
       get().abortController?.abort();
+      for (const requestId of requestIds) {
+        void invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
+      }
+      set({ inflightToolRequestIds: [] });
     },
     switchSession: async (sessionId) => {
       if (get().run.status === "running" || sessionId === get().activeSessionId) {

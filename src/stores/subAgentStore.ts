@@ -105,7 +105,7 @@ function sortManifests(manifests: AgentManifest[]) {
 }
 
 function resolveFiles() {
-  return ["AGENTS.md", "TOOLS.md", "MEMORY.md"];
+  return ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"];
 }
 
 function resolveAgents(manifests: AgentManifest[], preferences: AgentPreferences): ResolvedAgent[] {
@@ -303,8 +303,9 @@ export const useSubAgentStore = create<SubAgentStore>((set, get) => ({
           description: "",
           discoveredAt: 0,
           isBuiltin: false,
+          manifestFilePath: undefined,
+          maxTurns: 5,
           name: agentId,
-          rawMarkdown: "",
           sourceKind: "installed-package",
           suggestedTools: [],
           tags: [],
