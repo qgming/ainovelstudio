@@ -228,6 +228,25 @@ describe("App shell", () => {
     });
   });
 
+  it("设置页模型设置展示推荐供应商卡片", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("link", { name: "设置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "模型设置" }));
+
+    expect(await screen.findByRole("button", { name: "使用 OpenAI 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 Claude 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 智谱 AI 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 小米 MiMo 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 硅基流动 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 Moonshot AI 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 LongCat 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 ByteDance 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 Gemini 地址" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "使用 Qwen 地址" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "查看详情" }).length).toBeGreaterThan(0);
+  });
+
   it("设置页关于我们展示神笔写作品牌信息", async () => {
     render(<App />);
 
