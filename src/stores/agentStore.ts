@@ -78,6 +78,20 @@ type AgentStoreActions = {
 
 export type AgentStore = AgentStoreState & AgentStoreActions;
 
+type RunActivityState = Pick<
+  AgentStoreState,
+  "abortController" | "activeRunRequestId" | "inflightToolRequestIds" | "run"
+>;
+
+export function selectIsAgentRunActive(state: RunActivityState) {
+  return (
+    state.activeRunRequestId !== null ||
+    state.abortController !== null ||
+    state.inflightToolRequestIds.length > 0 ||
+    state.run.status === "running"
+  );
+}
+
 function buildInitialState(): AgentStoreState {
   return {
     abortController: null,
@@ -96,6 +110,14 @@ function buildInitialState(): AgentStoreState {
     sessions: [],
     status: "idle",
   };
+}
+
+function getPersistedSummaryStatus(state: AgentStoreState, summary: ChatSessionSummary): AgentRunStatus {
+  if (state.activeSessionId === summary.id && selectIsAgentRunActive(state)) {
+    return "running";
+  }
+
+  return normalizeRecoveredStatus(summary.status);
 }
 
 function formatAgentError(error: unknown, fallbackMessage: string) {
@@ -186,7 +208,7 @@ function applyPersistedSummary(set: AgentStoreSetter, summary: ChatSessionSummar
   set((state) => {
     const normalizedSummary = {
       ...summary,
-      status: normalizeRecoveredStatus(summary.status),
+      status: getPersistedSummaryStatus(state, summary),
     };
     const sessions = upsertSessionSummary(state.sessions, normalizedSummary);
     if (state.activeSessionId !== normalizedSummary.id) {
@@ -284,7 +306,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     ...buildInitialState(),
     closeHistory: () => set({ isHistoryOpen: false }),
     createNewSession: async () => {
-      if (get().run.status === "running") {
+      if (selectIsAgentRunActive(get())) {
         return;
       }
 
@@ -300,7 +322,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       }
     },
     deleteSession: async (sessionId) => {
-      if (get().run.status === "running") {
+      if (selectIsAgentRunActive(get())) {
         return;
       }
 
@@ -370,7 +392,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       set(buildInitialState());
     },
     sendMessage: async (selection) => {
-      if (get().run.status === "running") {
+      if (selectIsAgentRunActive(get())) {
         return;
       }
 
@@ -724,7 +746,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       void get().hardStopCurrentRun("manual_stop");
     },
     switchSession: async (sessionId) => {
-      if (get().run.status === "running" || sessionId === get().activeSessionId) {
+      if (selectIsAgentRunActive(get()) || sessionId === get().activeSessionId) {
         set({ isHistoryOpen: false });
         return;
       }

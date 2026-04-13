@@ -4,7 +4,7 @@ import { AgentComposer } from "../agent/AgentComposer";
 import { AgentContextOverview } from "../agent/AgentContextOverview";
 import { AgentMessageList } from "../agent/AgentMessageList";
 import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../common/ActionMenu";
-import { useAgentStore } from "../../stores/agentStore";
+import { selectIsAgentRunActive, useAgentStore } from "../../stores/agentStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
@@ -72,6 +72,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const planningState = useAgentStore((state) => state.planningState);
   const closeHistory = useAgentStore((state) => state.closeHistory);
   const run = useAgentStore((state) => state.run);
+  const isRunning = useAgentStore(selectIsAgentRunActive);
   const sendMessage = useAgentStore((state) => state.sendMessage);
   const sessions = useAgentStore((state) => state.sessions);
   const setInput = useAgentStore((state) => state.setInput);
@@ -84,7 +85,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const agentManifests = useSubAgentStore((state) => state.manifests);
   const agentPreferences = useSubAgentStore((state) => state.preferences);
   const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
-  const isRunning = run.status === "running";
+  const displayRunStatus = isRunning ? "running" : run.status;
   const [contextAnchorRect, setContextAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
   const [historyAnchorRect, setHistoryAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
 
@@ -184,7 +185,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
           })}
         </div>
       </ActionMenu>
-      <AgentMessageList messages={run.messages} runStatus={run.status} />
+      <AgentMessageList messages={run.messages} runStatus={displayRunStatus} />
       <AgentComposer
         input={input}
         onInputChange={setInput}
@@ -208,7 +209,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
           })),
         ]}
         rootNode={rootNode}
-        runStatus={run.status}
+        runStatus={displayRunStatus}
       />
     </aside>
   );

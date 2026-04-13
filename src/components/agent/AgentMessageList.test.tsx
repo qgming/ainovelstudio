@@ -322,6 +322,25 @@ describe("BookAgentPanel", () => {
     expect(useAgentStore.getState().inflightToolRequestIds).toEqual([]);
   });
 
+  it("activeRunRequestId 存在时即使 run.status 暂时不是 running 也保持运行态 UI", () => {
+    const abort = vi.fn();
+    useAgentStore.setState({
+      activeRunRequestId: "run-active",
+      abortController: { abort, signal: { aborted: false } } as unknown as AbortController,
+      run: {
+        id: "run-test",
+        status: "idle",
+        title: "",
+        messages: [],
+      },
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    expect(screen.getByRole("button", { name: "停止输出" })).toBeInTheDocument();
+    expect(screen.getByText("正在思考")).toBeInTheDocument();
+  });
+
   it("手动设置消息后可以渲染特殊 part 卡片", () => {
     useAgentStore.setState({
       run: {

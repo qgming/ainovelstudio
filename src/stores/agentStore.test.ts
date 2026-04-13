@@ -72,7 +72,7 @@ vi.mock("../lib/agent/session", () => ({
   runAgentTurn: streamControl.runAgentTurn,
 }));
 
-import { createChatSession, initializeChatStorage } from "../lib/chat/api";
+import { appendChatMessage, createChatSession, initializeChatStorage } from "../lib/chat/api";
 import { cancelToolRequests } from "../lib/bookWorkspace/api";
 import { resolveManualTurnContext, type ManualTurnContextPayload } from "../lib/agent/manualTurnContext";
 import { useAgentSettingsStore } from "./agentSettingsStore";
@@ -94,6 +94,7 @@ describe("agentStore", () => {
     streamControl.runAgentTurn.mockImplementation(async function* () {
       return;
     });
+    vi.mocked(appendChatMessage).mockReset();
     vi.mocked(resolveManualTurnContext).mockReset();
     vi.mocked(resolveManualTurnContext).mockResolvedValue(createEmptyManualContext());
     vi.mocked(cancelToolRequests).mockReset();
@@ -191,6 +192,69 @@ describe("agentStore", () => {
     await sendPromise;
 
     expect(useAgentStore.getState().run.status).toBe("completed");
+  });
+
+  it("持久化 running summary 回写时不会打断当前运行态", async () => {
+    let releaseManualContext!: () => void;
+    const manualContextPromise: Promise<ManualTurnContextPayload> = new Promise((resolve) => {
+      releaseManualContext = () => resolve(createEmptyManualContext());
+    });
+    vi.mocked(resolveManualTurnContext).mockReturnValue(manualContextPromise);
+    vi.mocked(appendChatMessage).mockResolvedValue({
+      id: "session-1",
+      title: "继续写",
+      summary: "正在思考",
+      status: "running",
+      createdAt: "1",
+      updatedAt: "2",
+      lastMessageAt: "2",
+      pinned: false,
+      archived: false,
+    });
+
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "继续写",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      sessions: [
+        {
+          id: "session-1",
+          title: "新对话",
+          summary: "",
+          status: "idle",
+          createdAt: "1",
+          updatedAt: "1",
+          lastMessageAt: null,
+          pinned: false,
+          archived: false,
+        },
+      ],
+      status: "ready",
+    });
+
+    const sendPromise = useAgentStore.getState().sendMessage({
+      agentIds: [],
+      filePaths: [],
+      skillIds: [],
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const runningState = useAgentStore.getState();
+    expect(runningState.run.status).toBe("running");
+    expect(runningState.sessions[0]?.status).toBe("running");
+    expect(runningState.activeRunRequestId).not.toBeNull();
+
+    releaseManualContext();
+    await sendPromise;
   });
 
   it("stopMessage 会在准备阶段立即清理运行态并移除占位消息", async () => {
