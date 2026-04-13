@@ -48,6 +48,11 @@ type TaskProfile = {
   outputHint: string;
 };
 
+const SKILL_LOADING_NOTE =
+  "system 里只保留技能目录；需要某个 skill 的完整规则时，再用 read_skill_file 按需读取 SKILL.md 或 references。";
+const MANUAL_CONTEXT_FILE_CHAR_LIMIT = 6_000;
+const MANUAL_CONTEXT_TOTAL_CHAR_LIMIT = 12_000;
+
 function joinSections(sections: Array<string | null | undefined>) {
   return sections
     .filter((section): section is string => Boolean(section?.trim()))
@@ -65,19 +70,47 @@ function renderPromptSections(sections: PromptSection[]) {
     .join("\n\n");
 }
 
-function buildSkillPromptBlock(skill: ResolvedSkill) {
+function createMiddleExcerpt(value: string, maxChars: number) {
+  const normalized = value.trim();
+  if (normalized.length <= maxChars) {
+    return {
+      omittedChars: 0,
+      text: normalized,
+      truncated: false,
+    };
+  }
+
+  if (maxChars < 600) {
+    return {
+      omittedChars: normalized.length - maxChars,
+      text: `${normalized.slice(0, maxChars).trimEnd()}…`,
+      truncated: true,
+    };
+  }
+
+  const headChars = Math.max(Math.floor(maxChars * 0.72), maxChars - 900);
+  const tailChars = Math.max(maxChars - headChars, 320);
+  return {
+    omittedChars: normalized.length - maxChars,
+    text: [
+      normalized.slice(0, headChars).trimEnd(),
+      "…（中间省略）…",
+      normalized.slice(-tailChars).trimStart(),
+    ].join("\n"),
+    truncated: true,
+  };
+}
+
+function buildSkillCatalogBlock(skill: ResolvedSkill) {
   return [
     `### 技能：${skill.name}`,
-    `- 来源：${skill.sourceLabel}`,
     `- 说明：${skill.description}`,
     skill.suggestedTools.length > 0
-      ? `- 推荐工具：${skill.suggestedTools.join(", ")}`
-      : "- 推荐工具：无",
-    skill.references.length > 0
-      ? `- 参考资料：${skill.references.map((entry) => entry.path).join(", ")}`
+      ? `- 常用工具：${skill.suggestedTools.join(", ")}`
       : null,
-    "技能规则：",
-    skill.effectivePrompt,
+    skill.references.length > 0
+      ? `- 可读参考：${skill.references.length} 份`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -116,8 +149,8 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
     "- 已知准确路径且需要全文上下文时，再使用 read_file。",
     "- 小范围改动优先使用 line_edit；只有整份内容都准备好了才使用 write_file。",
     "- create_file / create_folder / rename / delete_path 只处理结构变更，不负责正文读取。",
-    "可用工具：",
-    ...enabledTools.map((tool) => `- ${tool.name}（${tool.id}）：${tool.description}`),
+    "当前已启用工具目录：",
+    ...enabledTools.map((tool) => `- ${tool.name}（${tool.id}）`),
   ].join("\n");
 }
 
@@ -238,6 +271,7 @@ function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null
       [
         "### 手动指定技能",
         ...manualContext.skills.map((skill) => `- ${skill.name}：${skill.description}`),
+        "- 这些 skill 当前仅以目录信息注入；需要完整步骤时，请再读取对应 SKILL.md。",
       ].join("\n"),
     );
   }
@@ -254,12 +288,43 @@ function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null
   }
 
   if (manualContext.files.length > 0) {
+    let remainingChars = MANUAL_CONTEXT_TOTAL_CHAR_LIMIT;
+    const renderedFiles: string[] = [];
+
+    for (const file of manualContext.files) {
+      if (remainingChars <= 0) {
+        break;
+      }
+
+      const allocatedChars = Math.min(MANUAL_CONTEXT_FILE_CHAR_LIMIT, remainingChars);
+      const excerpt = createMiddleExcerpt(
+        file.content,
+        allocatedChars,
+      );
+      remainingChars -= Math.min(file.content.trim().length, allocatedChars);
+
+      renderedFiles.push(
+        [
+          `#### ${file.name}`,
+          `- 路径：${file.path}`,
+          excerpt.truncated
+            ? `- 注入方式：已裁剪摘录，约省略 ${excerpt.omittedChars} 个字符；如需全文请再用 read_file 读取。`
+            : "- 注入方式：已直接注入当前文件内容。",
+          "```text",
+          excerpt.text,
+          "```",
+        ].join("\n"),
+      );
+    }
+
+    const omittedFileCount = manualContext.files.length - renderedFiles.length;
     blocks.push(
       [
         "### 手动指定文件",
-        ...manualContext.files.map((file) =>
-          [`#### ${file.name}`, `- 路径：${file.path}`, "```text", file.content, "```"].join("\n"),
-        ),
+        ...renderedFiles,
+        omittedFileCount > 0
+          ? `- 另外还有 ${omittedFileCount} 个手动文件未直接注入，以控制上下文体积；需要时请按路径调用 read_file。`
+          : null,
       ].join("\n\n"),
     );
   }
@@ -287,7 +352,11 @@ export function buildSystemPrompt({
 
   const skillBlock =
     enabledSkills.length > 0
-      ? enabledSkills.map((skill) => buildSkillPromptBlock(skill)).join("\n\n")
+      ? [
+          SKILL_LOADING_NOTE,
+          "",
+          ...enabledSkills.map((skill) => buildSkillCatalogBlock(skill)),
+        ].join("\n")
       : "- 当前未启用额外技能。";
 
   const agentBlock =
