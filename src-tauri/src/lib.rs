@@ -22,9 +22,7 @@ impl Default for ToolCancellationRegistry {
 
 impl ToolCancellationRegistry {
     pub fn begin(&self, request_id: Option<&str>) {
-        if let Some(request_id) = request_id {
-            self.clear(request_id);
-        }
+        let _ = request_id;
     }
 
     pub fn cancel(&self, request_id: &str) {
@@ -70,6 +68,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             workspace::cancel_tool_request,
+            workspace::cancel_tool_requests,
             agents::pick_agent_archive,
             agents::scan_installed_agents,
             agents::initialize_builtin_agents,

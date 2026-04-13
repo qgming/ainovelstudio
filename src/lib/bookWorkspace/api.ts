@@ -11,7 +11,26 @@ export type InvokeCancellationOptions = {
   requestId?: string;
 };
 
-async function invokeWithCancellation<T>(
+function createToolAbortError() {
+  return new DOMException("Tool execution aborted.", "AbortError");
+}
+
+export async function cancelToolRequest(requestId: string) {
+  await invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
+}
+
+export async function cancelToolRequests(requestIds: string[]) {
+  const uniqueRequestIds = Array.from(new Set(requestIds.filter((requestId) => requestId.trim())));
+  if (uniqueRequestIds.length === 0) {
+    return;
+  }
+
+  await invoke<void>("cancel_tool_requests", { requestIds: uniqueRequestIds }).catch(async () => {
+    await Promise.allSettled(uniqueRequestIds.map((requestId) => cancelToolRequest(requestId)));
+  });
+}
+
+export async function invokeWithCancellation<T>(
   command: string,
   payload: Record<string, unknown>,
   options?: InvokeCancellationOptions,
@@ -24,8 +43,8 @@ async function invokeWithCancellation<T>(
   }
 
   if (abortSignal.aborted) {
-    await invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
-    throw new DOMException("Tool execution aborted.", "AbortError");
+    await cancelToolRequest(requestId);
+    throw createToolAbortError();
   }
 
   return new Promise<T>((resolve, reject) => {
@@ -36,8 +55,8 @@ async function invokeWithCancellation<T>(
       }
       settled = true;
       abortSignal.removeEventListener("abort", handleAbort);
-      void invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
-      reject(new DOMException("Tool execution aborted.", "AbortError"));
+      void cancelToolRequest(requestId);
+      reject(createToolAbortError());
     };
 
     abortSignal.addEventListener("abort", handleAbort, { once: true });

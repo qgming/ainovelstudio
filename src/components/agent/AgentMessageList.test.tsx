@@ -297,10 +297,11 @@ describe("BookAgentPanel", () => {
     expect(screen.queryAllByText("read_workspace_tree")).toHaveLength(1);
   });
 
-  it("运行中时显示停止按钮并可终止输出", () => {
+  it("运行中时显示停止按钮并可终止输出", async () => {
     const abort = vi.fn();
     useAgentStore.setState({
-      abortController: { abort } as unknown as AbortController,
+      abortController: { abort, signal: { aborted: false } } as unknown as AbortController,
+      inflightToolRequestIds: ["tool-read-1", "tool-search-2"],
       run: {
         id: "run-test",
         status: "running",
@@ -317,6 +318,8 @@ describe("BookAgentPanel", () => {
     fireEvent.click(stopButton);
 
     expect(abort).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(useAgentStore.getState().inflightToolRequestIds).toEqual([]);
   });
 
   it("手动设置消息后可以渲染特殊 part 卡片", () => {
@@ -568,7 +571,7 @@ describe("BookAgentPanel", () => {
 });
 
 describe("AgentMessageList", () => {
-  it("runStatus 为 running 时显示思考尾巴", () => {
+  it("runStatus 为 running 时显示无背景的思考尾巴", () => {
     render(
       <AgentMessageList
         runStatus="running"
@@ -584,6 +587,9 @@ describe("AgentMessageList", () => {
     );
 
     expect(screen.getByText("正在思考")).toBeInTheDocument();
+    const tail = screen.getByTestId("agent-thinking-tail");
+    expect(tail.innerHTML).not.toContain("rounded-[10px]");
+    expect(tail.innerHTML).not.toContain("bg-white");
   });
 
   it("runStatus 不是 running 时不显示思考尾巴", () => {

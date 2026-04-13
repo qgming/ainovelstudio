@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
@@ -14,12 +15,16 @@ import { useThemeStore } from "./stores/themeStore";
 import { useSkillsStore } from "./stores/skillsStore";
 import { useSubAgentStore } from "./stores/subAgentStore";
 
+const appWindow = getCurrentWindow();
+
 function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const initializeAgents = useSubAgentStore((state) => state.initialize);
   const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
   const initializeAgentHistory = useAgentStore((state) => state.initialize);
+  const hardStopCurrentRun = useAgentStore((state) => state.hardStopCurrentRun);
+  const isClosingRef = useRef(false);
 
   useEffect(() => {
     initializeTheme();
@@ -28,6 +33,26 @@ function AppShell() {
     void initializeAgentSettings();
     void initializeAgentHistory();
   }, [initializeAgentHistory, initializeAgentSettings, initializeAgents, initializeSkills, initializeTheme]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    void appWindow.onCloseRequested(async (event) => {
+      if (isClosingRef.current) {
+        return;
+      }
+      isClosingRef.current = true;
+      event.preventDefault();
+      await hardStopCurrentRun("app_close");
+      await appWindow.close();
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [hardStopCurrentRun]);
 
   return (
     <div className="h-screen overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">

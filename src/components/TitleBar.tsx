@@ -2,11 +2,13 @@ import { Minus, Copy, Square, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import appIcon from "../assets/icon.png";
+import { useAgentStore } from "../stores/agentStore";
 
 const appWindow = getCurrentWindow();
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
+  const hardStopCurrentRun = useAgentStore((state) => state.hardStopCurrentRun);
 
   useEffect(() => {
     let mounted = true;
@@ -44,6 +46,11 @@ export function TitleBar() {
     setIsMaximized(true);
   }
 
+  async function handleCloseWindow() {
+    await hardStopCurrentRun("app_close");
+    await appWindow.close();
+  }
+
   return (
     <header className="flex h-8 shrink-0 items-center justify-between border-b border-[#e8eaee] bg-[#f7f7f8] pl-3 dark:border-[#23252b] dark:bg-[#111214]">
       <div
@@ -73,7 +80,7 @@ export function TitleBar() {
         <WindowButton
           ariaLabel="关闭窗口"
           danger
-          onClick={() => void appWindow.close()}
+          onClick={() => void handleCloseWindow()}
         >
           <X className="h-3.5 w-3.5" strokeWidth={2.2} />
         </WindowButton>

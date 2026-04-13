@@ -151,6 +151,20 @@ fn check_cancellation(
     registry.check(request_id)
 }
 
+fn with_cancellable_request<T, F>(
+    registry: &ToolCancellationRegistry,
+    request_id: Option<&str>,
+    operation: F,
+) -> CommandResult<T>
+where
+    F: FnOnce() -> CommandResult<T>,
+{
+    registry.begin(request_id);
+    let result = operation();
+    registry.finish(request_id);
+    result
+}
+
 fn validate_adjacent_context(
     lines: &[String],
     target_index: usize,
@@ -599,6 +613,18 @@ pub fn cancel_tool_request(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
+pub fn cancel_tool_requests(
+    requestIds: Vec<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<()> {
+    for request_id in requestIds {
+        registry.cancel(&request_id);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn pick_book_directory(app: AppHandle) -> CommandResult<Option<String>> {
     Ok(app
         .dialog()
@@ -615,47 +641,95 @@ pub fn read_workspace_tree(
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<TreeNode> {
-    registry.begin(requestId.as_deref());
-    let result = (|| {
-        let root_path = ensure_root_directory(&rootPath)?;
-        build_tree(&root_path, &root_path, &registry, requestId.as_deref())
-    })();
-    registry.finish(requestId.as_deref());
-    result
+    read_workspace_tree_internal(&rootPath, requestId.as_deref(), &registry)
+}
+
+fn read_workspace_tree_internal(
+    root_path: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<TreeNode> {
+    with_cancellable_request(registry, request_id, || {
+        let root_path = ensure_root_directory(root_path)?;
+        build_tree(&root_path, &root_path, registry, request_id)
+    })
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn read_text_file(rootPath: String, path: String) -> CommandResult<String> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let file_path = ensure_existing_path_in_root(&root_path, &path)?;
-    if !file_path.is_file() {
-        return Err("只能读取文件内容。".into());
-    }
-    fs::read_to_string(file_path).map_err(error_to_string)
+pub fn read_text_file(
+    rootPath: String,
+    path: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<String> {
+    read_text_file_internal(&rootPath, &path, requestId.as_deref(), &registry)
+}
+
+fn read_text_file_internal(
+    root_path: &str,
+    path: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<String> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        check_cancellation(registry, request_id)?;
+        let file_path = ensure_existing_path_in_root(&root_path, path)?;
+        if !file_path.is_file() {
+            return Err("只能读取文件内容。".into());
+        }
+        check_cancellation(registry, request_id)?;
+        let contents = fs::read_to_string(file_path).map_err(error_to_string)?;
+        check_cancellation(registry, request_id)?;
+        Ok(contents)
+    })
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn write_text_file(rootPath: String, path: String, contents: String) -> CommandResult<()> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let file_path = ensure_path_in_root(&root_path, &path)?;
+pub fn write_text_file(
+    rootPath: String,
+    path: String,
+    contents: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<()> {
+    write_text_file_internal(&rootPath, &path, &contents, requestId.as_deref(), &registry)
+}
 
-    if file_path == root_path {
-        return Err("只能写入文件内容。".into());
-    }
+fn write_text_file_internal(
+    root_path: &str,
+    path: &str,
+    contents: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<()> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        check_cancellation(registry, request_id)?;
+        let file_path = ensure_path_in_root(&root_path, path)?;
 
-    if file_path.exists() && !file_path.is_file() {
-        return Err("只能写入文件内容。".into());
-    }
+        if file_path == root_path {
+            return Err("只能写入文件内容。".into());
+        }
 
-    let parent_path = file_path
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| "无法定位父级目录。".to_string())?;
-    fs::create_dir_all(&parent_path).map_err(error_to_string)?;
-    fs::write(&file_path, contents).map_err(error_to_string)?;
-    Ok(())
+        if file_path.exists() && !file_path.is_file() {
+            return Err("只能写入文件内容。".into());
+        }
+
+        let parent_path = file_path
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| "无法定位父级目录。".to_string())?;
+        check_cancellation(registry, request_id)?;
+        fs::create_dir_all(&parent_path).map_err(error_to_string)?;
+        check_cancellation(registry, request_id)?;
+        fs::write(&file_path, contents).map_err(error_to_string)?;
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -667,10 +741,19 @@ pub fn search_workspace_content(
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<Vec<WorkspaceSearchMatch>> {
-    registry.begin(requestId.as_deref());
-    let result = (|| {
-        let root_path = ensure_root_directory(&rootPath)?;
-        let normalized_query = normalize_search_query(&query)?;
+    search_workspace_content_internal(&rootPath, &query, limit, requestId.as_deref(), &registry)
+}
+
+fn search_workspace_content_internal(
+    root_path: &str,
+    query: &str,
+    limit: Option<usize>,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<Vec<WorkspaceSearchMatch>> {
+    with_cancellable_request(registry, request_id, || {
+        let root_path = ensure_root_directory(root_path)?;
+        let normalized_query = normalize_search_query(query)?;
         let normalized_limit = normalize_search_limit(limit);
         let mut matches = Vec::new();
 
@@ -680,14 +763,12 @@ pub fn search_workspace_content(
             &normalized_query,
             normalized_limit,
             &mut matches,
-            &registry,
-            requestId.as_deref(),
+            registry,
+            request_id,
         )?;
 
         Ok(matches)
-    })();
-    registry.finish(requestId.as_deref());
-    result
+    })
 }
 
 #[tauri::command]
@@ -696,21 +777,39 @@ pub fn read_text_file_line(
     rootPath: String,
     path: String,
     lineNumber: usize,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<WorkspaceLineResult> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let file_path = ensure_existing_path_in_root(&root_path, &path)?;
-    if !file_path.is_file() {
-        return Err("只能读取文件中的指定行。".into());
-    }
+    read_text_file_line_internal(&rootPath, &path, lineNumber, requestId.as_deref(), &registry)
+}
 
-    let contents = fs::read_to_string(&file_path).map_err(error_to_string)?;
-    let (lines, _) = split_text_lines(&contents);
-    let index = validate_line_number(lineNumber)?;
+fn read_text_file_line_internal(
+    root_path: &str,
+    path: &str,
+    line_number: usize,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<WorkspaceLineResult> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        check_cancellation(registry, request_id)?;
+        let file_path = ensure_existing_path_in_root(&root_path, path)?;
+        if !file_path.is_file() {
+            return Err("只能读取文件中的指定行。".into());
+        }
 
-    Ok(WorkspaceLineResult {
-        line_number: lineNumber,
-        path: display_relative_path(&root_path, &file_path),
-        text: line_text_or_empty(&lines, index).to_string(),
+        check_cancellation(registry, request_id)?;
+        let contents = fs::read_to_string(&file_path).map_err(error_to_string)?;
+        let (lines, _) = split_text_lines(&contents);
+        let index = validate_line_number(line_number)?;
+        check_cancellation(registry, request_id)?;
+
+        Ok(WorkspaceLineResult {
+            line_number,
+            path: display_relative_path(&root_path, &file_path),
+            text: line_text_or_empty(&lines, index).to_string(),
+        })
     })
 }
 
@@ -723,43 +822,73 @@ pub fn replace_text_file_line(
     contents: String,
     previousLine: Option<String>,
     nextLine: Option<String>,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<WorkspaceLineResult> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let file_path = ensure_existing_path_in_root(&root_path, &path)?;
-    if !file_path.is_file() {
-        return Err("只能替换文件中的指定行。".into());
-    }
+    replace_text_file_line_internal(
+        &rootPath,
+        &path,
+        lineNumber,
+        &contents,
+        previousLine,
+        nextLine,
+        requestId.as_deref(),
+        &registry,
+    )
+}
 
-    let next_line = validate_single_line_text(&contents)?;
-    let previous_line = validate_optional_context_line(previousLine)?;
-    let next_context_line = validate_optional_context_line(nextLine)?;
-    let raw = fs::read_to_string(&file_path).map_err(error_to_string)?;
-    let line_ending = detect_line_ending(&raw);
-    let (mut lines, had_trailing_newline) = split_text_lines(&raw);
-    let index = validate_line_number(lineNumber)?;
-    validate_adjacent_context(
-        &lines,
-        index,
-        previous_line.as_deref(),
-        next_context_line.as_deref(),
-    )?;
+fn replace_text_file_line_internal(
+    root_path: &str,
+    path: &str,
+    line_number: usize,
+    contents: &str,
+    previous_line: Option<String>,
+    next_line: Option<String>,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<WorkspaceLineResult> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        check_cancellation(registry, request_id)?;
+        let file_path = ensure_existing_path_in_root(&root_path, path)?;
+        if !file_path.is_file() {
+            return Err("只能替换文件中的指定行。".into());
+        }
 
-    if index >= lines.len() {
-        lines.resize(index + 1, String::new());
-    }
-    lines[index] = next_line.clone();
+        let next_line_value = validate_single_line_text(contents)?;
+        let previous_line_value = validate_optional_context_line(previous_line)?;
+        let next_context_line = validate_optional_context_line(next_line)?;
+        check_cancellation(registry, request_id)?;
+        let raw = fs::read_to_string(&file_path).map_err(error_to_string)?;
+        let line_ending = detect_line_ending(&raw);
+        let (mut lines, had_trailing_newline) = split_text_lines(&raw);
+        let index = validate_line_number(line_number)?;
+        validate_adjacent_context(
+            &lines,
+            index,
+            previous_line_value.as_deref(),
+            next_context_line.as_deref(),
+        )?;
 
-    let mut next_contents = lines.join(line_ending);
-    if had_trailing_newline {
-        next_contents.push_str(line_ending);
-    }
+        if index >= lines.len() {
+            lines.resize(index + 1, String::new());
+        }
+        lines[index] = next_line_value.clone();
 
-    fs::write(&file_path, next_contents).map_err(error_to_string)?;
+        let mut next_contents = lines.join(line_ending);
+        if had_trailing_newline {
+            next_contents.push_str(line_ending);
+        }
 
-    Ok(WorkspaceLineResult {
-        line_number: lineNumber,
-        path: display_relative_path(&root_path, &file_path),
-        text: next_line,
+        check_cancellation(registry, request_id)?;
+        fs::write(&file_path, next_contents).map_err(error_to_string)?;
+
+        Ok(WorkspaceLineResult {
+            line_number,
+            path: display_relative_path(&root_path, &file_path),
+            text: next_line_value,
+        })
     })
 }
 
@@ -782,18 +911,34 @@ pub fn create_workspace_directory(
     rootPath: String,
     parentPath: String,
     name: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<String> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let parent_path = ensure_parent_directory_in_root(&root_path, &parentPath)?;
-    let directory_name = validate_name(&name)?;
-    let next_path = parent_path.join(directory_name);
+    create_workspace_directory_internal(&rootPath, &parentPath, &name, requestId.as_deref(), &registry)
+}
 
-    if next_path.exists() {
-        return Err("同名文件或文件夹已存在。".into());
-    }
+fn create_workspace_directory_internal(
+    root_path: &str,
+    parent_path: &str,
+    name: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<String> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        let parent_path = ensure_parent_directory_in_root(&root_path, parent_path)?;
+        let directory_name = validate_name(name)?;
+        let next_path = parent_path.join(directory_name);
 
-    fs::create_dir_all(&next_path).map_err(error_to_string)?;
-    Ok(normalize_path(&next_path))
+        if next_path.exists() {
+            return Err("同名文件或文件夹已存在。".into());
+        }
+
+        check_cancellation(registry, request_id)?;
+        fs::create_dir_all(&next_path).map_err(error_to_string)?;
+        Ok(normalize_path(&next_path))
+    })
 }
 
 #[tauri::command]
@@ -802,18 +947,34 @@ pub fn create_workspace_text_file(
     rootPath: String,
     parentPath: String,
     name: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<String> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let parent_path = ensure_parent_directory_in_root(&root_path, &parentPath)?;
-    let file_name = normalize_text_file_name(&name)?;
-    let next_path = parent_path.join(file_name);
+    create_workspace_text_file_internal(&rootPath, &parentPath, &name, requestId.as_deref(), &registry)
+}
 
-    if next_path.exists() {
-        return Err("同名文件已存在。".into());
-    }
+fn create_workspace_text_file_internal(
+    root_path: &str,
+    parent_path: &str,
+    name: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<String> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        let parent_path = ensure_parent_directory_in_root(&root_path, parent_path)?;
+        let file_name = normalize_text_file_name(name)?;
+        let next_path = parent_path.join(file_name);
 
-    fs::write(&next_path, "").map_err(error_to_string)?;
-    Ok(normalize_path(&next_path))
+        if next_path.exists() {
+            return Err("同名文件已存在。".into());
+        }
+
+        check_cancellation(registry, request_id)?;
+        fs::write(&next_path, "").map_err(error_to_string)?;
+        Ok(normalize_path(&next_path))
+    })
 }
 
 #[tauri::command]
@@ -822,46 +983,80 @@ pub fn rename_workspace_entry(
     rootPath: String,
     path: String,
     nextName: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<String> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let current_path = ensure_existing_path_in_root(&root_path, &path)?;
+    rename_workspace_entry_internal(&rootPath, &path, &nextName, requestId.as_deref(), &registry)
+}
 
-    if current_path == root_path {
-        return Err("不能重命名书籍根目录。".into());
-    }
+fn rename_workspace_entry_internal(
+    root_path: &str,
+    path: &str,
+    next_name: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<String> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        let current_path = ensure_existing_path_in_root(&root_path, path)?;
 
-    let parent_path = current_path
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| "无法定位父级目录。".to_string())?;
-    let target_name = build_rename_target_name(&current_path, &nextName)?;
-    let target_path = parent_path.join(target_name);
+        if current_path == root_path {
+            return Err("不能重命名书籍根目录。".into());
+        }
 
-    if target_path.exists() {
-        return Err("目标名称已存在。".into());
-    }
+        let parent_path = current_path
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| "无法定位父级目录。".to_string())?;
+        let target_name = build_rename_target_name(&current_path, next_name)?;
+        let target_path = parent_path.join(target_name);
 
-    fs::rename(&current_path, &target_path).map_err(error_to_string)?;
-    Ok(normalize_path(&target_path))
+        if target_path.exists() {
+            return Err("目标名称已存在。".into());
+        }
+
+        check_cancellation(registry, request_id)?;
+        fs::rename(&current_path, &target_path).map_err(error_to_string)?;
+        Ok(normalize_path(&target_path))
+    })
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn delete_workspace_entry(rootPath: String, path: String) -> CommandResult<()> {
-    let root_path = ensure_root_directory(&rootPath)?;
-    let target_path = ensure_existing_path_in_root(&root_path, &path)?;
+pub fn delete_workspace_entry(
+    rootPath: String,
+    path: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<()> {
+    delete_workspace_entry_internal(&rootPath, &path, requestId.as_deref(), &registry)
+}
 
-    if target_path == root_path {
-        return Err("不能删除书籍根目录。".into());
-    }
+fn delete_workspace_entry_internal(
+    root_path: &str,
+    path: &str,
+    request_id: Option<&str>,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<()> {
+    with_cancellable_request(registry, request_id, || {
+        check_cancellation(registry, request_id)?;
+        let root_path = ensure_root_directory(root_path)?;
+        let target_path = ensure_existing_path_in_root(&root_path, path)?;
 
-    if target_path.is_dir() {
-        fs::remove_dir_all(&target_path).map_err(error_to_string)?;
-    } else {
-        fs::remove_file(&target_path).map_err(error_to_string)?;
-    }
+        if target_path == root_path {
+            return Err("不能删除书籍根目录。".into());
+        }
 
-    Ok(())
+        check_cancellation(registry, request_id)?;
+        if target_path.is_dir() {
+            fs::remove_dir_all(&target_path).map_err(error_to_string)?;
+        } else {
+            fs::remove_file(&target_path).map_err(error_to_string)?;
+        }
+
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -883,11 +1078,14 @@ mod tests {
     fn write_text_file_creates_missing_directories_and_file() {
         let root = create_temp_workspace();
         let root_str = normalize_path(&root);
+        let registry = ToolCancellationRegistry::default();
 
-        write_text_file(
-            root_str,
-            "章节/第一卷/第1章.md".into(),
-            "# 新章节\n\n这里是正文。".into(),
+        write_text_file_internal(
+            &root_str,
+            "章节/第一卷/第1章.md",
+            "# 新章节\n\n这里是正文。",
+            None,
+            &registry,
         )
         .expect("write_text_file should create missing directories and file");
 
@@ -902,8 +1100,9 @@ mod tests {
     fn write_text_file_rejects_paths_outside_root() {
         let root = create_temp_workspace();
         let root_str = normalize_path(&root);
+        let registry = ToolCancellationRegistry::default();
 
-        let error = write_text_file(root_str, "../escape.md".into(), "oops".into())
+        let error = write_text_file_internal(&root_str, "../escape.md", "oops", None, &registry)
             .expect_err("write_text_file should reject escaping root");
 
         assert_eq!(error, "目标路径不在当前书籍目录内。");
@@ -915,9 +1114,16 @@ mod tests {
         let root = create_temp_workspace();
         let file_path = root.join("章节.md");
         fs::write(&file_path, "第一行\n第二行").expect("failed to seed file");
+        let registry = ToolCancellationRegistry::default();
 
-        let result = read_text_file_line(normalize_path(&root), "章节.md".into(), 5)
-            .expect("read_text_file_line should support out-of-range positive lines");
+        let result = read_text_file_line_internal(
+            &normalize_path(&root),
+            "章节.md",
+            5,
+            None,
+            &registry,
+        )
+        .expect("read_text_file_line should support out-of-range positive lines");
 
         assert_eq!(result.line_number, 5);
         assert_eq!(result.text, "");
@@ -929,14 +1135,17 @@ mod tests {
         let root = create_temp_workspace();
         let file_path = root.join("章节.md");
         fs::write(&file_path, "第一行\n第二行").expect("failed to seed file");
+        let registry = ToolCancellationRegistry::default();
 
-        let result = replace_text_file_line(
-            normalize_path(&root),
-            "章节.md".into(),
+        let result = replace_text_file_line_internal(
+            &normalize_path(&root),
+            "章节.md",
             5,
-            "第五行".into(),
+            "第五行",
             Some("".into()),
             Some("".into()),
+            None,
+            &registry,
         )
         .expect("replace_text_file_line should allow writing to any positive line");
 
@@ -952,14 +1161,17 @@ mod tests {
         let root = create_temp_workspace();
         let file_path = root.join("章节.md");
         fs::write(&file_path, "第一行\n第二行\n第三行").expect("failed to seed file");
+        let registry = ToolCancellationRegistry::default();
 
-        let error = replace_text_file_line(
-            normalize_path(&root),
-            "章节.md".into(),
+        let error = replace_text_file_line_internal(
+            &normalize_path(&root),
+            "章节.md",
             2,
-            "新的第二行".into(),
+            "新的第二行",
             Some("不匹配的上一行".into()),
             Some("第三行".into()),
+            None,
+            &registry,
         )
         .expect_err("replace_text_file_line should validate previous line");
 
@@ -987,11 +1199,14 @@ mod tests {
     fn create_workspace_text_file_accepts_json_extension() {
         let root = create_temp_workspace();
         let root_str = normalize_path(&root);
+        let registry = ToolCancellationRegistry::default();
 
-        let created = create_workspace_text_file(
-            root_str,
-            normalize_path(&root),
-            "角色关系矩阵.json".into(),
+        let created = create_workspace_text_file_internal(
+            &root_str,
+            &normalize_path(&root),
+            "角色关系矩阵.json",
+            None,
+            &registry,
         )
         .expect("create_workspace_text_file should accept json extension");
 
@@ -1001,25 +1216,66 @@ mod tests {
     }
 
     #[test]
-    fn read_workspace_tree_keeps_index_json_visible() {
+    fn cancelled_write_text_file_does_not_create_file() {
         let root = create_temp_workspace();
-        fs::create_dir_all(root.join("章节")).expect("failed to create chapter dir");
-        fs::write(root.join("index.json"), "{}").expect("failed to seed root index");
-        fs::write(root.join("章节").join("index.json"), "{}").expect("failed to seed child index");
+        let root_str = normalize_path(&root);
+        let registry = ToolCancellationRegistry::default();
+        registry.cancel("req-write-cancel");
 
-        let tree =
-            read_workspace_tree(normalize_path(&root)).expect("read_workspace_tree should succeed");
+        let error = write_text_file_internal(
+            &root_str,
+            "章节/第二卷/第2章.md",
+            "不会写入",
+            Some("req-write-cancel"),
+            &registry,
+        )
+        .expect_err("cancelled write should abort before writing");
 
-        let child_names = tree
-            .children
-            .unwrap_or_default()
-            .into_iter()
-            .map(|child| child.name)
-            .collect::<Vec<_>>();
+        assert_eq!(error, "Tool execution aborted.");
+        assert!(!root.join("章节").join("第二卷").join("第2章.md").exists());
+        fs::remove_dir_all(&root).ok();
+    }
 
-        assert!(root.join("index.json").exists());
-        assert!(root.join("章节").join("index.json").exists());
-        assert_eq!(child_names, vec!["章节", "index.json"]);
+    #[test]
+    fn cancelled_create_workspace_text_file_does_not_create_file() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+        let registry = ToolCancellationRegistry::default();
+        registry.cancel("req-create-file-cancel");
+
+        let error = create_workspace_text_file_internal(
+            &root_str,
+            &root_str,
+            "新建章节.md",
+            Some("req-create-file-cancel"),
+            &registry,
+        )
+        .expect_err("cancelled create file should abort before creating file");
+
+        assert_eq!(error, "Tool execution aborted.");
+        assert!(!root.join("新建章节.md").exists());
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn cancelled_delete_workspace_entry_does_not_remove_file() {
+        let root = create_temp_workspace();
+        let root_str = normalize_path(&root);
+        let file_path = root.join("章节.md");
+        fs::write(&file_path, "保留内容").expect("failed to seed file");
+        let registry = ToolCancellationRegistry::default();
+        registry.cancel("req-delete-cancel");
+
+        let error = delete_workspace_entry_internal(
+            &root_str,
+            "章节.md",
+            Some("req-delete-cancel"),
+            &registry,
+        )
+        .expect_err("cancelled delete should abort before removing file");
+
+        assert_eq!(error, "Tool execution aborted.");
+        assert!(file_path.exists());
         fs::remove_dir_all(&root).ok();
     }
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { ChevronDown, ChevronRight, Brain, Wrench, Check, X, LoaderCircle, Users, Circle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -9,6 +9,47 @@ const statusClasses = {
   neutral: "border-[#dde4f0] bg-[#f8fafc] text-[#5b6475] dark:border-[#2a2f37] dark:bg-[#171a1f] dark:text-[#9ca7b8]",
   success: "border-[#1f5b44] bg-[#eafaf2] text-[#1d6a4d] dark:border-[#22553f] dark:bg-[#13221a] dark:text-[#9fe2bb]",
   warning: "border-[#6d5321] bg-[#fff6de] text-[#8a6412] dark:border-[#5c4620] dark:bg-[#261f12] dark:text-[#f3c96b]",
+} as const;
+
+const markdownComponents = {
+  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0 text-inherit">{children}</p>,
+  ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-3 list-disc pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-3 list-decimal pl-5 last:mb-0">{children}</ol>,
+  li: ({ children }: { children?: React.ReactNode }) => <li className="mb-1 text-inherit last:mb-0">{children}</li>,
+  blockquote: ({ children }: { children?: React.ReactNode }) => (
+    <blockquote className="mb-3 border-l-2 border-current/20 pl-3 opacity-90 last:mb-0">{children}</blockquote>
+  ),
+  code: ({ children, className, ...props }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) => (
+    <code
+      {...props}
+      className={`rounded bg-black/10 px-1.5 py-0.5 font-mono text-[0.92em] text-inherit dark:bg-white/10 ${className ?? ""}`.trim()}
+    >
+      {children}
+    </code>
+  ),
+  pre: ({ children }: { children?: React.ReactNode }) => (
+    <pre className="mb-3 overflow-x-auto rounded-[8px] bg-black/10 px-3 py-2 font-mono text-[0.92em] text-inherit dark:bg-white/10 last:mb-0">
+      {children}
+    </pre>
+  ),
+  a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="underline underline-offset-2 text-inherit opacity-90 hover:opacity-100"
+    >
+      {children}
+    </a>
+  ),
+  hr: () => <hr className="my-3 border-current/15" />,
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div className="mb-3 overflow-x-auto last:mb-0">
+      <table className="w-full border-collapse text-left text-inherit">{children}</table>
+    </div>
+  ),
+  th: ({ children }: { children?: React.ReactNode }) => <th className="border border-current/15 px-2 py-1 font-semibold">{children}</th>,
+  td: ({ children }: { children?: React.ReactNode }) => <td className="border border-current/15 px-2 py-1 align-top">{children}</td>,
 } as const;
 
 function StepStatusIcon({ status }: { status: "idle" | "running" | "completed" | "failed" }) {
@@ -140,57 +181,15 @@ function AccordionCard({
   );
 }
 
-function MarkdownText({ className = "", text }: { className?: string; text: string }) {
+const MarkdownText = memo(function MarkdownText({ className = "", text }: { className?: string; text: string }) {
   return (
     <div className={`agent-markdown text-sm leading-6 text-inherit ${className}`.trim()}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          p: ({ children }) => <p className="mb-3 last:mb-0 text-inherit">{children}</p>,
-          ul: ({ children }) => <ul className="mb-3 list-disc pl-5 last:mb-0">{children}</ul>,
-          ol: ({ children }) => <ol className="mb-3 list-decimal pl-5 last:mb-0">{children}</ol>,
-          li: ({ children }) => <li className="mb-1 text-inherit last:mb-0">{children}</li>,
-          blockquote: ({ children }) => (
-            <blockquote className="mb-3 border-l-2 border-current/20 pl-3 opacity-90 last:mb-0">{children}</blockquote>
-          ),
-          code: ({ children, className, ...props }) => (
-            <code
-              {...props}
-              className={`rounded bg-black/10 px-1.5 py-0.5 font-mono text-[0.92em] text-inherit dark:bg-white/10 ${className ?? ""}`.trim()}
-            >
-              {children}
-            </code>
-          ),
-          pre: ({ children }) => (
-            <pre className="mb-3 overflow-x-auto rounded-[8px] bg-black/10 px-3 py-2 font-mono text-[0.92em] text-inherit dark:bg-white/10 last:mb-0">
-              {children}
-            </pre>
-          ),
-          a: ({ children, href }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="underline underline-offset-2 text-inherit opacity-90 hover:opacity-100"
-            >
-              {children}
-            </a>
-          ),
-          hr: () => <hr className="my-3 border-current/15" />,
-          table: ({ children }) => (
-            <div className="mb-3 overflow-x-auto last:mb-0">
-              <table className="w-full border-collapse text-left text-inherit">{children}</table>
-            </div>
-          ),
-          th: ({ children }) => <th className="border border-current/15 px-2 py-1 font-semibold">{children}</th>,
-          td: ({ children }) => <td className="border border-current/15 px-2 py-1 align-top">{children}</td>,
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
         {text}
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 function formatStructuredText(text: string) {
   const trimmed = text.trim();

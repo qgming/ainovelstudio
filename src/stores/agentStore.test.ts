@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockInvoke } = vi.hoisted(() => ({
+const { mockInvoke, streamControl } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
+  streamControl: {
+    runAgentTurn: vi.fn(),
+  },
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -20,17 +23,21 @@ vi.mock("../lib/chat/api", () => ({
 }));
 
 vi.mock("../lib/bookWorkspace/api", () => ({
+  cancelToolRequests: vi.fn(),
   readWorkspaceTextFile: vi.fn(),
 }));
 
-vi.mock("./agentSettingsStore", async () => {
-  const actual = await vi.importActual<typeof import("./agentSettingsStore")>("./agentSettingsStore");
-  return {
-    ...actual,
-    useAgentSettingsStore: actual.useAgentSettingsStore,
-    getStoredDefaultAgentMarkdown: vi.fn(() => ""),
-  };
-});
+vi.mock("../lib/agentConfig/api", () => ({
+  initializeDefaultAgentConfig: vi.fn(async () => ({ markdown: "", path: null })),
+  readDefaultAgentConfig: vi.fn(async () => ({ markdown: "", path: null })),
+  writeDefaultAgentConfig: vi.fn(async () => ({ markdown: "", path: null })),
+}));
+
+vi.mock("../lib/agentSettings/api", () => ({
+  clearAgentSettings: vi.fn(async () => undefined),
+  readAgentSettings: vi.fn(async () => null),
+  writeAgentSettings: vi.fn(async () => undefined),
+}));
 
 vi.mock("./bookWorkspaceStore", () => ({
   useBookWorkspaceStore: {
@@ -62,23 +69,53 @@ vi.mock("../lib/agent/manualTurnContext", () => ({
 }));
 
 vi.mock("../lib/agent/session", () => ({
-  runAgentTurn: vi.fn(),
+  runAgentTurn: streamControl.runAgentTurn,
 }));
 
-import { initializeChatStorage } from "../lib/chat/api";
+import { createChatSession, initializeChatStorage } from "../lib/chat/api";
+import { cancelToolRequests } from "../lib/bookWorkspace/api";
+import { resolveManualTurnContext, type ManualTurnContextPayload } from "../lib/agent/manualTurnContext";
 import { useAgentSettingsStore } from "./agentSettingsStore";
 import { useAgentStore } from "./agentStore";
+
+function createEmptyManualContext(): ManualTurnContextPayload {
+  return {
+    agents: [],
+    files: [],
+    skills: [],
+  };
+}
 
 describe("agentStore", () => {
   beforeEach(() => {
     mockInvoke.mockReset();
     mockInvoke.mockResolvedValue(undefined);
+    streamControl.runAgentTurn.mockReset();
+    streamControl.runAgentTurn.mockImplementation(async function* () {
+      return;
+    });
+    vi.mocked(resolveManualTurnContext).mockReset();
+    vi.mocked(resolveManualTurnContext).mockResolvedValue(createEmptyManualContext());
+    vi.mocked(cancelToolRequests).mockReset();
+    vi.mocked(cancelToolRequests).mockResolvedValue(undefined);
     useAgentSettingsStore.getState().reset();
+    useAgentSettingsStore.setState({
+      config: {
+        apiKey: "test-key",
+        baseURL: "https://example.test",
+        model: "test-model",
+      },
+      defaultAgentMarkdown: "# Test agent",
+      enabledTools: {},
+      errorMessage: null,
+      status: "ready",
+      configFilePath: null,
+    });
     useAgentStore.getState().reset();
     mockInvoke.mockClear();
   });
 
-  it("stopMessage 会取消全部进行中的工具请求并清空列表", async () => {
+  it("stopMessage 会批量取消全部进行中的工具请求并清空列表", async () => {
     useAgentStore.setState({
       abortController: new AbortController(),
       inflightToolRequestIds: ["tool-read-1", "tool-search-2"],
@@ -86,15 +123,14 @@ describe("agentStore", () => {
 
     useAgentStore.getState().stopMessage();
     await Promise.resolve();
+    await Promise.resolve();
 
-    expect(mockInvoke).toHaveBeenCalledTimes(2);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "cancel_tool_request", { requestId: "tool-read-1" });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "cancel_tool_request", { requestId: "tool-search-2" });
+    expect(cancelToolRequests).toHaveBeenCalledWith(["tool-read-1", "tool-search-2"]);
     expect(useAgentStore.getState().inflightToolRequestIds).toEqual([]);
-    expect(useAgentStore.getState().abortController?.signal.aborted).toBe(true);
+    expect(useAgentStore.getState().abortController).toBeNull();
   });
 
-  it("stopMessage 在没有进行中工具时也只会中止当前 run", () => {
+  it("stopMessage 在没有进行中工具时也只会中止当前 run", async () => {
     const abortController = new AbortController();
     useAgentStore.setState({
       abortController,
@@ -102,10 +138,198 @@ describe("agentStore", () => {
     });
 
     useAgentStore.getState().stopMessage();
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(mockInvoke).not.toHaveBeenCalled();
+    expect(cancelToolRequests).toHaveBeenCalledWith([]);
     expect(abortController.signal.aborted).toBe(true);
     expect(useAgentStore.getState().inflightToolRequestIds).toEqual([]);
+    expect(useAgentStore.getState().abortController).toBeNull();
+  });
+
+  it("sendMessage 会在准备阶段前立即进入运行态", async () => {
+    let releaseManualContext!: () => void;
+    const manualContextPromise: Promise<ManualTurnContextPayload> = new Promise((resolve) => {
+      releaseManualContext = () => resolve(createEmptyManualContext());
+    });
+    vi.mocked(resolveManualTurnContext).mockReturnValue(manualContextPromise);
+    streamControl.runAgentTurn.mockImplementation(async function* () {
+      yield { type: "text-delta", delta: "已开始响应" };
+    });
+
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "继续写",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    const sendPromise = useAgentStore.getState().sendMessage({
+      agentIds: [],
+      filePaths: [],
+      skillIds: [],
+    });
+    await Promise.resolve();
+
+    const runningState = useAgentStore.getState();
+    expect(runningState.run.status).toBe("running");
+    expect(runningState.run.messages).toHaveLength(2);
+    expect(runningState.run.messages[0]?.role).toBe("user");
+    expect(runningState.run.messages[1]?.parts).toEqual([{ type: "placeholder", text: "正在思考" }]);
+    expect(runningState.activeRunRequestId).not.toBeNull();
+    expect(runningState.input).toBe("");
+
+    releaseManualContext();
+    await sendPromise;
+
+    expect(useAgentStore.getState().run.status).toBe("completed");
+  });
+
+  it("stopMessage 会在准备阶段立即清理运行态并移除占位消息", async () => {
+    let releaseManualContext!: () => void;
+    const manualContextPromise: Promise<ManualTurnContextPayload> = new Promise((resolve) => {
+      releaseManualContext = () => resolve(createEmptyManualContext());
+    });
+    vi.mocked(resolveManualTurnContext).mockReturnValue(manualContextPromise);
+    streamControl.runAgentTurn.mockImplementation(async function* () {
+      yield { type: "text-delta", delta: "不会显示" };
+    });
+
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "继续写",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    const sendPromise = useAgentStore.getState().sendMessage({
+      agentIds: [],
+      filePaths: [],
+      skillIds: [],
+    });
+    await Promise.resolve();
+
+    useAgentStore.getState().stopMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const stoppedState = useAgentStore.getState();
+    expect(stoppedState.run.status).toBe("idle");
+    expect(stoppedState.run.messages).toHaveLength(1);
+    expect(stoppedState.run.messages[0]?.role).toBe("user");
+    expect(stoppedState.activeRunRequestId).toBeNull();
+    expect(stoppedState.abortController).toBeNull();
+
+    releaseManualContext();
+    await sendPromise;
+
+    const finalState = useAgentStore.getState();
+    expect(finalState.run.status).toBe("idle");
+    expect(finalState.run.messages).toHaveLength(1);
+  });
+
+  it("首次发送前即使尚未创建会话也会立刻显示正在思考", async () => {
+    let releaseCreateSession!: () => void;
+    const createSessionPromise = new Promise<Awaited<ReturnType<typeof createChatSession>>>((resolve) => {
+      releaseCreateSession = () => resolve({
+        activeSessionDraft: "",
+        activeSessionId: "session-1",
+        activeSessionMessages: [],
+        sessions: [
+          {
+            id: "session-1",
+            title: "新对话",
+            summary: "",
+            status: "idle",
+            createdAt: "1",
+            updatedAt: "1",
+            lastMessageAt: null,
+            pinned: false,
+            archived: false,
+          },
+        ],
+      });
+    });
+    vi.mocked(createChatSession).mockReturnValue(createSessionPromise);
+
+    useAgentStore.setState({
+      activeSessionId: null,
+      input: "第一次发送",
+      isHydrated: true,
+      messagesBySession: {},
+      run: {
+        id: "run-default",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      sessions: [],
+      status: "ready",
+    });
+
+    const sendPromise = useAgentStore.getState().sendMessage();
+    await Promise.resolve();
+
+    const runningState = useAgentStore.getState();
+    expect(runningState.run.status).toBe("running");
+    expect(runningState.run.messages).toHaveLength(2);
+    expect(runningState.run.messages[0]?.role).toBe("user");
+    expect(runningState.run.messages[1]?.parts).toEqual([{ type: "placeholder", text: "正在思考" }]);
+    expect(runningState.input).toBe("");
+
+    releaseCreateSession();
+    await sendPromise;
+
+    expect(useAgentStore.getState().run.status).toBe("completed");
+    expect(useAgentStore.getState().activeSessionId).toBe("session-1");
+  });
+
+  it("sendMessage 在首个响应前报错时会结束运行态并追加错误消息", async () => {
+    streamControl.runAgentTurn.mockImplementation(async function* () {
+      throw new Error("provider exploded");
+    });
+
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "继续写",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    await useAgentStore.getState().sendMessage();
+
+    const state = useAgentStore.getState();
+    expect(state.run.status).toBe("failed");
+    expect(state.activeRunRequestId).toBeNull();
+    expect(state.run.messages.at(-1)?.role).toBe("system");
+    expect(state.run.messages.at(-1)?.parts).toEqual([
+      {
+        type: "text",
+        text: expect.stringContaining("provider exploded"),
+      },
+    ]);
   });
 
   it("initialize 会把恢复出的 running 会话降级为空闲并清理未完成 part", async () => {

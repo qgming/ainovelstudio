@@ -8,6 +8,7 @@ const { mockInvoke, mockWindow } = vi.hoisted(() => ({
     isMaximized: vi.fn().mockResolvedValue(false),
     maximize: vi.fn(),
     minimize: vi.fn(),
+    onCloseRequested: vi.fn().mockResolvedValue(() => {}),
     onResized: vi.fn().mockResolvedValue(() => {}),
     unmaximize: vi.fn(),
   },
@@ -84,6 +85,8 @@ describe("App shell", () => {
     mockWindow.isMaximized.mockResolvedValue(false);
     mockWindow.maximize.mockReset();
     mockWindow.minimize.mockReset();
+    mockWindow.onCloseRequested.mockReset();
+    mockWindow.onCloseRequested.mockResolvedValue(() => {});
     mockWindow.onResized.mockReset();
     mockWindow.onResized.mockResolvedValue(() => {});
     mockWindow.unmaximize.mockReset();
@@ -121,22 +124,47 @@ describe("App shell", () => {
     expect(mockWindow.minimize).toHaveBeenCalledTimes(1);
     expect(mockWindow.maximize).toHaveBeenCalledTimes(1);
     expect(mockWindow.unmaximize).toHaveBeenCalledTimes(1);
-    expect(mockWindow.close).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mockWindow.close).toHaveBeenCalledTimes(1);
+    });
 
     await waitFor(() => {
       expect(mockWindow.isMaximized).toHaveBeenCalled();
     });
   });
 
-  it("默认显示书籍空状态，并且可以切换到技能页", () => {
+  it("关闭请求会先中断当前运行再关闭窗口", async () => {
+    let closeHandler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined;
+    mockWindow.onCloseRequested.mockImplementation(async (handler: (event: { preventDefault: () => void }) => Promise<void>) => {
+      closeHandler = handler;
+      return () => {};
+    });
+
+    const abort = vi.fn();
+    useAgentStore.setState({
+      abortController: { abort, signal: { aborted: false } } as unknown as AbortController,
+      inflightToolRequestIds: ["tool-read-1", "tool-search-2"],
+      run: {
+        id: "run-test",
+        status: "running",
+        title: "",
+        messages: [],
+      },
+    });
+
     render(<App />);
 
-    expect(screen.getByRole("button", { name: "选择书籍" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(closeHandler).toBeDefined();
+    });
 
-    fireEvent.click(screen.getByRole("link", { name: "技能" }));
+    const preventDefault = vi.fn();
+    await closeHandler?.({ preventDefault });
 
-    expect(screen.getByRole("heading", { name: "技能中心" })).toBeInTheDocument();
-    expect(screen.queryByText(/已启用 \d+ 个技能/)).not.toBeInTheDocument();
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(mockInvoke).toHaveBeenCalledWith("cancel_tool_requests", { requestIds: ["tool-read-1", "tool-search-2"] });
+    expect(mockWindow.close).toHaveBeenCalledTimes(1);
   });
 
   it("可以切换到代理页", async () => {

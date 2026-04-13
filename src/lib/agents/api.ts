@@ -1,55 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { InvokeCancellationOptions } from "../bookWorkspace/api";
-
-async function invokeWithCancellation<T>(
-  command: string,
-  payload: Record<string, unknown>,
-  options?: InvokeCancellationOptions,
-) {
-  const requestId = options?.requestId;
-  const abortSignal = options?.abortSignal;
-
-  if (!requestId || !abortSignal) {
-    return invoke<T>(command, payload);
-  }
-
-  if (abortSignal.aborted) {
-    await invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
-    throw new DOMException("Tool execution aborted.", "AbortError");
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const handleAbort = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      abortSignal.removeEventListener("abort", handleAbort);
-      void invoke<void>("cancel_tool_request", { requestId }).catch(() => undefined);
-      reject(new DOMException("Tool execution aborted.", "AbortError"));
-    };
-
-    abortSignal.addEventListener("abort", handleAbort, { once: true });
-    void invoke<T>(command, { ...payload, requestId })
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        abortSignal.removeEventListener("abort", handleAbort);
-        resolve(value);
-      })
-      .catch((error) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        abortSignal.removeEventListener("abort", handleAbort);
-        reject(error);
-      });
-  });
-}
+import { invokeWithCancellation, type InvokeCancellationOptions } from "../bookWorkspace/api";
 
 export type AgentSourceKind = "builtin-package" | "installed-package";
 

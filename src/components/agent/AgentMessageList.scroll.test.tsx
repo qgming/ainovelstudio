@@ -1,5 +1,5 @@
-import { render, fireEvent, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { render, fireEvent, act } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentMessageList } from "./AgentMessageList";
 import type { AgentMessage } from "../../lib/agent/types";
 
@@ -54,7 +54,20 @@ function attachScrollMetrics(element: HTMLDivElement, metrics: { clientHeight: n
 }
 
 describe("AgentMessageList scroll", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      return window.setTimeout(() => callback(performance.now()), 16);
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+      window.clearTimeout(id);
+    });
+  });
+
   afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
     document.body.innerHTML = "";
   });
 
@@ -67,13 +80,19 @@ describe("AgentMessageList scroll", () => {
       scrollTop: 290,
     });
 
+    act(() => {
+      vi.runAllTimers();
+      metrics.setScrollTop(290);
+    });
     fireEvent.scroll(scroller);
     metrics.setScrollHeight(560);
     view.rerender(<AgentMessageList messages={createMessages("第一段\n\n第二段")} runStatus="completed" />);
 
-    await waitFor(() => {
-      expect(metrics.getScrollTop()).toBe(560);
+    act(() => {
+      vi.runAllTimers();
     });
+
+    expect(metrics.getScrollTop()).toBe(560);
   });
 
   it("手动上滑后流式更新不会强制拉回到底部", async () => {
@@ -85,12 +104,18 @@ describe("AgentMessageList scroll", () => {
       scrollTop: 120,
     });
 
+    act(() => {
+      vi.runAllTimers();
+      metrics.setScrollTop(120);
+    });
     fireEvent.scroll(scroller);
     metrics.setScrollHeight(560);
     view.rerender(<AgentMessageList messages={createMessages("第一段\n\n第二段")} runStatus="completed" />);
 
-    await waitFor(() => {
-      expect(metrics.getScrollTop()).toBe(120);
+    act(() => {
+      vi.runAllTimers();
     });
+
+    expect(metrics.getScrollTop()).toBe(120);
   });
 });
