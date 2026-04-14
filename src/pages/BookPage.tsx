@@ -71,7 +71,15 @@ function getMaxRightPanelWidth(layout: BookPanelLayout, containerWidth: number) 
   );
 }
 
-export function BookPage() {
+type BookPageProps = {
+  onWorkspaceRootChange?: (rootPath: string) => void;
+  requestedRootPath?: string | null;
+};
+
+export function BookPage({
+  onWorkspaceRootChange,
+  requestedRootPath = null,
+}: BookPageProps = {}) {
   const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
   const availableBooks = useBookWorkspaceStore((state) => state.availableBooks);
   const bookshelfError = useBookWorkspaceStore((state) => state.bookshelfError);
@@ -100,6 +108,7 @@ export function BookPage() {
   const refreshWorkspaceList = useBookWorkspaceStore((state) => state.refreshWorkspaceList);
   const requestDelete = useBookWorkspaceStore((state) => state.requestDelete);
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
+  const rootPath = useBookWorkspaceStore((state) => state.rootPath);
   const saveActiveFile = useBookWorkspaceStore((state) => state.saveActiveFile);
   const selectFile = useBookWorkspaceStore((state) => state.selectFile);
   const setPromptValue = useBookWorkspaceStore((state) => state.setPromptValue);
@@ -115,8 +124,10 @@ export function BookPage() {
   const panelLayoutRef = useRef(panelLayout);
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const cleanupResizeRef = useRef<(() => void) | null>(null);
+  const storedSnapshot = requestedRootPath ? null : getStoredWorkspaceSnapshot();
   const shouldShowWorkspaceRestoreState =
-    !hasInitialized && !rootNode && getStoredWorkspaceSnapshot() !== null;
+    !requestedRootPath && !hasInitialized && !rootNode && storedSnapshot !== null;
+  const shouldShowWorkspaceOpenState = Boolean(requestedRootPath && isBusy && !rootNode);
 
   useEffect(() => {
     panelLayoutRef.current = panelLayout;
@@ -129,8 +140,28 @@ export function BookPage() {
   }, []);
 
   useEffect(() => {
+    if (requestedRootPath) {
+      return;
+    }
+
     void initializeWorkspace();
-  }, [initializeWorkspace]);
+  }, [initializeWorkspace, requestedRootPath]);
+
+  useEffect(() => {
+    if (!requestedRootPath || rootPath === requestedRootPath) {
+      return;
+    }
+
+    void selectWorkspace(requestedRootPath);
+  }, [requestedRootPath, rootPath, selectWorkspace]);
+
+  useEffect(() => {
+    if (!onWorkspaceRootChange || !rootPath || rootPath === requestedRootPath) {
+      return;
+    }
+
+    onWorkspaceRootChange(rootPath);
+  }, [onWorkspaceRootChange, requestedRootPath, rootPath]);
 
   useEffect(() => {
     if (!activeFilePath || !isDirty || isBusy) {
@@ -309,6 +340,11 @@ export function BookPage() {
       <div className="min-h-0 flex-1 overflow-hidden">
         {shouldShowWorkspaceRestoreState ? (
           <BookWorkspaceLoadingState />
+        ) : shouldShowWorkspaceOpenState ? (
+          <BookWorkspaceLoadingState
+            description="正在读取书籍目录、文件树和编辑上下文，请稍候。"
+            title="正在打开书籍工作区..."
+          />
         ) : rootNode ? (
           <div
             ref={panelsRef}

@@ -1,12 +1,15 @@
 use crate::ToolCancellationRegistry;
 use serde::Serialize;
 use std::{
+    collections::HashSet,
     fs,
+    io::{Cursor, Read, Seek, Write},
     path::{Component, Path, PathBuf},
 };
 use tauri::{AppHandle, Manager, State};
 #[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 #[derive(Clone, Serialize)]
 pub struct TreeNode {
@@ -52,6 +55,11 @@ const INVALID_NAME_CHARS: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', 
 const DEFAULT_SEARCH_LIMIT: usize = 50;
 const MAX_SEARCH_LIMIT: usize = 200;
 const REQUIRED_BOOK_WORKSPACE_FILES: [&str; 2] = ["README.md", "04_正文/创作状态追踪器.json"];
+const MAX_BOOK_ARCHIVE_ENTRIES: usize = 5_000;
+const MAX_BOOK_ARCHIVE_FILE_SIZE: u64 = 10 * 1024 * 1024;
+const MAX_BOOK_ARCHIVE_TOTAL_SIZE: u64 = 256 * 1024 * 1024;
+const MAX_BOOK_ARCHIVE_DEPTH: usize = 12;
+const MAX_BOOK_ARCHIVE_COMPRESSION_RATIO: u64 = 200;
 
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
@@ -355,6 +363,306 @@ fn normalize_candidate_path(path: &Path) -> PathBuf {
     }
 
     normalized
+}
+
+fn path_depth(path: &Path) -> usize {
+    path.components()
+        .filter(|component| matches!(component, Component::Normal(_)))
+        .count()
+}
+
+fn is_ignored_book_archive_path(path: &Path) -> bool {
+    path.components().any(|component| {
+        let Component::Normal(name) = component else {
+            return false;
+        };
+        let value = name.to_string_lossy();
+        value == "__MACOSX" || value == ".DS_Store" || value == "Thumbs.db"
+    })
+}
+
+fn preview_archive_paths(paths: &[PathBuf]) -> String {
+    let preview = paths
+        .iter()
+        .take(8)
+        .map(|path| normalize_path(path))
+        .collect::<Vec<_>>()
+        .join("，");
+
+    if preview.is_empty() {
+        "无可用文件".into()
+    } else {
+        preview
+    }
+}
+
+fn collect_book_archive_file_paths<R: Read + std::io::Seek>(
+    archive: &mut ZipArchive<R>,
+) -> CommandResult<Vec<PathBuf>> {
+    if archive.len() == 0 {
+        return Err("ZIP 压缩包为空。".into());
+    }
+    if archive.len() > MAX_BOOK_ARCHIVE_ENTRIES {
+        return Err("ZIP 内文件数量过多。".into());
+    }
+
+    let mut safe_paths = Vec::new();
+    let mut total_uncompressed = 0_u64;
+
+    for index in 0..archive.len() {
+        let entry = archive.by_index(index).map_err(error_to_string)?;
+        let Some(path) = entry.enclosed_name() else {
+            return Err("ZIP 内存在非法路径。".into());
+        };
+        if path_depth(&path) > MAX_BOOK_ARCHIVE_DEPTH {
+            return Err("ZIP 内目录层级过深。".into());
+        }
+        if entry.size() > MAX_BOOK_ARCHIVE_FILE_SIZE {
+            return Err("ZIP 内单个文件过大。".into());
+        }
+        if entry.compressed_size() > 0
+            && entry.size() / entry.compressed_size().max(1) > MAX_BOOK_ARCHIVE_COMPRESSION_RATIO
+        {
+            return Err("ZIP 压缩比异常，已拒绝导入。".into());
+        }
+
+        total_uncompressed = total_uncompressed.saturating_add(entry.size());
+        if total_uncompressed > MAX_BOOK_ARCHIVE_TOTAL_SIZE {
+            return Err("ZIP 解压后的总大小超出限制。".into());
+        }
+
+        if entry.is_dir() || is_ignored_book_archive_path(&path) {
+            continue;
+        }
+
+        safe_paths.push(path.to_path_buf());
+    }
+
+    if safe_paths.is_empty() {
+        return Err("ZIP 中没有可导入的文件。".into());
+    }
+
+    Ok(safe_paths)
+}
+
+fn archive_contains_required_book_files(
+    file_set: &HashSet<String>,
+    prefix: &Path,
+) -> bool {
+    REQUIRED_BOOK_WORKSPACE_FILES.iter().all(|relative_path| {
+        let candidate = if prefix.as_os_str().is_empty() {
+            PathBuf::from(relative_path)
+        } else {
+            prefix.join(relative_path)
+        };
+        file_set.contains(&normalize_path(&candidate))
+    })
+}
+
+fn detect_book_archive_root(file_paths: &[PathBuf]) -> CommandResult<PathBuf> {
+    let file_set = file_paths
+        .iter()
+        .map(|path| normalize_path(path))
+        .collect::<HashSet<_>>();
+    let mut candidates = vec![PathBuf::new()];
+    let mut seen = HashSet::from([String::new()]);
+
+    for path in file_paths {
+        let mut current = path.parent();
+        while let Some(prefix) = current {
+            let normalized_prefix = normalize_path(prefix);
+            if seen.insert(normalized_prefix) {
+                candidates.push(prefix.to_path_buf());
+            }
+            current = prefix.parent();
+        }
+    }
+
+    let matching_roots = candidates
+        .into_iter()
+        .filter(|prefix| archive_contains_required_book_files(&file_set, prefix))
+        .collect::<Vec<_>>();
+
+    if matching_roots.is_empty() {
+        return Err(format!(
+            "ZIP 中未找到有效书籍工作区。至少需要包含 README.md 和 04_正文/创作状态追踪器.json。检测到的文件示例：{}",
+            preview_archive_paths(file_paths)
+        ));
+    }
+
+    if matching_roots.len() > 1 {
+        let options = matching_roots
+            .iter()
+            .map(|prefix| {
+                if prefix.as_os_str().is_empty() {
+                    "<压缩包根目录>".into()
+                } else {
+                    normalize_path(prefix)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("，");
+
+        return Err(format!(
+            "ZIP 中检测到多个书籍工作区，当前仅支持单书导入。检测到：{}",
+            options
+        ));
+    }
+
+    Ok(matching_roots[0].clone())
+}
+
+fn derive_imported_book_name(root_prefix: &Path, file_name: &str) -> CommandResult<String> {
+    let candidate = root_prefix
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            Path::new(file_name)
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .ok_or_else(|| "无法确定导入书籍名称。".to_string())?;
+
+    validate_name(&candidate)
+}
+
+fn import_book_archive_to_library(
+    books_root: &Path,
+    file_name: &str,
+    archive_bytes: Vec<u8>,
+) -> CommandResult<PathBuf> {
+    let mut archive = ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
+    let file_paths = collect_book_archive_file_paths(&mut archive)?;
+    let root_prefix = detect_book_archive_root(&file_paths)?;
+    let book_name = derive_imported_book_name(&root_prefix, file_name)?;
+    let target_root = books_root.join(&book_name);
+
+    if target_root.exists() {
+        return Err("同名书籍已存在，请先重命名现有书籍或导入其他压缩包。".into());
+    }
+
+    fs::create_dir_all(&target_root).map_err(error_to_string)?;
+    let import_result = (|| -> CommandResult<()> {
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).map_err(error_to_string)?;
+            if entry.is_dir() {
+                continue;
+            }
+
+            let Some(safe_path) = entry.enclosed_name() else {
+                continue;
+            };
+            if is_ignored_book_archive_path(&safe_path) {
+                continue;
+            }
+
+            let relative_path = if root_prefix.as_os_str().is_empty() {
+                safe_path.to_path_buf()
+            } else {
+                let Ok(path) = safe_path.strip_prefix(&root_prefix) else {
+                    continue;
+                };
+                if path.as_os_str().is_empty() {
+                    continue;
+                }
+                path.to_path_buf()
+            };
+
+            let target_path = target_root.join(&relative_path);
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent).map_err(error_to_string)?;
+            }
+
+            let mut output = fs::File::create(&target_path).map_err(error_to_string)?;
+            std::io::copy(&mut entry, &mut output).map_err(error_to_string)?;
+        }
+
+        if !is_book_workspace_directory(&target_root) {
+            return Err("导入的 ZIP 不是有效的书籍工作区。".into());
+        }
+
+        Ok(())
+    })();
+
+    if let Err(error) = import_result {
+        let _ = fs::remove_dir_all(&target_root);
+        return Err(error);
+    }
+
+    Ok(target_root)
+}
+
+fn ensure_book_workspace_in_library(books_root: &Path, root_path: &str) -> CommandResult<PathBuf> {
+    let workspace_path = ensure_existing_path_in_root(books_root, root_path)?;
+    if !is_book_workspace_directory(&workspace_path) {
+        return Err("目标书籍不存在，或不是有效的书籍工作区。".into());
+    }
+
+    Ok(workspace_path)
+}
+
+fn append_workspace_directory_to_archive<W: Write + Seek>(
+    archive: &mut ZipWriter<W>,
+    root_path: &Path,
+    current_path: &Path,
+) -> CommandResult<()> {
+    if current_path != root_path {
+        let directory_name = format!("{}/", relative_path(root_path, current_path));
+        archive
+            .add_directory(
+                directory_name,
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored),
+            )
+            .map_err(error_to_string)?;
+    }
+
+    let mut entries = fs::read_dir(current_path)
+        .map_err(error_to_string)?
+        .map(|entry| entry.map(|entry| entry.path()).map_err(error_to_string))
+        .collect::<CommandResult<Vec<_>>>()?;
+    entries.sort_by(|left, right| relative_path(root_path, left).cmp(&relative_path(root_path, right)));
+
+    for path in entries {
+        if path.is_dir() {
+            append_workspace_directory_to_archive(archive, root_path, &path)?;
+            continue;
+        }
+
+        if !path.is_file() {
+            continue;
+        }
+
+        let archive_path = relative_path(root_path, &path);
+        archive
+            .start_file(
+                archive_path,
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored),
+            )
+            .map_err(error_to_string)?;
+
+        let mut input = fs::File::open(&path).map_err(error_to_string)?;
+        std::io::copy(&mut input, archive).map_err(error_to_string)?;
+    }
+
+    Ok(())
+}
+
+fn export_book_workspace_archive(workspace_path: &Path) -> CommandResult<Vec<u8>> {
+    let cursor = Cursor::new(Vec::new());
+    let mut archive = ZipWriter::new(cursor);
+    append_workspace_directory_to_archive(&mut archive, workspace_path, workspace_path)?;
+    archive.finish().map_err(error_to_string).map(|cursor| cursor.into_inner())
+}
+
+fn delete_book_workspace_internal(books_root: &Path, root_path: &str) -> CommandResult<()> {
+    let workspace_path = ensure_book_workspace_in_library(books_root, root_path)?;
+    fs::remove_dir_all(&workspace_path).map_err(error_to_string)
 }
 
 fn ensure_existing_path_in_root(root: &Path, path: &str) -> CommandResult<PathBuf> {
@@ -723,6 +1031,82 @@ pub fn list_book_workspaces(app: AppHandle) -> CommandResult<Vec<BookWorkspaceSu
     });
 
     Ok(workspaces)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn import_book_zip(
+    app: AppHandle,
+    fileName: String,
+    archiveBytes: Vec<u8>,
+) -> CommandResult<String> {
+    if Path::new(&fileName)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.eq_ignore_ascii_case("zip"))
+        != Some(true)
+    {
+        return Err("仅支持导入 .zip 书籍包。".into());
+    }
+    if archiveBytes.is_empty() {
+        return Err("ZIP 压缩包为空。".into());
+    }
+
+    let books_root = ensure_books_library_root(&app)?;
+    let workspace_path = import_book_archive_to_library(&books_root, &fileName, archiveBytes)?;
+    Ok(normalize_path(&workspace_path))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn export_book_zip(app: AppHandle, rootPath: String) -> CommandResult<Option<String>> {
+    let books_root = ensure_books_library_root(&app)?;
+    let workspace_path = ensure_book_workspace_in_library(&books_root, &rootPath)?;
+    let archive_bytes = export_book_workspace_archive(&workspace_path)?;
+
+    #[cfg(desktop)]
+    {
+        let default_file_name = format!("{}.zip", entry_name(&workspace_path));
+        let save_path = app
+            .dialog()
+            .file()
+            .set_file_name(&default_file_name)
+            .add_filter("ZIP 压缩包", &["zip"])
+            .blocking_save_file()
+            .and_then(|path| path.into_path().ok());
+
+        let Some(save_path) = save_path else {
+            return Ok(None);
+        };
+
+        let final_path = if save_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.eq_ignore_ascii_case("zip"))
+            == Some(true)
+        {
+            save_path
+        } else {
+            save_path.with_extension("zip")
+        };
+
+        fs::write(&final_path, archive_bytes).map_err(error_to_string)?;
+        return Ok(Some(normalize_path(&final_path)));
+    }
+
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        let _ = archive_bytes;
+        Err("当前平台暂不支持导出 ZIP 书籍包。".into())
+    }
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn delete_book_workspace(app: AppHandle, rootPath: String) -> CommandResult<()> {
+    let books_root = ensure_books_library_root(&app)?;
+    delete_book_workspace_internal(&books_root, &rootPath)
 }
 
 #[tauri::command]
@@ -1238,16 +1622,48 @@ fn delete_workspace_entry_internal(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use uuid::Uuid;
 
     fn create_temp_workspace() -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after unix epoch")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("ainovelstudio-workspace-test-{nonce}"));
+        let root = std::env::temp_dir().join(format!("ainovelstudio-workspace-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("failed to create temp workspace");
         root
+    }
+
+    fn create_book_archive(entries: &[(&str, &str)]) -> Vec<u8> {
+        let cursor = Cursor::new(Vec::new());
+        let mut archive = ZipWriter::new(cursor);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+
+        for (path, content) in entries {
+            archive
+                .start_file(path, options)
+                .expect("start_file should succeed");
+            archive
+                .write_all(content.as_bytes())
+                .expect("write_all should succeed");
+        }
+
+        archive
+            .finish()
+            .expect("finish should succeed")
+            .into_inner()
+    }
+
+    fn read_archive_entry_names(archive_bytes: Vec<u8>) -> Vec<String> {
+        let mut archive =
+            ZipArchive::new(Cursor::new(archive_bytes)).expect("archive should be readable");
+        let mut names = (0..archive.len())
+            .map(|index| {
+                archive
+                    .by_index(index)
+                    .expect("entry should be readable")
+                    .name()
+                    .replace('\\', "/")
+            })
+            .collect::<Vec<_>>();
+        names.sort();
+        names
     }
 
     #[test]
@@ -1364,6 +1780,113 @@ mod tests {
         assert!(file_paths.contains(&"02_角色设定/角色关系矩阵.json"));
         assert!(file_paths.contains(&"04_正文/章节模板.md"));
         assert!(file_paths.contains(&"04_正文/第一卷/第001章_待命名.md"));
+    }
+
+    #[test]
+    fn import_book_archive_supports_nested_workspace_root() {
+        let root = create_temp_workspace();
+        let archive = create_book_archive(&[
+            ("北境余烬/README.md", "# 北境余烬"),
+            (
+                "北境余烬/04_正文/创作状态追踪器.json",
+                "{\"currentChapter\":\"第001章\"}",
+            ),
+            ("北境余烬/04_正文/第一卷/第001章.md", "正文"),
+        ]);
+
+        let imported_path = import_book_archive_to_library(&root, "导入书籍.zip", archive)
+            .expect("import_book_archive_to_library should import nested workspace");
+
+        assert!(imported_path.ends_with("北境余烬"));
+        assert!(imported_path.join("README.md").is_file());
+        assert!(
+            imported_path
+                .join("04_正文")
+                .join("创作状态追踪器.json")
+                .is_file()
+        );
+        assert!(
+            imported_path
+                .join("04_正文")
+                .join("第一卷")
+                .join("第001章.md")
+                .is_file()
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn import_book_archive_supports_flat_workspace_root() {
+        let root = create_temp_workspace();
+        let archive = create_book_archive(&[
+            ("README.md", "# 平原夜雨"),
+            ("04_正文/创作状态追踪器.json", "{\"progress\":1}"),
+            ("04_正文/第一卷/第001章.md", "正文"),
+        ]);
+
+        let imported_path = import_book_archive_to_library(&root, "平原夜雨.zip", archive)
+            .expect("import_book_archive_to_library should import flat workspace");
+
+        assert!(imported_path.ends_with("平原夜雨"));
+        assert!(imported_path.join("README.md").is_file());
+        assert!(
+            imported_path
+                .join("04_正文")
+                .join("创作状态追踪器.json")
+                .is_file()
+        );
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn import_book_archive_rejects_multiple_workspaces() {
+        let root = create_temp_workspace();
+        let archive = create_book_archive(&[
+            ("甲书/README.md", "# 甲书"),
+            ("甲书/04_正文/创作状态追踪器.json", "{\"progress\":1}"),
+            ("乙书/README.md", "# 乙书"),
+            ("乙书/04_正文/创作状态追踪器.json", "{\"progress\":2}"),
+        ]);
+
+        let error = import_book_archive_to_library(&root, "双书.zip", archive)
+            .expect_err("multiple workspaces should be rejected");
+
+        assert!(error.contains("多个书籍工作区"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn export_book_workspace_archive_keeps_workspace_structure() {
+        let root = create_temp_workspace();
+        let workspace = create_book_workspace_internal(&root, "北境余烬")
+            .expect("create_book_workspace_internal should create workspace");
+        fs::write(
+            workspace.join("04_正文").join("第一卷").join("第002章.md"),
+            "第二章正文",
+        )
+        .expect("failed to seed extra chapter");
+
+        let archive_bytes = export_book_workspace_archive(&workspace)
+            .expect("export_book_workspace_archive should succeed");
+        let entry_names = read_archive_entry_names(archive_bytes);
+
+        assert!(entry_names.contains(&"README.md".to_string()));
+        assert!(entry_names.contains(&"04_正文/创作状态追踪器.json".to_string()));
+        assert!(entry_names.contains(&"04_正文/第一卷/第002章.md".to_string()));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn delete_book_workspace_internal_removes_workspace_root() {
+        let root = create_temp_workspace();
+        let workspace = create_book_workspace_internal(&root, "平原夜雨")
+            .expect("create_book_workspace_internal should create workspace");
+
+        delete_book_workspace_internal(&root, &normalize_path(&workspace))
+            .expect("delete_book_workspace_internal should remove workspace");
+
+        assert!(!workspace.exists());
+        fs::remove_dir_all(&root).ok();
     }
 
     #[test]

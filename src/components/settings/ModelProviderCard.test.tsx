@@ -261,8 +261,8 @@ describe("ModelProviderCard", () => {
     expect(screen.getByTestId("provider-icon-siliconflow")).toBeInTheDocument();
     expect(screen.getByTestId("provider-icon-qwen")).toBeInTheDocument();
 
-    const detailButtons = screen.getAllByRole("button", { name: "查看详情" });
-    expect(detailButtons).toHaveLength(11);
+    const detailButtons = screen.getAllByRole("button", { name: /查看 .* 详情/ });
+    expect(detailButtons).toHaveLength(14);
   });
 
   it("点击推荐供应商卡片时回填 Base URL", () => {

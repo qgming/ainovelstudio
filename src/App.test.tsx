@@ -23,6 +23,26 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: mockInvoke,
 }));
 
+vi.mock("@lobehub/icons", () => ({
+  ProviderIcon: ({ provider }: { provider: string }) => <span data-testid={`provider-icon-${provider}`} />,
+  Claude: {
+    Color: ({ size }: { size?: number }) => <span data-size={size} data-testid="provider-icon-claude" />,
+  },
+  Gemini: {
+    Color: ({ size }: { size?: number }) => <span data-size={size} data-testid="provider-icon-gemini" />,
+  },
+  Qwen: {
+    Color: ({ size }: { size?: number }) => <span data-size={size} data-testid="provider-icon-qwen" />,
+  },
+  Zhipu: {
+    Color: ({ size }: { size?: number }) => <span data-size={size} data-testid="provider-icon-zhipu" />,
+  },
+  XiaomiMiMo: ({ size }: { size?: number }) => <span data-size={size} data-testid="provider-icon-xiaomi-mimo" />,
+  SiliconCloud: {
+    Color: ({ size }: { size?: number }) => <span data-size={size} data-testid="provider-icon-siliconflow" />,
+  },
+}));
+
 import App from "./App";
 import { BUILTIN_TOOLS } from "./lib/agent/toolDefs";
 import { useAgentStore } from "./stores/agentStore";
@@ -86,6 +106,9 @@ describe("App shell", () => {
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "initialize_chat_storage") {
         return chatBootstrap;
+      }
+      if (command === "list_book_workspaces") {
+        return [];
       }
       return undefined;
     });
@@ -187,6 +210,155 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "代理中心" })).toBeInTheDocument();
   });
 
+  it("默认进入首页并展示书籍入口动作", async () => {
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "initialize_chat_storage") {
+        return chatBootstrap;
+      }
+      if (command === "list_book_workspaces") {
+        return [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+      }
+      return undefined;
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "首页" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导入书籍" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新建书籍" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开书籍 北境余烬" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更多操作 北境余烬" })).toBeInTheDocument();
+  });
+
+  it("首页点击书籍后会进入图书工作区", async () => {
+    mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
+      switch (command) {
+        case "initialize_chat_storage":
+          return chatBootstrap;
+        case "list_book_workspaces":
+          return [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+        case "read_workspace_tree":
+          return tree;
+        case "read_text_file":
+          return payload?.path === chapterPath ? "这是章节初稿" : "";
+        default:
+          return undefined;
+      }
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "打开书籍 北境余烬" }));
+
+    expect(await screen.findByText("北境余烬")).toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
+    expect(window.location.hash).toContain("/books/workspace?path=");
+  });
+
+  it("首页导入 ZIP 书籍后会进入图书工作区", async () => {
+    mockInvoke.mockImplementation(async (command: string) => {
+      switch (command) {
+        case "initialize_chat_storage":
+          return chatBootstrap;
+        case "list_book_workspaces":
+          return [];
+        case "import_book_zip":
+          return rootPath;
+        case "read_workspace_tree":
+          return tree;
+        default:
+          return undefined;
+      }
+    });
+
+    render(<App />);
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+
+    const file = new File(["zip-book"], "北境余烬.zip", { type: "application/zip" });
+    Object.defineProperty(file, "arrayBuffer", {
+      value: async () => Uint8Array.from([80, 75, 3, 4]).buffer,
+    });
+
+    await act(async () => {
+      fireEvent.change(input!, { target: { files: [file] } });
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("import_book_zip", {
+        archiveBytes: [80, 75, 3, 4],
+        fileName: "北境余烬.zip",
+      });
+    });
+
+    expect(await screen.findByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
+    expect(window.location.hash).toContain("/books/workspace?path=");
+  });
+
+  it("首页图书更多菜单支持导出 ZIP", async () => {
+    mockInvoke.mockImplementation(async (command: string) => {
+      switch (command) {
+        case "initialize_chat_storage":
+          return chatBootstrap;
+        case "list_book_workspaces":
+          return [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+        case "export_book_zip":
+          return "C:/exports/北境余烬.zip";
+        default:
+          return undefined;
+      }
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "更多操作 北境余烬" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "导出图书" }));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("export_book_zip", {
+        rootPath,
+      });
+    });
+
+    expect(await screen.findByText("已导出《北境余烬》")).toBeInTheDocument();
+  });
+
+  it("首页图书更多菜单支持删除图书", async () => {
+    let books = [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+    mockInvoke.mockImplementation(async (command: string) => {
+      switch (command) {
+        case "initialize_chat_storage":
+          return chatBootstrap;
+        case "list_book_workspaces":
+          return books;
+        case "delete_book_workspace":
+          books = [];
+          return undefined;
+        default:
+          return undefined;
+      }
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "更多操作 北境余烬" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除图书" }));
+
+    expect(await screen.findByText("删除后不会进入回收站，请确认这是你想要的操作。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "删除图书" }));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("delete_book_workspace", {
+        rootPath,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "打开书籍 北境余烬" })).not.toBeInTheDocument();
+    });
+  });
+
   it("点击侧边栏主题按钮会切换深色模式且不会离开当前页面", async () => {
     render(<App />);
 
@@ -284,7 +456,7 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "使用 ByteDance 地址" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "使用 Gemini 地址" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "使用 Qwen 地址" })).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "查看详情" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /查看 .* 详情/ }).length).toBeGreaterThan(0);
   });
 
   it("设置页关于我们展示神笔写作品牌信息", async () => {
@@ -295,7 +467,7 @@ describe("App shell", () => {
 
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
-    expect(screen.getByText("版本 0.1.1")).toBeInTheDocument();
+    expect(screen.getByText("版本 0.1.2")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
     expect(screen.queryByText("www.qgming.com")).not.toBeInTheDocument();
   });
@@ -319,7 +491,7 @@ describe("App shell", () => {
   });
 
   it("从其他页面进入书籍页时，恢复中的工作区不会闪出空状态或编辑器空占位", async () => {
-    window.location.hash = "#/skills";
+    window.location.hash = "#/books/workspace";
     window.localStorage.setItem(
       "ainovelstudio-book-workspace",
       JSON.stringify({ rootPath, selectedFilePath: chapterPath }),
@@ -342,8 +514,6 @@ describe("App shell", () => {
     });
 
     render(<App />);
-
-    fireEvent.click(screen.getByRole("link", { name: "首页" }));
 
     expect(screen.getByText("正在恢复书籍工作区...")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "选择书籍" })).not.toBeInTheDocument();

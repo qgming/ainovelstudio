@@ -368,6 +368,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         set({ errorMessage: null, isBookshelfOpen: false, isBusy: true });
         await persistDirtyDraftIfNeeded();
         await loadWorkspace(nextRootPath, null);
+        set({ hasInitialized: true });
       } catch (error) {
         set({ errorMessage: getReadableError(error) });
       }
@@ -430,6 +431,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
           await loadWorkspace(nextRootPath, null);
           set({
             availableBooks,
+            hasInitialized: true,
             bookshelfError: null,
             isBookshelfOpen: false,
           });

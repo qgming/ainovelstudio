@@ -140,6 +140,18 @@ export function listBookWorkspaces() {
   return invoke<BookWorkspaceSummary[]>("list_book_workspaces");
 }
 
+export function importBookZip(fileName: string, archiveBytes: number[]) {
+  return invoke<string>("import_book_zip", { fileName, archiveBytes });
+}
+
+export function exportBookZip(rootPath: string) {
+  return invoke<string | null>("export_book_zip", { rootPath });
+}
+
+export function deleteBookWorkspace(rootPath: string) {
+  return invoke<void>("delete_book_workspace", { rootPath });
+}
+
 export function readWorkspaceTree(rootPath: string, options?: InvokeCancellationOptions) {
   return invokeWithCancellation<TreeNode>("read_workspace_tree", { rootPath }, options);
 }
