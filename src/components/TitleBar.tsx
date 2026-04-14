@@ -4,9 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import appIcon from "../assets/icon.png";
 
-const appWindow = getCurrentWindow();
-
 export function TitleBar() {
+  const appWindow = getCurrentWindow();
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {

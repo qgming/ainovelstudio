@@ -64,9 +64,17 @@ const tree = {
   ],
 } as const;
 
+function setUserAgent(value: string) {
+  Object.defineProperty(window.navigator, "userAgent", {
+    configurable: true,
+    value,
+  });
+}
+
 describe("App shell", () => {
   beforeEach(() => {
     window.location.hash = "";
+    setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
     window.localStorage.clear();
     document.documentElement.className = "";
     useThemeStore.setState({ theme: "light", initialized: false });
@@ -153,6 +161,22 @@ describe("App shell", () => {
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(mockInvoke).toHaveBeenCalledWith("terminate_application");
+  });
+
+  it("Android 环境不会挂载桌面标题栏和关闭拦截", async () => {
+    setUserAgent("Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro)");
+
+    render(<App />);
+
+    expect(screen.queryByRole("button", { name: "最小化窗口" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "最大化窗口" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "关闭窗口" })).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "首页" })).toBeInTheDocument();
+    });
+
+    expect(mockWindow.onCloseRequested).not.toHaveBeenCalled();
   });
 
   it("可以切换到代理页", async () => {
@@ -338,4 +362,3 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: "第001章_待命名.md" })).toBeInTheDocument();
   });
 });
-

@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
+import { isMobileRuntime } from "./lib/platform";
 import { AgentDetailPage } from "./pages/AgentDetailPage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { BookPage } from "./pages/BookPage";
@@ -16,14 +17,13 @@ import { useThemeStore } from "./stores/themeStore";
 import { useSkillsStore } from "./stores/skillsStore";
 import { useSubAgentStore } from "./stores/subAgentStore";
 
-const appWindow = getCurrentWindow();
-
 function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const initializeAgents = useSubAgentStore((state) => state.initialize);
   const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
   const initializeAgentHistory = useAgentStore((state) => state.initialize);
+  const mobileRuntime = isMobileRuntime();
 
   useEffect(() => {
     initializeTheme();
@@ -34,24 +34,35 @@ function AppShell() {
   }, [initializeAgentHistory, initializeAgentSettings, initializeAgents, initializeSkills, initializeTheme]);
 
   useEffect(() => {
+    if (mobileRuntime) {
+      return;
+    }
+
+    const appWindow = getCurrentWindow();
+    let disposed = false;
     let unlisten: (() => void) | null = null;
 
     void appWindow.onCloseRequested(async (event) => {
       event.preventDefault();
       await invoke("terminate_application");
     }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
       unlisten = dispose;
     });
 
     return () => {
+      disposed = true;
       unlisten?.();
     };
-  }, []);
+  }, [mobileRuntime]);
 
   return (
-    <div className="h-screen overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">
+    <div className="h-dvh min-h-dvh overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">
       <div className="flex h-full flex-col overflow-hidden">
-        <TitleBar />
+        {mobileRuntime ? null : <TitleBar />}
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <Sidebar />
           <main className="min-h-0 flex-1 overflow-hidden bg-[#f7f8fb] dark:bg-[#0f1012]">

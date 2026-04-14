@@ -5,6 +5,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 use tauri::{AppHandle, State};
+#[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Clone, Serialize)]
@@ -633,12 +634,22 @@ pub fn cancel_tool_requests(
 
 #[tauri::command]
 pub async fn pick_book_directory(app: AppHandle) -> CommandResult<Option<String>> {
-    Ok(app
-        .dialog()
-        .file()
-        .blocking_pick_folder()
-        .and_then(|path| path.into_path().ok())
-        .map(|path| normalize_path(&path)))
+    #[cfg(desktop)]
+    {
+        return Ok(app
+            .dialog()
+            .file()
+            .blocking_pick_folder()
+            .and_then(|path| path.into_path().ok())
+            .map(|path| normalize_path(&path)));
+    }
+
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        // 移动端当前不支持目录选择，返回空值让前端走降级处理。
+        Ok(None)
+    }
 }
 
 #[tauri::command]

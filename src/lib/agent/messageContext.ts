@@ -21,6 +21,10 @@ type SerializedHistoryMessage = {
   tools: string[];
 };
 
+type TextConversationMessage = Extract<ModelMessage, { role: "assistant" | "user" }> & {
+  content: string;
+};
+
 function compactText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -86,7 +90,8 @@ function collectPathLikeStrings(value: unknown, bucket: Set<string>, depth = 0) 
 function extractPathsFromToolPart(part: Extract<AgentPart, { type: "tool-call" | "tool-result" }>) {
   const paths = new Set<string>();
   const parsedInput = "inputSummary" in part ? tryParseJson(part.inputSummary) : null;
-  const parsedOutput = "outputSummary" in part ? tryParseJson(part.outputSummary) : null;
+  const outputSummary = "outputSummary" in part ? part.outputSummary ?? "" : "";
+  const parsedOutput = outputSummary ? tryParseJson(outputSummary) : null;
 
   if (parsedInput) {
     collectPathLikeStrings(parsedInput, paths);
@@ -402,7 +407,7 @@ function trimRecentMessagesToBudget(
   return kept;
 }
 
-function toModelMessage(message: SerializedHistoryMessage): ModelMessage {
+function toModelMessage(message: SerializedHistoryMessage): TextConversationMessage {
   return {
     role: message.role,
     content: message.content,
@@ -412,7 +417,7 @@ function toModelMessage(message: SerializedHistoryMessage): ModelMessage {
 export function buildConversationMessages(
   historyMessages: AgentMessage[],
   currentUserContent: string,
-): ModelMessage[] {
+): TextConversationMessage[] {
   const recentHistory = historyMessages.slice(-MAX_HISTORY_TURNS);
   const compactBoundary = Math.max(
     0,

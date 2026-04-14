@@ -23,3 +23,12 @@ dist-ssr
 *.sln
 
 .claude/
+
+# Tauri Android generated project and build artifacts
+src-tauri/gen/android/
+*.apk
+*.aab
+
+# Signing secrets
+*.jks
+*.keystore
