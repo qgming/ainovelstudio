@@ -101,7 +101,7 @@ export function AgentDetailPage() {
       return;
     }
 
-    const shouldDelete = window.confirm(`确定要删除代理“${agent.name}”吗？该操作会移除本地已安装代理目录。`);
+    const shouldDelete = window.confirm(`确定要删除代理“${agent.name}”吗？该操作会移除当前已安装代理数据。`);
     if (!shouldDelete) {
       return;
     }

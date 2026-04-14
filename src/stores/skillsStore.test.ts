@@ -7,7 +7,6 @@ vi.mock("../lib/skills/api", () => ({
   deleteInstalledSkill: vi.fn(),
   importSkillZip: vi.fn(),
   initializeBuiltinSkills: vi.fn(),
-  pickSkillArchive: vi.fn(),
   readSkillDetail: vi.fn(),
   readSkillPreferences: vi.fn().mockResolvedValue({ enabledById: {} }),
   scanInstalledSkills: vi.fn(),

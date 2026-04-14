@@ -1,5 +1,5 @@
 import { Plus, RefreshCw, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { SubAgentRow } from "../components/agents/SubAgentRow";
@@ -22,6 +22,7 @@ export function AgentsPage() {
   const [draftName, setDraftName] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (status === "idle") {
@@ -64,16 +65,34 @@ export function AgentsPage() {
     setCreateDialogOpen(false);
   }
 
+  async function handleImportChange(event: ChangeEvent<HTMLInputElement>) {
+    const [file] = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    const archiveBytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+    await importAgentPackage(file.name, archiveBytes);
+  }
+
   return (
     <>
       <PageShell
         title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">代理中心</h1>}
         actions={[
           { icon: RefreshCw, label: "刷新代理库", tone: "default", onClick: () => void refresh() },
-          { icon: Upload, label: "导入代理", tone: "default", onClick: () => void importAgentPackage() },
+          { icon: Upload, label: "导入代理", tone: "default", onClick: () => importInputRef.current?.click() },
           { icon: Plus, label: "新建代理", tone: "primary", onClick: () => setCreateDialogOpen(true) },
         ]}
       >
+        <input
+          ref={importInputRef}
+          hidden
+          accept=".zip,application/zip"
+          type="file"
+          onChange={(event) => void handleImportChange(event)}
+        />
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b border-[#e2e8f0] px-4 py-3 text-xs text-[#526074] dark:border-[#20242b] dark:text-zinc-400 sm:px-5">
             <span>共 {agents.length} 个代理</span>
@@ -93,7 +112,7 @@ export function AgentsPage() {
           <div className="h-full overflow-y-auto">
             {status === "loading" ? (
               <div className="flex h-full min-h-[240px] items-center justify-center border-t border-[#e2e8f0] px-6 text-sm text-[#64748b] dark:border-[#20242b] dark:text-zinc-400">
-                正在扫描代理目录…
+                正在扫描代理库…
               </div>
             ) : agents.length > 0 ? (
               <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-7 dark:border-[#20242b]">
@@ -108,7 +127,7 @@ export function AgentsPage() {
               </div>
             ) : (
               <div className="flex h-full min-h-[240px] items-center justify-center border-t border-[#e2e8f0] px-6 text-sm text-[#64748b] dark:border-[#20242b] dark:text-zinc-400">
-                暂无可用代理，请导入标准 ZIP 代理包或检查 agents 目录。
+                暂无可用代理，请导入标准 ZIP 代理包或新建代理。
               </div>
             )}
           </div>

@@ -28,6 +28,12 @@ export type WorkspaceSnapshot = {
   selectedFilePath: string | null;
 };
 
+export type BookWorkspaceSummary = {
+  name: string;
+  path: string;
+  updatedAt: number;
+};
+
 export type PromptMode = "createBook" | "createFolder" | "createFile" | "rename";
 
 export type PromptState = {

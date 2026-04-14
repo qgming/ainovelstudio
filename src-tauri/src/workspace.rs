@@ -4,7 +4,7 @@ use std::{
     fs,
     path::{Component, Path, PathBuf},
 };
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 #[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
 
@@ -17,6 +17,14 @@ pub struct TreeNode {
     kind: String,
     name: String,
     path: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookWorkspaceSummary {
+    name: String,
+    path: String,
+    updated_at: u64,
 }
 
 #[derive(Serialize)]
@@ -43,6 +51,7 @@ type CommandResult<T> = Result<T, String>;
 const INVALID_NAME_CHARS: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
 const DEFAULT_SEARCH_LIMIT: usize = 50;
 const MAX_SEARCH_LIMIT: usize = 200;
+const REQUIRED_BOOK_WORKSPACE_FILES: [&str; 2] = ["README.md", "04_正文/创作状态追踪器.json"];
 
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
@@ -254,7 +263,9 @@ fn collect_workspace_search_matches(
                 return Ok(());
             }
 
-            collect_workspace_search_matches(root, &path, query, limit, matches, registry, request_id)?;
+            collect_workspace_search_matches(
+                root, &path, query, limit, matches, registry, request_id,
+            )?;
             if matches.len() >= limit {
                 return Ok(());
             }
@@ -597,17 +608,50 @@ fn create_book_workspace_internal(parent_path: &Path, book_name: &str) -> Comman
     }
 
     fs::create_dir_all(&root_path).map_err(error_to_string)?;
+    let setup_result = (|| -> CommandResult<()> {
+        let (directories, files) = build_book_template(&validated_book_name);
+        for directory in directories {
+            fs::create_dir_all(root_path.join(directory)).map_err(error_to_string)?;
+        }
 
-    let (directories, files) = build_book_template(&validated_book_name);
-    for directory in directories {
-        fs::create_dir_all(root_path.join(directory)).map_err(error_to_string)?;
-    }
+        for (relative_path, contents) in files {
+            fs::write(root_path.join(relative_path), contents).map_err(error_to_string)?;
+        }
+        Ok(())
+    })();
 
-    for (relative_path, contents) in files {
-        fs::write(root_path.join(relative_path), contents).map_err(error_to_string)?;
+    if let Err(error) = setup_result {
+        let _ = fs::remove_dir_all(&root_path);
+        return Err(error);
     }
 
     Ok(root_path)
+}
+
+fn ensure_books_library_root(app: &AppHandle) -> CommandResult<PathBuf> {
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(error_to_string)?
+        .join("books");
+    fs::create_dir_all(&root).map_err(error_to_string)?;
+    Ok(root)
+}
+
+fn read_updated_at(path: &Path) -> u64 {
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+fn is_book_workspace_directory(path: &Path) -> bool {
+    path.is_dir()
+        && REQUIRED_BOOK_WORKSPACE_FILES
+            .iter()
+            .all(|relative_path| path.join(relative_path).is_file())
 }
 
 #[tauri::command]
@@ -650,6 +694,35 @@ pub async fn pick_book_directory(app: AppHandle) -> CommandResult<Option<String>
         // 移动端当前不支持目录选择，返回空值让前端走降级处理。
         Ok(None)
     }
+}
+
+#[tauri::command]
+pub fn list_book_workspaces(app: AppHandle) -> CommandResult<Vec<BookWorkspaceSummary>> {
+    let books_root = ensure_books_library_root(&app)?;
+    let mut workspaces = Vec::new();
+
+    for entry in fs::read_dir(&books_root).map_err(error_to_string)? {
+        let entry = entry.map_err(error_to_string)?;
+        let path = entry.path();
+        if !is_book_workspace_directory(&path) {
+            continue;
+        }
+
+        workspaces.push(BookWorkspaceSummary {
+            name: entry_name(&path),
+            path: normalize_path(&path),
+            updated_at: read_updated_at(&path),
+        });
+    }
+
+    workspaces.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    Ok(workspaces)
 }
 
 #[tauri::command]
@@ -798,7 +871,13 @@ pub fn read_text_file_line(
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<WorkspaceLineResult> {
-    read_text_file_line_internal(&rootPath, &path, lineNumber, requestId.as_deref(), &registry)
+    read_text_file_line_internal(
+        &rootPath,
+        &path,
+        lineNumber,
+        requestId.as_deref(),
+        &registry,
+    )
 }
 
 fn read_text_file_line_internal(
@@ -912,13 +991,25 @@ fn replace_text_file_line_internal(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn create_book_workspace(parentPath: String, bookName: String) -> CommandResult<String> {
-    let parent_path = PathBuf::from(parentPath);
-    if !parent_path.exists() || !parent_path.is_dir() {
-        return Err("书籍创建位置不存在。".into());
-    }
-
-    let canonical_parent = fs::canonicalize(parent_path).map_err(error_to_string)?;
+pub fn create_book_workspace(
+    app: AppHandle,
+    parentPath: Option<String>,
+    bookName: String,
+) -> CommandResult<String> {
+    let canonical_parent = match parentPath
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    {
+        Some(parent_path) => {
+            let parent_path = PathBuf::from(parent_path);
+            if !parent_path.exists() || !parent_path.is_dir() {
+                return Err("书籍创建位置不存在。".into());
+            }
+            fs::canonicalize(parent_path).map_err(error_to_string)?
+        }
+        None => ensure_books_library_root(&app)?,
+    };
     let workspace_path = create_book_workspace_internal(&canonical_parent, &bookName)?;
     Ok(normalize_path(&workspace_path))
 }
@@ -932,7 +1023,13 @@ pub fn create_workspace_directory(
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<String> {
-    create_workspace_directory_internal(&rootPath, &parentPath, &name, requestId.as_deref(), &registry)
+    create_workspace_directory_internal(
+        &rootPath,
+        &parentPath,
+        &name,
+        requestId.as_deref(),
+        &registry,
+    )
 }
 
 fn create_workspace_directory_internal(
@@ -968,7 +1065,13 @@ pub fn create_workspace_text_file(
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<String> {
-    create_workspace_text_file_internal(&rootPath, &parentPath, &name, requestId.as_deref(), &registry)
+    create_workspace_text_file_internal(
+        &rootPath,
+        &parentPath,
+        &name,
+        requestId.as_deref(),
+        &registry,
+    )
 }
 
 fn create_workspace_text_file_internal(
@@ -1189,14 +1292,9 @@ mod tests {
         fs::write(&file_path, "第一行\n第二行").expect("failed to seed file");
         let registry = ToolCancellationRegistry::default();
 
-        let result = read_text_file_line_internal(
-            &normalize_path(&root),
-            "章节.md",
-            5,
-            None,
-            &registry,
-        )
-        .expect("read_text_file_line should support out-of-range positive lines");
+        let result =
+            read_text_file_line_internal(&normalize_path(&root), "章节.md", 5, None, &registry)
+                .expect("read_text_file_line should support out-of-range positive lines");
 
         assert_eq!(result.line_number, 5);
         assert_eq!(result.text, "");
@@ -1248,17 +1346,17 @@ mod tests {
         )
         .expect_err("replace_text_file_line should validate previous line");
 
-        assert_eq!(error, "前一行校验失败。预期“不匹配的上一行”，实际“第一行”。");
+        assert_eq!(
+            error,
+            "前一行校验失败。预期“不匹配的上一行”，实际“第一行”。"
+        );
         fs::remove_dir_all(&root).ok();
     }
 
     #[test]
     fn build_book_template_uses_engineering_structure() {
         let (directories, files) = build_book_template("北境余烬");
-        let file_paths = files
-            .iter()
-            .map(|(path, _)| *path)
-            .collect::<Vec<_>>();
+        let file_paths = files.iter().map(|(path, _)| *path).collect::<Vec<_>>();
 
         assert!(directories.contains(&"00_系统指令"));
         assert!(directories.contains(&"04_正文/第一卷"));
@@ -1266,6 +1364,21 @@ mod tests {
         assert!(file_paths.contains(&"02_角色设定/角色关系矩阵.json"));
         assert!(file_paths.contains(&"04_正文/章节模板.md"));
         assert!(file_paths.contains(&"04_正文/第一卷/第001章_待命名.md"));
+    }
+
+    #[test]
+    fn is_book_workspace_directory_requires_template_markers() {
+        let root = create_temp_workspace();
+        let valid_book = create_book_workspace_internal(&root, "北境余烬")
+            .expect("create_book_workspace_internal should create valid workspace");
+        let invalid_book = root.join("半成品");
+        fs::create_dir_all(&invalid_book).expect("failed to create invalid workspace");
+        fs::write(invalid_book.join("README.md"), "only readme").expect("failed to write invalid readme");
+
+        assert!(is_book_workspace_directory(&valid_book));
+        assert!(!is_book_workspace_directory(&invalid_book));
+
+        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -1324,14 +1437,8 @@ mod tests {
         fs::create_dir_all(&nested_dir).expect("failed to create nested directory");
         let registry = ToolCancellationRegistry::default();
 
-        let error = move_workspace_entry_internal(
-            &root_str,
-            "卷一",
-            "卷一/章节",
-            None,
-            &registry,
-        )
-        .expect_err("move should reject moving a directory into its descendant");
+        let error = move_workspace_entry_internal(&root_str, "卷一", "卷一/章节", None, &registry)
+            .expect_err("move should reject moving a directory into its descendant");
 
         assert_eq!(error, "不能将文件夹迁移到其自身或子目录中。");
         assert!(source_dir.exists());

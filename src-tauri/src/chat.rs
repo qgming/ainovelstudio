@@ -376,7 +376,10 @@ fn next_message_seq(connection: &rusqlite::Connection, session_id: &str) -> Comm
 #[tauri::command]
 pub fn read_skill_preferences(app: AppHandle) -> CommandResult<TogglePreferences> {
     let connection = open_database(&app)?;
-    Ok(parse_preferences(get_state_value(&connection, SKILLS_PREFERENCES_KEY)?))
+    Ok(parse_preferences(get_state_value(
+        &connection,
+        SKILLS_PREFERENCES_KEY,
+    )?))
 }
 
 #[tauri::command]
@@ -399,7 +402,10 @@ pub fn clear_skill_preferences(app: AppHandle) -> CommandResult<()> {
 #[tauri::command]
 pub fn read_agent_preferences(app: AppHandle) -> CommandResult<TogglePreferences> {
     let connection = open_database(&app)?;
-    Ok(parse_preferences(get_state_value(&connection, AGENTS_PREFERENCES_KEY)?))
+    Ok(parse_preferences(get_state_value(
+        &connection,
+        AGENTS_PREFERENCES_KEY,
+    )?))
 }
 
 #[tauri::command]
@@ -422,7 +428,10 @@ pub fn clear_agent_preferences(app: AppHandle) -> CommandResult<()> {
 #[tauri::command]
 pub fn read_agent_settings(app: AppHandle) -> CommandResult<Option<AgentSettingsDocument>> {
     let connection = open_database(&app)?;
-    Ok(parse_agent_settings(get_state_value(&connection, AGENT_SETTINGS_KEY)?))
+    Ok(parse_agent_settings(get_state_value(
+        &connection,
+        AGENT_SETTINGS_KEY,
+    )?))
 }
 
 #[tauri::command]

@@ -72,8 +72,8 @@ const tree = {
 function setupInvokeMock() {
   mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
     switch (command) {
-      case "pick_book_directory":
-        return rootPath;
+      case "list_book_workspaces":
+        return [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
       case "read_workspace_tree":
         return tree;
       case "read_text_file":
@@ -107,6 +107,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
     expect(screen.getByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
@@ -119,6 +120,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
     fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
 
@@ -144,6 +146,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
     fireEvent.click(await screen.findByRole("button", { name: "创作状态追踪器.json" }));
 
     expect(await screen.findByRole("textbox", { name: "文件编辑器" })).toHaveValue(
@@ -167,6 +170,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
     fireEvent.click(screen.getByRole("button", { name: "第二卷" }));
 
@@ -182,6 +186,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
 
     fireEvent.click(screen.getByRole("button", { name: "第一卷 更多操作" }));
@@ -204,6 +209,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("第一卷")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开全部文件夹" })).toBeInTheDocument();
@@ -229,6 +235,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
     fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
 
@@ -244,6 +251,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
     fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
 
@@ -258,10 +266,11 @@ describe("BookPage", () => {
     expect(screen.getByText("第一幕").tagName).toBe("LI");
   });
 
-  it("已打开书籍后可从顶部重新打开书籍菜单并再次选择书籍", async () => {
+  it("已打开书籍后可从顶部重新打开书籍菜单并再次打开书架", async () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
 
@@ -271,16 +280,14 @@ describe("BookPage", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: "选择书籍" }));
 
-    await waitFor(() => {
-      const pickDirectoryCalls = mockInvoke.mock.calls.filter(([command]) => command === "pick_book_directory");
-      expect(pickDirectoryCalls).toHaveLength(2);
-    });
+    expect(await screen.findByRole("heading", { name: "选择书籍" })).toBeInTheDocument();
   });
 
   it("已打开书籍后可从顶部菜单再次触发新建书籍流程", async () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
 
@@ -297,12 +304,12 @@ describe("BookPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "新建书籍" }));
     fireEvent.change(screen.getByLabelText("书名"), { target: { value: "北境余烬" } });
-    fireEvent.click(screen.getByRole("button", { name: "创建并选择位置" }));
+    fireEvent.click(screen.getByRole("button", { name: "创建书籍" }));
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith("create_book_workspace", {
         bookName: "北境余烬",
-        parentPath: rootPath,
+        parentPath: "",
       });
     });
   });
@@ -328,6 +335,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
     expect(screen.getByText("北境余烬").closest("aside")).toHaveStyle({ width: "360px" });
@@ -340,6 +348,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
 
@@ -382,6 +391,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
 
@@ -442,6 +452,7 @@ describe("BookPage", () => {
     render(<BookPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByRole("button", { name: "展开 Agent 栏" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Agent" })).not.toBeInTheDocument();

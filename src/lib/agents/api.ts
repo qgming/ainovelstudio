@@ -56,10 +56,6 @@ export function clearAgentPreferences() {
   return invoke<void>("clear_agent_preferences");
 }
 
-export function pickAgentArchive() {
-  return invoke<string | null>("pick_agent_archive");
-}
-
 export function scanInstalledAgents(options?: InvokeCancellationOptions) {
   return invokeWithCancellation<AgentManifest[]>("scan_installed_agents", {}, options);
 }
@@ -88,7 +84,6 @@ export function deleteInstalledAgent(agentId: string) {
   return invoke<AgentManifest[]>("delete_installed_agent", { agentId });
 }
 
-export function importAgentZip(zipPath: string) {
-  return invoke<AgentManifest[]>("import_agent_zip", { zipPath });
+export function importAgentZip(fileName: string, archiveBytes: number[]) {
+  return invoke<AgentManifest[]>("import_agent_zip", { fileName, archiveBytes });
 }
-

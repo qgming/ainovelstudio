@@ -1,17 +1,18 @@
-use crate::ToolCancellationRegistry;
-use serde::Serialize;
+use crate::{db::open_database, embedded_resources::EMBEDDED_SKILL_FILES, ToolCancellationRegistry};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::{
-    collections::{HashMap, HashSet},
-    fs::{self, File},
+    collections::HashMap,
+    io::{Cursor, Read},
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{path::BaseDirectory, AppHandle, Manager, State};
-use tauri_plugin_dialog::DialogExt;
+use tauri::{AppHandle, State};
 use zip::ZipArchive;
 
 type CommandResult<T> = Result<T, String>;
+type SkillFiles = HashMap<String, String>;
 
 const MAX_ARCHIVE_ENTRIES: usize = 200;
 const MAX_ARCHIVE_FILE_SIZE: u64 = 5 * 1024 * 1024;
@@ -21,8 +22,11 @@ const MAX_COMPRESSION_RATIO: u64 = 200;
 const BLOCKED_REFERENCE_EXTENSIONS: [&str; 10] = [
     "exe", "dll", "bat", "cmd", "sh", "ps1", "msi", "com", "scr", "js",
 ];
+const SKILL_SOURCE_BUILTIN: &str = "builtin-package";
+const SKILL_SOURCE_INSTALLED: &str = "installed-package";
+const SKILL_PRIMARY_FILE: &str = "SKILL.md";
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillReferenceEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,7 +36,7 @@ pub struct SkillReferenceEntry {
     size: u64,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillValidation {
     errors: Vec<String>,
@@ -40,7 +44,7 @@ pub struct SkillValidation {
     warnings: Vec<String>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,13 +83,6 @@ pub struct BuiltinSkillsInitializationResult {
     skipped_skill_ids: Vec<String>,
 }
 
-#[derive(Clone)]
-struct SkillRoot {
-    is_builtin: bool,
-    path: PathBuf,
-    source_kind: &'static str,
-}
-
 struct ParsedSkillMarkdown {
     body: String,
     frontmatter: Option<Value>,
@@ -100,17 +97,14 @@ fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+fn normalize_text_content(content: &str) -> String {
+    content.replace("\r\n", "\n")
+}
+
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
-        .unwrap_or(0)
-}
-
-fn current_timestamp_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
         .unwrap_or(0)
 }
 
@@ -202,7 +196,7 @@ fn extract_description_from_body(body: &str) -> String {
 }
 
 fn parse_skill_markdown(raw: &str) -> CommandResult<ParsedSkillMarkdown> {
-    let normalized = raw.replace("\r\n", "\n");
+    let normalized = normalize_text_content(raw);
     if !normalized.starts_with("---\n") {
         return Ok(ParsedSkillMarkdown {
             body: normalized.trim().to_string(),
@@ -241,8 +235,8 @@ fn parse_skill_markdown(raw: &str) -> CommandResult<ParsedSkillMarkdown> {
         });
     }
 
-    let parsed = serde_yaml::from_str::<Value>(&yaml_raw)
-        .map_err(|error| format!("YAML 解析失败：{error}"))?;
+    let parsed =
+        serde_yaml::from_str::<Value>(&yaml_raw).map_err(|error| format!("YAML 解析失败：{error}"))?;
 
     match parsed {
         Value::Object(_) => Ok(ParsedSkillMarkdown {
@@ -282,7 +276,7 @@ fn validate_skill_name(name: &str) -> bool {
 
 fn validate_frontmatter(
     frontmatter: Option<&Map<String, Value>>,
-    directory_name: &str,
+    skill_id: &str,
 ) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -290,8 +284,8 @@ fn validate_frontmatter(
     let name = read_string_field(frontmatter, "name");
     match name {
         Some(ref value) if validate_skill_name(value) => {
-            if value != directory_name {
-                errors.push("frontmatter.name 必须与技能目录名保持一致。".into());
+            if value != skill_id {
+                errors.push("frontmatter.name 必须与技能 ID 保持一致。".into());
             }
         }
         Some(_) => {
@@ -304,8 +298,7 @@ fn validate_frontmatter(
 
     match read_string_field(frontmatter, "description") {
         Some(value) => {
-            let length = value.chars().count();
-            if length > 1024 {
+            if value.chars().count() > 1024 {
                 errors.push("frontmatter.description 长度不能超过 1024 个字符。".into());
             }
             if !value.contains("use when") && !value.contains("使用") && !value.contains("适用")
@@ -321,8 +314,7 @@ fn validate_frontmatter(
     }
 
     if let Some(compatibility) = read_string_field(frontmatter, "compatibility") {
-        let length = compatibility.chars().count();
-        if length > 500 {
+        if compatibility.chars().count() > 500 {
             errors.push("frontmatter.compatibility 长度不能超过 500 个字符。".into());
         }
     }
@@ -345,254 +337,7 @@ fn validate_frontmatter(
     (errors, warnings)
 }
 
-fn collect_reference_entries(
-    base_path: &Path,
-    current_path: &Path,
-) -> CommandResult<Vec<SkillReferenceEntry>> {
-    let mut entries = Vec::new();
-    if !current_path.exists() {
-        return Ok(entries);
-    }
-
-    for entry in fs::read_dir(current_path).map_err(error_to_string)? {
-        let entry = entry.map_err(error_to_string)?;
-        let path = entry.path();
-        if path.is_dir() {
-            entries.extend(collect_reference_entries(base_path, &path)?);
-            continue;
-        }
-
-        let relative = path.strip_prefix(base_path).map_err(error_to_string)?;
-        let metadata = fs::metadata(&path).map_err(error_to_string)?;
-        entries.push(SkillReferenceEntry {
-            extension: detect_extension(&path),
-            name: path
-                .file_name()
-                .map(|name| name.to_string_lossy().to_string())
-                .unwrap_or_else(|| normalize_path(&path)),
-            path: normalize_path(relative),
-            size: metadata.len(),
-        });
-    }
-
-    entries.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(entries)
-}
-
-fn parse_skill_manifest(skill_dir: &Path, source_root: &SkillRoot) -> CommandResult<SkillManifest> {
-    let skill_file_path = skill_dir.join("SKILL.md");
-    if !skill_file_path.exists() || !skill_file_path.is_file() {
-        return Err("技能目录缺少 SKILL.md。".into());
-    }
-
-    let raw_markdown = fs::read_to_string(&skill_file_path).map_err(error_to_string)?;
-    let directory_name = skill_dir
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| "skill".into());
-
-    let mut errors = Vec::new();
-    let mut warnings = Vec::new();
-    let parsed_markdown = match parse_skill_markdown(&raw_markdown) {
-        Ok(parsed) => parsed,
-        Err(error) => {
-            errors.push(error);
-            ParsedSkillMarkdown {
-                body: raw_markdown.trim().to_string(),
-                frontmatter: None,
-                frontmatter_raw: None,
-            }
-        }
-    };
-
-    let frontmatter_object = parsed_markdown
-        .frontmatter
-        .as_ref()
-        .and_then(Value::as_object);
-
-    let fallback_id = sanitize_skill_id_fallback(&directory_name);
-    let id = fallback_id.clone();
-
-    let (frontmatter_errors, frontmatter_warnings) =
-        validate_frontmatter(frontmatter_object, &directory_name);
-    errors.extend(frontmatter_errors);
-    warnings.extend(frontmatter_warnings);
-
-    let name =
-        read_string_field(frontmatter_object, "name").unwrap_or_else(|| directory_name.clone());
-    let description = read_string_field(frontmatter_object, "description")
-        .unwrap_or_else(|| extract_description_from_body(&parsed_markdown.body));
-    let version = read_string_field(frontmatter_object, "version")
-        .or_else(|| read_metadata_string_field(frontmatter_object, "version"));
-    let author = read_string_field(frontmatter_object, "author")
-        .or_else(|| read_metadata_string_field(frontmatter_object, "author"));
-    let tags = read_string_list_field(frontmatter_object, "tags");
-    let suggested_tools = {
-        let from_tools = read_string_list_field(frontmatter_object, "tools");
-        if from_tools.is_empty() {
-            read_string_list_field(frontmatter_object, "allowed-tools")
-        } else {
-            from_tools
-        }
-    };
-
-    let references_path = skill_dir.join("references");
-    let references = if references_path.exists() && references_path.is_dir() {
-        let entries = collect_reference_entries(skill_dir, &references_path)?;
-        if entries
-            .iter()
-            .any(|entry| !is_reference_file_allowed(Path::new(&entry.path)))
-        {
-            errors.push("references 目录包含不允许导入的可执行文件。".into());
-        }
-        entries
-    } else {
-        Vec::new()
-    };
-
-    if parsed_markdown.body.trim().is_empty() {
-        warnings.push("SKILL.md 正文为空，运行时可能无法提供有效技能说明。".into());
-    }
-
-    Ok(SkillManifest {
-        author,
-        body: parsed_markdown.body,
-        default_enabled: source_root.is_builtin,
-        description,
-        discovered_at: current_timestamp(),
-        frontmatter: parsed_markdown.frontmatter,
-        frontmatter_raw: parsed_markdown.frontmatter_raw,
-        id,
-        install_path: Some(normalize_path(skill_dir)),
-        is_builtin: source_root.is_builtin,
-        name,
-        raw_markdown,
-        references,
-        references_path: if references_path.exists() {
-            Some(normalize_path(&references_path))
-        } else {
-            None
-        },
-        skill_file_path: Some(normalize_path(&skill_file_path)),
-        source_kind: source_root.source_kind.into(),
-        suggested_tools,
-        tags,
-        validation: SkillValidation {
-            is_valid: errors.is_empty(),
-            errors,
-            warnings,
-        },
-        version,
-    })
-}
-
-fn scan_skill_root(
-    root: &SkillRoot,
-    registry: Option<&ToolCancellationRegistry>,
-    request_id: Option<&str>,
-) -> CommandResult<Vec<SkillManifest>> {
-    if !root.path.exists() || !root.path.is_dir() {
-        return Ok(Vec::new());
-    }
-
-    let mut manifests = Vec::new();
-    for entry in fs::read_dir(&root.path).map_err(error_to_string)? {
-        if let Some(registry) = registry {
-            registry.check(request_id)?;
-        }
-        let entry = entry.map_err(error_to_string)?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-
-        let skill_file = path.join("SKILL.md");
-        if !skill_file.exists() {
-            continue;
-        }
-
-        manifests.push(parse_skill_manifest(&path, root)?);
-    }
-
-    Ok(manifests)
-}
-
-fn ensure_user_skills_root(app: &AppHandle) -> CommandResult<PathBuf> {
-    let root = app
-        .path()
-        .app_data_dir()
-        .map_err(error_to_string)?
-        .join("skills");
-    fs::create_dir_all(&root).map_err(error_to_string)?;
-    Ok(root)
-}
-
-fn resolve_builtin_skills_root(app: &AppHandle) -> Option<PathBuf> {
-    ["skills", "resources/skills"]
-        .into_iter()
-        .filter_map(|relative_path| {
-            app.path()
-                .resolve(relative_path, BaseDirectory::Resource)
-                .ok()
-        })
-        .find(|path| path.exists() && path.is_dir())
-}
-
-fn collect_skill_roots(app: &AppHandle) -> CommandResult<Vec<SkillRoot>> {
-    let mut roots = Vec::new();
-    if let Some(resource_root) = resolve_builtin_skills_root(app) {
-        roots.push(SkillRoot {
-            is_builtin: true,
-            path: resource_root,
-            source_kind: "builtin-package",
-        });
-    }
-
-    roots.push(SkillRoot {
-        is_builtin: false,
-        path: ensure_user_skills_root(app)?,
-        source_kind: "installed-package",
-    });
-
-    Ok(roots)
-}
-
-fn scan_all_skills(
-    app: &AppHandle,
-    registry: Option<&ToolCancellationRegistry>,
-    request_id: Option<&str>,
-) -> CommandResult<Vec<SkillManifest>> {
-    let mut builtin_ids: HashSet<String> = HashSet::new();
-    let mut by_id: HashMap<String, SkillManifest> = HashMap::new();
-    for root in collect_skill_roots(app)? {
-        if let Some(registry) = registry {
-            registry.check(request_id)?;
-        }
-        for manifest in scan_skill_root(&root, registry, request_id)? {
-            if root.is_builtin {
-                builtin_ids.insert(manifest.id.clone());
-            }
-            match by_id.get(&manifest.id) {
-                Some(existing) if existing.source_kind == "installed-package" => {}
-                _ => {
-                    by_id.insert(manifest.id.clone(), manifest);
-                }
-            }
-        }
-    }
-
-    let mut manifests = by_id
-        .into_values()
-        .map(|mut manifest| {
-            manifest.default_enabled = builtin_ids.contains(&manifest.id);
-            manifest
-        })
-        .collect::<Vec<_>>();
-    manifests.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
-    Ok(manifests)
-}
-
-fn resolve_skill_file_path(skill_dir: &Path, relative_path: &str) -> CommandResult<PathBuf> {
+fn normalize_relative_path(relative_path: &str) -> CommandResult<String> {
     let trimmed = relative_path.trim();
     if trimmed.is_empty() {
         return Err("文件路径不能为空。".into());
@@ -611,18 +356,316 @@ fn resolve_skill_file_path(skill_dir: &Path, relative_path: &str) -> CommandResu
         return Err("文件路径不合法。".into());
     }
 
-    let file_path = skill_dir.join(&relative);
-    if !file_path.exists() || !file_path.is_file() {
-        return Err("未找到对应技能文件。".into());
+    Ok(normalize_path(&relative))
+}
+
+fn validate_skill_file_path(relative_path: &str) -> CommandResult<String> {
+    let normalized = normalize_relative_path(relative_path)?;
+    if normalized == SKILL_PRIMARY_FILE {
+        return Ok(normalized);
+    }
+    if !normalized.starts_with("references/") {
+        return Err("仅支持访问 SKILL.md 和 references 目录下的文件。".into());
+    }
+    if !is_reference_file_allowed(Path::new(&normalized)) {
+        return Err("当前 reference 文件类型不允许访问。".into());
+    }
+    Ok(normalized)
+}
+
+fn resolve_reference_relative_path(reference_path: &str) -> CommandResult<String> {
+    let normalized = normalize_relative_path(reference_path)?;
+    let resolved = if normalized.starts_with("references/") {
+        normalized
+    } else {
+        format!("references/{normalized}")
+    };
+    validate_skill_file_path(&resolved)
+}
+
+fn build_skill_virtual_path(skill_id: &str, relative_path: &str) -> String {
+    format!("sqlite://skills/{skill_id}/{relative_path}")
+}
+
+fn collect_reference_entries_from_files(files: &SkillFiles) -> Vec<SkillReferenceEntry> {
+    let mut entries = files
+        .iter()
+        .filter(|(path, _)| path.starts_with("references/"))
+        .map(|(path, content)| SkillReferenceEntry {
+            extension: detect_extension(Path::new(path)),
+            name: Path::new(path)
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_string()),
+            path: path.clone(),
+            size: content.as_bytes().len() as u64,
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.path.cmp(&right.path));
+    entries
+}
+
+fn build_skill_manifest_from_files(
+    skill_id: &str,
+    files: &SkillFiles,
+    source_kind: &str,
+    is_builtin: bool,
+) -> CommandResult<SkillManifest> {
+    let raw_markdown = files
+        .get(SKILL_PRIMARY_FILE)
+        .cloned()
+        .ok_or_else(|| "技能缺少 SKILL.md。".to_string())?;
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    let parsed_markdown = match parse_skill_markdown(&raw_markdown) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            errors.push(error);
+            ParsedSkillMarkdown {
+                body: raw_markdown.trim().to_string(),
+                frontmatter: None,
+                frontmatter_raw: None,
+            }
+        }
+    };
+
+    let frontmatter_object = parsed_markdown
+        .frontmatter
+        .as_ref()
+        .and_then(Value::as_object);
+    let (frontmatter_errors, frontmatter_warnings) =
+        validate_frontmatter(frontmatter_object, skill_id);
+    errors.extend(frontmatter_errors);
+    warnings.extend(frontmatter_warnings);
+
+    let references = collect_reference_entries_from_files(files);
+    if references
+        .iter()
+        .any(|entry| !is_reference_file_allowed(Path::new(&entry.path)))
+    {
+        errors.push("references 目录包含不允许导入的可执行文件。".into());
+    }
+    if parsed_markdown.body.trim().is_empty() {
+        warnings.push("SKILL.md 正文为空，运行时可能无法提供有效技能说明。".into());
     }
 
-    let canonical_file_path = fs::canonicalize(&file_path).map_err(error_to_string)?;
-    let canonical_skill_dir = fs::canonicalize(skill_dir).map_err(error_to_string)?;
-    if !canonical_file_path.starts_with(&canonical_skill_dir) {
-        return Err("技能文件路径超出允许范围。".into());
+    let name =
+        read_string_field(frontmatter_object, "name").unwrap_or_else(|| skill_id.to_string());
+    let description = read_string_field(frontmatter_object, "description")
+        .unwrap_or_else(|| extract_description_from_body(&parsed_markdown.body));
+    let version = read_string_field(frontmatter_object, "version")
+        .or_else(|| read_metadata_string_field(frontmatter_object, "version"));
+    let author = read_string_field(frontmatter_object, "author")
+        .or_else(|| read_metadata_string_field(frontmatter_object, "author"));
+    let tags = read_string_list_field(frontmatter_object, "tags");
+    let suggested_tools = {
+        let from_tools = read_string_list_field(frontmatter_object, "tools");
+        if from_tools.is_empty() {
+            read_string_list_field(frontmatter_object, "allowed-tools")
+        } else {
+            from_tools
+        }
+    };
+
+    Ok(SkillManifest {
+        author,
+        body: parsed_markdown.body,
+        default_enabled: is_builtin,
+        description,
+        discovered_at: current_timestamp(),
+        frontmatter: parsed_markdown.frontmatter,
+        frontmatter_raw: parsed_markdown.frontmatter_raw,
+        id: skill_id.to_string(),
+        install_path: Some(format!("sqlite://skills/{skill_id}")),
+        is_builtin,
+        name,
+        raw_markdown,
+        references,
+        references_path: files
+            .keys()
+            .any(|path| path.starts_with("references/"))
+            .then(|| build_skill_virtual_path(skill_id, "references")),
+        skill_file_path: Some(build_skill_virtual_path(skill_id, SKILL_PRIMARY_FILE)),
+        source_kind: source_kind.into(),
+        suggested_tools,
+        tags,
+        validation: SkillValidation {
+            errors: errors.clone(),
+            is_valid: errors.is_empty(),
+            warnings,
+        },
+        version,
+    })
+}
+
+fn serialize_json<T: Serialize>(value: &T) -> CommandResult<String> {
+    serde_json::to_string(value).map_err(error_to_string)
+}
+
+fn save_skill_record(
+    connection: &Connection,
+    manifest: &SkillManifest,
+    files: &SkillFiles,
+) -> CommandResult<()> {
+    connection
+        .execute(
+            r#"
+            INSERT INTO skill_packages (id, source_kind, is_builtin, manifest_json, files_json, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(id) DO UPDATE
+            SET source_kind = excluded.source_kind,
+                is_builtin = excluded.is_builtin,
+                manifest_json = excluded.manifest_json,
+                files_json = excluded.files_json,
+                updated_at = excluded.updated_at
+            "#,
+            params![
+                manifest.id,
+                manifest.source_kind,
+                if manifest.is_builtin { 1 } else { 0 },
+                serialize_json(manifest)?,
+                serialize_json(files)?,
+                current_timestamp() as i64,
+            ],
+        )
+        .map_err(error_to_string)?;
+    Ok(())
+}
+
+fn load_skill_record(
+    connection: &Connection,
+    skill_id: &str,
+) -> CommandResult<Option<(SkillManifest, SkillFiles)>> {
+    connection
+        .query_row(
+            "SELECT manifest_json, files_json FROM skill_packages WHERE id = ?1",
+            params![skill_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(error_to_string)?
+        .map(|(manifest_raw, files_raw)| {
+            let manifest =
+                serde_json::from_str::<SkillManifest>(&manifest_raw).map_err(error_to_string)?;
+            let files = serde_json::from_str::<SkillFiles>(&files_raw).map_err(error_to_string)?;
+            Ok((manifest, files))
+        })
+        .transpose()
+}
+
+fn load_all_skill_records(connection: &Connection) -> CommandResult<Vec<(SkillManifest, SkillFiles)>> {
+    let mut statement = connection
+        .prepare("SELECT manifest_json, files_json FROM skill_packages")
+        .map_err(error_to_string)?;
+    let mut rows = statement.query([]).map_err(error_to_string)?;
+    let mut records = Vec::new();
+    while let Some(row) = rows.next().map_err(error_to_string)? {
+        let manifest_raw = row.get::<_, String>(0).map_err(error_to_string)?;
+        let files_raw = row.get::<_, String>(1).map_err(error_to_string)?;
+        let manifest =
+            serde_json::from_str::<SkillManifest>(&manifest_raw).map_err(error_to_string)?;
+        let files = serde_json::from_str::<SkillFiles>(&files_raw).map_err(error_to_string)?;
+        records.push((manifest, files));
+    }
+    Ok(records)
+}
+
+fn delete_skill_record(connection: &Connection, skill_id: &str) -> CommandResult<()> {
+    connection
+        .execute("DELETE FROM skill_packages WHERE id = ?1", params![skill_id])
+        .map_err(error_to_string)?;
+    Ok(())
+}
+
+fn collect_embedded_skill_files(skill_id: &str) -> SkillFiles {
+    let prefix = format!("{skill_id}/");
+    EMBEDDED_SKILL_FILES
+        .iter()
+        .filter(|file| file.path.starts_with(&prefix))
+        .filter_map(|file| {
+            file.path
+                .strip_prefix(&prefix)
+                .map(|relative_path| (relative_path.to_string(), normalize_text_content(file.content)))
+        })
+        .collect()
+}
+
+fn embedded_skill_ids() -> Vec<String> {
+    let mut ids = EMBEDDED_SKILL_FILES
+        .iter()
+        .filter_map(|file| file.path.split('/').next())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn sync_builtin_skills_to_database(
+    app: &AppHandle,
+) -> CommandResult<BuiltinSkillsInitializationResult> {
+    let connection = open_database(app)?;
+    let mut initialized_skill_ids = Vec::new();
+    let mut skipped_skill_ids = Vec::new();
+    for skill_id in embedded_skill_ids() {
+        if let Some((existing, _)) = load_skill_record(&connection, &skill_id)? {
+            if existing.source_kind == SKILL_SOURCE_INSTALLED {
+                skipped_skill_ids.push(skill_id);
+                continue;
+            }
+        }
+
+        let files = collect_embedded_skill_files(&skill_id);
+        let manifest =
+            build_skill_manifest_from_files(&skill_id, &files, SKILL_SOURCE_BUILTIN, true)?;
+        if !manifest.validation.is_valid {
+            let error_details = manifest.validation.errors.join("；");
+            return Err(if error_details.is_empty() {
+                format!("内置技能 {skill_id} 初始化失败。")
+            } else {
+                format!("内置技能 {skill_id} 初始化失败：{error_details}")
+            });
+        }
+        save_skill_record(&connection, &manifest, &files)?;
+        initialized_skill_ids.push(skill_id);
     }
 
-    Ok(file_path)
+    Ok(BuiltinSkillsInitializationResult {
+        initialized_skill_ids,
+        skipped_skill_ids,
+    })
+}
+
+fn ensure_builtin_skills_seeded(app: &AppHandle) -> CommandResult<()> {
+    sync_builtin_skills_to_database(app).map(|_| ())
+}
+
+fn scan_all_skills(
+    app: &AppHandle,
+    registry: Option<&ToolCancellationRegistry>,
+    request_id: Option<&str>,
+) -> CommandResult<Vec<SkillManifest>> {
+    if let Some(registry) = registry {
+        registry.check(request_id)?;
+    }
+    ensure_builtin_skills_seeded(app)?;
+    if let Some(registry) = registry {
+        registry.check(request_id)?;
+    }
+
+    let connection = open_database(app)?;
+    let mut manifests = load_all_skill_records(&connection)?
+        .into_iter()
+        .map(|(manifest, _)| manifest)
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    Ok(manifests)
+}
+
+fn read_skill_package(app: &AppHandle, skill_id: &str) -> CommandResult<(SkillManifest, SkillFiles)> {
+    ensure_builtin_skills_seeded(app)?;
+    let connection = open_database(app)?;
+    load_skill_record(&connection, skill_id)?.ok_or_else(|| "未找到对应技能。".into())
 }
 
 fn validate_reference_name(name: &str) -> CommandResult<String> {
@@ -639,73 +682,19 @@ fn build_skill_markdown_template(name: &str, description: &str) -> String {
     )
 }
 
-fn write_skill_file(skill_dir: &Path, relative_path: &str, content: &str) -> CommandResult<()> {
-    let trimmed = relative_path.trim();
-    if trimmed == "SKILL.md" {
-        let file_path = skill_dir.join("SKILL.md");
-        fs::write(&file_path, content).map_err(error_to_string)?;
-        return Ok(());
-    }
-
-    let file_path = resolve_reference_file_path(skill_dir, trimmed)?;
-    fs::write(file_path, content).map_err(error_to_string)
-}
-
-fn create_reference_file(skill_dir: &Path, name: &str) -> CommandResult<String> {
-    let safe_name = validate_reference_name(name)?;
-    let references_root = skill_dir.join("references");
-    fs::create_dir_all(&references_root).map_err(error_to_string)?;
-
-    let relative_path = format!("references/{safe_name}.md");
-    let file_path = references_root.join(format!("{safe_name}.md"));
-    if file_path.exists() {
-        return Err("已存在同名参考文献文件。".into());
-    }
-
-    fs::write(
-        &file_path,
-        format!("# {safe_name}\n\n在这里记录与技能相关的参考内容。\n"),
-    )
-    .map_err(error_to_string)?;
-
-    Ok(relative_path)
-}
-
-fn create_skill_directory_from_content(
+fn save_skill_files(
     app: &AppHandle,
-    name: &str,
-    skill_markdown: &str,
+    skill_id: &str,
+    files: &SkillFiles,
+    source_kind: &str,
+    is_builtin: bool,
 ) -> CommandResult<()> {
-    let safe_name = validate_reference_name(name)?;
-    let user_root = ensure_user_skills_root(app)?;
-    let skill_dir = user_root.join(&safe_name);
-    if skill_dir.exists() {
-        return Err("已存在同名技能。".into());
-    }
-
-    fs::create_dir_all(skill_dir.join("references")).map_err(error_to_string)?;
-    fs::write(skill_dir.join("SKILL.md"), skill_markdown).map_err(error_to_string)?;
-
-    let scan_root = SkillRoot {
-        is_builtin: false,
-        path: user_root,
-        source_kind: "installed-package",
-    };
-    let manifest = parse_skill_manifest(&skill_dir, &scan_root)?;
-    if !manifest.validation.is_valid {
-        let _ = fs::remove_dir_all(&skill_dir);
-        let error_details = manifest.validation.errors.join("；");
-        return Err(if error_details.is_empty() {
-            "复制内置技能失败。".into()
-        } else {
-            format!("复制内置技能失败：{error_details}")
-        });
-    }
-
-    Ok(())
+    let manifest = build_skill_manifest_from_files(skill_id, files, source_kind, is_builtin)?;
+    let connection = open_database(app)?;
+    save_skill_record(&connection, &manifest, files)
 }
 
-fn create_skill_directory(app: &AppHandle, name: &str, description: &str) -> CommandResult<()> {
+fn create_skill_record(app: &AppHandle, name: &str, description: &str) -> CommandResult<()> {
     let safe_name = validate_reference_name(name)?;
     let trimmed_description = description.trim();
     if trimmed_description.is_empty() {
@@ -715,27 +704,17 @@ fn create_skill_directory(app: &AppHandle, name: &str, description: &str) -> Com
         return Err("技能简介长度不能超过 1024 个字符。".into());
     }
 
-    let user_root = ensure_user_skills_root(app)?;
-    let skill_dir = user_root.join(&safe_name);
-    if skill_dir.exists() {
+    let connection = open_database(app)?;
+    if load_skill_record(&connection, &safe_name)?.is_some() {
         return Err("已存在同名技能。".into());
     }
 
-    fs::create_dir_all(skill_dir.join("references")).map_err(error_to_string)?;
-    fs::write(
-        skill_dir.join("SKILL.md"),
+    let files = SkillFiles::from([(
+        SKILL_PRIMARY_FILE.to_string(),
         build_skill_markdown_template(&safe_name, trimmed_description),
-    )
-    .map_err(error_to_string)?;
-
-    let scan_root = SkillRoot {
-        is_builtin: false,
-        path: user_root,
-        source_kind: "installed-package",
-    };
-    let manifest = parse_skill_manifest(&skill_dir, &scan_root)?;
+    )]);
+    let manifest = build_skill_manifest_from_files(&safe_name, &files, SKILL_SOURCE_INSTALLED, false)?;
     if !manifest.validation.is_valid {
-        let _ = fs::remove_dir_all(&skill_dir);
         let error_details = manifest.validation.errors.join("；");
         return Err(if error_details.is_empty() {
             "新建技能失败。".into()
@@ -743,132 +722,47 @@ fn create_skill_directory(app: &AppHandle, name: &str, description: &str) -> Com
             format!("新建技能失败：{error_details}")
         });
     }
-
-    Ok(())
+    save_skill_record(&connection, &manifest, &files)
 }
 
-fn resolve_skill_directory(app: &AppHandle, skill_id: &str) -> CommandResult<PathBuf> {
-    scan_all_skills(app, None, None)?
-        .into_iter()
-        .find(|skill| skill.id == skill_id)
-        .and_then(|skill| skill.install_path)
-        .map(PathBuf::from)
-        .ok_or_else(|| "未找到对应技能。".into())
+fn create_reference_file(app: &AppHandle, skill_id: &str, name: &str) -> CommandResult<String> {
+    let safe_name = validate_reference_name(name)?;
+    let (manifest, mut files) = read_skill_package(app, skill_id)?;
+    if manifest.source_kind != SKILL_SOURCE_INSTALLED {
+        return Err("仅支持为已安装技能创建参考文献。".into());
+    }
+
+    let relative_path = format!("references/{safe_name}.md");
+    if files.contains_key(&relative_path) {
+        return Err("已存在同名参考文献文件。".into());
+    }
+
+    files.insert(
+        relative_path.clone(),
+        format!("# {safe_name}\n\n在这里记录与技能相关的参考内容。\n"),
+    );
+    save_skill_files(app, skill_id, &files, SKILL_SOURCE_INSTALLED, false)?;
+    Ok(relative_path)
 }
 
-fn resolve_installed_skill_directory(app: &AppHandle, skill_id: &str) -> CommandResult<PathBuf> {
-    let user_root = ensure_user_skills_root(app)?;
-    let target_path = user_root.join(skill_id);
-    if !target_path.exists() || !target_path.is_dir() {
-        return Err("未找到可删除的已安装技能目录。".into());
-    }
-
-    let canonical_target_path = fs::canonicalize(&target_path).map_err(error_to_string)?;
-    let canonical_user_root = fs::canonicalize(&user_root).map_err(error_to_string)?;
-    if !canonical_target_path.starts_with(&canonical_user_root) {
-        return Err("技能目录超出允许范围。".into());
-    }
-
-    Ok(target_path)
-}
-
-fn resolve_reference_file_path(skill_dir: &Path, reference_path: &str) -> CommandResult<PathBuf> {
-    let relative_path = PathBuf::from(reference_path);
-    if relative_path.is_absolute() {
-        return Err("references 路径不合法。".into());
-    }
-    if relative_path.components().any(|component| {
-        matches!(
-            component,
-            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-        )
-    }) {
-        return Err("references 路径不合法。".into());
-    }
-
-    let references_root = skill_dir.join("references");
-    let reference_file_path = if relative_path.starts_with("references") {
-        skill_dir.join(&relative_path)
-    } else {
-        references_root.join(&relative_path)
-    };
-    if !reference_file_path.exists() || !reference_file_path.is_file() {
-        return Err("未找到对应 reference 文件。".into());
-    }
-    if !is_reference_file_allowed(&reference_file_path) {
-        return Err("当前 reference 文件类型不允许读取。".into());
-    }
-
-    let canonical_file_path = fs::canonicalize(&reference_file_path).map_err(error_to_string)?;
-    let canonical_references_root = fs::canonicalize(&references_root).map_err(error_to_string)?;
-    if !canonical_file_path.starts_with(&canonical_references_root) {
-        return Err("references 路径超出允许范围。".into());
-    }
-
-    Ok(reference_file_path)
-}
-
-fn copy_directory_recursive(source: &Path, target: &Path) -> CommandResult<()> {
-    fs::create_dir_all(target).map_err(error_to_string)?;
-    for entry in fs::read_dir(source).map_err(error_to_string)? {
-        let entry = entry.map_err(error_to_string)?;
-        let source_path = entry.path();
-        let target_path = target.join(entry.file_name());
-        if source_path.is_dir() {
-            copy_directory_recursive(&source_path, &target_path)?;
-        } else {
-            if let Some(parent) = target_path.parent() {
-                fs::create_dir_all(parent).map_err(error_to_string)?;
-            }
-            fs::copy(&source_path, &target_path).map_err(error_to_string)?;
-        }
-    }
-    Ok(())
-}
-
-fn sync_builtin_skills_to_user_dir(
+fn write_skill_content(
     app: &AppHandle,
-) -> CommandResult<BuiltinSkillsInitializationResult> {
-    let user_root = ensure_user_skills_root(app)?;
-    let builtin_root = match resolve_builtin_skills_root(app) {
-        Some(path) => path,
-        None => {
-            return Ok(BuiltinSkillsInitializationResult {
-                initialized_skill_ids: Vec::new(),
-                skipped_skill_ids: Vec::new(),
-            });
-        }
-    };
+    skill_id: &str,
+    relative_path: &str,
+    content: &str,
+) -> CommandResult<()> {
+    let path = validate_skill_file_path(relative_path)?;
+    let (_, mut files) = read_skill_package(app, skill_id)?;
+    files.insert(path, normalize_text_content(content));
+    save_skill_files(app, skill_id, &files, SKILL_SOURCE_INSTALLED, false)
+}
 
-    let builtin_skill_root = SkillRoot {
-        is_builtin: true,
-        path: builtin_root,
-        source_kind: "builtin-package",
-    };
-    let builtin_manifests = scan_skill_root(&builtin_skill_root, None, None)?;
-
-    let mut initialized_skill_ids = Vec::new();
-    let mut skipped_skill_ids = Vec::new();
-    for manifest in builtin_manifests {
-        let Some(install_path) = manifest.install_path.as_deref() else {
-            skipped_skill_ids.push(manifest.id);
-            continue;
-        };
-
-        let target_path = user_root.join(&manifest.id);
-        if target_path.exists() {
-            skipped_skill_ids.push(manifest.id);
-            continue;
-        }
-
-        copy_directory_recursive(Path::new(install_path), &target_path)?;
-        initialized_skill_ids.push(manifest.id);
-    }
-
-    Ok(BuiltinSkillsInitializationResult {
-        initialized_skill_ids,
-        skipped_skill_ids,
-    })
+fn read_skill_content(app: &AppHandle, skill_id: &str, relative_path: &str) -> CommandResult<String> {
+    let path = validate_skill_file_path(relative_path)?;
+    let (_, files) = read_skill_package(app, skill_id)?;
+    files.get(&path)
+        .cloned()
+        .ok_or_else(|| "未找到对应技能文件。".into())
 }
 
 fn path_depth(path: &Path) -> usize {
@@ -889,17 +783,16 @@ fn validate_reference_archive_path(path: &Path) -> CommandResult<()> {
     Ok(())
 }
 
-fn install_skill_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec<SkillManifest>> {
-    let file = File::open(zip_path).map_err(error_to_string)?;
-    let mut archive = ZipArchive::new(file).map_err(error_to_string)?;
+fn read_skill_files_from_archive<R: Read + std::io::Seek>(
+    archive: &mut ZipArchive<R>,
+) -> CommandResult<SkillFiles> {
     if archive.len() == 0 {
         return Err("ZIP 压缩包为空。".into());
     }
     if archive.len() > MAX_ARCHIVE_ENTRIES {
         return Err("ZIP 内文件数量过多。".into());
     }
-
-    let mut safe_paths: Vec<PathBuf> = Vec::new();
+    let mut safe_paths = Vec::new();
     let mut total_uncompressed = 0_u64;
     for index in 0..archive.len() {
         let entry = archive.by_index(index).map_err(error_to_string)?;
@@ -928,7 +821,7 @@ fn install_skill_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         .iter()
         .filter(|path| {
             path.file_name()
-                .map(|name| name == "SKILL.md")
+                .map(|name| name == SKILL_PRIMARY_FILE)
                 .unwrap_or(false)
         })
         .cloned()
@@ -962,39 +855,18 @@ fn install_skill_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         ));
     }
 
-    let skill_file_path = &skill_files[0];
-    let root_prefix = skill_file_path
+    let root_prefix = skill_files[0]
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();
-    let archive_file_name = zip_path
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .map(sanitize_skill_id_fallback)
-        .unwrap_or_else(|| format!("skill-{}", current_timestamp_millis()));
+    let mut files = SkillFiles::new();
 
-    let temp_root = app
-        .path()
-        .app_data_dir()
-        .map_err(error_to_string)?
-        .join("skill-import-temp")
-        .join(format!(
-            "{}-{}",
-            archive_file_name,
-            current_timestamp_millis()
-        ));
-    if temp_root.exists() {
-        fs::remove_dir_all(&temp_root).map_err(error_to_string)?;
-    }
-    fs::create_dir_all(&temp_root).map_err(error_to_string)?;
-
-    let extract_root = temp_root.join(&archive_file_name);
-    fs::create_dir_all(&extract_root).map_err(error_to_string)?;
-
-    let mut archive =
-        ZipArchive::new(File::open(zip_path).map_err(error_to_string)?).map_err(error_to_string)?;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(error_to_string)?;
+        if entry.is_dir() {
+            continue;
+        }
+
         let Some(safe_path) = entry.enclosed_name() else {
             continue;
         };
@@ -1002,7 +874,7 @@ fn install_skill_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
             continue;
         }
         let relative_path = if root_prefix.as_os_str().is_empty() {
-            safe_path.clone()
+            safe_path.to_path_buf()
         } else {
             safe_path
                 .strip_prefix(&root_prefix)
@@ -1012,65 +884,65 @@ fn install_skill_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         if relative_path.as_os_str().is_empty() {
             continue;
         }
+
         validate_reference_archive_path(&relative_path)?;
-
-        let output_path = extract_root.join(&relative_path);
-        if entry.is_dir() {
-            fs::create_dir_all(&output_path).map_err(error_to_string)?;
-            continue;
-        }
-
-        if let Some(parent) = output_path.parent() {
-            fs::create_dir_all(parent).map_err(error_to_string)?;
-        }
-        let mut output = File::create(&output_path).map_err(error_to_string)?;
-        std::io::copy(&mut entry, &mut output).map_err(error_to_string)?;
+        let normalized_path = normalize_relative_path(&normalize_path(&relative_path))?;
+        let mut content = String::new();
+        entry
+            .read_to_string(&mut content)
+            .map_err(|_| "技能包仅支持 UTF-8 文本文件。".to_string())?;
+        files.insert(normalized_path, normalize_text_content(&content));
     }
 
-    let scan_root = SkillRoot {
-        is_builtin: false,
-        path: extract_root.clone(),
-        source_kind: "installed-package",
-    };
-    let manifest = parse_skill_manifest(&extract_root, &scan_root)?;
-    if !manifest.validation.is_valid {
-        let _ = fs::remove_dir_all(&temp_root);
-        let error_details = manifest.validation.errors.join("；");
-        let warning_details = manifest.validation.warnings.join("；");
-        return Err(
-            match (error_details.is_empty(), warning_details.is_empty()) {
-                (false, false) => format!(
-                    "技能包校验失败：{}。警告：{}",
-                    error_details, warning_details
-                ),
-                (false, true) => format!("技能包校验失败：{}", error_details),
-                (true, false) => format!("技能包校验失败，警告：{}", warning_details),
-                (true, true) => "技能包校验失败。".into(),
-            },
-        );
-    }
-
-    let user_root = ensure_user_skills_root(app)?;
-    let target_path = user_root.join(&manifest.id);
-    if target_path.exists() {
-        let _ = fs::remove_dir_all(&temp_root);
-        return Err("已存在同名技能，请先移除旧技能后再导入。".into());
-    }
-
-    copy_directory_recursive(&extract_root, &target_path)?;
-    let _ = fs::remove_dir_all(&temp_root);
-    scan_all_skills(app, None, None)
+    Ok(files)
 }
 
-#[tauri::command]
-pub async fn pick_skill_archive(app: AppHandle) -> CommandResult<Option<String>> {
-    Ok(app
-        .dialog()
-        .file()
-        .add_filter("Skill ZIP", &["zip"])
-        .blocking_pick_file()
-        .and_then(|path| path.into_path().ok())
-        .map(|path| normalize_path(&path)))
+fn derive_skill_id(files: &SkillFiles, file_name: &str) -> String {
+    files.get(SKILL_PRIMARY_FILE)
+        .and_then(|raw| parse_skill_markdown(raw).ok())
+        .and_then(|parsed| {
+            parsed
+                .frontmatter
+                .as_ref()
+                .and_then(Value::as_object)
+                .and_then(|frontmatter| read_string_field(Some(frontmatter), "name"))
+        })
+        .unwrap_or_else(|| {
+            Path::new(file_name)
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .map(sanitize_skill_id_fallback)
+                .unwrap_or_else(|| sanitize_skill_id_fallback("skill"))
+        })
+}
+
+fn install_skill_archive(
+    app: &AppHandle,
+    file_name: &str,
+    archive_bytes: Vec<u8>,
+) -> CommandResult<Vec<SkillManifest>> {
+    let mut archive =
+        ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
+    let files = read_skill_files_from_archive(&mut archive)?;
+    let skill_id = derive_skill_id(&files, file_name);
+    let manifest = build_skill_manifest_from_files(&skill_id, &files, SKILL_SOURCE_INSTALLED, false)?;
+    if !manifest.validation.is_valid {
+        let error_details = manifest.validation.errors.join("；");
+        let warning_details = manifest.validation.warnings.join("；");
+        return Err(match (error_details.is_empty(), warning_details.is_empty()) {
+            (false, false) => format!("技能包校验失败：{}。警告：{}", error_details, warning_details),
+            (false, true) => format!("技能包校验失败：{}", error_details),
+            (true, false) => format!("技能包校验失败，警告：{}", warning_details),
+            (true, true) => "技能包校验失败。".into(),
+        });
+    }
+
+    let connection = open_database(app)?;
+    if load_skill_record(&connection, &manifest.id)?.is_some() {
+        return Err("已存在同名技能，请先移除旧技能后再导入。".into());
+    }
+    save_skill_record(&connection, &manifest, &files)?;
+    scan_all_skills(app, None, None)
 }
 
 #[tauri::command]
@@ -1090,16 +962,13 @@ pub fn scan_installed_skills(
 pub fn initialize_builtin_skills(
     app: AppHandle,
 ) -> CommandResult<BuiltinSkillsInitializationResult> {
-    sync_builtin_skills_to_user_dir(&app)
+    sync_builtin_skills_to_database(&app)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn read_skill_detail(app: AppHandle, skillId: String) -> CommandResult<SkillManifest> {
-    scan_all_skills(&app, None, None)?
-        .into_iter()
-        .find(|skill| skill.id == skillId)
-        .ok_or_else(|| "未找到对应技能。".into())
+    read_skill_package(&app, &skillId).map(|(manifest, _)| manifest)
 }
 
 #[tauri::command]
@@ -1109,9 +978,8 @@ pub fn read_skill_reference_content(
     skillId: String,
     referencePath: String,
 ) -> CommandResult<String> {
-    let skill_dir = resolve_skill_directory(&app, &skillId)?;
-    let reference_file_path = resolve_reference_file_path(&skill_dir, &referencePath)?;
-    fs::read_to_string(reference_file_path).map_err(error_to_string)
+    let reference_path = resolve_reference_relative_path(&referencePath)?;
+    read_skill_content(&app, &skillId, &reference_path)
 }
 
 #[tauri::command]
@@ -1126,17 +994,7 @@ pub fn read_skill_file_content(
     registry.begin(requestId.as_deref());
     let result = (|| {
         registry.check(requestId.as_deref())?;
-        let skill_dir = resolve_skill_directory(&app, &skillId)?;
-        registry.check(requestId.as_deref())?;
-        if relativePath.trim() == "SKILL.md" {
-            let file_path = resolve_skill_file_path(&skill_dir, "SKILL.md")?;
-            registry.check(requestId.as_deref())?;
-            return fs::read_to_string(file_path).map_err(error_to_string);
-        }
-
-        let reference_file_path = resolve_reference_file_path(&skill_dir, &relativePath)?;
-        registry.check(requestId.as_deref())?;
-        fs::read_to_string(reference_file_path).map_err(error_to_string)
+        read_skill_content(&app, &skillId, &relativePath)
     })();
     registry.finish(requestId.as_deref());
     result
@@ -1150,33 +1008,7 @@ pub fn write_skill_file_content(
     relativePath: String,
     content: String,
 ) -> CommandResult<Vec<SkillManifest>> {
-    let installed_skill_dir = resolve_installed_skill_directory(&app, &skillId);
-    let skill_dir = match installed_skill_dir {
-        Ok(skill_dir) => skill_dir,
-        Err(_) => {
-            if relativePath.trim() != "SKILL.md" {
-                return Err("仅支持先复制内置技能的主文件。".into());
-            }
-            let manifest = scan_all_skills(&app, None, None)?
-                .into_iter()
-                .find(|skill| skill.id == skillId)
-                .ok_or_else(|| "未找到对应技能。".to_string())?;
-            create_skill_directory_from_content(&app, &skillId, &content)?;
-            let user_root = ensure_user_skills_root(&app)?;
-            let copied_skill_dir = user_root.join(&skillId);
-            if let Some(references_path) = manifest.references_path {
-                let source_references_path = PathBuf::from(references_path);
-                if source_references_path.exists() && source_references_path.is_dir() {
-                    copy_directory_recursive(
-                        &source_references_path,
-                        &copied_skill_dir.join("references"),
-                    )?;
-                }
-            }
-            copied_skill_dir
-        }
-    };
-    write_skill_file(&skill_dir, &relativePath, &content)?;
+    write_skill_content(&app, &skillId, &relativePath, &content)?;
     scan_all_skills(&app, None, None)
 }
 
@@ -1187,7 +1019,7 @@ pub fn create_skill(
     name: String,
     description: String,
 ) -> CommandResult<Vec<SkillManifest>> {
-    create_skill_directory(&app, &name, &description)?;
+    create_skill_record(&app, &name, &description)?;
     scan_all_skills(&app, None, None)
 }
 
@@ -1198,8 +1030,7 @@ pub fn create_skill_reference_file(
     skillId: String,
     name: String,
 ) -> CommandResult<Vec<SkillManifest>> {
-    let skill_dir = resolve_installed_skill_directory(&app, &skillId)?;
-    create_reference_file(&skill_dir, &name)?;
+    create_reference_file(&app, &skillId, &name)?;
     scan_all_skills(&app, None, None)
 }
 
@@ -1209,27 +1040,35 @@ pub fn delete_installed_skill(
     app: AppHandle,
     skillId: String,
 ) -> CommandResult<Vec<SkillManifest>> {
-    let target_path = resolve_installed_skill_directory(&app, &skillId)?;
-    fs::remove_dir_all(&target_path).map_err(error_to_string)?;
+    let connection = open_database(&app)?;
+    let Some((manifest, _)) = load_skill_record(&connection, &skillId)? else {
+        return Err("未找到可删除的已安装技能。".into());
+    };
+    if manifest.source_kind != SKILL_SOURCE_INSTALLED {
+        return Err("仅支持删除已安装技能。".into());
+    }
+    delete_skill_record(&connection, &skillId)?;
     scan_all_skills(&app, None, None)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn import_skill_zip(app: AppHandle, zipPath: String) -> CommandResult<Vec<SkillManifest>> {
-    let zip_path = PathBuf::from(zipPath);
-    if !zip_path.exists() || !zip_path.is_file() {
-        return Err("ZIP 文件不存在。".into());
-    }
-    if zip_path
+pub fn import_skill_zip(
+    app: AppHandle,
+    fileName: String,
+    archiveBytes: Vec<u8>,
+) -> CommandResult<Vec<SkillManifest>> {
+    if Path::new(&fileName)
         .extension()
-        .map(|extension| extension.to_string_lossy().to_ascii_lowercase())
-        .as_deref()
-        != Some("zip")
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.eq_ignore_ascii_case("zip"))
+        != Some(true)
     {
         return Err("仅支持导入 .zip 技能包。".into());
     }
+    if archiveBytes.is_empty() {
+        return Err("ZIP 压缩包为空。".into());
+    }
 
-    install_skill_from_zip(&app, &zip_path)
+    install_skill_archive(&app, &fileName, archiveBytes)
 }
-

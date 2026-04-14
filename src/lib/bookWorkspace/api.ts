@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  BookWorkspaceSummary,
   TreeNode,
   WorkspaceLineResult,
   WorkspaceSearchMatch,
@@ -133,6 +134,10 @@ export function clearStoredWorkspaceSnapshot() {
 
 export function pickWorkspaceDirectory() {
   return invoke<string | null>("pick_book_directory");
+}
+
+export function listBookWorkspaces() {
+  return invoke<BookWorkspaceSummary[]>("list_book_workspaces");
 }
 
 export function readWorkspaceTree(rootPath: string, options?: InvokeCancellationOptions) {

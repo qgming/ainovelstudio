@@ -104,7 +104,7 @@ export function SkillDetailPage() {
       return;
     }
 
-    const shouldDelete = window.confirm(`确定要删除技能“${skill.name}”吗？该操作会移除本地已安装技能目录。`);
+    const shouldDelete = window.confirm(`确定要删除技能“${skill.name}”吗？该操作会移除当前已安装技能数据。`);
     if (!shouldDelete) {
       return;
     }

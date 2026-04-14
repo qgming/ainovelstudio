@@ -5,7 +5,6 @@ import {
   deleteInstalledAgent,
   importAgentZip,
   initializeBuiltinAgents,
-  pickAgentArchive,
   readAgentPreferences,
   scanInstalledAgents,
   writeAgentPreferences,
@@ -59,7 +58,7 @@ type SubAgentActions = {
   createAgent: (name: string, description: string) => Promise<string>;
   deleteInstalledAgentById: (agentId: string) => Promise<void>;
   hydrate: () => Promise<void>;
-  importAgentPackage: () => Promise<void>;
+  importAgentPackage: (fileName: string, archiveBytes: number[]) => Promise<void>;
   initialize: () => Promise<void>;
   refresh: () => Promise<void>;
   reset: () => Promise<void>;
@@ -207,15 +206,14 @@ export const useSubAgentStore = create<SubAgentStore>((set, get) => ({
       }));
     }
   },
-  importAgentPackage: async () => {
-    const zipPath = await pickAgentArchive();
-    if (!zipPath) {
+  importAgentPackage: async (fileName, archiveBytes) => {
+    if (!fileName.trim() || archiveBytes.length === 0) {
       return;
     }
 
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
     try {
-      const manifests = sortManifests(await importAgentZip(zipPath));
+      const manifests = sortManifests(await importAgentZip(fileName, archiveBytes));
       set((state) => ({
         ...state,
         errorMessage: null,

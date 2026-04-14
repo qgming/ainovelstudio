@@ -3,12 +3,13 @@ mod app_control;
 mod chat;
 mod config;
 mod db;
+mod embedded_resources;
 mod skills;
 mod usage;
 mod workspace;
 
-use std::{collections::HashSet, sync::Mutex};
 use crate::app_control::terminate_application;
+use std::{collections::HashSet, sync::Mutex};
 
 pub struct ToolCancellationRegistry {
     cancelled: Mutex<HashSet<String>>,
@@ -72,7 +73,6 @@ pub fn run() {
             workspace::cancel_tool_request,
             workspace::cancel_tool_requests,
             terminate_application,
-            agents::pick_agent_archive,
             agents::scan_installed_agents,
             agents::initialize_builtin_agents,
             agents::read_agent_detail,
@@ -104,6 +104,7 @@ pub fn run() {
             config::write_default_agent_config,
             usage::read_usage_logs,
             workspace::pick_book_directory,
+            workspace::list_book_workspaces,
             workspace::read_workspace_tree,
             workspace::read_text_file,
             workspace::write_text_file,
@@ -116,7 +117,6 @@ pub fn run() {
             workspace::rename_workspace_entry,
             workspace::move_workspace_entry,
             workspace::delete_workspace_entry,
-            skills::pick_skill_archive,
             skills::scan_installed_skills,
             skills::initialize_builtin_skills,
             skills::read_skill_detail,

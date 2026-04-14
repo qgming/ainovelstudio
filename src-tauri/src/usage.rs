@@ -66,7 +66,10 @@ fn as_u64(value: Option<u64>) -> u64 {
 }
 
 fn extract_book_name(workspace_root_path: Option<&str>) -> String {
-    let Some(path) = workspace_root_path.map(str::trim).filter(|value| !value.is_empty()) else {
+    let Some(path) = workspace_root_path
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
         return String::new();
     };
 

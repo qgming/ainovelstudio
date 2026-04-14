@@ -60,10 +60,6 @@ export function clearSkillPreferences() {
   return invoke<void>("clear_skill_preferences");
 }
 
-export function pickSkillArchive() {
-  return invoke<string | null>("pick_skill_archive");
-}
-
 export function scanInstalledSkills(options?: InvokeCancellationOptions) {
   return invokeWithCancellation<SkillManifest[]>("scan_installed_skills", {}, options);
 }
@@ -100,7 +96,6 @@ export function deleteInstalledSkill(skillId: string) {
   return invoke<SkillManifest[]>("delete_installed_skill", { skillId });
 }
 
-export function importSkillZip(zipPath: string) {
-  return invoke<SkillManifest[]>("import_skill_zip", { zipPath });
+export function importSkillZip(fileName: string, archiveBytes: number[]) {
+  return invoke<SkillManifest[]>("import_skill_zip", { fileName, archiveBytes });
 }
-

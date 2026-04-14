@@ -8,6 +8,7 @@ import { BookWorkspaceLoadingState } from "../components/book/BookWorkspaceLoadi
 import { BookTreePanel } from "../components/book/BookTreePanel";
 import { BookWorkspaceEmptyState } from "../components/book/BookWorkspaceEmptyState";
 import { ActionMenu, ActionMenuItem } from "../components/common/ActionMenu";
+import { BookshelfDialog } from "../components/dialogs/BookshelfDialog";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
 import { getStoredWorkspaceSnapshot } from "../lib/bookWorkspace/api";
@@ -72,6 +73,9 @@ function getMaxRightPanelWidth(layout: BookPanelLayout, containerWidth: number) 
 
 export function BookPage() {
   const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
+  const availableBooks = useBookWorkspaceStore((state) => state.availableBooks);
+  const bookshelfError = useBookWorkspaceStore((state) => state.bookshelfError);
+  const closeBookshelf = useBookWorkspaceStore((state) => state.closeBookshelf);
   const closeConfirm = useBookWorkspaceStore((state) => state.closeConfirm);
   const closePrompt = useBookWorkspaceStore((state) => state.closePrompt);
   const toggleAllDirectories = useBookWorkspaceStore((state) => state.toggleAllDirectories);
@@ -84,6 +88,7 @@ export function BookPage() {
   const hasInitialized = useBookWorkspaceStore((state) => state.hasInitialized);
   const initializeWorkspace = useBookWorkspaceStore((state) => state.initializeWorkspace);
   const isBusy = useBookWorkspaceStore((state) => state.isBusy);
+  const isBookshelfOpen = useBookWorkspaceStore((state) => state.isBookshelfOpen);
   const isDirty = useBookWorkspaceStore((state) => state.isDirty);
   const openCreateBookDialog = useBookWorkspaceStore((state) => state.openCreateBookDialog);
   const openCreateFileDialog = useBookWorkspaceStore((state) => state.openCreateFileDialog);
@@ -92,6 +97,7 @@ export function BookPage() {
   const openWorkspace = useBookWorkspaceStore((state) => state.openWorkspace);
   const promptState = useBookWorkspaceStore((state) => state.promptState);
   const refreshWorkspace = useBookWorkspaceStore((state) => state.refreshWorkspace);
+  const refreshWorkspaceList = useBookWorkspaceStore((state) => state.refreshWorkspaceList);
   const requestDelete = useBookWorkspaceStore((state) => state.requestDelete);
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const saveActiveFile = useBookWorkspaceStore((state) => state.saveActiveFile);
@@ -100,6 +106,7 @@ export function BookPage() {
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
   const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
   const updateDraft = useBookWorkspaceStore((state) => state.updateDraft);
+  const selectWorkspace = useBookWorkspaceStore((state) => state.selectWorkspace);
   const [bookMenuAnchorRect, setBookMenuAnchorRect] = useState<AnchorRect | null>(null);
   const [panelLayout, setPanelLayout] = useState<BookPanelLayout>(
     () => getStoredBookPanelLayout() ?? DEFAULT_BOOK_PANEL_LAYOUT,
@@ -420,6 +427,21 @@ export function BookPage() {
           onCancel={closeConfirm}
           onConfirm={() => void confirmDelete()}
           title={confirmState.title}
+        />
+      ) : null}
+
+      {isBookshelfOpen ? (
+        <BookshelfDialog
+          books={availableBooks}
+          busy={isBusy}
+          errorMessage={bookshelfError}
+          onClose={closeBookshelf}
+          onCreate={() => {
+            closeBookshelf();
+            openCreateBookDialog();
+          }}
+          onOpen={(rootPath) => void selectWorkspace(rootPath)}
+          onRefresh={() => void refreshWorkspaceList()}
         />
       ) : null}
     </section>

@@ -1,16 +1,17 @@
-use crate::ToolCancellationRegistry;
+use crate::{db::open_database, embedded_resources::EMBEDDED_AGENT_FILES, ToolCancellationRegistry};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
-    fs::{self, File},
+    collections::HashMap,
+    io::{Cursor, Read},
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{path::BaseDirectory, AppHandle, Manager, State};
-use tauri_plugin_dialog::DialogExt;
+use tauri::{AppHandle, State};
 use zip::ZipArchive;
 
 type CommandResult<T> = Result<T, String>;
+type AgentFiles = HashMap<String, String>;
 
 const MAX_ARCHIVE_ENTRIES: usize = 200;
 const MAX_ARCHIVE_FILE_SIZE: u64 = 5 * 1024 * 1024;
@@ -18,8 +19,10 @@ const MAX_ARCHIVE_TOTAL_SIZE: u64 = 20 * 1024 * 1024;
 const MAX_ARCHIVE_DEPTH: usize = 8;
 const MAX_COMPRESSION_RATIO: u64 = 200;
 const PRIMARY_AGENT_FILES: [&str; 4] = ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"];
+const AGENT_SOURCE_BUILTIN: &str = "builtin-package";
+const AGENT_SOURCE_INSTALLED: &str = "installed-package";
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentValidation {
     errors: Vec<String>,
@@ -27,7 +30,7 @@ pub struct AgentValidation {
     warnings: Vec<String>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,19 +101,16 @@ pub struct BuiltinAgentsInitializationResult {
     skipped_agent_ids: Vec<String>,
 }
 
-#[derive(Clone)]
-struct AgentRoot {
-    is_builtin: bool,
-    path: PathBuf,
-    source_kind: &'static str,
-}
-
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
 }
 
 fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn normalize_text_content(content: &str) -> String {
+    content.replace("\r\n", "\n")
 }
 
 fn current_timestamp() -> u64 {
@@ -120,11 +120,32 @@ fn current_timestamp() -> u64 {
         .unwrap_or(0)
 }
 
-fn current_timestamp_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or(0)
+fn sanitize_agent_id_fallback(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|char| {
+            if char.is_ascii_lowercase() || char.is_ascii_digit() {
+                char
+            } else if char.is_ascii_uppercase() {
+                char.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+
+    let collapsed = sanitized
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    let trimmed = collapsed.trim_matches('-').to_string();
+    if trimmed.is_empty() {
+        "agent".into()
+    } else {
+        trimmed.chars().take(64).collect()
+    }
 }
 
 fn preview_text(content: &str) -> Option<String> {
@@ -169,42 +190,17 @@ fn validate_optional_text_field(
     }
 }
 
-fn sanitize_agent_id_fallback(value: &str) -> String {
-    let sanitized = value
-        .chars()
-        .map(|char| {
-            if char.is_ascii_lowercase() || char.is_ascii_digit() {
-                char
-            } else if char.is_ascii_uppercase() {
-                char.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>();
-
-    let collapsed = sanitized
-        .split('-')
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
-
-    let trimmed = collapsed.trim_matches('-').to_string();
-    if trimmed.is_empty() {
-        format!("agent-{}", current_timestamp_millis())
-    } else {
-        trimmed.chars().take(64).collect()
-    }
-}
-
-fn validate_manifest(manifest: &AgentPackageManifest, directory_name: &str) -> (Vec<String>, Vec<String>) {
+fn validate_manifest(
+    manifest: &AgentPackageManifest,
+    agent_id: &str,
+) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
     if !validate_agent_name(&manifest.id) {
         errors.push("manifest.json 中的 id 格式不合法：仅支持小写字母、数字和连字符，长度 1-64，且不能以连字符开头或结尾，也不能包含连续的 --。".into());
-    } else if manifest.id != directory_name {
-        errors.push("manifest.json 中的 id 必须与代理目录名保持一致。".into());
+    } else if manifest.id != agent_id {
+        errors.push("manifest.json 中的 id 必须与代理 ID 保持一致。".into());
     }
 
     if manifest.name.trim().is_empty() {
@@ -216,7 +212,6 @@ fn validate_manifest(manifest: &AgentPackageManifest, directory_name: &str) -> (
     } else if manifest.description.chars().count() > 1024 {
         errors.push("manifest.json 中的 description 长度不能超过 1024 个字符。".into());
     }
-
     validate_optional_text_field(
         manifest.role.as_deref(),
         64,
@@ -230,7 +225,11 @@ fn validate_manifest(manifest: &AgentPackageManifest, directory_name: &str) -> (
         &mut errors,
     );
 
-    if manifest.role.as_deref().is_none_or(|value| value.trim().is_empty()) {
+    if manifest
+        .role
+        .as_deref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
         warnings.push("建议填写 manifest.json.role，用于主代理委派。".into());
     }
     if manifest
@@ -244,201 +243,10 @@ fn validate_manifest(manifest: &AgentPackageManifest, directory_name: &str) -> (
     (errors, warnings)
 }
 
-fn parse_agent_manifest(agent_dir: &Path, source_root: &AgentRoot) -> CommandResult<AgentManifest> {
-    let manifest_file_path = agent_dir.join("manifest.json");
-    if !manifest_file_path.exists() || !manifest_file_path.is_file() {
-        return Err("代理目录缺少 manifest.json。".into());
-    }
-
-    let agent_file_path = agent_dir.join("AGENTS.md");
-    if !agent_file_path.exists() || !agent_file_path.is_file() {
-        return Err("代理目录缺少 AGENTS.md。".into());
-    }
-
-    let manifest_text = fs::read_to_string(&manifest_file_path).map_err(error_to_string)?;
-    let package_manifest = serde_json::from_str::<AgentPackageManifest>(&manifest_text)
-        .map_err(|error| format!("manifest.json 解析失败：{error}"))?;
-    let body = fs::read_to_string(&agent_file_path).map_err(error_to_string)?;
-    let directory_name = agent_dir
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| "agent".into());
-
-    let mut errors = Vec::new();
-    let mut warnings = Vec::new();
-    let (manifest_errors, manifest_warnings) = validate_manifest(&package_manifest, &directory_name);
-    errors.extend(manifest_errors);
-    warnings.extend(manifest_warnings);
-
-    let tools_file_path = agent_dir.join("TOOLS.md");
-    let memory_file_path = agent_dir.join("MEMORY.md");
-    let tools_preview = if tools_file_path.exists() {
-        preview_text(&fs::read_to_string(&tools_file_path).map_err(error_to_string)?)
-    } else {
-        warnings.push("建议提供 TOOLS.md，用于描述该代理的工具与技能边界。".into());
-        None
-    };
-    let memory_preview = if memory_file_path.exists() {
-        preview_text(&fs::read_to_string(&memory_file_path).map_err(error_to_string)?)
-    } else {
-        warnings.push("建议提供 MEMORY.md，用于记录该代理的长期偏好。".into());
-        None
-    };
-
-    if body.trim().is_empty() {
-        warnings.push("AGENTS.md 正文为空，运行时可能无法提供有效代理说明。".into());
-    }
-
-    Ok(AgentManifest {
-        author: package_manifest.author,
-        body,
-        default_enabled: package_manifest.default_enabled.unwrap_or(source_root.is_builtin),
-        description: package_manifest.description,
-        discovered_at: current_timestamp(),
-        dispatch_hint: package_manifest.dispatch_hint,
-        id: package_manifest.id,
-        install_path: Some(normalize_path(agent_dir)),
-        is_builtin: source_root.is_builtin,
-        manifest_file_path: Some(normalize_path(&manifest_file_path)),
-        max_turns: package_manifest.max_turns,
-        memory_file_path: if memory_file_path.exists() {
-            Some(normalize_path(&memory_file_path))
-        } else {
-            None
-        },
-        memory_preview,
-        name: package_manifest.name,
-        role: package_manifest.role,
-        source_kind: source_root.source_kind.into(),
-        suggested_tools: package_manifest.suggested_tools,
-        tags: package_manifest.tags,
-        tools_file_path: if tools_file_path.exists() {
-            Some(normalize_path(&tools_file_path))
-        } else {
-            None
-        },
-        tools_preview,
-        validation: AgentValidation {
-            is_valid: errors.is_empty(),
-            errors,
-            warnings,
-        },
-        version: package_manifest.version,
-        agent_file_path: Some(normalize_path(&agent_file_path)),
-    })
-}
-
-fn scan_agent_root(
-    root: &AgentRoot,
-    registry: Option<&ToolCancellationRegistry>,
-    request_id: Option<&str>,
-) -> CommandResult<Vec<AgentManifest>> {
-    if !root.path.exists() || !root.path.is_dir() {
-        return Ok(Vec::new());
-    }
-
-    let mut manifests = Vec::new();
-    for entry in fs::read_dir(&root.path).map_err(error_to_string)? {
-        if let Some(registry) = registry {
-            registry.check(request_id)?;
-        }
-        let entry = entry.map_err(error_to_string)?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        if !path.join("manifest.json").exists() {
-            continue;
-        }
-        manifests.push(parse_agent_manifest(&path, root)?);
-    }
-
-    Ok(manifests)
-}
-
-fn ensure_user_agents_root(app: &AppHandle) -> CommandResult<PathBuf> {
-    let root = app
-        .path()
-        .app_data_dir()
-        .map_err(error_to_string)?
-        .join("agents");
-    fs::create_dir_all(&root).map_err(error_to_string)?;
-    Ok(root)
-}
-
-fn resolve_builtin_agents_root(app: &AppHandle) -> Option<PathBuf> {
-    ["agents", "resources/agents"]
-        .into_iter()
-        .filter_map(|relative_path| {
-            app.path()
-                .resolve(relative_path, BaseDirectory::Resource)
-                .ok()
-        })
-        .find(|path| path.exists() && path.is_dir())
-}
-
-fn collect_agent_roots(app: &AppHandle) -> CommandResult<Vec<AgentRoot>> {
-    let mut roots = Vec::new();
-    if let Some(resource_root) = resolve_builtin_agents_root(app) {
-        roots.push(AgentRoot {
-            is_builtin: true,
-            path: resource_root,
-            source_kind: "builtin-package",
-        });
-    }
-
-    roots.push(AgentRoot {
-        is_builtin: false,
-        path: ensure_user_agents_root(app)?,
-        source_kind: "installed-package",
-    });
-
-    Ok(roots)
-}
-
-fn scan_all_agents(
-    app: &AppHandle,
-    registry: Option<&ToolCancellationRegistry>,
-    request_id: Option<&str>,
-) -> CommandResult<Vec<AgentManifest>> {
-    let mut builtin_ids: HashSet<String> = HashSet::new();
-    let mut by_id: HashMap<String, AgentManifest> = HashMap::new();
-    for root in collect_agent_roots(app)? {
-        if let Some(registry) = registry {
-            registry.check(request_id)?;
-        }
-        for manifest in scan_agent_root(&root, registry, request_id)? {
-            if root.is_builtin {
-                builtin_ids.insert(manifest.id.clone());
-            }
-            match by_id.get(&manifest.id) {
-                Some(existing) if existing.source_kind == "installed-package" => {}
-                _ => {
-                    by_id.insert(manifest.id.clone(), manifest);
-                }
-            }
-        }
-    }
-
-    let mut manifests = by_id
-        .into_values()
-        .map(|mut manifest| {
-            manifest.default_enabled = builtin_ids.contains(&manifest.id);
-            manifest
-        })
-        .collect::<Vec<_>>();
-    manifests.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
-    Ok(manifests)
-}
-
-fn resolve_agent_file_path(agent_dir: &Path, relative_path: &str) -> CommandResult<PathBuf> {
+fn normalize_relative_path(relative_path: &str) -> CommandResult<String> {
     let trimmed = relative_path.trim();
     if trimmed.is_empty() {
         return Err("文件路径不能为空。".into());
-    }
-
-    if !PRIMARY_AGENT_FILES.contains(&trimmed) {
-        return Err("仅允许访问 manifest.json、AGENTS.md、TOOLS.md、MEMORY.md。".into());
     }
 
     let relative = PathBuf::from(trimmed);
@@ -454,18 +262,266 @@ fn resolve_agent_file_path(agent_dir: &Path, relative_path: &str) -> CommandResu
         return Err("文件路径不合法。".into());
     }
 
-    let file_path = agent_dir.join(&relative);
-    if !file_path.exists() || !file_path.is_file() {
-        return Err("未找到对应代理文件。".into());
+    Ok(normalize_path(&relative))
+}
+
+fn validate_agent_file_path(relative_path: &str) -> CommandResult<String> {
+    let normalized = normalize_relative_path(relative_path)?;
+    if !PRIMARY_AGENT_FILES.contains(&normalized.as_str()) {
+        return Err("仅允许访问 manifest.json、AGENTS.md、TOOLS.md、MEMORY.md。".into());
+    }
+    Ok(normalized)
+}
+
+fn build_agent_virtual_path(agent_id: &str, relative_path: &str) -> String {
+    format!("sqlite://agents/{agent_id}/{relative_path}")
+}
+
+fn build_agent_manifest_from_files(
+    agent_id: &str,
+    files: &AgentFiles,
+    source_kind: &str,
+    is_builtin: bool,
+) -> CommandResult<AgentManifest> {
+    let manifest_text = files
+        .get("manifest.json")
+        .cloned()
+        .ok_or_else(|| "代理目录缺少 manifest.json。".to_string())?;
+    let body = files
+        .get("AGENTS.md")
+        .cloned()
+        .ok_or_else(|| "代理目录缺少 AGENTS.md。".to_string())?;
+    let package_manifest = serde_json::from_str::<AgentPackageManifest>(&manifest_text)
+        .map_err(|error| format!("manifest.json 解析失败：{error}"))?;
+
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    let (manifest_errors, manifest_warnings) = validate_manifest(&package_manifest, agent_id);
+    errors.extend(manifest_errors);
+    warnings.extend(manifest_warnings);
+
+    let tools_preview = files
+        .get("TOOLS.md")
+        .and_then(|content| preview_text(content))
+        .or_else(|| {
+            warnings.push("建议提供 TOOLS.md，用于描述该代理的工具与技能边界。".into());
+            None
+        });
+    let memory_preview = files
+        .get("MEMORY.md")
+        .and_then(|content| preview_text(content))
+        .or_else(|| {
+            warnings.push("建议提供 MEMORY.md，用于记录该代理的长期偏好。".into());
+            None
+        });
+
+    if body.trim().is_empty() {
+        warnings.push("AGENTS.md 正文为空，运行时可能无法提供有效代理说明。".into());
     }
 
-    let canonical_file_path = fs::canonicalize(&file_path).map_err(error_to_string)?;
-    let canonical_agent_dir = fs::canonicalize(agent_dir).map_err(error_to_string)?;
-    if !canonical_file_path.starts_with(&canonical_agent_dir) {
-        return Err("代理文件路径超出允许范围。".into());
+    Ok(AgentManifest {
+        author: package_manifest.author,
+        body,
+        default_enabled: package_manifest.default_enabled.unwrap_or(is_builtin),
+        description: package_manifest.description,
+        discovered_at: current_timestamp(),
+        dispatch_hint: package_manifest.dispatch_hint,
+        id: package_manifest.id,
+        install_path: Some(format!("sqlite://agents/{agent_id}")),
+        is_builtin,
+        manifest_file_path: Some(build_agent_virtual_path(agent_id, "manifest.json")),
+        max_turns: package_manifest.max_turns,
+        memory_file_path: files
+            .contains_key("MEMORY.md")
+            .then(|| build_agent_virtual_path(agent_id, "MEMORY.md")),
+        memory_preview,
+        name: package_manifest.name,
+        role: package_manifest.role,
+        source_kind: source_kind.into(),
+        suggested_tools: package_manifest.suggested_tools,
+        tags: package_manifest.tags,
+        tools_file_path: files
+            .contains_key("TOOLS.md")
+            .then(|| build_agent_virtual_path(agent_id, "TOOLS.md")),
+        tools_preview,
+        validation: AgentValidation {
+            errors: errors.clone(),
+            is_valid: errors.is_empty(),
+            warnings,
+        },
+        version: package_manifest.version,
+        agent_file_path: Some(build_agent_virtual_path(agent_id, "AGENTS.md")),
+    })
+}
+
+fn serialize_json<T: Serialize>(value: &T) -> CommandResult<String> {
+    serde_json::to_string(value).map_err(error_to_string)
+}
+
+fn save_agent_record(
+    connection: &Connection,
+    manifest: &AgentManifest,
+    files: &AgentFiles,
+) -> CommandResult<()> {
+    connection
+        .execute(
+            r#"
+            INSERT INTO agent_packages (id, source_kind, is_builtin, manifest_json, files_json, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(id) DO UPDATE
+            SET source_kind = excluded.source_kind,
+                is_builtin = excluded.is_builtin,
+                manifest_json = excluded.manifest_json,
+                files_json = excluded.files_json,
+                updated_at = excluded.updated_at
+            "#,
+            params![
+                manifest.id,
+                manifest.source_kind,
+                if manifest.is_builtin { 1 } else { 0 },
+                serialize_json(manifest)?,
+                serialize_json(files)?,
+                current_timestamp() as i64,
+            ],
+        )
+        .map_err(error_to_string)?;
+    Ok(())
+}
+
+fn load_agent_record(
+    connection: &Connection,
+    agent_id: &str,
+) -> CommandResult<Option<(AgentManifest, AgentFiles)>> {
+    connection
+        .query_row(
+            "SELECT manifest_json, files_json FROM agent_packages WHERE id = ?1",
+            params![agent_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(error_to_string)?
+        .map(|(manifest_raw, files_raw)| {
+            let manifest =
+                serde_json::from_str::<AgentManifest>(&manifest_raw).map_err(error_to_string)?;
+            let files = serde_json::from_str::<AgentFiles>(&files_raw).map_err(error_to_string)?;
+            Ok((manifest, files))
+        })
+        .transpose()
+}
+
+fn load_all_agent_records(connection: &Connection) -> CommandResult<Vec<(AgentManifest, AgentFiles)>> {
+    let mut statement = connection
+        .prepare("SELECT manifest_json, files_json FROM agent_packages")
+        .map_err(error_to_string)?;
+    let mut rows = statement.query([]).map_err(error_to_string)?;
+    let mut records = Vec::new();
+    while let Some(row) = rows.next().map_err(error_to_string)? {
+        let manifest_raw = row.get::<_, String>(0).map_err(error_to_string)?;
+        let files_raw = row.get::<_, String>(1).map_err(error_to_string)?;
+        let manifest =
+            serde_json::from_str::<AgentManifest>(&manifest_raw).map_err(error_to_string)?;
+        let files = serde_json::from_str::<AgentFiles>(&files_raw).map_err(error_to_string)?;
+        records.push((manifest, files));
+    }
+    Ok(records)
+}
+
+fn delete_agent_record(connection: &Connection, agent_id: &str) -> CommandResult<()> {
+    connection
+        .execute("DELETE FROM agent_packages WHERE id = ?1", params![agent_id])
+        .map_err(error_to_string)?;
+    Ok(())
+}
+
+fn collect_embedded_agent_files(agent_id: &str) -> AgentFiles {
+    let prefix = format!("{agent_id}/");
+    EMBEDDED_AGENT_FILES
+        .iter()
+        .filter(|file| file.path.starts_with(&prefix))
+        .filter_map(|file| {
+            file.path
+                .strip_prefix(&prefix)
+                .map(|relative_path| (relative_path.to_string(), normalize_text_content(file.content)))
+        })
+        .collect()
+}
+
+fn embedded_agent_ids() -> Vec<String> {
+    let mut ids = EMBEDDED_AGENT_FILES
+        .iter()
+        .filter_map(|file| file.path.split('/').next())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn sync_builtin_agents_to_database(
+    app: &AppHandle,
+) -> CommandResult<BuiltinAgentsInitializationResult> {
+    let connection = open_database(app)?;
+    let mut initialized_agent_ids = Vec::new();
+    let mut skipped_agent_ids = Vec::new();
+    for agent_id in embedded_agent_ids() {
+        if let Some((existing, _)) = load_agent_record(&connection, &agent_id)? {
+            if existing.source_kind == AGENT_SOURCE_INSTALLED {
+                skipped_agent_ids.push(agent_id);
+                continue;
+            }
+        }
+
+        let files = collect_embedded_agent_files(&agent_id);
+        let manifest =
+            build_agent_manifest_from_files(&agent_id, &files, AGENT_SOURCE_BUILTIN, true)?;
+        if !manifest.validation.is_valid {
+            let error_details = manifest.validation.errors.join("；");
+            return Err(if error_details.is_empty() {
+                format!("内置代理 {agent_id} 初始化失败。")
+            } else {
+                format!("内置代理 {agent_id} 初始化失败：{error_details}")
+            });
+        }
+        save_agent_record(&connection, &manifest, &files)?;
+        initialized_agent_ids.push(agent_id);
     }
 
-    Ok(file_path)
+    Ok(BuiltinAgentsInitializationResult {
+        initialized_agent_ids,
+        skipped_agent_ids,
+    })
+}
+
+fn ensure_builtin_agents_seeded(app: &AppHandle) -> CommandResult<()> {
+    sync_builtin_agents_to_database(app).map(|_| ())
+}
+
+fn scan_all_agents(
+    app: &AppHandle,
+    registry: Option<&ToolCancellationRegistry>,
+    request_id: Option<&str>,
+) -> CommandResult<Vec<AgentManifest>> {
+    if let Some(registry) = registry {
+        registry.check(request_id)?;
+    }
+    ensure_builtin_agents_seeded(app)?;
+    if let Some(registry) = registry {
+        registry.check(request_id)?;
+    }
+
+    let connection = open_database(app)?;
+    let mut manifests = load_all_agent_records(&connection)?
+        .into_iter()
+        .map(|(manifest, _)| manifest)
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    Ok(manifests)
+}
+
+fn read_agent_package(app: &AppHandle, agent_id: &str) -> CommandResult<(AgentManifest, AgentFiles)> {
+    ensure_builtin_agents_seeded(app)?;
+    let connection = open_database(app)?;
+    load_agent_record(&connection, agent_id)?.ok_or_else(|| "未找到对应代理。".into())
 }
 
 fn build_agent_manifest_template(name: &str, description: &str) -> String {
@@ -477,13 +533,13 @@ fn build_agent_manifest_template(name: &str, description: &str) -> String {
         "dispatchHint": "当任务与该代理专长高度相关时优先委派。",
         "tags": ["writing"],
         "suggestedTools": ["read_file", "write_file"],
-        "defaultEnabled": true,
+        "defaultEnabled": false,
         "version": "1.0.0",
         "maxTurns": 5
     }))
     .unwrap_or_else(|_| {
         format!(
-            "{{\n  \"id\": \"{name}\",\n  \"name\": \"{name}\",\n  \"description\": \"{description}\",\n  \"defaultEnabled\": true,\n  \"version\": \"1.0.0\",\n  \"maxTurns\": 5\n}}"
+            "{{\n  \"id\": \"{name}\",\n  \"name\": \"{name}\",\n  \"description\": \"{description}\",\n  \"defaultEnabled\": false,\n  \"version\": \"1.0.0\",\n  \"maxTurns\": 5\n}}"
         )
     })
 }
@@ -494,72 +550,19 @@ fn build_agent_markdown_template(name: &str) -> String {
     )
 }
 
-fn write_agent_file(agent_dir: &Path, relative_path: &str, content: &str) -> CommandResult<()> {
-    let trimmed = relative_path.trim();
-    if !PRIMARY_AGENT_FILES.contains(&trimmed) {
-        return Err("仅允许写入 manifest.json、AGENTS.md、TOOLS.md、MEMORY.md。".into());
-    }
-    let file_path = agent_dir.join(trimmed);
-
-    if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent).map_err(error_to_string)?;
-    }
-    fs::write(file_path, content).map_err(error_to_string)
-}
-
-fn create_agent_directory_from_content(
+fn save_agent_files(
     app: &AppHandle,
-    name: &str,
-    manifest_content: &str,
+    agent_id: &str,
+    files: &AgentFiles,
+    source_kind: &str,
+    is_builtin: bool,
 ) -> CommandResult<()> {
-    let safe_name = name.trim();
-    if !validate_agent_name(safe_name) {
-        return Err("名称格式不合法：仅支持小写字母、数字和连字符。".into());
-    }
-    let user_root = ensure_user_agents_root(app)?;
-    let agent_dir = user_root.join(&safe_name);
-    if agent_dir.exists() {
-        return Err("已存在同名代理。".into());
-    }
-
-    fs::create_dir_all(&agent_dir).map_err(error_to_string)?;
-    fs::write(agent_dir.join("manifest.json"), manifest_content).map_err(error_to_string)?;
-    fs::write(
-        agent_dir.join("AGENTS.md"),
-        build_agent_markdown_template(safe_name),
-    )
-    .map_err(error_to_string)?;
-    fs::write(
-        agent_dir.join("TOOLS.md"),
-        "# TOOLS\n\n- 在这里记录该代理可使用的工具、技能与边界。\n",
-    )
-    .map_err(error_to_string)?;
-    fs::write(
-        agent_dir.join("MEMORY.md"),
-        "# MEMORY\n\n- 在这里记录用户对该代理的长期偏好。\n",
-    )
-    .map_err(error_to_string)?;
-
-    let scan_root = AgentRoot {
-        is_builtin: false,
-        path: user_root,
-        source_kind: "installed-package",
-    };
-    let manifest = parse_agent_manifest(&agent_dir, &scan_root)?;
-    if !manifest.validation.is_valid {
-        let _ = fs::remove_dir_all(&agent_dir);
-        let error_details = manifest.validation.errors.join("；");
-        return Err(if error_details.is_empty() {
-            "复制内置代理失败。".into()
-        } else {
-            format!("复制内置代理失败：{error_details}")
-        });
-    }
-
-    Ok(())
+    let manifest = build_agent_manifest_from_files(agent_id, files, source_kind, is_builtin)?;
+    let connection = open_database(app)?;
+    save_agent_record(&connection, &manifest, files)
 }
 
-fn create_agent_directory(app: &AppHandle, name: &str, description: &str) -> CommandResult<()> {
+fn create_agent_record(app: &AppHandle, name: &str, description: &str) -> CommandResult<()> {
     let safe_name = name.trim();
     if !validate_agent_name(safe_name) {
         return Err("名称格式不合法：仅支持小写字母、数字和连字符。".into());
@@ -572,42 +575,19 @@ fn create_agent_directory(app: &AppHandle, name: &str, description: &str) -> Com
         return Err("代理简介长度不能超过 1024 个字符。".into());
     }
 
-    let user_root = ensure_user_agents_root(app)?;
-    let agent_dir = user_root.join(&safe_name);
-    if agent_dir.exists() {
+    let connection = open_database(app)?;
+    if load_agent_record(&connection, safe_name)?.is_some() {
         return Err("已存在同名代理。".into());
     }
 
-    fs::create_dir_all(&agent_dir).map_err(error_to_string)?;
-    fs::write(
-        agent_dir.join("manifest.json"),
-        build_agent_manifest_template(&safe_name, trimmed_description),
-    )
-    .map_err(error_to_string)?;
-    fs::write(
-        agent_dir.join("AGENTS.md"),
-        build_agent_markdown_template(&safe_name),
-    )
-    .map_err(error_to_string)?;
-    fs::write(
-        agent_dir.join("TOOLS.md"),
-        "# TOOLS\n\n- 记录该代理可用的工具与技能。\n",
-    )
-    .map_err(error_to_string)?;
-    fs::write(
-        agent_dir.join("MEMORY.md"),
-        "# MEMORY\n\n- 记录用户对该代理的长期偏好。\n",
-    )
-    .map_err(error_to_string)?;
-
-    let scan_root = AgentRoot {
-        is_builtin: false,
-        path: user_root,
-        source_kind: "installed-package",
-    };
-    let manifest = parse_agent_manifest(&agent_dir, &scan_root)?;
+    let files = AgentFiles::from([
+        ("manifest.json".to_string(), build_agent_manifest_template(safe_name, trimmed_description)),
+        ("AGENTS.md".to_string(), build_agent_markdown_template(safe_name)),
+        ("TOOLS.md".to_string(), "# TOOLS\n\n- 记录该代理可用的工具与技能。\n".into()),
+        ("MEMORY.md".to_string(), "# MEMORY\n\n- 记录用户对该代理的长期偏好。\n".into()),
+    ]);
+    let manifest = build_agent_manifest_from_files(safe_name, &files, AGENT_SOURCE_INSTALLED, false)?;
     if !manifest.validation.is_valid {
-        let _ = fs::remove_dir_all(&agent_dir);
         let error_details = manifest.validation.errors.join("；");
         return Err(if error_details.is_empty() {
             "新建代理失败。".into()
@@ -615,96 +595,27 @@ fn create_agent_directory(app: &AppHandle, name: &str, description: &str) -> Com
             format!("新建代理失败：{error_details}")
         });
     }
-
-    Ok(())
+    save_agent_record(&connection, &manifest, &files)
 }
 
-fn resolve_agent_directory(app: &AppHandle, agent_id: &str) -> CommandResult<PathBuf> {
-    scan_all_agents(app, None, None)?
-        .into_iter()
-        .find(|agent| agent.id == agent_id)
-        .and_then(|agent| agent.install_path)
-        .map(PathBuf::from)
-        .ok_or_else(|| "未找到对应代理。".into())
-}
-
-fn resolve_installed_agent_directory(app: &AppHandle, agent_id: &str) -> CommandResult<PathBuf> {
-    let user_root = ensure_user_agents_root(app)?;
-    let target_path = user_root.join(agent_id);
-    if !target_path.exists() || !target_path.is_dir() {
-        return Err("未找到可删除的已安装代理目录。".into());
-    }
-
-    let canonical_target_path = fs::canonicalize(&target_path).map_err(error_to_string)?;
-    let canonical_user_root = fs::canonicalize(&user_root).map_err(error_to_string)?;
-    if !canonical_target_path.starts_with(&canonical_user_root) {
-        return Err("代理目录超出允许范围。".into());
-    }
-
-    Ok(target_path)
-}
-
-fn copy_directory_recursive(source: &Path, target: &Path) -> CommandResult<()> {
-    fs::create_dir_all(target).map_err(error_to_string)?;
-    for entry in fs::read_dir(source).map_err(error_to_string)? {
-        let entry = entry.map_err(error_to_string)?;
-        let source_path = entry.path();
-        let target_path = target.join(entry.file_name());
-        if source_path.is_dir() {
-            copy_directory_recursive(&source_path, &target_path)?;
-        } else {
-            if let Some(parent) = target_path.parent() {
-                fs::create_dir_all(parent).map_err(error_to_string)?;
-            }
-            fs::copy(&source_path, &target_path).map_err(error_to_string)?;
-        }
-    }
-    Ok(())
-}
-
-fn sync_builtin_agents_to_user_dir(
+fn write_agent_content(
     app: &AppHandle,
-) -> CommandResult<BuiltinAgentsInitializationResult> {
-    let user_root = ensure_user_agents_root(app)?;
-    let builtin_root = match resolve_builtin_agents_root(app) {
-        Some(path) => path,
-        None => {
-            return Ok(BuiltinAgentsInitializationResult {
-                initialized_agent_ids: Vec::new(),
-                skipped_agent_ids: Vec::new(),
-            });
-        }
-    };
+    agent_id: &str,
+    relative_path: &str,
+    content: &str,
+) -> CommandResult<()> {
+    let path = validate_agent_file_path(relative_path)?;
+    let (_, mut files) = read_agent_package(app, agent_id)?;
+    files.insert(path, normalize_text_content(content));
+    save_agent_files(app, agent_id, &files, AGENT_SOURCE_INSTALLED, false)
+}
 
-    let builtin_agent_root = AgentRoot {
-        is_builtin: true,
-        path: builtin_root,
-        source_kind: "builtin-package",
-    };
-    let builtin_manifests = scan_agent_root(&builtin_agent_root, None, None)?;
-
-    let mut initialized_agent_ids = Vec::new();
-    let mut skipped_agent_ids = Vec::new();
-    for manifest in builtin_manifests {
-        let Some(install_path) = manifest.install_path.as_deref() else {
-            skipped_agent_ids.push(manifest.id);
-            continue;
-        };
-
-        let target_path = user_root.join(&manifest.id);
-        if target_path.exists() {
-            skipped_agent_ids.push(manifest.id);
-            continue;
-        }
-
-        copy_directory_recursive(Path::new(install_path), &target_path)?;
-        initialized_agent_ids.push(manifest.id);
-    }
-
-    Ok(BuiltinAgentsInitializationResult {
-        initialized_agent_ids,
-        skipped_agent_ids,
-    })
+fn read_agent_content(app: &AppHandle, agent_id: &str, relative_path: &str) -> CommandResult<String> {
+    let path = validate_agent_file_path(relative_path)?;
+    let (_, files) = read_agent_package(app, agent_id)?;
+    files.get(&path)
+        .cloned()
+        .ok_or_else(|| "未找到对应代理文件。".into())
 }
 
 fn path_depth(path: &Path) -> usize {
@@ -713,9 +624,9 @@ fn path_depth(path: &Path) -> usize {
         .count()
 }
 
-fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec<AgentManifest>> {
-    let file = File::open(zip_path).map_err(error_to_string)?;
-    let mut archive = ZipArchive::new(file).map_err(error_to_string)?;
+fn read_agent_files_from_archive<R: Read + std::io::Seek>(
+    archive: &mut ZipArchive<R>,
+) -> CommandResult<AgentFiles> {
     if archive.len() == 0 {
         return Err("ZIP 压缩包为空。".into());
     }
@@ -723,7 +634,7 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         return Err("ZIP 内文件数量过多。".into());
     }
 
-    let mut safe_paths: Vec<PathBuf> = Vec::new();
+    let mut safe_paths = Vec::new();
     let mut total_uncompressed = 0_u64;
     for index in 0..archive.len() {
         let entry = archive.by_index(index).map_err(error_to_string)?;
@@ -786,91 +697,71 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         ));
     }
 
-    let agent_file_path = &manifest_files[0];
-    let root_prefix = agent_file_path
+    let root_prefix = manifest_files[0]
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();
-    let archive_file_name = zip_path
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .map(sanitize_agent_id_fallback)
-        .unwrap_or_else(|| format!("agent-{}", current_timestamp_millis()));
-
-    let temp_root = app
-        .path()
-        .app_data_dir()
-        .map_err(error_to_string)?
-        .join("agent-import-temp")
-        .join(format!(
-            "{}-{}",
-            archive_file_name,
-            current_timestamp_millis()
-        ));
-    if temp_root.exists() {
-        fs::remove_dir_all(&temp_root).map_err(error_to_string)?;
-    }
-    fs::create_dir_all(&temp_root).map_err(error_to_string)?;
+    let mut files = AgentFiles::new();
 
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(error_to_string)?;
-        let Some(path) = entry.enclosed_name() else {
-            let _ = fs::remove_dir_all(&temp_root);
-            return Err("ZIP 内存在非法路径。".into());
-        };
-        if path_depth(&path) > MAX_ARCHIVE_DEPTH {
-            let _ = fs::remove_dir_all(&temp_root);
-            return Err("ZIP 内目录层级过深。".into());
-        }
-        if !root_prefix.as_os_str().is_empty() && !path.starts_with(&root_prefix) {
-            let _ = fs::remove_dir_all(&temp_root);
-            return Err("ZIP 内容结构不一致，无法确定代理根目录。".into());
+        if entry.is_dir() {
+            continue;
         }
 
-        let relative = if root_prefix.as_os_str().is_empty() {
-            path.to_path_buf()
+        let Some(safe_path) = entry.enclosed_name() else {
+            continue;
+        };
+        if !root_prefix.as_os_str().is_empty() && !safe_path.starts_with(&root_prefix) {
+            continue;
+        }
+        let relative_path = if root_prefix.as_os_str().is_empty() {
+            safe_path.to_path_buf()
         } else {
-            path.strip_prefix(&root_prefix)
+            safe_path
+                .strip_prefix(&root_prefix)
                 .map_err(error_to_string)?
                 .to_path_buf()
         };
-        if relative.as_os_str().is_empty() {
+        if relative_path.as_os_str().is_empty() {
             continue;
         }
 
-        let output_path = temp_root.join(&relative);
-        if entry.name().ends_with('/') {
-            fs::create_dir_all(&output_path).map_err(error_to_string)?;
-            continue;
-        }
-
-        if let Some(parent) = output_path.parent() {
-            fs::create_dir_all(parent).map_err(error_to_string)?;
-        }
-        let mut output_file = File::create(&output_path).map_err(error_to_string)?;
-        std::io::copy(&mut entry, &mut output_file).map_err(error_to_string)?;
+        let normalized_path = normalize_relative_path(&normalize_path(&relative_path))?;
+        let mut content = String::new();
+        entry
+            .read_to_string(&mut content)
+            .map_err(|_| "代理包仅支持 UTF-8 文本文件。".to_string())?;
+        files.insert(normalized_path, normalize_text_content(&content));
     }
 
-    let extract_root = if root_prefix.as_os_str().is_empty() {
-        temp_root.clone()
-    } else {
-        temp_root.clone()
-    };
+    Ok(files)
+}
 
-    let scan_root = AgentRoot {
-        is_builtin: false,
-        path: temp_root.clone(),
-        source_kind: "installed-package",
-    };
-    let mut manifests = scan_agent_root(&scan_root, None, None)?;
-    if manifests.len() != 1 {
-        let _ = fs::remove_dir_all(&temp_root);
-        return Err("导入包解析失败，必须且只能包含一个代理目录。".into());
-    }
+fn derive_agent_id(files: &AgentFiles, file_name: &str) -> String {
+    files.get("manifest.json")
+        .and_then(|content| serde_json::from_str::<AgentPackageManifest>(content).ok())
+        .map(|manifest| manifest.id)
+        .unwrap_or_else(|| {
+            Path::new(file_name)
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .map(sanitize_agent_id_fallback)
+                .unwrap_or_else(|| sanitize_agent_id_fallback("agent"))
+        })
+}
 
-    let manifest = manifests.remove(0);
+fn install_agent_archive(
+    app: &AppHandle,
+    file_name: &str,
+    archive_bytes: Vec<u8>,
+) -> CommandResult<Vec<AgentManifest>> {
+    let mut archive =
+        ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
+    let files = read_agent_files_from_archive(&mut archive)?;
+    let agent_id = derive_agent_id(&files, file_name);
+    let manifest = build_agent_manifest_from_files(&agent_id, &files, AGENT_SOURCE_INSTALLED, false)?;
     if !manifest.validation.is_valid {
-        let _ = fs::remove_dir_all(&temp_root);
         let error_details = manifest.validation.errors.join("；");
         return Err(if error_details.is_empty() {
             "代理包校验失败。".into()
@@ -879,27 +770,12 @@ fn install_agent_from_zip(app: &AppHandle, zip_path: &Path) -> CommandResult<Vec
         });
     }
 
-    let user_root = ensure_user_agents_root(app)?;
-    let target_path = user_root.join(&manifest.id);
-    if target_path.exists() {
-        let _ = fs::remove_dir_all(&temp_root);
+    let connection = open_database(app)?;
+    if load_agent_record(&connection, &manifest.id)?.is_some() {
         return Err("已存在同名代理，请先移除旧代理后再导入。".into());
     }
-
-    copy_directory_recursive(&extract_root.join(&manifest.id), &target_path)?;
-    let _ = fs::remove_dir_all(&temp_root);
+    save_agent_record(&connection, &manifest, &files)?;
     scan_all_agents(app, None, None)
-}
-
-#[tauri::command]
-pub async fn pick_agent_archive(app: AppHandle) -> CommandResult<Option<String>> {
-    Ok(app
-        .dialog()
-        .file()
-        .add_filter("Agent ZIP", &["zip"])
-        .blocking_pick_file()
-        .and_then(|path| path.into_path().ok())
-        .map(|path| normalize_path(&path)))
 }
 
 #[tauri::command]
@@ -919,16 +795,13 @@ pub fn scan_installed_agents(
 pub fn initialize_builtin_agents(
     app: AppHandle,
 ) -> CommandResult<BuiltinAgentsInitializationResult> {
-    sync_builtin_agents_to_user_dir(&app)
+    sync_builtin_agents_to_database(&app)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn read_agent_detail(app: AppHandle, agentId: String) -> CommandResult<AgentManifest> {
-    scan_all_agents(&app, None, None)?
-        .into_iter()
-        .find(|agent| agent.id == agentId)
-        .ok_or_else(|| "未找到对应代理。".into())
+    read_agent_package(&app, &agentId).map(|(manifest, _)| manifest)
 }
 
 #[tauri::command]
@@ -943,11 +816,7 @@ pub fn read_agent_file_content(
     registry.begin(requestId.as_deref());
     let result = (|| {
         registry.check(requestId.as_deref())?;
-        let agent_dir = resolve_agent_directory(&app, &agentId)?;
-        registry.check(requestId.as_deref())?;
-        let file_path = resolve_agent_file_path(&agent_dir, &relativePath)?;
-        registry.check(requestId.as_deref())?;
-        fs::read_to_string(file_path).map_err(error_to_string)
+        read_agent_content(&app, &agentId, &relativePath)
     })();
     registry.finish(requestId.as_deref());
     result
@@ -961,37 +830,7 @@ pub fn write_agent_file_content(
     relativePath: String,
     content: String,
 ) -> CommandResult<Vec<AgentManifest>> {
-    let installed_agent_dir = resolve_installed_agent_directory(&app, &agentId);
-    let agent_dir = match installed_agent_dir {
-        Ok(agent_dir) => agent_dir,
-        Err(_) => {
-            if relativePath.trim() != "manifest.json" {
-                return Err("仅支持先复制内置代理的 manifest.json。".into());
-            }
-            let manifest = scan_all_agents(&app, None, None)?
-                .into_iter()
-                .find(|agent| agent.id == agentId)
-                .ok_or_else(|| "未找到对应代理。".to_string())?;
-            create_agent_directory_from_content(&app, &agentId, &content)?;
-            let user_root = ensure_user_agents_root(&app)?;
-            let copied_agent_dir = user_root.join(&agentId);
-            if let Some(install_path) = manifest.install_path {
-                let source_path = PathBuf::from(install_path);
-                for relative in PRIMARY_AGENT_FILES
-                    .iter()
-                    .filter(|name| **name != "manifest.json")
-                {
-                    let source_file = source_path.join(relative);
-                    if source_file.exists() && source_file.is_file() {
-                        fs::copy(&source_file, copied_agent_dir.join(relative))
-                            .map_err(error_to_string)?;
-                    }
-                }
-            }
-            copied_agent_dir
-        }
-    };
-    write_agent_file(&agent_dir, &relativePath, &content)?;
+    write_agent_content(&app, &agentId, &relativePath, &content)?;
     scan_all_agents(&app, None, None)
 }
 
@@ -1002,7 +841,7 @@ pub fn create_agent(
     name: String,
     description: String,
 ) -> CommandResult<Vec<AgentManifest>> {
-    create_agent_directory(&app, &name, &description)?;
+    create_agent_record(&app, &name, &description)?;
     scan_all_agents(&app, None, None)
 }
 
@@ -1012,27 +851,35 @@ pub fn delete_installed_agent(
     app: AppHandle,
     agentId: String,
 ) -> CommandResult<Vec<AgentManifest>> {
-    let target_path = resolve_installed_agent_directory(&app, &agentId)?;
-    fs::remove_dir_all(&target_path).map_err(error_to_string)?;
+    let connection = open_database(&app)?;
+    let Some((manifest, _)) = load_agent_record(&connection, &agentId)? else {
+        return Err("未找到可删除的已安装代理。".into());
+    };
+    if manifest.source_kind != AGENT_SOURCE_INSTALLED {
+        return Err("仅支持删除已安装代理。".into());
+    }
+    delete_agent_record(&connection, &agentId)?;
     scan_all_agents(&app, None, None)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn import_agent_zip(app: AppHandle, zipPath: String) -> CommandResult<Vec<AgentManifest>> {
-    let zip_path = PathBuf::from(zipPath);
-    if !zip_path.exists() || !zip_path.is_file() {
-        return Err("ZIP 文件不存在。".into());
-    }
-    if zip_path
+pub fn import_agent_zip(
+    app: AppHandle,
+    fileName: String,
+    archiveBytes: Vec<u8>,
+) -> CommandResult<Vec<AgentManifest>> {
+    if Path::new(&fileName)
         .extension()
-        .map(|extension| extension.to_string_lossy().to_ascii_lowercase())
-        .as_deref()
-        != Some("zip")
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.eq_ignore_ascii_case("zip"))
+        != Some(true)
     {
         return Err("仅支持导入 .zip 代理包。".into());
     }
+    if archiveBytes.is_empty() {
+        return Err("ZIP 压缩包为空。".into());
+    }
 
-    install_agent_from_zip(&app, &zip_path)
+    install_agent_archive(&app, &fileName, archiveBytes)
 }
-

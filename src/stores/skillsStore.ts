@@ -6,7 +6,6 @@ import {
   deleteInstalledSkill,
   importSkillZip,
   initializeBuiltinSkills,
-  pickSkillArchive,
   readSkillPreferences,
   scanInstalledSkills,
   writeSkillPreferences,
@@ -59,7 +58,7 @@ type SkillsActions = {
   deleteInstalledSkillById: (skillId: string) => Promise<void>;
   hydrate: () => Promise<void>;
   initialize: () => Promise<void>;
-  importSkillPackage: () => Promise<void>;
+  importSkillPackage: (fileName: string, archiveBytes: number[]) => Promise<void>;
   refresh: () => Promise<void>;
   reset: () => Promise<void>;
   toggleSkill: (skillId: string) => Promise<void>;
@@ -254,16 +253,15 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
       }));
     }
   },
-  importSkillPackage: async () => {
-    const zipPath = await pickSkillArchive();
-    if (!zipPath) {
+  importSkillPackage: async (fileName, archiveBytes) => {
+    if (!fileName.trim() || archiveBytes.length === 0) {
       return;
     }
 
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
 
     try {
-      const manifests = sortManifests(await importSkillZip(zipPath));
+      const manifests = sortManifests(await importSkillZip(fileName, archiveBytes));
       set((state) => ({
         ...state,
         errorMessage: null,

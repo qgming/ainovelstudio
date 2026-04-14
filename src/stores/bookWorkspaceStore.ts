@@ -6,7 +6,7 @@ import {
   createWorkspaceTextFile,
   deleteWorkspaceEntry,
   getStoredWorkspaceSnapshot,
-  pickWorkspaceDirectory,
+  listBookWorkspaces,
   readWorkspaceTextFile,
   readWorkspaceTree,
   renameWorkspaceEntry,
@@ -21,10 +21,18 @@ import {
   isSameOrDescendant,
   replacePathPrefix,
 } from "../lib/bookWorkspace/tree";
-import type { ConfirmState, PromptState, TreeNode } from "../lib/bookWorkspace/types";
+import type {
+  BookWorkspaceSummary,
+  ConfirmState,
+  PromptState,
+  TreeNode,
+} from "../lib/bookWorkspace/types";
 
 export type BookWorkspaceStore = {
   activeFilePath: string | null;
+  availableBooks: BookWorkspaceSummary[];
+  bookshelfError: string | null;
+  closeBookshelf: () => void;
   closeConfirm: () => void;
   closePrompt: () => void;
   toggleAllDirectories: () => void;
@@ -37,14 +45,17 @@ export type BookWorkspaceStore = {
   hasInitialized: boolean;
   initializeWorkspace: () => Promise<void>;
   isBusy: boolean;
+  isBookshelfOpen: boolean;
   isDirty: boolean;
   openCreateBookDialog: () => void;
   openCreateFileDialog: (parentPath: string) => void;
   openCreateFolderDialog: (parentPath: string) => void;
   openRenameDialog: (node: TreeNode) => void;
   openWorkspace: () => Promise<void>;
+  selectWorkspace: (rootPath: string) => Promise<void>;
   promptState: PromptState | null;
   refreshWorkspace: () => Promise<void>;
+  refreshWorkspaceList: () => Promise<void>;
   refreshWorkspaceAfterExternalChange: () => Promise<void>;
   requestDelete: (node: TreeNode) => void;
   resetState: () => void;
@@ -60,12 +71,15 @@ export type BookWorkspaceStore = {
 
 const initialState = {
   activeFilePath: null,
+  availableBooks: [] as BookWorkspaceSummary[],
+  bookshelfError: null,
   confirmState: null,
   draftContent: "",
   errorMessage: null,
   expandedPaths: [] as string[],
   hasInitialized: false,
   isBusy: false,
+  isBookshelfOpen: false,
   isDirty: false,
   promptState: null,
   rootNode: null as TreeNode | null,
@@ -74,8 +88,8 @@ const initialState = {
 
 function buildCreateBookPrompt(): PromptState {
   return {
-    confirmLabel: "创建并选择位置",
-    description: "输入书名后选择一个目录，系统会自动初始化中文模板结构。",
+    confirmLabel: "创建书籍",
+    description: "输入书名后，系统会在应用内置书库中自动初始化中文模板结构。",
     label: "书名",
     mode: "createBook",
     title: "新建书籍",
@@ -133,6 +147,10 @@ function buildDeletePrompt(node: TreeNode): ConfirmState {
 
 function getReadableError(error: unknown): string {
   return error instanceof Error ? error.message : "操作失败，请重试。";
+}
+
+async function readAvailableBooks() {
+  return listBookWorkspaces();
 }
 
 export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
@@ -194,6 +212,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
 
   return {
     ...initialState,
+    closeBookshelf: () => set({ bookshelfError: null, isBookshelfOpen: false }),
     closeConfirm: () => set({ confirmState: null }),
     closePrompt: () => set({ promptState: null }),
     toggleAllDirectories: () => {
@@ -250,6 +269,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       set({ hasInitialized: true, isBusy: false });
     },
     isBusy: false,
+    isBookshelfOpen: false,
     isDirty: false,
     openCreateBookDialog: () => set({ promptState: buildCreateBookPrompt() }),
     openCreateFileDialog: (parentPath) => set({ promptState: buildCreateFilePrompt(parentPath) }),
@@ -259,14 +279,17 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       try {
         set({ errorMessage: null, isBusy: true });
         await persistDirtyDraftIfNeeded();
-        const rootPath = await pickWorkspaceDirectory();
-        if (!rootPath) {
-          set({ isBusy: false });
-          return;
-        }
-        await loadWorkspace(rootPath, null);
+        const availableBooks = await readAvailableBooks();
+        set({
+          availableBooks,
+          bookshelfError: null,
+          isBookshelfOpen: true,
+        });
       } catch (error) {
-        set({ errorMessage: getReadableError(error) });
+        set({
+          bookshelfError: getReadableError(error),
+          isBookshelfOpen: true,
+        });
       }
 
       set({ isBusy: false });
@@ -292,6 +315,17 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       }
 
       set({ isBusy: false });
+    },
+    refreshWorkspaceList: async () => {
+      try {
+        const availableBooks = await readAvailableBooks();
+        set({
+          availableBooks,
+          bookshelfError: null,
+        });
+      } catch (error) {
+        set({ bookshelfError: getReadableError(error) });
+      }
     },
     refreshWorkspaceAfterExternalChange: async () => {
       const { activeFilePath, rootPath } = get();
@@ -323,6 +357,17 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         await writeWorkspaceTextFile(rootPath, activeFilePath, draftContent);
         set({ isDirty: false });
         setStoredWorkspaceSnapshot(rootPath, activeFilePath);
+      } catch (error) {
+        set({ errorMessage: getReadableError(error) });
+      }
+
+      set({ isBusy: false });
+    },
+    selectWorkspace: async (nextRootPath) => {
+      try {
+        set({ errorMessage: null, isBookshelfOpen: false, isBusy: true });
+        await persistDirtyDraftIfNeeded();
+        await loadWorkspace(nextRootPath, null);
       } catch (error) {
         set({ errorMessage: getReadableError(error) });
       }
@@ -379,14 +424,15 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
 
         if (promptState.mode === "createBook") {
           await persistDirtyDraftIfNeeded();
-          const parentPath = await pickWorkspaceDirectory();
-          if (!parentPath) {
-            set({ isBusy: false });
-            return;
-          }
-          const nextRootPath = await createBookWorkspace(parentPath, trimmedValue);
+          const nextRootPath = await createBookWorkspace("", trimmedValue);
+          const availableBooks = await readAvailableBooks();
           set({ promptState: null });
           await loadWorkspace(nextRootPath, null);
+          set({
+            availableBooks,
+            bookshelfError: null,
+            isBookshelfOpen: false,
+          });
           set({ isBusy: false });
           return;
         }

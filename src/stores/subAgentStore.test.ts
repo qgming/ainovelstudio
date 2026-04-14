@@ -6,7 +6,6 @@ vi.mock("../lib/agents/api", () => ({
   deleteInstalledAgent: vi.fn(),
   importAgentZip: vi.fn(),
   initializeBuiltinAgents: vi.fn(),
-  pickAgentArchive: vi.fn(),
   readAgentPreferences: vi.fn().mockResolvedValue({ enabledById: {} }),
   scanInstalledAgents: vi.fn(),
   writeAgentPreferences: vi.fn().mockResolvedValue({ enabledById: {} }),

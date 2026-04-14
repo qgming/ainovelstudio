@@ -1,14 +1,13 @@
+use crate::db::open_database;
+use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
-use tauri::{path::BaseDirectory, AppHandle, Manager};
+use tauri::AppHandle;
 
 type CommandResult<T> = Result<T, String>;
 
-const DEFAULT_AGENT_FILE_NAME: &str = "AGENTS.md";
+const DEFAULT_AGENT_CONFIG_KEY: &str = "default-agent";
 const DEFAULT_AGENT_TEMPLATE: &str = include_str!("../resources/config/AGENTS.md");
+const DEFAULT_AGENT_CONFIG_PATH: &str = "sqlite://config/AGENTS.md";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,105 +21,73 @@ fn error_to_string(error: impl ToString) -> String {
     error.to_string()
 }
 
-fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
 fn normalize_markdown(content: &str) -> String {
     content.replace("\r\n", "\n")
 }
 
-fn ensure_user_config_root(app: &AppHandle) -> CommandResult<PathBuf> {
-    let root = app
-        .path()
-        .app_data_dir()
-        .map_err(error_to_string)?
-        .join("config");
-    fs::create_dir_all(&root).map_err(error_to_string)?;
-    Ok(root)
-}
-
-fn resolve_builtin_config_root(app: &AppHandle) -> Option<PathBuf> {
-    ["config", "resources/config"]
-        .into_iter()
-        .filter_map(|relative_path| {
-            app.path()
-                .resolve(relative_path, BaseDirectory::Resource)
-                .ok()
-        })
-        .find(|path| path.exists() && path.is_dir())
-}
-
-fn read_builtin_default_agent_markdown(app: &AppHandle) -> CommandResult<String> {
-    if let Some(root) = resolve_builtin_config_root(app) {
-        let file_path = root.join(DEFAULT_AGENT_FILE_NAME);
-        if file_path.exists() && file_path.is_file() {
-            return fs::read_to_string(file_path)
-                .map(|content| normalize_markdown(&content))
-                .map_err(error_to_string);
-        }
-    }
-
-    Ok(normalize_markdown(DEFAULT_AGENT_TEMPLATE))
-}
-
-fn resolve_default_agent_file(app: &AppHandle) -> CommandResult<(PathBuf, bool)> {
-    if let Some(root) = resolve_builtin_config_root(app) {
-        let file_path = root.join(DEFAULT_AGENT_FILE_NAME);
-        if file_path.exists() && file_path.is_file() {
-            return Ok((file_path, true));
-        }
-    }
-
-    let user_root = ensure_user_config_root(app)?;
-    let file_path = user_root.join(DEFAULT_AGENT_FILE_NAME);
-    if file_path.exists() {
-        return Ok((file_path, false));
-    }
-
-    let markdown = read_builtin_default_agent_markdown(app)?;
-    fs::write(&file_path, markdown).map_err(error_to_string)?;
-    Ok((file_path, true))
+fn current_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 fn build_document(
-    path: PathBuf,
     markdown: String,
     initialized_from_builtin: bool,
 ) -> DefaultAgentConfigDocument {
     DefaultAgentConfigDocument {
         initialized_from_builtin,
         markdown,
-        path: normalize_path(&path),
+        path: DEFAULT_AGENT_CONFIG_PATH.into(),
     }
+}
+
+fn ensure_default_agent_document(app: &AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
+    let connection = open_database(app)?;
+    let existing = connection
+        .query_row(
+            "SELECT markdown, initialized_from_builtin FROM config_documents WHERE key = ?1",
+            params![DEFAULT_AGENT_CONFIG_KEY],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0)),
+        )
+        .optional()
+        .map_err(error_to_string)?;
+
+    if let Some((markdown, initialized_from_builtin)) = existing {
+        return Ok(build_document(
+            normalize_markdown(&markdown),
+            initialized_from_builtin,
+        ));
+    }
+
+    let markdown = normalize_markdown(DEFAULT_AGENT_TEMPLATE);
+    connection
+        .execute(
+            r#"
+            INSERT INTO config_documents (key, markdown, initialized_from_builtin, updated_at)
+            VALUES (?1, ?2, 1, ?3)
+            "#,
+            params![DEFAULT_AGENT_CONFIG_KEY, markdown, current_timestamp()],
+        )
+        .map_err(error_to_string)?;
+
+    Ok(build_document(
+        normalize_markdown(DEFAULT_AGENT_TEMPLATE),
+        true,
+    ))
 }
 
 #[tauri::command]
 pub fn initialize_default_agent_config(
     app: AppHandle,
 ) -> CommandResult<DefaultAgentConfigDocument> {
-    let (file_path, initialized_from_builtin) = resolve_default_agent_file(&app)?;
-    let markdown = fs::read_to_string(&file_path)
-        .map(|content| normalize_markdown(&content))
-        .map_err(error_to_string)?;
-    Ok(build_document(
-        file_path,
-        markdown,
-        initialized_from_builtin,
-    ))
+    ensure_default_agent_document(&app)
 }
 
 #[tauri::command]
 pub fn read_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
-    let (file_path, initialized_from_builtin) = resolve_default_agent_file(&app)?;
-    let markdown = fs::read_to_string(&file_path)
-        .map(|content| normalize_markdown(&content))
-        .map_err(error_to_string)?;
-    Ok(build_document(
-        file_path,
-        markdown,
-        initialized_from_builtin,
-    ))
+    ensure_default_agent_document(&app)
 }
 
 #[tauri::command]
@@ -129,12 +96,21 @@ pub fn write_default_agent_config(
     app: AppHandle,
     content: String,
 ) -> CommandResult<DefaultAgentConfigDocument> {
-    let (file_path, initialized_from_builtin) = resolve_default_agent_file(&app)?;
+    let connection = open_database(&app)?;
     let markdown = normalize_markdown(&content);
-    fs::write(&file_path, &markdown).map_err(error_to_string)?;
-    Ok(build_document(
-        file_path,
-        markdown,
-        initialized_from_builtin,
-    ))
+    connection
+        .execute(
+            r#"
+            INSERT INTO config_documents (key, markdown, initialized_from_builtin, updated_at)
+            VALUES (?1, ?2, 0, ?3)
+            ON CONFLICT(key) DO UPDATE
+            SET markdown = excluded.markdown,
+                initialized_from_builtin = 0,
+                updated_at = excluded.updated_at
+            "#,
+            params![DEFAULT_AGENT_CONFIG_KEY, markdown, current_timestamp()],
+        )
+        .map_err(error_to_string)?;
+
+    Ok(build_document(markdown, false))
 }
