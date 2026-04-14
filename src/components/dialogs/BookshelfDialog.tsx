@@ -8,7 +8,7 @@ type BookshelfDialogProps = {
   errorMessage?: string | null;
   onClose: () => void;
   onCreate: () => void;
-  onOpen: (rootPath: string) => void;
+  onOpen: (bookId: string) => void;
   onRefresh: () => void;
 };
 
@@ -50,11 +50,11 @@ export function BookshelfDialog({
             <div className="divide-y divide-[#e2e8f0] dark:divide-[#20242b]">
               {books.map((book) => (
                 <button
-                  key={book.path}
+                  key={book.id}
                   type="button"
                   aria-label={book.name}
                   disabled={busy}
-                  onClick={() => onOpen(book.path)}
+                  onClick={() => onOpen(book.id)}
                   className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-[#eef6ff] disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-[#141c26]"
                 >
                   <BookOpenText className="mt-0.5 h-4 w-4 shrink-0 text-[#0b84e7] dark:text-[#7cc4ff]" />

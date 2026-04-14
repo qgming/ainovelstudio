@@ -1,17 +1,21 @@
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { getWorkspacePathFromSearchParams, buildBookWorkspaceRoute } from "../lib/bookWorkspace/routes";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { buildBookWorkspaceRoute } from "../lib/bookWorkspace/routes";
 import { BookPage } from "./BookPage";
 
 export function BookWorkspacePage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const requestedRootPath = getWorkspacePathFromSearchParams(searchParams);
+  const { bookId } = useParams<{ bookId: string }>();
+
+  if (!bookId) {
+    return <Navigate replace to="/" />;
+  }
 
   return (
     <BookPage
-      requestedRootPath={requestedRootPath}
-      onWorkspaceRootChange={(rootPath) => {
-        navigate(buildBookWorkspaceRoute(rootPath), { replace: requestedRootPath == null });
+      onNavigateHome={() => navigate("/")}
+      requestedBookId={bookId}
+      onWorkspaceBookChange={(bookId) => {
+        navigate(buildBookWorkspaceRoute(bookId), { replace: true });
       }}
     />
   );

@@ -43,12 +43,14 @@ import { getEnabledAgents, useSubAgentStore } from "./subAgentStore";
 type AgentStoreStatus = "idle" | "loading" | "ready" | "error";
 
 type RunInterruptReason = "manual_stop" | "app_close" | "restart" | "reset";
+const DEFAULT_CHAT_BOOK_ID = "__global__";
 
 type AgentStoreState = {
   abortController: AbortController | null;
   activeRunRequestId: string | null;
   activeSessionId: string | null;
   contextTags: string[];
+  currentBookId: string | null;
   draftsBySession: Record<string, string>;
   errorMessage: string | null;
   input: string;
@@ -67,7 +69,7 @@ type AgentStoreActions = {
   createNewSession: () => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   hardStopCurrentRun: (reason?: RunInterruptReason) => Promise<void>;
-  initialize: () => Promise<void>;
+  initialize: (bookId?: string | null) => Promise<void>;
   openHistory: () => void;
   reset: () => void;
   sendMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
@@ -98,6 +100,7 @@ function buildInitialState(): AgentStoreState {
     activeRunRequestId: null,
     activeSessionId: null,
     contextTags: ["工具: 文件工作区"],
+    currentBookId: null,
     draftsBySession: {},
     errorMessage: null,
     input: "",
@@ -161,6 +164,7 @@ function applyBootstrap(state: AgentStoreState, bootstrap: ChatBootstrap): Parti
 
   return {
     activeSessionId: bootstrap.activeSessionId,
+    currentBookId: bootstrap.bookId ?? state.currentBookId,
     draftsBySession: nextDraftsBySession,
     errorMessage: null,
     input: bootstrap.activeSessionId ? nextDraftsBySession[bootstrap.activeSessionId] ?? "" : "",
@@ -282,18 +286,20 @@ async function ensureAgentSettingsReady() {
 
 export const useAgentStore = create<AgentStore>((set, get) => {
   async function ensureActiveSession() {
+    const bookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
+
     if (get().activeSessionId) {
       return get().activeSessionId;
     }
 
     if (!get().isHydrated && get().status !== "loading") {
-      await get().initialize();
+      await get().initialize(bookId);
       if (get().activeSessionId) {
         return get().activeSessionId;
       }
     }
 
-    const bootstrap = await createChatSession();
+    const bootstrap = await createChatSession(bookId);
     set((state) => ({
       ...state,
       ...applyBootstrap(state, bootstrap),
@@ -306,12 +312,14 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     ...buildInitialState(),
     closeHistory: () => set({ isHistoryOpen: false }),
     createNewSession: async () => {
+      const bookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
+
       if (selectIsAgentRunActive(get())) {
         return;
       }
 
       try {
-        const bootstrap = await createChatSession();
+        const bootstrap = await createChatSession(bookId);
         set((state) => ({
           ...state,
           ...applyBootstrap(state, bootstrap),
@@ -327,23 +335,39 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       }
 
       try {
-        const bootstrap = await deleteChatSession(sessionId);
+        const bookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
+        const bootstrap = await deleteChatSession(bookId, sessionId);
         set((state) => ({ ...state, ...applyBootstrap(state, bootstrap) }));
       } catch (error) {
         set({ errorMessage: formatAgentError(error, "删除历史会话失败。") });
       }
     },
-    initialize: async () => {
-      if (get().status === "loading" || get().isHydrated) {
+    initialize: async (bookId = DEFAULT_CHAT_BOOK_ID) => {
+      const normalizedBookId = bookId ?? DEFAULT_CHAT_BOOK_ID;
+      const state = get();
+      if (
+        state.status === "loading" ||
+        (state.isHydrated && state.currentBookId === normalizedBookId)
+      ) {
         return;
       }
 
-      set({ errorMessage: null, status: "loading" });
+      if (selectIsAgentRunActive(state)) {
+        await get().hardStopCurrentRun("restart");
+      }
+
+      set({
+        ...buildInitialState(),
+        currentBookId: normalizedBookId,
+        errorMessage: null,
+        status: "loading",
+      });
       try {
-        const bootstrap = await initializeChatStorage();
+        const bootstrap = await initializeChatStorage(normalizedBookId);
         set((state) => ({ ...state, ...applyBootstrap(state, bootstrap) }));
       } catch (error) {
         set({
+          currentBookId: normalizedBookId,
           errorMessage: formatAgentError(error, "历史会话初始化失败。"),
           isHydrated: true,
           status: "error",
@@ -437,7 +461,14 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         }
 
         await persistSummary(
-          updateChatMessage(sessionId, assistantMessage.id, assistant.parts, assistant.meta, buildSessionPatch(latestMessages, status)),
+          updateChatMessage(
+            get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
+            sessionId,
+            assistantMessage.id,
+            assistant.parts,
+            assistant.meta,
+            buildSessionPatch(latestMessages, status),
+          ),
         );
       };
 
@@ -531,8 +562,12 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         }));
         void setChatDraft(currentSessionId, "");
 
-        await persistSummary(appendChatMessage(sessionId, userMessage, buildSessionPatch(latestMessages, "running")));
-        await persistSummary(appendChatMessage(sessionId, assistantMessage));
+        const currentBookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
+
+        await persistSummary(
+          appendChatMessage(currentBookId, sessionId, userMessage, buildSessionPatch(latestMessages, "running")),
+        );
+        await persistSummary(appendChatMessage(currentBookId, sessionId, assistantMessage));
 
         await ensureAgentSettingsReady();
         if (!isCurrentRun()) {
@@ -680,7 +715,14 @@ export const useAgentStore = create<AgentStore>((set, get) => {
             });
           }
           if (sessionId && abortedState.removePlaceholder && abortedState.assistant) {
-            await persistSummary(deleteChatMessage(sessionId, abortedState.assistant.id, buildSessionPatch(latestMessages, "idle")));
+            await persistSummary(
+              deleteChatMessage(
+                get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
+                sessionId,
+                abortedState.assistant.id,
+                buildSessionPatch(latestMessages, "idle"),
+              ),
+            );
             return;
           }
 
@@ -720,7 +762,14 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           };
         });
         if (sessionId) {
-          await persistSummary(appendChatMessage(sessionId, systemMessage, buildSessionPatch(latestMessages, "failed")));
+          await persistSummary(
+            appendChatMessage(
+              get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
+              sessionId,
+              systemMessage,
+              buildSessionPatch(latestMessages, "failed"),
+            ),
+          );
         }
       }
     },
@@ -752,7 +801,8 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       }
 
       try {
-        const bootstrap = await switchChatSession(sessionId);
+        const bookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
+        const bootstrap = await switchChatSession(bookId, sessionId);
         set((state) => ({
           ...state,
           ...applyBootstrap(state, bootstrap),
@@ -764,5 +814,3 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     },
   };
 });
-
-

@@ -16,6 +16,7 @@ const AGENT_SETTINGS_KEY: &str = "agent.settings";
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatSessionSummary {
+    book_id: String,
     id: String,
     title: String,
     summary: String,
@@ -41,6 +42,7 @@ pub struct ChatMessageDocument {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatBootstrap {
+    book_id: String,
     sessions: Vec<ChatSessionSummary>,
     active_session_id: Option<String>,
     active_session_messages: Vec<ChatMessageDocument>,
@@ -118,6 +120,10 @@ fn draft_key(session_id: &str) -> String {
     format!("{DRAFT_KEY_PREFIX}{session_id}")
 }
 
+fn active_session_key(book_id: &str) -> String {
+    format!("{ACTIVE_SESSION_KEY}.{book_id}")
+}
+
 fn parse_json(raw: &str, fallback: Value) -> Value {
     serde_json::from_str(raw).unwrap_or(fallback)
 }
@@ -134,6 +140,7 @@ fn parse_agent_settings(value: Option<Value>) -> Option<AgentSettingsDocument> {
 
 fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSessionSummary> {
     Ok(ChatSessionSummary {
+        book_id: row.get("book_id")?,
         id: row.get("id")?,
         title: row.get("title")?,
         summary: row.get("summary")?,
@@ -146,20 +153,23 @@ fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSessionSummary> {
     })
 }
 
-fn load_sessions(connection: &rusqlite::Connection) -> CommandResult<Vec<ChatSessionSummary>> {
+fn load_sessions(
+    connection: &rusqlite::Connection,
+    book_id: &str,
+) -> CommandResult<Vec<ChatSessionSummary>> {
     let mut statement = connection
         .prepare(
             r#"
-            SELECT id, title, summary, status, created_at, updated_at, last_message_at, pinned, archived
+            SELECT book_id, id, title, summary, status, created_at, updated_at, last_message_at, pinned, archived
             FROM chat_sessions
-            WHERE archived = 0
+            WHERE archived = 0 AND book_id = ?1
             ORDER BY updated_at DESC, created_at DESC
             "#,
         )
         .map_err(error_to_string)?;
 
     let sessions = statement
-        .query_map([], row_to_session)
+        .query_map(params![book_id], row_to_session)
         .map_err(error_to_string)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(error_to_string)?;
@@ -170,15 +180,16 @@ fn load_sessions(connection: &rusqlite::Connection) -> CommandResult<Vec<ChatSes
 fn read_session(
     connection: &rusqlite::Connection,
     session_id: &str,
+    book_id: &str,
 ) -> CommandResult<ChatSessionSummary> {
     connection
         .query_row(
             r#"
-            SELECT id, title, summary, status, created_at, updated_at, last_message_at, pinned, archived
+            SELECT book_id, id, title, summary, status, created_at, updated_at, last_message_at, pinned, archived
             FROM chat_sessions
-            WHERE id = ?1
+            WHERE id = ?1 AND book_id = ?2
             "#,
-            params![session_id],
+            params![session_id, book_id],
             row_to_session,
         )
         .map_err(error_to_string)
@@ -264,34 +275,36 @@ fn delete_state_value(connection: &rusqlite::Connection, key: &str) -> CommandRe
     Ok(())
 }
 
-fn create_session(connection: &rusqlite::Connection) -> CommandResult<String> {
+fn create_session(connection: &rusqlite::Connection, book_id: &str) -> CommandResult<String> {
     let session_id = Uuid::new_v4().to_string();
     let now = now_iso();
     connection
         .execute(
             r#"
-            INSERT INTO chat_sessions (id, title, summary, status, created_at, updated_at, last_message_at, pinned, archived)
-            VALUES (?1, ?2, '', 'idle', ?3, ?3, NULL, 0, 0)
+            INSERT INTO chat_sessions (book_id, id, title, summary, status, created_at, updated_at, last_message_at, pinned, archived)
+            VALUES (?1, ?2, ?3, '', 'idle', ?4, ?4, NULL, 0, 0)
             "#,
-            params![session_id, "新对话", now],
+            params![book_id, session_id, "新对话", now],
         )
         .map_err(error_to_string)?;
     Ok(session_id)
 }
 
-fn ensure_active_session(connection: &rusqlite::Connection) -> CommandResult<String> {
-    let sessions = load_sessions(connection)?;
+fn ensure_active_session(connection: &rusqlite::Connection, book_id: &str) -> CommandResult<String> {
+    let sessions = load_sessions(connection, book_id)?;
     if sessions.is_empty() {
-        let session_id = create_session(connection)?;
+        let session_id = create_session(connection, book_id)?;
         set_state_value(
             connection,
-            ACTIVE_SESSION_KEY,
+            &active_session_key(book_id),
             &Value::String(session_id.clone()),
         )?;
         return Ok(session_id);
     }
 
-    if let Some(Value::String(session_id)) = get_state_value(connection, ACTIVE_SESSION_KEY)? {
+    if let Some(Value::String(session_id)) =
+        get_state_value(connection, &active_session_key(book_id))?
+    {
         if sessions.iter().any(|session| session.id == session_id) {
             return Ok(session_id);
         }
@@ -300,7 +313,7 @@ fn ensure_active_session(connection: &rusqlite::Connection) -> CommandResult<Str
     let session_id = sessions[0].id.clone();
     set_state_value(
         connection,
-        ACTIVE_SESSION_KEY,
+        &active_session_key(book_id),
         &Value::String(session_id.clone()),
     )?;
     Ok(session_id)
@@ -308,6 +321,7 @@ fn ensure_active_session(connection: &rusqlite::Connection) -> CommandResult<Str
 
 fn build_bootstrap(
     connection: &rusqlite::Connection,
+    book_id: &str,
     session_id: String,
 ) -> CommandResult<ChatBootstrap> {
     let draft = get_state_value(connection, &draft_key(&session_id))?
@@ -315,7 +329,8 @@ fn build_bootstrap(
         .unwrap_or_default();
 
     Ok(ChatBootstrap {
-        sessions: load_sessions(connection)?,
+        book_id: book_id.to_string(),
+        sessions: load_sessions(connection, book_id)?,
         active_session_id: Some(session_id.clone()),
         active_session_messages: load_messages(connection, &session_id)?,
         active_session_draft: draft,
@@ -325,9 +340,10 @@ fn build_bootstrap(
 fn apply_patch(
     connection: &rusqlite::Connection,
     session_id: &str,
+    book_id: &str,
     patch: Option<ChatSessionPatch>,
 ) -> CommandResult<ChatSessionSummary> {
-    let current = read_session(connection, session_id)?;
+    let current = read_session(connection, session_id, book_id)?;
     if let Some(patch) = patch {
         let title = normalize_session_title(patch.title.or(Some(current.title.clone())));
         let summary = patch.summary.unwrap_or(current.summary.clone());
@@ -360,7 +376,7 @@ fn apply_patch(
             .map_err(error_to_string)?;
     }
 
-    read_session(connection, session_id)
+    read_session(connection, session_id, book_id)
 }
 
 fn next_message_seq(connection: &rusqlite::Connection, session_id: &str) -> CommandResult<i64> {
@@ -452,40 +468,51 @@ pub fn clear_agent_settings(app: AppHandle) -> CommandResult<()> {
 }
 
 #[tauri::command]
-pub fn initialize_chat_storage(app: AppHandle) -> CommandResult<ChatBootstrap> {
+#[allow(non_snake_case)]
+pub fn initialize_chat_storage(app: AppHandle, bookId: String) -> CommandResult<ChatBootstrap> {
     let connection = open_database(&app)?;
-    let session_id = ensure_active_session(&connection)?;
-    build_bootstrap(&connection, session_id)
+    let session_id = ensure_active_session(&connection, &bookId)?;
+    build_bootstrap(&connection, &bookId, session_id)
 }
 #[tauri::command]
-pub fn create_chat_session(app: AppHandle) -> CommandResult<ChatBootstrap> {
+#[allow(non_snake_case)]
+pub fn create_chat_session(app: AppHandle, bookId: String) -> CommandResult<ChatBootstrap> {
     let connection = open_database(&app)?;
-    let session_id = create_session(&connection)?;
+    let session_id = create_session(&connection, &bookId)?;
     set_state_value(
         &connection,
-        ACTIVE_SESSION_KEY,
+        &active_session_key(&bookId),
         &Value::String(session_id.clone()),
     )?;
-    build_bootstrap(&connection, session_id)
+    build_bootstrap(&connection, &bookId, session_id)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn switch_chat_session(app: AppHandle, sessionId: String) -> CommandResult<ChatBootstrap> {
+pub fn switch_chat_session(
+    app: AppHandle,
+    bookId: String,
+    sessionId: String,
+) -> CommandResult<ChatBootstrap> {
     let connection = open_database(&app)?;
-    read_session(&connection, &sessionId)?;
+    read_session(&connection, &sessionId, &bookId)?;
     set_state_value(
         &connection,
-        ACTIVE_SESSION_KEY,
+        &active_session_key(&bookId),
         &Value::String(sessionId.clone()),
     )?;
-    build_bootstrap(&connection, sessionId)
+    build_bootstrap(&connection, &bookId, sessionId)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn delete_chat_session(app: AppHandle, sessionId: String) -> CommandResult<ChatBootstrap> {
+pub fn delete_chat_session(
+    app: AppHandle,
+    bookId: String,
+    sessionId: String,
+) -> CommandResult<ChatBootstrap> {
     let connection = open_database(&app)?;
+    read_session(&connection, &sessionId, &bookId)?;
     connection
         .execute(
             "DELETE FROM chat_sessions WHERE id = ?1",
@@ -493,14 +520,15 @@ pub fn delete_chat_session(app: AppHandle, sessionId: String) -> CommandResult<C
         )
         .map_err(error_to_string)?;
     delete_state_value(&connection, &draft_key(&sessionId))?;
-    let next_session_id = ensure_active_session(&connection)?;
-    build_bootstrap(&connection, next_session_id)
+    let next_session_id = ensure_active_session(&connection, &bookId)?;
+    build_bootstrap(&connection, &bookId, next_session_id)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn rename_chat_session(
     app: AppHandle,
+    bookId: String,
     sessionId: String,
     title: String,
 ) -> CommandResult<ChatSessionSummary> {
@@ -508,6 +536,7 @@ pub fn rename_chat_session(
     apply_patch(
         &connection,
         &sessionId,
+        &bookId,
         Some(ChatSessionPatch {
             title: Some(title),
             summary: None,
@@ -522,7 +551,14 @@ pub fn rename_chat_session(
 #[allow(non_snake_case)]
 pub fn set_chat_draft(app: AppHandle, sessionId: String, draft: String) -> CommandResult<()> {
     let connection = open_database(&app)?;
-    read_session(&connection, &sessionId)?;
+    let book_id = connection
+        .query_row(
+            "SELECT book_id FROM chat_sessions WHERE id = ?1",
+            params![sessionId.clone()],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(error_to_string)?;
+    read_session(&connection, &sessionId, &book_id)?;
     set_state_value(&connection, &draft_key(&sessionId), &Value::String(draft))
 }
 
@@ -530,12 +566,14 @@ pub fn set_chat_draft(app: AppHandle, sessionId: String, draft: String) -> Comma
 #[allow(non_snake_case)]
 pub fn append_chat_message(
     app: AppHandle,
+    bookId: String,
     sessionId: String,
     message: ChatMessageInput,
     sessionPatch: Option<ChatSessionPatch>,
 ) -> CommandResult<ChatSessionSummary> {
     let connection = open_database(&app)?;
     let seq = next_message_seq(&connection, &sessionId)?;
+    let book_id = read_session(&connection, &sessionId, &bookId)?.book_id;
     connection
         .execute(
             r#"
@@ -554,13 +592,14 @@ pub fn append_chat_message(
             ],
         )
         .map_err(error_to_string)?;
-    apply_patch(&connection, &sessionId, sessionPatch)
+    apply_patch(&connection, &sessionId, &book_id, sessionPatch)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn update_chat_message(
     app: AppHandle,
+    bookId: String,
     sessionId: String,
     messageId: String,
     parts: Value,
@@ -568,6 +607,7 @@ pub fn update_chat_message(
     sessionPatch: Option<ChatSessionPatch>,
 ) -> CommandResult<ChatSessionSummary> {
     let connection = open_database(&app)?;
+    let book_id = read_session(&connection, &sessionId, &bookId)?.book_id;
     connection
         .execute(
             r#"
@@ -584,23 +624,25 @@ pub fn update_chat_message(
             ],
         )
         .map_err(error_to_string)?;
-    apply_patch(&connection, &sessionId, sessionPatch)
+    apply_patch(&connection, &sessionId, &book_id, sessionPatch)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn delete_chat_message(
     app: AppHandle,
+    bookId: String,
     sessionId: String,
     messageId: String,
     sessionPatch: Option<ChatSessionPatch>,
 ) -> CommandResult<ChatSessionSummary> {
     let connection = open_database(&app)?;
+    let book_id = read_session(&connection, &sessionId, &bookId)?.book_id;
     connection
         .execute(
             "DELETE FROM chat_messages WHERE session_id = ?1 AND id = ?2",
             params![sessionId, messageId],
         )
         .map_err(error_to_string)?;
-    apply_patch(&connection, &sessionId, sessionPatch)
+    apply_patch(&connection, &sessionId, &book_id, sessionPatch)
 }

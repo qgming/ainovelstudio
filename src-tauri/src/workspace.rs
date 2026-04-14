@@ -1,4 +1,5 @@
-use crate::ToolCancellationRegistry;
+use crate::{db::open_database, ToolCancellationRegistry};
+use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use std::{
     collections::HashSet,
@@ -9,6 +10,7 @@ use std::{
 use tauri::{AppHandle, Manager, State};
 #[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
+use uuid::Uuid;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 #[derive(Clone, Serialize)]
@@ -25,6 +27,7 @@ pub struct TreeNode {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookWorkspaceSummary {
+    id: String,
     name: String,
     path: String,
     updated_at: u64,
@@ -65,8 +68,19 @@ fn error_to_string(error: impl ToString) -> String {
     error.to_string()
 }
 
+fn normalize_path_string(value: String) -> String {
+    let normalized = value.replace('\\', "/");
+    if let Some(path) = normalized.strip_prefix("//?/UNC/") {
+        return format!("//{}", path);
+    }
+    if let Some(path) = normalized.strip_prefix("//?/") {
+        return path.to_string();
+    }
+    normalized
+}
+
 fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+    normalize_path_string(path.to_string_lossy().to_string())
 }
 
 fn entry_name(path: &Path) -> String {
@@ -946,6 +960,78 @@ fn ensure_books_library_root(app: &AppHandle) -> CommandResult<PathBuf> {
     Ok(root)
 }
 
+fn now_iso() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_else(|_| "0".into())
+}
+
+fn ensure_book_registry_entry(app: &AppHandle, root_path: &Path) -> CommandResult<String> {
+    let normalized_root_path = normalize_path(root_path);
+    let connection = open_database(app)?;
+    let existing_id = connection
+        .query_row(
+            "SELECT id FROM book_workspace_registry WHERE root_path = ?1",
+            params![normalized_root_path],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(error_to_string)?;
+
+    if let Some(book_id) = existing_id {
+        return Ok(book_id);
+    }
+
+    let book_id = Uuid::new_v4().to_string();
+    connection
+        .execute(
+            r#"
+            INSERT INTO book_workspace_registry (id, root_path, created_at)
+            VALUES (?1, ?2, ?3)
+            "#,
+            params![book_id, normalize_path(root_path), now_iso()],
+        )
+        .map_err(error_to_string)?;
+    Ok(book_id)
+}
+
+fn get_book_workspace_path_by_id(app: &AppHandle, book_id: &str) -> CommandResult<PathBuf> {
+    let connection = open_database(app)?;
+    let root_path = connection
+        .query_row(
+            "SELECT root_path FROM book_workspace_registry WHERE id = ?1",
+            params![book_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(error_to_string)?
+        .ok_or_else(|| "目标书籍不存在。".to_string())?;
+
+    let books_root = ensure_books_library_root(app)?;
+    ensure_book_workspace_in_library(&books_root, &root_path)
+}
+
+fn delete_book_registry_entry(app: &AppHandle, root_path: &Path) -> CommandResult<()> {
+    let connection = open_database(app)?;
+    connection
+        .execute(
+            "DELETE FROM book_workspace_registry WHERE root_path = ?1",
+            params![normalize_path(root_path)],
+        )
+        .map_err(error_to_string)?;
+    Ok(())
+}
+
+fn build_book_workspace_summary(app: &AppHandle, path: &Path) -> CommandResult<BookWorkspaceSummary> {
+    Ok(BookWorkspaceSummary {
+        id: ensure_book_registry_entry(app, path)?,
+        name: entry_name(path),
+        path: normalize_path(path),
+        updated_at: read_updated_at(path),
+    })
+}
+
 fn read_updated_at(path: &Path) -> u64 {
     fs::metadata(path)
         .and_then(|metadata| metadata.modified())
@@ -1016,11 +1102,7 @@ pub fn list_book_workspaces(app: AppHandle) -> CommandResult<Vec<BookWorkspaceSu
             continue;
         }
 
-        workspaces.push(BookWorkspaceSummary {
-            name: entry_name(&path),
-            path: normalize_path(&path),
-            updated_at: read_updated_at(&path),
-        });
+        workspaces.push(build_book_workspace_summary(&app, &path)?);
     }
 
     workspaces.sort_by(|left, right| {
@@ -1035,11 +1117,32 @@ pub fn list_book_workspaces(app: AppHandle) -> CommandResult<Vec<BookWorkspaceSu
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub fn get_book_workspace_summary(
+    app: AppHandle,
+    rootPath: String,
+) -> CommandResult<BookWorkspaceSummary> {
+    let books_root = ensure_books_library_root(&app)?;
+    let workspace_path = ensure_book_workspace_in_library(&books_root, &rootPath)?;
+    build_book_workspace_summary(&app, &workspace_path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn get_book_workspace_summary_by_id(
+    app: AppHandle,
+    bookId: String,
+) -> CommandResult<BookWorkspaceSummary> {
+    let workspace_path = get_book_workspace_path_by_id(&app, &bookId)?;
+    build_book_workspace_summary(&app, &workspace_path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 pub fn import_book_zip(
     app: AppHandle,
     fileName: String,
     archiveBytes: Vec<u8>,
-) -> CommandResult<String> {
+) -> CommandResult<BookWorkspaceSummary> {
     if Path::new(&fileName)
         .extension()
         .and_then(|extension| extension.to_str())
@@ -1054,7 +1157,8 @@ pub fn import_book_zip(
 
     let books_root = ensure_books_library_root(&app)?;
     let workspace_path = import_book_archive_to_library(&books_root, &fileName, archiveBytes)?;
-    Ok(normalize_path(&workspace_path))
+    let _ = ensure_book_registry_entry(&app, &workspace_path)?;
+    build_book_workspace_summary(&app, &workspace_path)
 }
 
 #[tauri::command]
@@ -1106,7 +1210,9 @@ pub async fn export_book_zip(app: AppHandle, rootPath: String) -> CommandResult<
 #[allow(non_snake_case)]
 pub fn delete_book_workspace(app: AppHandle, rootPath: String) -> CommandResult<()> {
     let books_root = ensure_books_library_root(&app)?;
-    delete_book_workspace_internal(&books_root, &rootPath)
+    let workspace_path = ensure_book_workspace_in_library(&books_root, &rootPath)?;
+    delete_book_workspace_internal(&books_root, &rootPath)?;
+    delete_book_registry_entry(&app, &workspace_path)
 }
 
 #[tauri::command]
@@ -1379,7 +1485,7 @@ pub fn create_book_workspace(
     app: AppHandle,
     parentPath: Option<String>,
     bookName: String,
-) -> CommandResult<String> {
+) -> CommandResult<BookWorkspaceSummary> {
     let canonical_parent = match parentPath
         .as_deref()
         .map(str::trim)
@@ -1395,7 +1501,8 @@ pub fn create_book_workspace(
         None => ensure_books_library_root(&app)?,
     };
     let workspace_path = create_book_workspace_internal(&canonical_parent, &bookName)?;
-    Ok(normalize_path(&workspace_path))
+    let _ = ensure_book_registry_entry(&app, &workspace_path)?;
+    build_book_workspace_summary(&app, &workspace_path)
 }
 
 #[tauri::command]

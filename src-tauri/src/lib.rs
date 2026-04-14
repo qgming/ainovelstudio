@@ -105,6 +105,8 @@ pub fn run() {
             usage::read_usage_logs,
             workspace::pick_book_directory,
             workspace::list_book_workspaces,
+            workspace::get_book_workspace_summary,
+            workspace::get_book_workspace_summary_by_id,
             workspace::import_book_zip,
             workspace::export_book_zip,
             workspace::delete_book_workspace,

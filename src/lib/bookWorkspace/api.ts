@@ -140,8 +140,16 @@ export function listBookWorkspaces() {
   return invoke<BookWorkspaceSummary[]>("list_book_workspaces");
 }
 
+export function getBookWorkspaceSummary(rootPath: string) {
+  return invoke<BookWorkspaceSummary>("get_book_workspace_summary", { rootPath });
+}
+
+export function getBookWorkspaceSummaryById(bookId: string) {
+  return invoke<BookWorkspaceSummary>("get_book_workspace_summary_by_id", { bookId });
+}
+
 export function importBookZip(fileName: string, archiveBytes: number[]) {
-  return invoke<string>("import_book_zip", { fileName, archiveBytes });
+  return invoke<BookWorkspaceSummary>("import_book_zip", { fileName, archiveBytes });
 }
 
 export function exportBookZip(rootPath: string) {
@@ -194,7 +202,7 @@ export function replaceWorkspaceTextLine(
 }
 
 export function createBookWorkspace(parentPath: string, bookName: string) {
-  return invoke<string>("create_book_workspace", { parentPath, bookName });
+  return invoke<BookWorkspaceSummary>("create_book_workspace", { parentPath, bookName });
 }
 
 export function createWorkspaceDirectory(rootPath: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {

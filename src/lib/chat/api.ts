@@ -4,24 +4,24 @@ import type { ChatBootstrap, ChatSessionPatch, ChatSessionSummary } from "./type
 
 type ChatMessagePayload = Pick<AgentMessage, "id" | "role" | "author" | "parts" | "meta">;
 
-export function initializeChatStorage() {
-  return invoke<ChatBootstrap>("initialize_chat_storage");
+export function initializeChatStorage(bookId = "__global__") {
+  return invoke<ChatBootstrap>("initialize_chat_storage", { bookId });
 }
 
-export function createChatSession() {
-  return invoke<ChatBootstrap>("create_chat_session");
+export function createChatSession(bookId: string) {
+  return invoke<ChatBootstrap>("create_chat_session", { bookId });
 }
 
-export function switchChatSession(sessionId: string) {
-  return invoke<ChatBootstrap>("switch_chat_session", { sessionId });
+export function switchChatSession(bookId: string, sessionId: string) {
+  return invoke<ChatBootstrap>("switch_chat_session", { bookId, sessionId });
 }
 
-export function deleteChatSession(sessionId: string) {
-  return invoke<ChatBootstrap>("delete_chat_session", { sessionId });
+export function deleteChatSession(bookId: string, sessionId: string) {
+  return invoke<ChatBootstrap>("delete_chat_session", { bookId, sessionId });
 }
 
-export function renameChatSession(sessionId: string, title: string) {
-  return invoke<ChatSessionSummary>("rename_chat_session", { sessionId, title });
+export function renameChatSession(bookId: string, sessionId: string, title: string) {
+  return invoke<ChatSessionSummary>("rename_chat_session", { bookId, sessionId, title });
 }
 
 export function setChatDraft(sessionId: string, draft: string) {
@@ -29,14 +29,16 @@ export function setChatDraft(sessionId: string, draft: string) {
 }
 
 export function appendChatMessage(
+  bookId: string,
   sessionId: string,
   message: ChatMessagePayload,
   sessionPatch?: ChatSessionPatch,
 ) {
-  return invoke<ChatSessionSummary>("append_chat_message", { message, sessionId, sessionPatch });
+  return invoke<ChatSessionSummary>("append_chat_message", { bookId, message, sessionId, sessionPatch });
 }
 
 export function updateChatMessage(
+  bookId: string,
   sessionId: string,
   messageId: string,
   parts: AgentMessage["parts"],
@@ -44,6 +46,7 @@ export function updateChatMessage(
   sessionPatch?: ChatSessionPatch,
 ) {
   return invoke<ChatSessionSummary>("update_chat_message", {
+    bookId,
     messageId,
     meta,
     parts,
@@ -52,6 +55,11 @@ export function updateChatMessage(
   });
 }
 
-export function deleteChatMessage(sessionId: string, messageId: string, sessionPatch?: ChatSessionPatch) {
-  return invoke<ChatSessionSummary>("delete_chat_message", { messageId, sessionId, sessionPatch });
+export function deleteChatMessage(
+  bookId: string,
+  sessionId: string,
+  messageId: string,
+  sessionPatch?: ChatSessionPatch,
+) {
+  return invoke<ChatSessionSummary>("delete_chat_message", { bookId, messageId, sessionId, sessionPatch });
 }

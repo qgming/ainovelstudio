@@ -1,5 +1,5 @@
 import { Blocks, ChevronRight, History, SquarePen } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AgentComposer } from "../agent/AgentComposer";
 import { AgentContextOverview } from "../agent/AgentContextOverview";
 import { AgentMessageList } from "../agent/AgentMessageList";
@@ -63,6 +63,7 @@ function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
+  const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
   const createNewSession = useAgentStore((state) => state.createNewSession);
   const errorMessage = useAgentStore((state) => state.errorMessage);
@@ -78,6 +79,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const setInput = useAgentStore((state) => state.setInput);
   const stopMessage = useAgentStore((state) => state.stopMessage);
   const switchSession = useAgentStore((state) => state.switchSession);
+  const initializeAgentHistory = useAgentStore((state) => state.initialize);
   const rootPath = useBookWorkspaceStore((state) => state.rootPath);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
@@ -88,6 +90,13 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const displayRunStatus = isRunning ? "running" : run.status;
   const [contextAnchorRect, setContextAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
   const [historyAnchorRect, setHistoryAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
+
+  useEffect(() => {
+    if (!rootBookId) {
+      return;
+    }
+    void initializeAgentHistory(rootBookId);
+  }, [initializeAgentHistory, rootBookId]);
 
   const isContextOpen = contextAnchorRect !== null;
 
@@ -214,4 +223,3 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
     </aside>
   );
 }
-

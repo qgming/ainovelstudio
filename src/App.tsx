@@ -13,7 +13,6 @@ import { SettingPage } from "./pages/SettingPage";
 import { SkillDetailPage } from "./pages/SkillDetailPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { useAgentSettingsStore } from "./stores/agentSettingsStore";
-import { useAgentStore } from "./stores/agentStore";
 import { useThemeStore } from "./stores/themeStore";
 import { useSkillsStore } from "./stores/skillsStore";
 import { useSubAgentStore } from "./stores/subAgentStore";
@@ -23,7 +22,6 @@ function AppShell() {
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const initializeAgents = useSubAgentStore((state) => state.initialize);
   const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
-  const initializeAgentHistory = useAgentStore((state) => state.initialize);
   const mobileRuntime = isMobileRuntime();
 
   useEffect(() => {
@@ -31,8 +29,7 @@ function AppShell() {
     void initializeSkills();
     void initializeAgents();
     void initializeAgentSettings();
-    void initializeAgentHistory();
-  }, [initializeAgentHistory, initializeAgentSettings, initializeAgents, initializeSkills, initializeTheme]);
+  }, [initializeAgentSettings, initializeAgents, initializeSkills, initializeTheme]);
 
   useEffect(() => {
     if (mobileRuntime) {
@@ -70,7 +67,8 @@ function AppShell() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/book" element={<Navigate to="/" replace />} />
-              <Route path="/books/workspace" element={<BookWorkspacePage />} />
+              <Route path="/books/workspace" element={<Navigate to="/" replace />} />
+              <Route path="/books/:bookId" element={<BookWorkspacePage />} />
               <Route path="/skills" element={<SkillsPage />} />
               <Route path="/skills/:skillId" element={<SkillDetailPage />} />
               <Route path="/agents" element={<AgentsPage />} />

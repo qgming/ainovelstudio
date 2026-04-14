@@ -51,10 +51,13 @@ import { useBookWorkspaceStore } from "./stores/bookWorkspaceStore";
 import { useThemeStore } from "./stores/themeStore";
 
 const rootPath = "C:/books/北境余烬";
+const bookId = "book-1";
 const chapterPath = `${rootPath}/04_正文/第一卷/第001章_待命名.md`;
 const chatBootstrap = {
+  bookId: "__global__",
   sessions: [
     {
+      bookId: "__global__",
       id: "session-1",
       title: "新对话",
       summary: "",
@@ -216,7 +219,7 @@ describe("App shell", () => {
         return chatBootstrap;
       }
       if (command === "list_book_workspaces") {
-        return [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+        return [{ id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
       }
       return undefined;
     });
@@ -236,7 +239,10 @@ describe("App shell", () => {
         case "initialize_chat_storage":
           return chatBootstrap;
         case "list_book_workspaces":
-          return [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+          return [{ id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+        case "get_book_workspace_summary_by_id":
+        case "get_book_workspace_summary":
+          return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
           return tree;
         case "read_text_file":
@@ -252,7 +258,7 @@ describe("App shell", () => {
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
     expect(screen.getByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
-    expect(window.location.hash).toContain("/books/workspace?path=");
+    expect(window.location.hash).toContain(`/books/${bookId}`);
   });
 
   it("首页导入 ZIP 书籍后会进入图书工作区", async () => {
@@ -263,7 +269,9 @@ describe("App shell", () => {
         case "list_book_workspaces":
           return [];
         case "import_book_zip":
-          return rootPath;
+          return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
+        case "get_book_workspace_summary_by_id":
+          return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
           return tree;
         default:
@@ -293,7 +301,7 @@ describe("App shell", () => {
     });
 
     expect(await screen.findByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
-    expect(window.location.hash).toContain("/books/workspace?path=");
+    expect(window.location.hash).toContain(`/books/${bookId}`);
   });
 
   it("首页图书更多菜单支持导出 ZIP", async () => {
@@ -302,7 +310,7 @@ describe("App shell", () => {
         case "initialize_chat_storage":
           return chatBootstrap;
         case "list_book_workspaces":
-          return [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+          return [{ id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
         case "export_book_zip":
           return "C:/exports/北境余烬.zip";
         default:
@@ -325,7 +333,7 @@ describe("App shell", () => {
   });
 
   it("首页图书更多菜单支持删除图书", async () => {
-    let books = [{ name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+    let books = [{ id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
     mockInvoke.mockImplementation(async (command: string) => {
       switch (command) {
         case "initialize_chat_storage":
@@ -490,23 +498,19 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "切换到深色模式" })).toBeInTheDocument();
   });
 
-  it("从其他页面进入书籍页时，恢复中的工作区不会闪出空状态或编辑器空占位", async () => {
-    window.location.hash = "#/books/workspace";
-    window.localStorage.setItem(
-      "ainovelstudio-book-workspace",
-      JSON.stringify({ rootPath, selectedFilePath: chapterPath }),
-    );
-
-    let resolveFile!: (value: string) => void;
+  it("从其他页面进入指定书籍页时，会先显示打开中状态，再稳定进入工作区", async () => {
+    window.location.hash = `#/books/${bookId}`;
+    let resolveTree!: (value: typeof tree) => void;
     mockInvoke.mockImplementation(async (command: string) => {
       switch (command) {
         case "initialize_chat_storage":
           return chatBootstrap;
+        case "get_book_workspace_summary_by_id":
+        case "get_book_workspace_summary":
+          return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
-          return tree;
-        case "read_text_file":
-          return new Promise<string>((resolve) => {
-            resolveFile = resolve;
+          return new Promise<typeof tree>((resolve) => {
+            resolveTree = resolve;
           });
         default:
           return undefined;
@@ -515,20 +519,20 @@ describe("App shell", () => {
 
     render(<App />);
 
-    expect(screen.getByText("正在恢复书籍工作区...")).toBeInTheDocument();
+    expect(screen.getByText("正在打开书籍工作区...")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "选择书籍" })).not.toBeInTheDocument();
     expect(screen.queryByText("从左侧打开一个文件。")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      const readFileCalls = mockInvoke.mock.calls.filter(([command]) => command === "read_text_file");
-      expect(readFileCalls).toHaveLength(1);
+      const readTreeCalls = mockInvoke.mock.calls.filter(([command]) => command === "read_workspace_tree");
+      expect(readTreeCalls).toHaveLength(1);
     });
 
     await act(async () => {
-      resolveFile("这是章节初稿");
+      resolveTree(tree);
     });
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "第001章_待命名.md" })).toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
   });
 });

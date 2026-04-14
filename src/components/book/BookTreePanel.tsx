@@ -1,7 +1,7 @@
 import {
-  ChevronRight,
   FilePlus2,
   FolderPlus,
+  House,
   Maximize2,
   Minimize2,
   RefreshCw,
@@ -9,13 +9,6 @@ import {
 import { collectAllDirectoryPaths } from "../../lib/bookWorkspace/tree";
 import { BookTreeItem } from "./BookTreeItem";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
-
-type AnchorRect = {
-  bottom: number;
-  left: number;
-  right: number;
-  top: number;
-};
 
 type BookTreePanelProps = {
   activeFilePath: string | null;
@@ -25,7 +18,7 @@ type BookTreePanelProps = {
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (node: TreeNode) => void;
-  onOpenBookMenu: (anchorRect: AnchorRect) => void;
+  onNavigateHome: () => void;
   onRefresh: () => void;
   onRename: (node: TreeNode) => void;
   onSelectFile: (path: string) => void;
@@ -65,25 +58,17 @@ function WorkspaceButton({
 }: {
   busy?: boolean;
   name: string;
-  onClick: (anchorRect: AnchorRect) => void;
+  onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      aria-label="打开书籍菜单"
+      aria-label="返回首页"
       disabled={busy}
-      onClick={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        onClick({
-          bottom: rect.bottom,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-        });
-      }}
+      onClick={onClick}
       className="flex h-8 min-w-0 items-center gap-0.5 rounded-[10px] px-2 text-left text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#f3f4f6] dark:hover:bg-[#1a1c21]"
     >
-      <ChevronRight className="h-4 w-4 shrink-0 text-black dark:text-white" />
+      <House className="h-4 w-4 shrink-0 text-black dark:text-white" />
       <span className="truncate text-[15px] font-semibold leading-none tracking-[-0.03em]">
         {name}
       </span>
@@ -99,7 +84,7 @@ export function BookTreePanel({
   onCreateFile,
   onCreateFolder,
   onDelete,
-  onOpenBookMenu,
+  onNavigateHome,
   onRefresh,
   onRename,
   onSelectFile,
@@ -121,7 +106,7 @@ export function BookTreePanel({
         <WorkspaceButton
           busy={busy}
           name={rootNode.name}
-          onClick={onOpenBookMenu}
+          onClick={onNavigateHome}
         />
         <div className="flex shrink-0 items-center gap-0.5">
           <ToolbarButton

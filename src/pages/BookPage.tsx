@@ -7,7 +7,6 @@ import { BookPanelResizeHandle } from "../components/book/BookPanelResizeHandle"
 import { BookWorkspaceLoadingState } from "../components/book/BookWorkspaceLoadingState";
 import { BookTreePanel } from "../components/book/BookTreePanel";
 import { BookWorkspaceEmptyState } from "../components/book/BookWorkspaceEmptyState";
-import { ActionMenu, ActionMenuItem } from "../components/common/ActionMenu";
 import { BookshelfDialog } from "../components/dialogs/BookshelfDialog";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
@@ -28,16 +27,11 @@ import {
   type BookPanelLayout,
 } from "../lib/bookWorkspace/layout";
 import { getBaseName } from "../lib/bookWorkspace/paths";
+import { useAgentStore } from "../stores/agentStore";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const AUTO_SAVE_DELAY_MS = 800;
 type ResizeHandle = "left" | "right" | null;
-type AnchorRect = {
-  bottom: number;
-  left: number;
-  right: number;
-  top: number;
-};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -72,13 +66,15 @@ function getMaxRightPanelWidth(layout: BookPanelLayout, containerWidth: number) 
 }
 
 type BookPageProps = {
-  onWorkspaceRootChange?: (rootPath: string) => void;
-  requestedRootPath?: string | null;
+  onWorkspaceBookChange?: (bookId: string) => void;
+  onNavigateHome?: () => void;
+  requestedBookId?: string | null;
 };
 
 export function BookPage({
-  onWorkspaceRootChange,
-  requestedRootPath = null,
+  onWorkspaceBookChange,
+  onNavigateHome,
+  requestedBookId = null,
 }: BookPageProps = {}) {
   const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
   const availableBooks = useBookWorkspaceStore((state) => state.availableBooks);
@@ -108,15 +104,16 @@ export function BookPage({
   const refreshWorkspaceList = useBookWorkspaceStore((state) => state.refreshWorkspaceList);
   const requestDelete = useBookWorkspaceStore((state) => state.requestDelete);
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
-  const rootPath = useBookWorkspaceStore((state) => state.rootPath);
+  const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
   const saveActiveFile = useBookWorkspaceStore((state) => state.saveActiveFile);
   const selectFile = useBookWorkspaceStore((state) => state.selectFile);
+  const rootBookName = useBookWorkspaceStore((state) => state.rootBookName);
+  const resetAgentState = useAgentStore((state) => state.reset);
   const setPromptValue = useBookWorkspaceStore((state) => state.setPromptValue);
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
   const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
   const updateDraft = useBookWorkspaceStore((state) => state.updateDraft);
-  const selectWorkspace = useBookWorkspaceStore((state) => state.selectWorkspace);
-  const [bookMenuAnchorRect, setBookMenuAnchorRect] = useState<AnchorRect | null>(null);
+  const selectWorkspaceByBookId = useBookWorkspaceStore((state) => state.selectWorkspaceByBookId);
   const [panelLayout, setPanelLayout] = useState<BookPanelLayout>(
     () => getStoredBookPanelLayout() ?? DEFAULT_BOOK_PANEL_LAYOUT,
   );
@@ -124,10 +121,16 @@ export function BookPage({
   const panelLayoutRef = useRef(panelLayout);
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const cleanupResizeRef = useRef<(() => void) | null>(null);
-  const storedSnapshot = requestedRootPath ? null : getStoredWorkspaceSnapshot();
+  const routeLoadingBookIdRef = useRef<string | null>(null);
+  const storedSnapshot = requestedBookId ? null : getStoredWorkspaceSnapshot();
   const shouldShowWorkspaceRestoreState =
-    !requestedRootPath && !hasInitialized && !rootNode && storedSnapshot !== null;
-  const shouldShowWorkspaceOpenState = Boolean(requestedRootPath && isBusy && !rootNode);
+    !requestedBookId && !hasInitialized && !rootNode && storedSnapshot !== null;
+  const isSwitchingRequestedWorkspace = Boolean(requestedBookId && rootBookId && rootBookId !== requestedBookId);
+  const shouldShowWorkspaceOpenState = Boolean(
+    requestedBookId &&
+      !errorMessage &&
+      (!rootNode || !rootBookId || isSwitchingRequestedWorkspace),
+  );
 
   useEffect(() => {
     panelLayoutRef.current = panelLayout;
@@ -140,28 +143,42 @@ export function BookPage({
   }, []);
 
   useEffect(() => {
-    if (requestedRootPath) {
+    if (requestedBookId) {
       return;
     }
 
     void initializeWorkspace();
-  }, [initializeWorkspace, requestedRootPath]);
+  }, [initializeWorkspace, requestedBookId]);
 
   useEffect(() => {
-    if (!requestedRootPath || rootPath === requestedRootPath) {
+    if (!requestedBookId || rootBookId === requestedBookId) {
+      if (rootBookId === requestedBookId) {
+        routeLoadingBookIdRef.current = null;
+      }
       return;
     }
 
-    void selectWorkspace(requestedRootPath);
-  }, [requestedRootPath, rootPath, selectWorkspace]);
+    routeLoadingBookIdRef.current = requestedBookId;
+    void selectWorkspaceByBookId(requestedBookId);
+  }, [requestedBookId, rootBookId, selectWorkspaceByBookId]);
 
   useEffect(() => {
-    if (!onWorkspaceRootChange || !rootPath || rootPath === requestedRootPath) {
+    return () => {
+      resetAgentState();
+    };
+  }, [resetAgentState]);
+
+  useEffect(() => {
+    if (!onWorkspaceBookChange || !rootBookId || rootBookId === requestedBookId) {
       return;
     }
 
-    onWorkspaceRootChange(rootPath);
-  }, [onWorkspaceRootChange, requestedRootPath, rootPath]);
+    if (routeLoadingBookIdRef.current === requestedBookId) {
+      return;
+    }
+
+    onWorkspaceBookChange(rootBookId);
+  }, [onWorkspaceBookChange, requestedBookId, rootBookId]);
 
   useEffect(() => {
     if (!activeFilePath || !isDirty || isBusy) {
@@ -367,12 +384,24 @@ export function BookPage({
                   onCreateFile={openCreateFileDialog}
                   onCreateFolder={openCreateFolderDialog}
                   onDelete={requestDelete}
-                  onOpenBookMenu={(anchorRect) => setBookMenuAnchorRect(anchorRect)}
+                  onNavigateHome={() => {
+                    if (onNavigateHome) {
+                      onNavigateHome();
+                      return;
+                    }
+
+                    if (typeof window !== "undefined") {
+                      window.location.hash = "#/";
+                    }
+                  }}
                   onRefresh={() => void refreshWorkspace()}
                   onRename={openRenameDialog}
                   onSelectFile={(path) => void selectFile(path)}
                   onToggleDirectory={toggleDirectory}
-                  rootNode={rootNode}
+                  rootNode={{
+                    ...rootNode,
+                    name: rootBookName || rootNode.name,
+                  }}
                   width={panelLayout.leftPanelWidth}
                 />
                 <BookPanelResizeHandle
@@ -416,31 +445,6 @@ export function BookPage({
         )}
       </div>
 
-      <ActionMenu anchorRect={bookMenuAnchorRect} onClose={() => setBookMenuAnchorRect(null)}>
-        <div className="space-y-1">
-          <ActionMenuItem
-            ariaLabel="选择书籍"
-            disabled={isBusy}
-            onClick={() => {
-              setBookMenuAnchorRect(null);
-              void openWorkspace();
-            }}
-          >
-            选择书籍
-          </ActionMenuItem>
-          <ActionMenuItem
-            ariaLabel="新建书籍"
-            disabled={isBusy}
-            onClick={() => {
-              setBookMenuAnchorRect(null);
-              openCreateBookDialog();
-            }}
-          >
-            新建书籍
-          </ActionMenuItem>
-        </div>
-      </ActionMenu>
-
       {promptState ? (
         <PromptDialog
           busy={isBusy}
@@ -476,7 +480,7 @@ export function BookPage({
             closeBookshelf();
             openCreateBookDialog();
           }}
-          onOpen={(rootPath) => void selectWorkspace(rootPath)}
+          onOpen={(bookId) => void selectWorkspaceByBookId(bookId)}
           onRefresh={() => void refreshWorkspaceList()}
         />
       ) : null}

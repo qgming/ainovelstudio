@@ -29,6 +29,7 @@ export type WorkspaceSnapshot = {
 };
 
 export type BookWorkspaceSummary = {
+  id: string;
   name: string;
   path: string;
   updatedAt: number;

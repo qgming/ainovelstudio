@@ -5,6 +5,8 @@ import {
   createWorkspaceDirectory,
   createWorkspaceTextFile,
   deleteWorkspaceEntry,
+  getBookWorkspaceSummary,
+  getBookWorkspaceSummaryById,
   getStoredWorkspaceSnapshot,
   listBookWorkspaces,
   readWorkspaceTextFile,
@@ -52,7 +54,7 @@ export type BookWorkspaceStore = {
   openCreateFolderDialog: (parentPath: string) => void;
   openRenameDialog: (node: TreeNode) => void;
   openWorkspace: () => Promise<void>;
-  selectWorkspace: (rootPath: string) => Promise<void>;
+  selectWorkspaceByBookId: (bookId: string) => Promise<void>;
   promptState: PromptState | null;
   refreshWorkspace: () => Promise<void>;
   refreshWorkspaceList: () => Promise<void>;
@@ -60,6 +62,8 @@ export type BookWorkspaceStore = {
   requestDelete: (node: TreeNode) => void;
   resetState: () => void;
   rootNode: TreeNode | null;
+  rootBookId: string | null;
+  rootBookName: string | null;
   rootPath: string | null;
   saveActiveFile: () => Promise<void>;
   selectFile: (path: string) => Promise<void>;
@@ -67,6 +71,13 @@ export type BookWorkspaceStore = {
   submitPrompt: () => Promise<void>;
   toggleDirectory: (path: string) => void;
   updateDraft: (value: string) => void;
+};
+
+type LoadWorkspaceOptions = {
+  isCurrent?: () => boolean;
+  rootPath: string;
+  selectedFilePath: string | null;
+  workspaceSummary?: BookWorkspaceSummary;
 };
 
 const initialState = {
@@ -82,6 +93,8 @@ const initialState = {
   isBookshelfOpen: false,
   isDirty: false,
   promptState: null,
+  rootBookId: null as string | null,
+  rootBookName: null as string | null,
   rootNode: null as TreeNode | null,
   rootPath: null as string | null,
 };
@@ -153,15 +166,52 @@ async function readAvailableBooks() {
   return listBookWorkspaces();
 }
 
+async function readWorkspaceSummary(rootPath: string): Promise<BookWorkspaceSummary> {
+  const summary = await getBookWorkspaceSummary(rootPath);
+  if (!summary || typeof summary.id !== "string" || typeof summary.path !== "string" || typeof summary.name !== "string") {
+    throw new Error("书籍元数据不完整。");
+  }
+  return summary;
+}
+
+async function readWorkspaceSummaryById(bookId: string): Promise<BookWorkspaceSummary> {
+  const summary = await getBookWorkspaceSummaryById(bookId);
+  if (!summary || typeof summary.id !== "string" || typeof summary.path !== "string" || typeof summary.name !== "string") {
+    throw new Error("书籍元数据不完整。");
+  }
+  return summary;
+}
+
 export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
-  async function loadWorkspace(rootPath: string, selectedFilePath: string | null) {
-    const rootNode = await readWorkspaceTree(rootPath);
+  let workspaceLoadRequestId = 0;
+
+  function createWorkspaceLoadGuard() {
+    const requestId = ++workspaceLoadRequestId;
+    return () => requestId === workspaceLoadRequestId;
+  }
+
+  async function loadWorkspace({
+    rootPath,
+    selectedFilePath,
+    isCurrent = () => true,
+    workspaceSummary,
+  }: LoadWorkspaceOptions) {
+    const [rootNode, workspace] = await Promise.all([
+      readWorkspaceTree(rootPath),
+      workspaceSummary ? Promise.resolve(workspaceSummary) : readWorkspaceSummary(rootPath),
+    ]);
+    if (!isCurrent()) {
+      return false;
+    }
     const nextSelectedFilePath =
       selectedFilePath && findNodeByPath(rootNode, selectedFilePath) ? selectedFilePath : null;
     const expandedPaths = buildExpandedPaths(rootNode, nextSelectedFilePath);
 
     if (nextSelectedFilePath && isTextEditableFile(nextSelectedFilePath)) {
       const content = await readWorkspaceTextFile(rootPath, nextSelectedFilePath);
+      if (!isCurrent()) {
+        return false;
+      }
       set({
         activeFilePath: nextSelectedFilePath,
         confirmState: null,
@@ -169,11 +219,13 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         errorMessage: null,
         expandedPaths,
         isDirty: false,
+        rootBookId: workspace.id,
+        rootBookName: workspace.name,
         rootNode,
         rootPath,
       });
       setStoredWorkspaceSnapshot(rootPath, nextSelectedFilePath);
-      return;
+      return true;
     }
 
     set({
@@ -183,11 +235,14 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       errorMessage: null,
       expandedPaths,
       isDirty: false,
+      rootBookId: workspace.id,
+      rootBookName: workspace.name,
       rootNode,
       rootPath,
     });
 
     setStoredWorkspaceSnapshot(rootPath, null);
+    return true;
   }
 
   async function reloadWorkspace(nextSelectedFilePath: string | null) {
@@ -196,7 +251,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       return;
     }
 
-    await loadWorkspace(rootPath, nextSelectedFilePath);
+    await loadWorkspace({ rootPath, selectedFilePath: nextSelectedFilePath });
   }
 
   async function persistDirtyDraftIfNeeded() {
@@ -257,16 +312,29 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         return;
       }
 
+      const isCurrent = createWorkspaceLoadGuard();
       try {
         set({ isBusy: true });
-        await loadWorkspace(snapshot.rootPath, snapshot.selectedFilePath);
+        const loaded = await loadWorkspace({
+          isCurrent,
+          rootPath: snapshot.rootPath,
+          selectedFilePath: snapshot.selectedFilePath,
+        });
+        if (!loaded || !isCurrent()) {
+          return;
+        }
       } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
         clearStoredWorkspaceSnapshot();
         set({ ...initialState, errorMessage: getReadableError(error), hasInitialized: true });
         return;
       }
 
-      set({ hasInitialized: true, isBusy: false });
+      if (isCurrent()) {
+        set({ hasInitialized: true, isBusy: false });
+      }
     },
     isBusy: false,
     isBookshelfOpen: false,
@@ -301,20 +369,33 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         return;
       }
 
+      const isCurrent = createWorkspaceLoadGuard();
       try {
         set({ errorMessage: null, isBusy: true });
 
         if (isDirty && activeFilePath) {
           await writeWorkspaceTextFile(rootPath, activeFilePath, draftContent);
+          if (!isCurrent()) {
+            return;
+          }
           setStoredWorkspaceSnapshot(rootPath, activeFilePath);
         }
 
-        await loadWorkspace(rootPath, activeFilePath);
+        await loadWorkspace({
+          isCurrent,
+          rootPath,
+          selectedFilePath: activeFilePath,
+        });
       } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
         set({ errorMessage: getReadableError(error) });
       }
 
-      set({ isBusy: false });
+      if (isCurrent()) {
+        set({ isBusy: false });
+      }
     },
     refreshWorkspaceList: async () => {
       try {
@@ -333,17 +414,29 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         return;
       }
 
+      const isCurrent = createWorkspaceLoadGuard();
       try {
         set({ errorMessage: null, isBusy: true });
-        await loadWorkspace(rootPath, activeFilePath);
+        await loadWorkspace({
+          isCurrent,
+          rootPath,
+          selectedFilePath: activeFilePath,
+        });
       } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
         set({ errorMessage: getReadableError(error) });
       }
 
-      set({ isBusy: false });
+      if (isCurrent()) {
+        set({ isBusy: false });
+      }
     },
     requestDelete: (node) => set({ confirmState: buildDeletePrompt(node) }),
     resetState: () => set({ ...initialState }),
+    rootBookId: null,
+    rootBookName: null,
     rootNode: null,
     rootPath: null,
     saveActiveFile: async () => {
@@ -363,17 +456,38 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
 
       set({ isBusy: false });
     },
-    selectWorkspace: async (nextRootPath) => {
+    selectWorkspaceByBookId: async (bookId) => {
+      const isCurrent = createWorkspaceLoadGuard();
       try {
         set({ errorMessage: null, isBookshelfOpen: false, isBusy: true });
         await persistDirtyDraftIfNeeded();
-        await loadWorkspace(nextRootPath, null);
+        if (!isCurrent()) {
+          return;
+        }
+        const workspace = await readWorkspaceSummaryById(bookId);
+        if (!isCurrent()) {
+          return;
+        }
+        const loaded = await loadWorkspace({
+          isCurrent,
+          rootPath: workspace.path,
+          selectedFilePath: null,
+          workspaceSummary: workspace,
+        });
+        if (!loaded || !isCurrent()) {
+          return;
+        }
         set({ hasInitialized: true });
       } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
         set({ errorMessage: getReadableError(error) });
       }
 
-      set({ isBusy: false });
+      if (isCurrent()) {
+        set({ isBusy: false });
+      }
     },
     selectFile: async (path) => {
       const { expandedPaths, rootNode, rootPath } = get();
@@ -425,10 +539,14 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
 
         if (promptState.mode === "createBook") {
           await persistDirtyDraftIfNeeded();
-          const nextRootPath = await createBookWorkspace("", trimmedValue);
+          const workspace = await createBookWorkspace("", trimmedValue);
           const availableBooks = await readAvailableBooks();
           set({ promptState: null });
-          await loadWorkspace(nextRootPath, null);
+          await loadWorkspace({
+            rootPath: workspace.path,
+            selectedFilePath: null,
+            workspaceSummary: workspace,
+          });
           set({
             availableBooks,
             hasInitialized: true,
@@ -454,7 +572,10 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         if (promptState.mode === "createFile" && promptState.parentPath) {
           const nextFilePath = await createWorkspaceTextFile(rootPath, promptState.parentPath, trimmedValue);
           set({ promptState: null });
-          await loadWorkspace(rootPath, nextFilePath);
+          await loadWorkspace({
+            rootPath,
+            selectedFilePath: nextFilePath,
+          });
           set({ isBusy: false });
           return;
         }

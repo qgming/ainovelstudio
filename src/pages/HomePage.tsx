@@ -93,7 +93,7 @@ export function HomePage() {
     event.stopPropagation();
     const nextAnchorRect = toAnchorRect(event.currentTarget.getBoundingClientRect());
     setBookMenuState((current) => {
-      if (current?.book.path === book.path) {
+      if (current?.book.id === book.id) {
         return null;
       }
 
@@ -115,8 +115,8 @@ export function HomePage() {
       setImportBusy(true);
       setErrorMessage(null);
       const archiveBytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-      const rootPath = await importBookZip(file.name, archiveBytes);
-      navigate(buildBookWorkspaceRoute(rootPath));
+      const workspace = await importBookZip(file.name, archiveBytes);
+      navigate(buildBookWorkspaceRoute(workspace.id));
     } catch (error) {
       setErrorMessage(getReadableError(error));
     } finally {
@@ -139,10 +139,10 @@ export function HomePage() {
     try {
       setCreateBusy(true);
       setErrorMessage(null);
-      const rootPath = await createBookWorkspace("", bookName);
+      const workspace = await createBookWorkspace("", bookName);
       setCreateDialogOpen(false);
       setDraftName("");
-      navigate(buildBookWorkspaceRoute(rootPath));
+      navigate(buildBookWorkspaceRoute(workspace.id));
     } catch (error) {
       setErrorMessage(getReadableError(error));
     } finally {
@@ -263,7 +263,7 @@ export function HomePage() {
 
                     return (
                       <div
-                        key={book.path}
+                        key={book.id}
                         className={[
                           "group relative aspect-[3/4] overflow-hidden border border-[#e2e8f0] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition-all duration-200 dark:border-[#20242b] dark:bg-[#111214]",
                           isDeleting || isExporting
@@ -274,7 +274,7 @@ export function HomePage() {
                         <button
                           type="button"
                           aria-label={`打开书籍 ${book.name}`}
-                          onClick={() => navigate(buildBookWorkspaceRoute(book.path))}
+                          onClick={() => navigate(buildBookWorkspaceRoute(book.id))}
                           className="flex h-full w-full flex-col justify-between p-4 pr-12 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b84e7] focus-visible:ring-inset dark:focus-visible:ring-[#7cc4ff]"
                         >
                           <div className="space-y-4">

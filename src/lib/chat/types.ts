@@ -1,6 +1,7 @@
 import type { AgentMessage, AgentRunStatus } from "../agent/types";
 
 export type ChatSessionSummary = {
+  bookId?: string;
   id: string;
   title: string;
   summary: string;
@@ -17,6 +18,7 @@ export type ChatBootstrap = {
   activeSessionId: string | null;
   activeSessionMessages: AgentMessage[];
   activeSessionDraft: string;
+  bookId?: string;
 };
 
 export type ChatSessionPatch = {
