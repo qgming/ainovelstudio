@@ -9,7 +9,11 @@ import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { selectSubAgentForPrompt } from "./delegation";
 import { buildConversationMessages } from "./messageContext";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
-import { buildSubAgentSystem, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
+import {
+  buildSubAgentSystem,
+  buildSystemPrompt,
+  buildUserTurnContent,
+} from "./promptContext";
 import { getPlanningIntervention, type PlanningState } from "./planning";
 import { createToolResultPart, mergeToolResultPart } from "./toolParts";
 import type { AgentUsage } from "./types";
@@ -30,7 +34,10 @@ type RunAgentTurnInput = {
   providerConfig: AgentProviderConfig;
   /** workspace 工具集 */
   workspaceTools: Record<string, AgentTool>;
-  onToolRequestStateChange?: (event: { requestId: string; status: "start" | "finish" }) => void;
+  onToolRequestStateChange?: (event: {
+    requestId: string;
+    status: "start" | "finish";
+  }) => void;
   onUsage?: (usage: AgentUsage) => void;
   /** 可选：用于测试注入的流式调用 */
   _streamFn?: typeof streamAgentText;
@@ -39,7 +46,9 @@ type RunAgentTurnInput = {
 };
 
 function hasProviderConfig(config: AgentProviderConfig) {
-  return Boolean(config.apiKey.trim() && config.baseURL.trim() && config.model.trim());
+  return Boolean(
+    config.apiKey.trim() && config.baseURL.trim() && config.model.trim(),
+  );
 }
 
 function createAbortError() {
@@ -47,7 +56,10 @@ function createAbortError() {
 }
 
 function createToolRequestId(toolName: string) {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return `tool-${toolName}-${crypto.randomUUID()}`;
   }
 
@@ -60,7 +72,10 @@ function throwIfAborted(abortSignal?: AbortSignal) {
   }
 }
 
-async function withAbort<T>(abortSignal: AbortSignal | undefined, task: () => Promise<T>): Promise<T> {
+async function withAbort<T>(
+  abortSignal: AbortSignal | undefined,
+  task: () => Promise<T>,
+): Promise<T> {
   if (!abortSignal) {
     return task();
   }
@@ -84,7 +99,6 @@ async function withAbort<T>(abortSignal: AbortSignal | undefined, task: () => Pr
       });
   });
 }
-
 
 function createSubagentSnapshot({
   detail,
@@ -112,7 +126,10 @@ function createSubagentSnapshot({
   };
 }
 
-function mergeSubagentInnerParts(parts: AgentPart[], part: AgentPart): AgentPart[] {
+function mergeSubagentInnerParts(
+  parts: AgentPart[],
+  part: AgentPart,
+): AgentPart[] {
   if (part.type === "text-delta") {
     const last = parts[parts.length - 1];
     if (last && last.type === "text") {
@@ -124,7 +141,10 @@ function mergeSubagentInnerParts(parts: AgentPart[], part: AgentPart): AgentPart
   if (part.type === "reasoning") {
     const last = parts[parts.length - 1];
     if (last && last.type === "reasoning") {
-      return [...parts.slice(0, -1), { ...last, detail: last.detail + part.detail }];
+      return [
+        ...parts.slice(0, -1),
+        { ...last, detail: last.detail + part.detail },
+      ];
     }
     return [...parts, part];
   }
@@ -148,8 +168,21 @@ async function runSubAgentTask(params: {
   enabledToolIds: string[];
   onProgress?: (snapshot: AgentPart & { type: "subagent" }) => void;
 }): Promise<{ agent: ResolvedAgent; text: string; subagentId: string }> {
-  const { abortSignal, agentId, enabledAgents, enabledSkills, taskPrompt, providerConfig, streamFn, workspaceTools, enabledToolIds, onProgress } = params;
-  const explicitAgent = agentId ? enabledAgents.find((agent) => agent.id === agentId) ?? null : null;
+  const {
+    abortSignal,
+    agentId,
+    enabledAgents,
+    enabledSkills,
+    taskPrompt,
+    providerConfig,
+    streamFn,
+    workspaceTools,
+    enabledToolIds,
+    onProgress,
+  } = params;
+  const explicitAgent = agentId
+    ? (enabledAgents.find((agent) => agent.id === agentId) ?? null)
+    : null;
   if (agentId && !explicitAgent) {
     throw new Error(`未找到可用子代理：${agentId}`);
   }
@@ -170,7 +203,12 @@ async function runSubAgentTask(params: {
 
   const subagentId = `subagent-${matchedAgent.id}-${Date.now()}`;
   const innerParts: AgentPart[] = [];
-  const subagentTools = buildAiSdkTools(workspaceTools, enabledToolIds, abortSignal, undefined);
+  const subagentTools = buildAiSdkTools(
+    workspaceTools,
+    enabledToolIds,
+    abortSignal,
+    undefined,
+  );
 
   throwIfAborted(abortSignal);
   onProgress?.(
@@ -246,7 +284,10 @@ async function runSubAgentTask(params: {
   }
 
   const finalText = innerParts
-    .filter((part): part is Extract<AgentPart, { type: "text" }> => part.type === "text")
+    .filter(
+      (part): part is Extract<AgentPart, { type: "text" }> =>
+        part.type === "text",
+    )
     .map((part) => part.text)
     .join("\n\n");
 
@@ -270,218 +311,375 @@ function buildAiSdkTools(
   workspaceTools: Record<string, AgentTool>,
   enabledToolIds: string[],
   abortSignal?: AbortSignal,
-  onToolRequestStateChange?: (event: { requestId: string; status: "start" | "finish" }) => void,
+  onToolRequestStateChange?: (event: {
+    requestId: string;
+    status: "start" | "finish";
+  }) => void,
 ): ToolSet {
   const toolSet: ToolSet = {};
   type ToolBuilder = (toolName: string, tool: AgentTool) => ToolSet[string];
-  const runTool = async (toolName: string, tool: AgentTool, input: Record<string, unknown>) => {
+  const runTool = async (
+    toolName: string,
+    tool: AgentTool,
+    input: Record<string, unknown>,
+  ) => {
     const requestId = createToolRequestId(toolName);
     onToolRequestStateChange?.({ requestId, status: "start" });
     try {
-      return await withAbort(abortSignal, () => tool.execute(input, { abortSignal, requestId }));
+      return await withAbort(abortSignal, () =>
+        tool.execute(input, { abortSignal, requestId }),
+      );
     } finally {
       onToolRequestStateChange?.({ requestId, status: "finish" });
     }
   };
   const builders: Record<string, ToolBuilder> = {
-    create_file: (toolName, tool) =>
-      defineTool({
-        description: "在指定目录创建新的文本文件。适合新增文件；如果目标文件已经存在或你只是想修改旧文件内容，不要用它。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          parentPath: z.string().describe("新文件所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 正文/第一卷。"),
-          name: z.string().describe("要创建的文件名，通常应包含扩展名，如 chapter-01.md。"),
-        }),
-        execute: async (input: { parentPath: string; name: string }) => {
-          const result = await runTool(toolName, tool, input);
-          return result.summary;
-        },
-      }),
-    create_folder: (toolName, tool) =>
-      defineTool({
-        description: "在指定目录创建文件夹。适合补齐目录结构，不负责创建文件内容。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          parentPath: z.string().describe("新文件夹所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 08-场景规划。"),
-          name: z.string().describe("要创建的文件夹名称，不要传完整路径。"),
-        }),
-        execute: async (input: { parentPath: string; name: string }) => {
-          const result = await runTool(toolName, tool, input);
-          return result.summary;
-        },
-      }),
-    delete_path: (toolName, tool) =>
-      defineTool({
-        description: "删除指定文件或目录。只有在你已经确认目标路径和影响范围时才使用，避免把它当清理未知内容的通用手段。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          path: z.string().describe("工作区内要删除的准确路径。优先使用相对工作区根目录的路径；删除目录会递归影响其下内容。"),
-        }),
-        execute: async (input: { path: string }) => {
-          const result = await runTool(toolName, tool, input);
-          return result.summary;
-        },
-      }),
-    line_edit: (toolName, tool) =>
-      defineTool({
-        description: "按行读取或替换文本。适合小范围精确修改；get 可读取任意正整数行号，超出文件末尾时返回空行。replace 会替换指定行，必要时自动补空行；为避免改错位置，替换前应传入前一行和后一行做校验。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          action: z.enum(["get", "replace"]).describe("get 读取单行内容；replace 仅替换这一行，不会跨行编辑。"),
-          contents: z.string().optional().describe("仅在 action=replace 时传入。必须是单行文本，不能包含换行符，也不应附带行号。"),
-          lineNumber: z.number().int().positive().describe("从 1 开始的目标行号。get 支持任意正整数；replace 超出文件末尾时会自动补空行到目标位置。"),
-          nextLine: z.string().optional().describe("仅在 action=replace 时使用。目标行后一行的当前内容，用于防止行号漂移导致误改；如果后一行不存在，传空字符串。"),
-          path: z.string().describe("要操作的工作区文本文件路径，必须是已经存在的文本文件。优先使用相对工作区根目录的路径，例如 05-完整大纲.md。"),
-          previousLine: z.string().optional().describe("仅在 action=replace 时使用。目标行前一行的当前内容，用于防止行号漂移导致误改；如果前一行不存在，传空字符串。"),
-        }),
-        execute: async (input: {
-          action: "get" | "replace";
-          contents?: string;
-          lineNumber: number;
-          nextLine?: string;
-          path: string;
-          previousLine?: string;
-        }) => {
-          const result = await runTool(toolName, tool, input as unknown as Record<string, unknown>);
-          return result.data ?? result.summary;
-        },
-      }),
-    list_agents: (toolName, tool) =>
-      defineTool({
-        description:
-          "读取当前本地可用 agents 列表，返回 agent 的基础信息和可读取文件列表。通常在你还不确定 agentId 时先调用它。",
-        inputSchema: z.object({}),
-        execute: async (_input: Record<string, never>) => {
-          const result = await runTool(toolName, tool, {});
-          return result.data ?? result.summary;
-        },
-      }),
     todo: (toolName, tool) =>
       defineTool({
         description:
-          "更新当前会话里的短计划。适合把正在做的几步显式写出来，并保持同一时间最多一个 in_progress。",
+          "更新当前会话里的短计划，并保持同一时间最多一个 in_progress。",
         inputSchema: z.object({
-          items: z.array(
-            z.object({
-              content: z.string().min(1).describe("这一步要做什么。"),
-              status: z.enum(["pending", "in_progress", "completed"]).default("pending"),
-              activeForm: z.string().optional().describe("当步骤进行中时更自然的进行时描述。"),
-            }),
-          ).describe("当前整份计划。允许整份重写；同一时间最多一个 in_progress。"),
+          items: z
+            .array(
+              z.object({
+                activeForm: z
+                  .string()
+                  .optional()
+                  .describe("当步骤处于进行中时，更自然的进行时描述。"),
+                content: z.string().min(1).describe("这一步要做什么。"),
+                status: z
+                  .enum(["pending", "in_progress", "completed"])
+                  .default("pending"),
+              }),
+            )
+            .describe("当前整份计划。允许整份重写。"),
         }),
-        execute: async (input: {
-          items: Array<{
-            activeForm?: string;
-            content: string;
-            status?: "pending" | "in_progress" | "completed";
-          }>;
-        }) => {
-          const result = await runTool(toolName, tool, input as unknown as Record<string, unknown>);
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
           return result.data ?? result.summary;
         },
       }),
-    list_skills: (toolName, tool) =>
+    browse: (toolName, tool) =>
       defineTool({
         description:
-          "读取当前本地可用 skills 列表，返回 skill 的基础信息和可读取文件列表。通常在你还不确定 skillId 时先调用它。",
-        inputSchema: z.object({}),
-        execute: async (_input: Record<string, never>) => {
-          const result = await runTool(toolName, tool, {});
-          return result.data ?? result.summary;
-        },
-      }),
-    read_agent_file: (toolName, tool) =>
-      defineTool({
-        description:
-          "读取指定 agent 内文件内容。先用 list_agents 确认 agentId，再读取 manifest.json、AGENTS.md、TOOLS.md 或 MEMORY.md。",
+          "浏览工作区结构。适合先看目录树、列出目录内容，或检查某个路径的概况。",
         inputSchema: z.object({
-          agentId: z.string().describe("目标代理 ID。建议先通过 list_agents 获取，避免传错。"),
+          depth: z
+            .number()
+            .int()
+            .positive()
+            .max(8)
+            .optional()
+            .describe("仅在 mode=tree 时使用。限制返回的树深度，默认 2。"),
+          mode: z
+            .enum(["list", "stat", "tree"])
+            .default("list")
+            .describe(
+              "list 列出目录直接子项；stat 查看路径概况；tree 返回裁剪后的目录树。",
+            ),
+          path: z
+            .string()
+            .optional()
+            .describe("要浏览的相对工作区路径；不传时默认为工作区根目录。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    search: (toolName, tool) =>
+      defineTool({
+        description:
+          "搜索目录名、文件名和正文内容，用于先定位目标，再决定是否 read 或 edit。",
+        inputSchema: z.object({
+          extensions: z
+            .array(z.string())
+            .optional()
+            .describe("可选的扩展名过滤，如 ['md', '.json']。"),
+          limit: z
+            .number()
+            .int()
+            .positive()
+            .max(200)
+            .optional()
+            .describe("最多返回多少条结果。默认 50。"),
+          path: z
+            .string()
+            .optional()
+            .describe("可选，相对工作区路径，只在该路径下过滤结果。"),
+          query: z
+            .string()
+            .describe("搜索关键词，建议传短语、章节名、角色名或字段名。"),
+          scope: z
+            .enum(["all", "content", "names"])
+            .default("all")
+            .describe(
+              "all 搜目录名+文件名+正文，content 只搜正文，names 只搜目录名和文件名。",
+            ),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    read: (toolName, tool) =>
+      defineTool({
+        description:
+          "读取文本文件。已知准确路径时使用；支持全文、头部、尾部或指定行段。",
+        inputSchema: z.object({
+          endLine: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("仅在 mode=range 时使用。结束行号，包含该行。"),
+          limit: z
+            .number()
+            .int()
+            .positive()
+            .max(400)
+            .optional()
+            .describe("在 head 或 tail 模式下返回的最大行数，默认 80。"),
+          mode: z
+            .enum(["full", "head", "range", "tail"])
+            .default("full")
+            .describe(
+              "full 返回全文；head / tail 返回头尾片段；range 返回指定行段。",
+            ),
+          path: z.string().describe("目标文本文件的相对工作区路径。"),
+          startLine: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("仅在 mode=range 时使用。起始行号，从 1 开始。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    edit: (toolName, tool) =>
+      defineTool({
+        description:
+          "对文本做局部编辑。适合替换、前插、后插、追加或前置，不需要整份重写。",
+        inputSchema: z.object({
+          action: z
+            .enum([
+              "append",
+              "insert_after",
+              "insert_before",
+              "prepend",
+              "replace",
+            ])
+            .default("replace"),
+          content: z.string().describe("要写入的新文本。"),
+          expectedCount: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("replaceAll=false 时，预期 target 命中的次数，默认 1。"),
+          path: z.string().describe("目标文本文件的相对工作区路径。"),
+          replaceAll: z
+            .boolean()
+            .optional()
+            .describe("为 true 时，对所有命中的 target 生效。"),
+          target: z
+            .string()
+            .optional()
+            .describe(
+              "replace / insert_before / insert_after 时需要的锚点文本。",
+            ),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.summary;
+        },
+      }),
+    write: (toolName, tool) =>
+      defineTool({
+        description: "整文件覆盖写入。只有在你已经准备好完整新内容时使用。",
+        inputSchema: z.object({
+          content: z.string().describe("文件的新完整内容。"),
+          path: z.string().describe("目标文件的相对工作区路径。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.summary;
+        },
+      }),
+    json: (toolName, tool) =>
+      defineTool({
+        description:
+          "读取或局部更新 JSON。优先用它改字段、对象和数组，不要为了改一个键整份重写。",
+        inputSchema: z.object({
+          action: z
+            .enum(["append", "delete", "get", "merge", "set"])
+            .default("get"),
+          path: z.string().describe("目标 JSON 文件的相对工作区路径。"),
+          pointer: z
+            .string()
+            .optional()
+            .describe(
+              "JSON Pointer。空字符串表示根节点，例如 /stage、/chapters/0/title。",
+            ),
+          value: z
+            .unknown()
+            .optional()
+            .describe("set / merge / append 时需要的新值。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    path: (toolName, tool) =>
+      defineTool({
+        description:
+          "处理工作区中的结构性变更，如创建文件、创建文件夹、重命名、迁移和删除。",
+        inputSchema: z.object({
+          action: z
+            .enum(["create_file", "create_folder", "delete", "move", "rename"])
+            .describe("要执行的路径动作。"),
+          name: z
+            .string()
+            .optional()
+            .describe("create_file / create_folder / rename 时需要的名称。"),
+          parentPath: z
+            .string()
+            .optional()
+            .describe("create_file / create_folder 时使用的父目录路径。"),
+          path: z
+            .string()
+            .optional()
+            .describe("rename / move / delete 时的目标路径。"),
+          targetParentPath: z
+            .string()
+            .optional()
+            .describe("move 时的目标父目录路径。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.summary;
+        },
+      }),
+    skill: (toolName, tool) =>
+      defineTool({
+        description:
+          "读取或管理本地 skill。先 list，再 read / write 具体文件。",
+        inputSchema: z.object({
+          action: z
+            .enum([
+              "create",
+              "create_reference",
+              "delete",
+              "list",
+              "read",
+              "write",
+            ])
+            .default("list"),
+          content: z
+            .string()
+            .optional()
+            .describe("write 时要写入 skill 文件的新内容。"),
+          description: z
+            .string()
+            .optional()
+            .describe("create 时的新 skill 简介。"),
+          name: z
+            .string()
+            .optional()
+            .describe(
+              "create 时的新 skill 名称；create_reference 时的新参考文件名称。",
+            ),
           relativePath: z
             .string()
-            .describe("代理目录内的相对路径，例如 manifest.json、AGENTS.md、TOOLS.md 或 MEMORY.md。"),
+            .optional()
+            .describe(
+              "read / write 时 skill 内的相对路径，如 SKILL.md 或 references/voice.md。",
+            ),
+          skillId: z
+            .string()
+            .optional()
+            .describe("list 之外的动作通常都需要 skillId。"),
         }),
-        execute: async (input: { agentId: string; relativePath: string }) => {
-          const result = await runTool(toolName, tool, input as unknown as Record<string, unknown>);
-          return result.summary;
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
         },
       }),
-    read_file: (toolName, tool) =>
-      defineTool({
-        description: "读取完整文本文件内容。仅在你已经知道准确路径、并且需要查看全文上下文时使用；如果还不知道文件或目录在哪里，先用 search_workspace_content 或 read_workspace_tree 缩小范围。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          path: z.string().describe("工作区内的准确文本文件路径。优先使用相对工作区根目录的路径，例如 05-完整大纲.md；该工具不会帮你搜索路径，因此未知路径时不要直接调用。"),
-        }),
-        execute: async (input: { path: string }) => {
-          const result = await runTool(toolName, tool, input);
-          return result.summary;
-        },
-      }),
-    read_skill_file: (toolName, tool) =>
+    agent: (toolName, tool) =>
       defineTool({
         description:
-          "读取指定 skill 内文件内容。先用 list_skills 确认 skillId 与可读文件，再读取如 SKILL.md 或 references/*.md。",
+          "读取或管理本地 agent。先 list，再 read / write 具体文件。",
         inputSchema: z.object({
-          skillId: z.string().describe("目标技能 ID。建议先通过 list_skills 获取，避免传错。"),
+          action: z
+            .enum(["create", "delete", "list", "read", "write"])
+            .default("list"),
+          agentId: z
+            .string()
+            .optional()
+            .describe("list 之外的动作通常都需要 agentId。"),
+          content: z
+            .string()
+            .optional()
+            .describe("write 时要写入 agent 文件的新内容。"),
+          description: z
+            .string()
+            .optional()
+            .describe("create 时的新 agent 简介。"),
+          name: z.string().optional().describe("create 时的新 agent 名称。"),
           relativePath: z
             .string()
-            .describe("技能目录内的相对路径，例如 SKILL.md 或 references/xxx.md。"),
+            .optional()
+            .describe(
+              "read / write 时 agent 内的相对路径，如 manifest.json、AGENTS.md、TOOLS.md 或 MEMORY.md。",
+            ),
         }),
-        execute: async (input: { relativePath: string; skillId: string }) => {
-          const result = await runTool(toolName, tool, input as unknown as Record<string, unknown>);
-          return result.summary;
-        },
-      }),
-    read_workspace_tree: (toolName, tool) =>
-      defineTool({
-        description: "读取当前工作区的目录树。适合先了解目录结构、入口文件和层级关系；它不会搜索文件正文。",
-        inputSchema: z.object({}),
-        execute: async (_input: Record<string, never>) => {
-          const result = await runTool(toolName, tool, {});
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
           return result.data ?? result.summary;
-        },
-      }),
-    rename: (toolName, tool) =>
-      defineTool({
-        description: "重命名工作区中的文件夹或文件。既支持文件夹重命名，也支持文件名重命名；只改名称，不修改文件正文。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          path: z.string().describe("当前的准确路径，必须已经存在于工作区内；可以是文件夹，也可以是文件。优先使用相对工作区根目录的路径。"),
-          nextName: z.string().describe("新的文件夹名称或文件名，只传名称本身，不要传完整路径。"),
-        }),
-        execute: async (input: { path: string; nextName: string }) => {
-          const result = await runTool(toolName, tool, input);
-          return result.summary;
-        },
-      }),
-    move_path: (toolName, tool) =>
-      defineTool({
-        description: "将工作区中的文件夹或文件迁移到另一个已存在的目录。只改位置，不改名称，也不修改文件正文。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          path: z.string().describe("当前的准确路径，必须已经存在于工作区内；可以是文件夹，也可以是文件。优先使用相对工作区根目录的路径。"),
-          targetParentPath: z.string().describe("目标父目录路径，必须已经存在于工作区内。只传目标目录，不要包含文件或文件夹自己的名称。"),
-        }),
-        execute: async (input: { path: string; targetParentPath: string }) => {
-          const result = await runTool(toolName, tool, input);
-          return result.summary;
-        },
-      }),
-    search_workspace_content: (toolName, tool) =>
-      defineTool({
-        description: "搜索工作区中的目录名、文件名和正文命中，用于定位目标、判断下一步该读哪个文件或改哪个位置。它只返回命中摘要，不返回完整文件内容。",
-        inputSchema: z.object({
-          limit: z.number().int().positive().max(200).optional().describe("最多返回多少条结果。默认 50，最大 200；范围越大，结果越噪。"),
-          query: z.string().describe("搜索关键词，可匹配目录名、文件名和正文内容。建议传短语或关键实体，不要传整段自然语言。"),
-        }),
-        execute: async (input: { limit?: number; query: string }) => {
-          const result = await runTool(toolName, tool, input as unknown as Record<string, unknown>);
-          return result.data ?? result.summary;
-        },
-      }),
-    write_file: (toolName, tool) =>
-      defineTool({
-        description: "整文件覆盖写入。适用于你已经准备好文件的完整新内容时；调用后会覆盖原文件全部文本。若目标目录或文件不存在，会自动创建；如果只是小改动，优先使用 line_edit。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
-        inputSchema: z.object({
-          path: z.string().describe("要覆盖写入的目标文件路径。优先使用相对工作区根目录的路径，例如 05-完整大纲.md；若上级目录或文件不存在，会在工作区内自动创建。"),
-          contents: z.string().describe("文件的新完整内容。会整体覆盖旧内容，不是追加写入。"),
-        }),
-        execute: async (input: { path: string; contents: string }) => {
-          const result = await runTool(toolName, tool, input);
-          return result.summary;
         },
       }),
   };
@@ -532,17 +730,29 @@ export async function* runAgentTurn({
 }: RunAgentTurnInput): AsyncGenerator<AgentPart> {
   const progressQueue: AgentPart[] = [];
   if (!hasProviderConfig(providerConfig)) {
-    yield { type: "text", text: "请先前往设置页配置 Base URL、API Key 和模型名称，再运行 Agent。" };
+    yield {
+      type: "text",
+      text: "请先前往设置页配置 Base URL、API Key 和模型名称，再运行 Agent。",
+    };
     return;
   }
 
-  const aiTools = buildAiSdkTools(workspaceTools, enabledToolIds, abortSignal, onToolRequestStateChange);
+  const aiTools = buildAiSdkTools(
+    workspaceTools,
+    enabledToolIds,
+    abortSignal,
+    onToolRequestStateChange,
+  );
   if (enabledToolIds.includes("task") && enabledAgents.length > 0) {
     aiTools.task = defineTool({
-      description: "将局部任务交给子代理在干净上下文中执行，并返回摘要结果。可传 agentId 指定目标代理。",
+      description:
+        "将局部任务交给子代理在干净上下文中执行，并返回摘要结果。可传 agentId 指定目标代理。",
       inputSchema: z.object({
         prompt: z.string().min(1).describe("需要外包给子代理的局部任务指令。"),
-        agentId: z.string().optional().describe("可选。目标子代理 ID；不传时系统会尝试自动匹配。"),
+        agentId: z
+          .string()
+          .optional()
+          .describe("可选。目标子代理 ID；不传时系统会尝试自动匹配。"),
       }),
       execute: async (input: { prompt: string; agentId?: string }) => {
         const output = await runSubAgentTask({
@@ -665,8 +875,3 @@ export async function* runAgentTurn({
 }
 
 export { createSystemMessage };
-
-
-
-
-

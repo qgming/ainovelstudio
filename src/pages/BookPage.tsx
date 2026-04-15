@@ -27,7 +27,6 @@ import {
   type BookPanelLayout,
 } from "../lib/bookWorkspace/layout";
 import { getBaseName } from "../lib/bookWorkspace/paths";
-import { useAgentStore } from "../stores/agentStore";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const AUTO_SAVE_DELAY_MS = 800;
@@ -108,7 +107,6 @@ export function BookPage({
   const saveActiveFile = useBookWorkspaceStore((state) => state.saveActiveFile);
   const selectFile = useBookWorkspaceStore((state) => state.selectFile);
   const rootBookName = useBookWorkspaceStore((state) => state.rootBookName);
-  const resetAgentState = useAgentStore((state) => state.reset);
   const setPromptValue = useBookWorkspaceStore((state) => state.setPromptValue);
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
   const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
@@ -161,12 +159,6 @@ export function BookPage({
     routeLoadingBookIdRef.current = requestedBookId;
     void selectWorkspaceByBookId(requestedBookId);
   }, [requestedBookId, rootBookId, selectWorkspaceByBookId]);
-
-  useEffect(() => {
-    return () => {
-      resetAgentState();
-    };
-  }, [resetAgentState]);
 
   useEffect(() => {
     if (!onWorkspaceBookChange || !rootBookId || rootBookId === requestedBookId) {

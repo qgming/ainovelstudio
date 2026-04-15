@@ -6,7 +6,7 @@ import {
   type PlanningIntervention,
   type PlanningState,
 } from "./planning";
-import { BUILTIN_TOOLS } from "./toolDefs";
+import { BUILTIN_TOOLS, normalizeSuggestedToolIds } from "./toolDefs";
 
 // 最小后备文本，正常流程会从 AGENTS.md 文件加载完整人设
 export const DEFAULT_MAIN_AGENT_MARKDOWN = [
@@ -49,7 +49,7 @@ type TaskProfile = {
 };
 
 const SKILL_LOADING_NOTE =
-  "system 里只保留技能目录；需要某个 skill 的完整规则时，再用 read_skill_file 按需读取 SKILL.md 或 references。";
+  "system 里只保留技能目录；需要某个 skill 的完整规则时，再用 skill 工具按需读取 SKILL.md 或 references。";
 const MANUAL_CONTEXT_FILE_CHAR_LIMIT = 6_000;
 const MANUAL_CONTEXT_TOTAL_CHAR_LIMIT = 12_000;
 
@@ -102,11 +102,12 @@ function createMiddleExcerpt(value: string, maxChars: number) {
 }
 
 function buildSkillCatalogBlock(skill: ResolvedSkill) {
+  const suggestedTools = normalizeSuggestedToolIds(skill.suggestedTools);
   return [
     `### 技能：${skill.name}`,
     `- 说明：${skill.description}`,
-    skill.suggestedTools.length > 0
-      ? `- 常用工具：${skill.suggestedTools.join(", ")}`
+    suggestedTools.length > 0
+      ? `- 常用工具：${suggestedTools.join(", ")}`
       : null,
     skill.references.length > 0
       ? `- 可读参考：${skill.references.length} 份`
@@ -117,6 +118,7 @@ function buildSkillCatalogBlock(skill: ResolvedSkill) {
 }
 
 function buildAgentCatalogBlock(agent: ResolvedAgent) {
+  const suggestedTools = normalizeSuggestedToolIds(agent.suggestedTools);
   return [
     `### 子代理：${agent.name}`,
     `- 来源：${agent.sourceLabel}`,
@@ -124,8 +126,8 @@ function buildAgentCatalogBlock(agent: ResolvedAgent) {
     `- 说明：${agent.description}`,
     agent.dispatchHint ? `- 适用时机：${agent.dispatchHint}` : null,
     agent.tags.length > 0 ? `- 匹配标签：${agent.tags.join(", ")}` : null,
-    agent.suggestedTools.length > 0
-      ? `- 推荐工具：${agent.suggestedTools.join(", ")}`
+    suggestedTools.length > 0
+      ? `- 推荐工具：${suggestedTools.join(", ")}`
       : "- 推荐工具：无",
   ]
     .filter(Boolean)
@@ -133,7 +135,9 @@ function buildAgentCatalogBlock(agent: ResolvedAgent) {
 }
 
 function buildToolPromptBlock(enabledToolIds: string[]) {
-  const enabledTools = BUILTIN_TOOLS.filter((tool) => enabledToolIds.includes(tool.id));
+  const enabledTools = BUILTIN_TOOLS.filter((tool) =>
+    enabledToolIds.includes(tool.id),
+  );
 
   if (enabledTools.length === 0) {
     return "- 当前未启用任何工作区工具。";
@@ -144,11 +148,12 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
     "- 多步任务先调用 todo 写出当前计划，并在每完成一步后及时更新。",
     "- todo 只维护当前会话里的短计划，不要把它当长期任务系统。",
     "- 当任务需要子代理隔离上下文执行时，主动调用 task 工具，而不是在主上下文里展开长链路。",
-    "- 未知路径或未知入口时，优先使用 search_workspace_content 或 read_workspace_tree 缩小范围。",
+    "- 未知路径、未知入口或需要先看目录结构时，优先使用 browse 或 search 缩小范围。",
     "- 涉及工作区路径时，默认优先传相对工作区根目录的路径，不要传绝对路径；例如用 `05-完整大纲.md`，不要用 `C:/.../05-完整大纲.md`。",
-    "- 已知准确路径且需要全文上下文时，再使用 read_file。",
-    "- 小范围改动优先使用 line_edit；只有整份内容都准备好了才使用 write_file。",
-    "- create_file / create_folder / rename / move_path / delete_path 只处理结构变更，不负责正文读取。",
+    "- 已知准确路径且需要正文内容时，再使用 read。",
+    "- 小范围文本修改优先使用 edit；只有整份内容都准备好了才使用 write。",
+    "- JSON 数据优先使用 json 做局部读取和局部更新，不要为了改一个字段整份重写。",
+    "- 结构变更统一使用 path；skill 和 agent 内文件统一分别走 skill / agent 工具。",
     "当前已启用工具目录：",
     ...enabledTools.map((tool) => `- ${tool.name}（${tool.id}）`),
   ].join("\n");
@@ -166,7 +171,9 @@ function buildPlanningStateBlock(planningState?: PlanningState | null) {
   ].join("\n");
 }
 
-function buildPlanningInterventionBlock(planningIntervention?: PlanningIntervention | null) {
+function buildPlanningInterventionBlock(
+  planningIntervention?: PlanningIntervention | null,
+) {
   if (!planningIntervention) {
     return null;
   }
@@ -259,7 +266,9 @@ function inferFileKind(activeFilePath: string | null) {
   return "通用工作区文件";
 }
 
-function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null) {
+function buildManualContextBlock(
+  manualContext?: ManualTurnContextPayload | null,
+) {
   if (!manualContext) {
     return null;
   }
@@ -270,7 +279,9 @@ function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null
     blocks.push(
       [
         "### 手动指定技能",
-        ...manualContext.skills.map((skill) => `- ${skill.name}：${skill.description}`),
+        ...manualContext.skills.map(
+          (skill) => `- ${skill.name}：${skill.description}`,
+        ),
         "- 这些 skill 当前仅以目录信息注入；需要完整步骤时，请再读取对应 SKILL.md。",
       ].join("\n"),
     );
@@ -280,8 +291,9 @@ function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null
     blocks.push(
       [
         "### 手动指定子代理",
-        ...manualContext.agents.map((agent) =>
-          `- ${agent.name}${agent.role ? `（${agent.role}）` : ""}：${agent.description}`,
+        ...manualContext.agents.map(
+          (agent) =>
+            `- ${agent.name}${agent.role ? `（${agent.role}）` : ""}：${agent.description}`,
         ),
       ].join("\n"),
     );
@@ -296,11 +308,11 @@ function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null
         break;
       }
 
-      const allocatedChars = Math.min(MANUAL_CONTEXT_FILE_CHAR_LIMIT, remainingChars);
-      const excerpt = createMiddleExcerpt(
-        file.content,
-        allocatedChars,
+      const allocatedChars = Math.min(
+        MANUAL_CONTEXT_FILE_CHAR_LIMIT,
+        remainingChars,
       );
+      const excerpt = createMiddleExcerpt(file.content, allocatedChars);
       remainingChars -= Math.min(file.content.trim().length, allocatedChars);
 
       renderedFiles.push(
@@ -308,7 +320,7 @@ function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null
           `#### ${file.name}`,
           `- 路径：${file.path}`,
           excerpt.truncated
-            ? `- 注入方式：已裁剪摘录，约省略 ${excerpt.omittedChars} 个字符；如需全文请再用 read_file 读取。`
+            ? `- 注入方式：已裁剪摘录，约省略 ${excerpt.omittedChars} 个字符；如需全文请再用 read 读取。`
             : "- 注入方式：已直接注入当前文件内容。",
           "```text",
           excerpt.text,
@@ -323,7 +335,7 @@ function buildManualContextBlock(manualContext?: ManualTurnContextPayload | null
         "### 手动指定文件",
         ...renderedFiles,
         omittedFileCount > 0
-          ? `- 另外还有 ${omittedFileCount} 个手动文件未直接注入，以控制上下文体积；需要时请按路径调用 read_file。`
+          ? `- 另外还有 ${omittedFileCount} 个手动文件未直接注入，以控制上下文体积；需要时请按路径调用 read。`
           : null,
       ].join("\n\n"),
     );
@@ -403,16 +415,19 @@ export function buildSubAgentSystem(
   const skillBlock =
     enabledSkills.length > 0
       ? enabledSkills
-          .map((skill) =>
-            [
+          .map((skill) => {
+            const suggestedTools = normalizeSuggestedToolIds(
+              skill.suggestedTools,
+            );
+            return [
               `### 技能：${skill.name}`,
               `- 说明：${skill.description}`,
-              skill.suggestedTools.length > 0
-                ? `- 推荐工具：${skill.suggestedTools.join(", ")}`
+              suggestedTools.length > 0
+                ? `- 推荐工具：${suggestedTools.join(", ")}`
                 : "- 推荐工具：无",
               skill.effectivePrompt,
-            ].join("\n"),
-          )
+            ].join("\n");
+          })
           .join("\n\n")
       : "- 当前没有额外技能。";
 

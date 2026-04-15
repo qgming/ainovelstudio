@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
-import {
-  buildSystemPrompt,
-  buildUserTurnContent,
-} from "./promptContext";
+import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 
 function createSkill(overrides: Partial<ResolvedSkill> = {}): ResolvedSkill {
   return {
@@ -17,7 +14,9 @@ function createSkill(overrides: Partial<ResolvedSkill> = {}): ResolvedSkill {
     enabled: true,
     isBuiltin: true,
     rawMarkdown: "",
-    references: [{ name: "checklist.md", path: "references/checklist.md", size: 1 }],
+    references: [
+      { name: "checklist.md", path: "references/checklist.md", size: 1 },
+    ],
     sourceKind: "builtin-package",
     sourceLabel: "内置",
     suggestedTools: ["read_file"],
@@ -80,7 +79,7 @@ describe("prompt context", () => {
 
     expect(prompt).toContain("### 手动指定文件");
     expect(prompt).toContain("已裁剪摘录");
-    expect(prompt).toContain("如需全文请再用 read_file 读取");
+    expect(prompt).toContain("如需全文请再用 read 读取");
     expect(prompt).toContain("开头内容");
     expect(prompt).toContain("结尾内容");
     expect(prompt).toContain("…（中间省略）…");

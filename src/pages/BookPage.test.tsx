@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { BookPage } from "./BookPage";
+import { useAgentStore } from "../stores/agentStore";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const bookId = "book-1";
@@ -141,6 +142,7 @@ describe("BookPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
     useBookWorkspaceStore.getState().resetState();
+    useAgentStore.getState().reset();
     mockInvoke.mockReset();
     setupInvokeMock();
   });
@@ -528,6 +530,48 @@ describe("BookPage", () => {
 
     expect(handleWorkspaceBookChange).not.toHaveBeenCalled();
     expect(useBookWorkspaceStore.getState().rootBookId).toBe(otherBookId);
+  });
+
+  it("页面卸载时会保留正在运行的 Agent 会话", () => {
+    const runningMessages = [
+      {
+        id: "user-1",
+        role: "user" as const,
+        author: "你",
+        parts: [{ type: "text" as const, text: "继续写下一章" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant" as const,
+        author: "主代理",
+        parts: [{ type: "text" as const, text: "正在生成正文" }],
+      },
+    ];
+
+    useAgentStore.setState({
+      abortController: new AbortController(),
+      activeRunRequestId: "run-1",
+      activeSessionId: "session-1",
+      currentBookId: bookId,
+      isHydrated: true,
+      messagesBySession: { "session-1": runningMessages },
+      run: {
+        id: "session-1",
+        status: "running",
+        title: "继续写下一章",
+        messages: runningMessages,
+      },
+      status: "ready",
+    });
+
+    const view = render(<BookPage />);
+    view.unmount();
+
+    const state = useAgentStore.getState();
+    expect(state.activeRunRequestId).toBe("run-1");
+    expect(state.abortController).not.toBeNull();
+    expect(state.run.status).toBe("running");
+    expect(state.run.messages).toEqual(runningMessages);
   });
 });
 

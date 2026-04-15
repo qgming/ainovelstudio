@@ -77,15 +77,15 @@ describe("agent settings store", () => {
       enabledTools: { read_file: false },
     });
 
-    useAgentSettingsStore.getState().toggleTool("read_file");
+    useAgentSettingsStore.getState().toggleTool("read");
     await Promise.resolve();
 
-    expect(useAgentSettingsStore.getState().enabledTools.read_file).toBe(false);
+    expect(useAgentSettingsStore.getState().enabledTools.read).toBe(false);
     expect(mockInvoke).toHaveBeenCalledWith("write_agent_settings", {
       settings: expect.objectContaining({
         enabledTools: expect.objectContaining({
-          read_file: false,
-          write_file: true,
+          read: false,
+          write: true,
         }),
       }),
     });
@@ -123,9 +123,12 @@ describe("agent settings store", () => {
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("sqlite-model");
-    expect(state.enabledTools.read_file).toBe(false);
-    expect(state.enabledTools.write_file).toBe(true);
-    expect(mockInvoke).not.toHaveBeenCalledWith("write_agent_settings", expect.anything());
+    expect(state.enabledTools.read).toBe(false);
+    expect(state.enabledTools.write).toBe(true);
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "write_agent_settings",
+      expect.anything(),
+    );
   });
 
   it("initialize 遇到缺少字段的旧 SQLite 设置时，仍会按默认值补齐并保留已有 key/url/model", async () => {
@@ -195,7 +198,9 @@ describe("agent settings store", () => {
   });
 
   it("并发 initialize 会等待同一轮加载完成", async () => {
-    const deferred: { resolve: ((value: null) => void) | null } = { resolve: null };
+    const deferred: { resolve: ((value: null) => void) | null } = {
+      resolve: null,
+    };
 
     mockInvoke.mockImplementation((command: string) => {
       if (command === "initialize_default_agent_config") {
@@ -223,7 +228,11 @@ describe("agent settings store", () => {
     const second = useAgentSettingsStore.getState().initialize();
 
     expect(mockInvoke).toHaveBeenCalledWith("read_agent_settings");
-    expect(mockInvoke.mock.calls.filter(([command]) => command === "read_agent_settings")).toHaveLength(1);
+    expect(
+      mockInvoke.mock.calls.filter(
+        ([command]) => command === "read_agent_settings",
+      ),
+    ).toHaveLength(1);
 
     if (deferred.resolve) {
       deferred.resolve(null);
@@ -243,7 +252,9 @@ describe("agent settings store", () => {
     await useAgentSettingsStore.getState().refreshDefaultAgentMarkdown();
 
     expect(mockInvoke).toHaveBeenCalledWith("read_default_agent_config");
-    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toContain("刷新后的主代理");
+    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toContain(
+      "刷新后的主代理",
+    );
   });
 
   it("updateDefaultAgentMarkdown 写回配置文件", async () => {
@@ -292,17 +303,18 @@ describe("agent settings store", () => {
   it("reset 恢复默认值", () => {
     mockCommand("clear_agent_settings", undefined);
 
-    useAgentSettingsStore.getState().toggleTool("write_file");
+    useAgentSettingsStore.getState().toggleTool("write");
     useAgentSettingsStore.getState().updateConfig({ model: "custom-model" });
-    useAgentSettingsStore.setState({ defaultAgentMarkdown: "# 文件主代理", status: "ready" });
+    useAgentSettingsStore.setState({
+      defaultAgentMarkdown: "# 文件主代理",
+      status: "ready",
+    });
 
     useAgentSettingsStore.getState().reset();
 
     const state = useAgentSettingsStore.getState();
-    expect(state.enabledTools.write_file).toBe(true);
+    expect(state.enabledTools.write).toBe(true);
     expect(state.config.model).toBe("");
     expect(state.defaultAgentMarkdown).toBe("");
   });
 });
-
-

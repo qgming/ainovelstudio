@@ -530,7 +530,7 @@ describe("App shell", () => {
 
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
-    expect(screen.getByText("版本 0.1.2")).toBeInTheDocument();
+    expect(screen.getByText("版本 0.1.3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
     expect(screen.queryByText("www.qgming.com")).not.toBeInTheDocument();
   });

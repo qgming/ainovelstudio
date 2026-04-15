@@ -12,7 +12,8 @@ export const BUILTIN_TOOLS: ToolDef[] = [
   {
     id: "todo",
     name: "待办计划",
-    description: "更新当前会话的显式计划状态；同一时间最多保留一个进行中的步骤。",
+    description:
+      "更新当前会话的显式计划状态；同一时间最多保留一个进行中的步骤。",
   },
   {
     id: "task",
@@ -20,78 +21,130 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     description: "将局部任务派发给子代理在独立上下文中执行，并返回摘要结果。",
   },
   {
-    id: "read_file",
+    id: "browse",
+    name: "浏览工作区",
+    description:
+      "浏览目录树、列出文件夹内容或查看路径概况；适合先了解结构，再决定读哪个文件。",
+  },
+  {
+    id: "search",
+    name: "搜索内容",
+    description:
+      "搜索文件夹名、文件名和正文内容；适合定位关键词、章节、设定或数据字段。",
+  },
+  {
+    id: "read",
     name: "读取文件",
-    description: "读取完整文本文件；已知路径且需要全文上下文时使用，定位阶段优先先搜索。",
+    description:
+      "读取文本文件全文或局部行段；已知准确路径时使用，未知路径先 browse 或 search。",
   },
   {
-    id: "write_file",
-    name: "写入文件",
-    description: "整文件覆盖写入；缺失目录或新文件会自动创建，小改动优先行编辑。",
+    id: "edit",
+    name: "局部编辑",
+    description:
+      "对文本做局部替换、插入、追加或前置；适合改 md/txt，不需要整份重写。",
   },
   {
-    id: "line_edit",
-    name: "行编辑",
-    description: "按行读取或替换文本；支持任意行号读取，replace 可自动补空行，并建议带前后文校验防止误改。",
+    id: "write",
+    name: "整文件写入",
+    description:
+      "整文件覆盖写入；适合你已经准备好完整内容时使用，缺失目录会自动创建。",
   },
   {
-    id: "search_workspace_content",
-    name: "内容搜索",
-    description: "搜索目录名、文件名和正文内容，用于先定位目标，不直接返回完整文件。",
+    id: "json",
+    name: "JSON 数据",
+    description:
+      "按 JSON Pointer 读取或局部更新 JSON 内容；适合改字段、合并对象、删除键和追加数组项。",
   },
   {
-    id: "create_file",
-    name: "创建文件",
-    description: "在指定目录创建新文本文件；适合新增文件，不用于覆盖已有文件内容。",
+    id: "path",
+    name: "路径操作",
+    description:
+      "创建文件或文件夹、重命名、迁移或删除路径；只处理结构，不负责正文内容。",
   },
   {
-    id: "create_folder",
-    name: "创建文件夹",
-    description: "在指定目录创建文件夹；适合补齐工作区结构。",
+    id: "skill",
+    name: "技能资源",
+    description:
+      "列出、读取、创建、更新或删除本地 skill 文件；优先先列出再读写具体文件。",
   },
   {
-    id: "delete_path",
-    name: "删除路径",
-    description: "删除指定文件或目录；执行前应再次确认目标路径和影响范围。",
-  },
-  {
-    id: "rename",
-    name: "重命名",
-    description: "重命名工作区文件夹或文件；适合改名，不会修改文件正文。",
-  },
-  {
-    id: "move_path",
-    name: "迁移路径",
-    description: "将文件或文件夹迁移到指定目录；适合跨目录整理结构，不会修改文件正文。",
-  },
-  {
-    id: "read_workspace_tree",
-    name: "读取目录树",
-    description: "读取当前工作区目录结构；适合浏览层级和入口，不搜索正文。",
-  },
-  {
-    id: "list_skills",
-    name: "列出技能",
-    description: "读取当前本地可用 skills 列表，返回技能 ID、名称、描述和来源。",
-  },
-  {
-    id: "read_skill_file",
-    name: "读取技能文件",
-    description: "读取指定 skill 内文件内容，如 SKILL.md 或 references/*.md。",
-  },
-  {
-    id: "list_agents",
-    name: "列出代理",
-    description: "读取当前本地可用 agents 列表，返回代理 ID、名称、描述和来源。",
-  },
-  {
-    id: "read_agent_file",
-    name: "读取代理文件",
-    description: "读取指定 agent 内文件内容，如 manifest.json、AGENTS.md、TOOLS.md、MEMORY.md。",
+    id: "agent",
+    name: "代理资源",
+    description:
+      "列出、读取、创建、更新或删除本地 agent 文件；优先先列出再读写具体文件。",
   },
 ];
+
+const LEGACY_TOOL_ID_MAP: Record<string, string> = {
+  create_file: "path",
+  create_folder: "path",
+  delete_path: "path",
+  line_edit: "edit",
+  list_agents: "agent",
+  list_skills: "skill",
+  move_path: "path",
+  read_agent_file: "agent",
+  read_file: "read",
+  read_skill_file: "skill",
+  read_workspace_tree: "browse",
+  rename: "path",
+  search_workspace_content: "search",
+  write_file: "write",
+};
+
+function mergeLegacyToolPreferences(
+  enabledTools: Record<string, boolean>,
+  toolId: string,
+) {
+  const directValue = enabledTools[toolId];
+  if (typeof directValue === "boolean") {
+    return directValue;
+  }
+
+  const legacyValues = Object.entries(LEGACY_TOOL_ID_MAP)
+    .filter(([, nextToolId]) => nextToolId === toolId)
+    .map(([legacyToolId]) => enabledTools[legacyToolId])
+    .filter((value): value is boolean => typeof value === "boolean");
+
+  if (legacyValues.length === 0) {
+    return true;
+  }
+
+  if (legacyValues.every((value) => value === false)) {
+    return false;
+  }
+
+  return true;
+}
 
 /** 返回默认全部启用的工具映射 */
 export function getDefaultEnabledTools(): Record<string, boolean> {
   return Object.fromEntries(BUILTIN_TOOLS.map((t) => [t.id, true]));
+}
+
+export function migrateEnabledTools(
+  enabledTools?: Record<string, boolean> | null,
+) {
+  const defaults = getDefaultEnabledTools();
+  if (!enabledTools) {
+    return defaults;
+  }
+
+  return Object.fromEntries(
+    BUILTIN_TOOLS.map((tool) => [
+      tool.id,
+      mergeLegacyToolPreferences(enabledTools, tool.id),
+    ]),
+  );
+}
+
+export function normalizeSuggestedToolId(toolId: string) {
+  return LEGACY_TOOL_ID_MAP[toolId] ?? toolId;
+}
+
+export function normalizeSuggestedToolIds(toolIds: string[]) {
+  return Array.from(
+    new Set(toolIds.map((toolId) => normalizeSuggestedToolId(toolId))),
+  );
 }

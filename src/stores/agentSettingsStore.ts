@@ -4,8 +4,15 @@ import {
   readDefaultAgentConfig,
   writeDefaultAgentConfig,
 } from "../lib/agentConfig/api";
-import { clearAgentSettings, readAgentSettings, writeAgentSettings } from "../lib/agentSettings/api";
-import { getDefaultEnabledTools } from "../lib/agent/toolDefs";
+import {
+  clearAgentSettings,
+  readAgentSettings,
+  writeAgentSettings,
+} from "../lib/agentSettings/api";
+import {
+  getDefaultEnabledTools,
+  migrateEnabledTools,
+} from "../lib/agent/toolDefs";
 
 let initializePromise: Promise<void> | null = null;
 
@@ -73,18 +80,23 @@ async function loadPersistedAgentSettings() {
   const defaults = getDefaultState();
   return {
     config: { ...defaults.config, ...persisted.config },
-    enabledTools: { ...defaults.enabledTools, ...(persisted.enabledTools ?? {}) },
+    enabledTools: migrateEnabledTools(persisted.enabledTools),
   };
 }
 
-async function persistAgentSettings(state: Pick<AgentSettingsState, "config" | "enabledTools">) {
+async function persistAgentSettings(
+  state: Pick<AgentSettingsState, "config" | "enabledTools">,
+) {
   await writeAgentSettings({
     config: state.config,
     enabledTools: state.enabledTools,
   });
 }
 
-function persistAgentSettingsInBackground(state: Pick<AgentSettingsState, "config" | "enabledTools">, onError: (message: string) => void) {
+function persistAgentSettingsInBackground(
+  state: Pick<AgentSettingsState, "config" | "enabledTools">,
+  onError: (message: string) => void,
+) {
   void persistAgentSettings(state).catch((error) => {
     onError(formatSettingsError(error, "保存 Agent 设置失败。"));
   });
@@ -152,7 +164,10 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
       } catch (error) {
         set((state) => ({
           ...state,
-          errorMessage: formatSettingsError(error, "主代理 AGENTS.md 加载失败。"),
+          errorMessage: formatSettingsError(
+            error,
+            "主代理 AGENTS.md 加载失败。",
+          ),
           status: "error",
         }));
       }
