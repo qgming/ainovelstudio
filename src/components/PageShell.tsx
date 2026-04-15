@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type PageAction = {
   icon: LucideIcon;
@@ -16,12 +17,10 @@ type PageShellProps = {
   title: ReactNode;
 };
 
-const actionStyles: Record<NonNullable<PageAction["tone"]>, string> = {
-  default:
-    "border-[#d7dde8] bg-transparent text-[#111827] hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-100 dark:hover:bg-[#1b1f26]",
-  dark: "border-[#2c323c] bg-[#2c323c] text-white hover:bg-[#252b34] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white",
-  primary:
-    "border-[#0f172a] bg-[#0f172a] text-white hover:bg-[#1e293b] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white",
+const actionVariants: Record<NonNullable<PageAction["tone"]>, "outline" | "secondary" | "default"> = {
+  default: "outline",
+  dark: "secondary",
+  primary: "default",
 };
 
 export function PageShell({
@@ -39,18 +38,16 @@ export function PageShell({
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {headerRight}
             {actions.map(({ icon: Icon, label, onClick, tone = "default" }) => (
-              <button
+              <Button
                 key={label}
-                type="button"
                 onClick={onClick}
-                className={[
-                  "inline-flex h-8 items-center gap-1.5 rounded-[8px] border px-3 text-[12px] font-medium transition-colors duration-200",
-                  actionStyles[tone],
-                ].join(" ")}
+                size="sm"
+                variant={actionVariants[tone]}
+                className="gap-1.5"
               >
                 <Icon className="h-4 w-4" strokeWidth={2.1} />
                 <span>{label}</span>
-              </button>
+              </Button>
             ))}
           </div>
         ) : null}

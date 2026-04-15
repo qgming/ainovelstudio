@@ -4,6 +4,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
+import { Toaster } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { isMobileRuntime } from "./lib/platform";
 import { HomePage } from "./pages/HomePage";
 import { useThemeStore } from "./stores/themeStore";
@@ -99,7 +101,10 @@ function AppShell() {
 function App() {
   return (
     <HashRouter>
-      <AppShell />
+      <TooltipProvider>
+        <AppShell />
+        <Toaster />
+      </TooltipProvider>
     </HashRouter>
   );
 }
