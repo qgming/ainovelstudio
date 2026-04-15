@@ -3,11 +3,58 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Novel Studio</title>
+    <title>神笔写作</title>
+    <style>
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        background: #f7f8fb;
+        color: #64748b;
+        font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      }
+
+      .app-boot-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        overflow: hidden;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .app-boot-splash__content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .app-boot-splash__logo {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <section class="app-boot-splash">
+        <div class="app-boot-splash__content">
+          <img
+            class="app-boot-splash__logo"
+            src="/src/assets/icon.png"
+            alt=""
+          />
+        </div>
+      </section>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

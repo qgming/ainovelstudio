@@ -233,6 +233,28 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "更多操作 北境余烬" })).toBeInTheDocument();
   });
 
+  it("首页启动时不会预先初始化技能库、代理库和 Agent 设置", async () => {
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "initialize_chat_storage") {
+        return chatBootstrap;
+      }
+      if (command === "list_book_workspaces") {
+        return [];
+      }
+      return undefined;
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "首页" })).toBeInTheDocument();
+    expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_builtin_skills")).toHaveLength(0);
+    expect(mockInvoke.mock.calls.filter(([command]) => command === "scan_installed_skills")).toHaveLength(0);
+    expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_builtin_agents")).toHaveLength(0);
+    expect(mockInvoke.mock.calls.filter(([command]) => command === "scan_installed_agents")).toHaveLength(0);
+    expect(mockInvoke.mock.calls.filter(([command]) => command === "read_agent_settings")).toHaveLength(0);
+    expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_default_agent_config")).toHaveLength(0);
+  });
+
   it("首页点击书籍后会进入图书工作区", async () => {
     mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
       switch (command) {
@@ -256,9 +278,41 @@ describe("App shell", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "打开书籍 北境余烬" }));
 
+    await waitFor(() => {
+      expect(window.location.hash).toContain(`/books/${bookId}`);
+    });
+    expect(
+      await screen.findByRole("tree", { name: "书籍文件树" }, { timeout: 5000 }),
+    ).toBeInTheDocument();
+  });
+
+  it("首页已有书籍 summary 时，进入工作区不会卡在 by-id 查询", async () => {
+    mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
+      switch (command) {
+        case "initialize_chat_storage":
+          return chatBootstrap;
+        case "list_book_workspaces":
+          return [{ id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
+        case "get_book_workspace_summary_by_id":
+          return new Promise(() => undefined);
+        case "read_workspace_tree":
+          return tree;
+        case "read_text_file":
+          return payload?.path === chapterPath ? "这是章节初稿" : "";
+        default:
+          return undefined;
+      }
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "打开书籍 北境余烬" }));
+
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
-    expect(screen.getByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
-    expect(window.location.hash).toContain(`/books/${bookId}`);
+    expect(await screen.findByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
+    expect(mockInvoke).not.toHaveBeenCalledWith("get_book_workspace_summary_by_id", {
+      bookId,
+    });
   });
 
   it("首页导入 ZIP 书籍后会进入图书工作区", async () => {
@@ -379,7 +433,7 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "主题切换" }));
 
     expect(document.documentElement).not.toHaveClass("dark");
-    expect(screen.getByRole("heading", { name: "技能中心" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "技能中心" })).toBeInTheDocument();
   });
 
   it("设置页支持编辑默认 AGENTS，并可切换到工具库", async () => {
@@ -387,7 +441,9 @@ describe("App shell", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "设置" }));
 
-    expect(await screen.findByLabelText("默认 AGENTS 编辑器")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("默认 AGENTS 编辑器", {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText("AGENTS.md")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "工具库" }));

@@ -15,6 +15,7 @@ import {
   setStoredWorkspaceSnapshot,
   writeWorkspaceTextFile,
 } from "../lib/bookWorkspace/api";
+import { getCachedBookWorkspaceSummary } from "../lib/bookWorkspace/summaryCache";
 import { isTextEditableFile, normalizeEntryName, validateEntryName } from "../lib/bookWorkspace/paths";
 import {
   buildExpandedPaths,
@@ -464,7 +465,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         if (!isCurrent()) {
           return;
         }
-        const workspace = await readWorkspaceSummaryById(bookId);
+        const workspace = getCachedBookWorkspaceSummary(bookId) ?? await readWorkspaceSummaryById(bookId);
         if (!isCurrent()) {
           return;
         }

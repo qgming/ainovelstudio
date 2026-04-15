@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:exe": "tauri build --bundles nsis",
+    "build:android": "tauri android build --apk --target aarch64 --split-per-abi",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run --exclude src/lib/agent/modelGateway.integration.test.ts",

@@ -6,6 +6,10 @@ import type {
   WorkspaceSearchMatch,
   WorkspaceSnapshot,
 } from "./types";
+import {
+  cacheBookWorkspaceSummaries,
+  cacheBookWorkspaceSummary,
+} from "./summaryCache";
 
 export type InvokeCancellationOptions = {
   abortSignal?: AbortSignal;
@@ -137,19 +141,31 @@ export function pickWorkspaceDirectory() {
 }
 
 export function listBookWorkspaces() {
-  return invoke<BookWorkspaceSummary[]>("list_book_workspaces");
+  return invoke<BookWorkspaceSummary[]>("list_book_workspaces").then((summaries) => {
+    cacheBookWorkspaceSummaries(summaries);
+    return summaries;
+  });
 }
 
 export function getBookWorkspaceSummary(rootPath: string) {
-  return invoke<BookWorkspaceSummary>("get_book_workspace_summary", { rootPath });
+  return invoke<BookWorkspaceSummary>("get_book_workspace_summary", { rootPath }).then((summary) => {
+    cacheBookWorkspaceSummary(summary);
+    return summary;
+  });
 }
 
 export function getBookWorkspaceSummaryById(bookId: string) {
-  return invoke<BookWorkspaceSummary>("get_book_workspace_summary_by_id", { bookId });
+  return invoke<BookWorkspaceSummary>("get_book_workspace_summary_by_id", { bookId }).then((summary) => {
+    cacheBookWorkspaceSummary(summary);
+    return summary;
+  });
 }
 
 export function importBookZip(fileName: string, archiveBytes: number[]) {
-  return invoke<BookWorkspaceSummary>("import_book_zip", { fileName, archiveBytes });
+  return invoke<BookWorkspaceSummary>("import_book_zip", { fileName, archiveBytes }).then((summary) => {
+    cacheBookWorkspaceSummary(summary);
+    return summary;
+  });
 }
 
 export function exportBookZip(rootPath: string) {
@@ -202,7 +218,10 @@ export function replaceWorkspaceTextLine(
 }
 
 export function createBookWorkspace(parentPath: string, bookName: string) {
-  return invoke<BookWorkspaceSummary>("create_book_workspace", { parentPath, bookName });
+  return invoke<BookWorkspaceSummary>("create_book_workspace", { parentPath, bookName }).then((summary) => {
+    cacheBookWorkspaceSummary(summary);
+    return summary;
+  });
 }
 
 export function createWorkspaceDirectory(rootPath: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {

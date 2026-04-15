@@ -138,4 +138,40 @@ describe("bookWorkspaceStore", () => {
       rootPath: otherRootPath,
     });
   });
+
+  it("存在缓存 summary 时会直接打开书籍，不再等待 by-id 查询", async () => {
+    window.localStorage.setItem(
+      "ainovelstudio-book-route-cache",
+      JSON.stringify({
+        [otherBookId]: {
+          id: otherBookId,
+          name: "星河回声",
+          path: otherRootPath,
+          updatedAt: 1710000001,
+        },
+      }),
+    );
+
+    mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
+      switch (command) {
+        case "read_workspace_tree":
+          return payload?.rootPath === otherRootPath ? otherTree : initialTree;
+        case "read_text_file":
+          return "这是另一部书的正文";
+        case "get_book_workspace_summary_by_id":
+          throw new Error("不应触发 by-id 查询");
+        default:
+          return undefined;
+      }
+    });
+
+    await useBookWorkspaceStore.getState().selectWorkspaceByBookId(otherBookId);
+
+    expect(useBookWorkspaceStore.getState().rootBookId).toBe(otherBookId);
+    expect(useBookWorkspaceStore.getState().rootBookName).toBe("星河回声");
+    expect(useBookWorkspaceStore.getState().rootPath).toBe(otherRootPath);
+    expect(mockInvoke).not.toHaveBeenCalledWith("get_book_workspace_summary_by_id", {
+      bookId: otherBookId,
+    });
+  });
 });

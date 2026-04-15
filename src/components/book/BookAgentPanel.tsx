@@ -81,15 +81,28 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const switchSession = useAgentStore((state) => state.switchSession);
   const initializeAgentHistory = useAgentStore((state) => state.initialize);
   const rootPath = useBookWorkspaceStore((state) => state.rootPath);
+  const initializeSkills = useSkillsStore((state) => state.initialize);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
+  const skillsStatus = useSkillsStore((state) => state.status);
+  const initializeAgents = useSubAgentStore((state) => state.initialize);
   const enabledSkills = getEnabledSkills({ manifests, preferences });
   const agentManifests = useSubAgentStore((state) => state.manifests);
   const agentPreferences = useSubAgentStore((state) => state.preferences);
+  const agentsStatus = useSubAgentStore((state) => state.status);
   const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
   const displayRunStatus = isRunning ? "running" : run.status;
   const [contextAnchorRect, setContextAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
   const [historyAnchorRect, setHistoryAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
+
+  useEffect(() => {
+    if (skillsStatus === "idle") {
+      void initializeSkills();
+    }
+    if (agentsStatus === "idle") {
+      void initializeAgents();
+    }
+  }, [agentsStatus, initializeAgents, initializeSkills, skillsStatus]);
 
   useEffect(() => {
     if (!rootBookId) {
