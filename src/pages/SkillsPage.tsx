@@ -76,6 +76,7 @@ export function SkillsPage() {
   return (
     <>
       <PageShell
+        title={<div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">技能库</div>}
         actions={[
           { icon: RefreshCw, label: "刷新技能库", tone: "default", onClick: () => void refresh() },
           { icon: Upload, label: "导入技能", tone: "default", onClick: () => importInputRef.current?.click() },

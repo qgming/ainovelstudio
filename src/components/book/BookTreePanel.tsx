@@ -1,7 +1,7 @@
 import {
+  ChevronRight,
   FilePlus2,
   FolderPlus,
-  House,
   Maximize2,
   Minimize2,
   RefreshCw,
@@ -72,9 +72,9 @@ function WorkspaceButton({
       onClick={onClick}
       variant="ghost"
       size="sm"
-      className="h-7 min-w-0 justify-start gap-1 px-2 text-foreground"
+      className="h-7 min-w-0 justify-start gap-1 px-1 text-foreground"
     >
-      <House className="h-4 w-4 shrink-0" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-primary" />
       <span className="truncate text-[13px] font-medium leading-none tracking-[0.01em]">
         {name}
       </span>
@@ -108,7 +108,7 @@ export function BookTreePanel({
       style={{ width }}
       className="flex h-full shrink-0 flex-col overflow-hidden bg-app"
     >
-      <PanelHeader className="bg-transparent px-2">
+      <PanelHeader className="bg-transparent px-0">
         <WorkspaceButton
           busy={busy}
           name={rootNode.name}
@@ -152,7 +152,7 @@ export function BookTreePanel({
         </PanelToolbar>
       </PanelHeader>
       <PanelBody className="overflow-auto">
-        <div role="tree" aria-label="书籍文件树" className="space-y-1 px-1 py-2">
+        <div role="tree" aria-label="书籍文件树" className="space-y-1">
           {rootNode.children?.map((child) => (
             <BookTreeItem
               key={child.path}

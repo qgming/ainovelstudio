@@ -23,7 +23,7 @@ export function SubAgentRow({ agent, onOpen, onToggle }: SubAgentRowProps) {
         tabIndex={0}
         onClick={onOpen}
         onKeyDown={handleKeyDown}
-        className="editor-block-content cursor-pointer rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
+        className="editor-block-content cursor-pointer overflow-hidden rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -33,12 +33,8 @@ export function SubAgentRow({ agent, onOpen, onToggle }: SubAgentRowProps) {
           <Switch checked={agent.enabled} label={`切换代理 ${agent.name}`} onChange={() => onToggle()} />
         </div>
 
-        <p className="line-clamp-4 text-xs leading-6 text-muted-foreground">
+        <p className="line-clamp-4 text-xs leading-5 text-muted-foreground">
           {agent.description}
-        </p>
-
-        <p className="mt-auto line-clamp-2 text-[11px] leading-5 text-muted-foreground">
-          {agent.id}
         </p>
       </div>
     </article>

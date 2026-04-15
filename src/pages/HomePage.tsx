@@ -1,5 +1,5 @@
 import { BookOpenText, Download, Ellipsis, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
-import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../components/common/ActionMenu";
 import { Toast, type ToastTone } from "../components/common/Toast";
@@ -44,14 +44,6 @@ function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
 
 function getReadableError(error: unknown) {
   return error instanceof Error ? error.message : "操作失败，请重试。";
-}
-
-function formatUpdatedAt(updatedAt: number) {
-  if (!updatedAt) {
-    return "最近更新未知";
-  }
-
-  return `最近更新 ${new Date(updatedAt * 1000).toLocaleString()}`;
 }
 
 export function HomePage() {
@@ -103,6 +95,13 @@ export function HomePage() {
         book,
       };
     });
+  }
+
+  function handleBookTileKeyDown(bookId: string, event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      navigate(buildBookWorkspaceRoute(bookId));
+    }
   }
 
   async function handleImportChange(event: ChangeEvent<HTMLInputElement>) {
@@ -210,6 +209,7 @@ export function HomePage() {
   return (
     <>
       <PageShell
+        title={<div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">书架</div>}
         actions={[
           { icon: RefreshCw, label: "刷新书架", tone: "default", onClick: () => void refreshBooks() },
           {
@@ -263,7 +263,13 @@ export function HomePage() {
                             : "",
                         ].join(" ")}
                       >
-                        <div className="editor-block-content">
+                        <div
+                          role="link"
+                          tabIndex={0}
+                          onClick={() => navigate(buildBookWorkspaceRoute(book.id))}
+                          onKeyDown={(event) => handleBookTileKeyDown(book.id, event)}
+                          className="editor-block-content cursor-pointer overflow-hidden rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
+                        >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
                               <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Book</p>
@@ -283,22 +289,6 @@ export function HomePage() {
                               <Ellipsis className="h-4 w-4" />
                             </Button>
                           </div>
-
-                          <button
-                          type="button"
-                          aria-label={`打开书籍 ${book.name}`}
-                          onClick={() => navigate(buildBookWorkspaceRoute(book.id))}
-                          className="flex min-h-0 flex-1 flex-col justify-end text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
-                        >
-                            <div className="mt-auto border-t border-border pt-3">
-                              <p className="truncate text-xs leading-5 text-muted-foreground">
-                                {formatUpdatedAt(book.updatedAt)}
-                              </p>
-                              <p className="mt-1 truncate text-[11px] leading-5 text-muted-foreground">
-                                SQLite 工作区 / {book.id}
-                              </p>
-                            </div>
-                          </button>
                         </div>
                       </article>
                     );

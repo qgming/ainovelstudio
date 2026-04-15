@@ -76,6 +76,7 @@ export function AgentsPage() {
   return (
     <>
       <PageShell
+        title={<div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">代理库</div>}
         actions={[
           { icon: RefreshCw, label: "刷新代理库", tone: "default", onClick: () => void refresh() },
           { icon: Upload, label: "导入代理", tone: "default", onClick: () => importInputRef.current?.click() },

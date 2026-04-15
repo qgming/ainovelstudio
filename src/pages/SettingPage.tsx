@@ -1,8 +1,9 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Activity, Bot, Info, MoonStar, Settings2, Sparkles, Wrench, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Activity, Bot, Info, Sparkles, Wrench, type LucideIcon } from "lucide-react";
 import { PageShell } from "../components/PageShell";
 import { DefaultAgentSection } from "../components/settings/DefaultAgentSection";
 import { ModelProviderCard } from "../components/settings/ModelProviderCard";
+import { SettingsSectionHeader } from "../components/settings/SettingsSectionHeader";
 import { UsageAnalyticsSection } from "../components/settings/UsageAnalyticsSection";
 import { Switch } from "../components/ui/Switch";
 import appIcon from "../assets/icon.png";
@@ -10,9 +11,8 @@ import packageJson from "../../package.json";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../lib/agent/promptContext";
 import { BUILTIN_TOOLS } from "../lib/agent/toolDefs";
 import { getDefaultAgentProviderConfig, useAgentSettingsStore } from "../stores/agentSettingsStore";
-import { useThemeStore } from "../stores/themeStore";
 
-type SettingSectionKey = "agents" | "usage" | "basic" | "models" | "tools" | "about";
+type SettingSectionKey = "agents" | "usage" | "models" | "tools" | "about";
 
 type SettingNavItem = {
   icon: LucideIcon;
@@ -23,7 +23,6 @@ type SettingNavItem = {
 const settingNavItems: SettingNavItem[] = [
   { key: "agents", title: "AGENTS", icon: Bot },
   { key: "usage", title: "用量统计", icon: Activity },
-  { key: "basic", title: "基本设置", icon: Settings2 },
   { key: "models", title: "模型设置", icon: Sparkles },
   { key: "tools", title: "工具库", icon: Wrench },
   { key: "about", title: "关于我们", icon: Info },
@@ -31,39 +30,6 @@ const settingNavItems: SettingNavItem[] = [
 
 const APP_VERSION = packageJson.version;
 const OFFICIAL_WEBSITE = "https://www.qgming.com";
-
-function SectionCard({ children }: { children: ReactNode }) {
-  return <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">{children}</section>;
-}
-
-function ThemeSection({
-  theme,
-  toggleTheme,
-}: {
-  theme: "dark" | "light";
-  toggleTheme: () => void;
-}) {
-  return (
-    <SectionCard>
-      <div className="flex items-center justify-between gap-3 px-3 py-3">
-        <div className="flex items-center gap-3">
-          <MoonStar className="h-4 w-4 shrink-0 text-[#111827] dark:text-[#f3f4f6]" />
-          <h2 className="text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
-            主题
-          </h2>
-        </div>
-        <button
-          type="button"
-          aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-          onClick={toggleTheme}
-          className="inline-flex h-8 items-center rounded-[8px] border border-[#0f172a] bg-[#0f172a] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#1e293b] dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white"
-        >
-          {theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-        </button>
-      </div>
-    </SectionCard>
-  );
-}
 
 function ToolLibrarySection({
   enabledCount,
@@ -75,40 +41,37 @@ function ToolLibrarySection({
   toggleTool: (toolId: string) => void;
 }) {
   return (
-    <section>
-      <div className="flex items-center justify-between gap-3 px-3 py-3">
-        <h2 className="text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
-          内置工具
-        </h2>
-        <span className="text-xs text-[#64748b] dark:text-zinc-400">内置工具 · 已启用 {enabledCount}</span>
-      </div>
-      <div className="grid border-t border-[#e2e8f0] sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 dark:border-[#20242b]">
-        {BUILTIN_TOOLS.map((toolDef) => {
-          const enabled = enabledTools[toolDef.id] ?? true;
-          return (
-            <div
-              key={toolDef.id}
-              className="aspect-square border-r border-b border-[#e2e8f0] px-3 py-3 dark:border-[#20242b]"
-            >
-              <div className="flex h-full flex-col">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1 pr-2">
-                    <h3 className="text-sm font-medium text-[#111827] dark:text-zinc-100">{toolDef.name}</h3>
-                    <p className="text-xs text-[#64748b] dark:text-zinc-400">{toolDef.id}</p>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
+      <SettingsSectionHeader
+        title="工具库"
+        actions={<span className="text-xs text-muted-foreground">已启用 {enabledCount}</span>}
+      />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+          {BUILTIN_TOOLS.map((toolDef) => {
+            const enabled = enabledTools[toolDef.id] ?? true;
+            return (
+              <article key={toolDef.id} className="editor-block-tile">
+                <div className="editor-block-content overflow-hidden">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Tool</p>
+                      <h3 className="mt-2 line-clamp-2 text-lg font-medium leading-6 text-foreground">{toolDef.name}</h3>
+                      <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-muted-foreground">{toolDef.id}</p>
+                    </div>
+                    <Switch
+                      checked={enabled}
+                      label={enabled ? `禁用 ${toolDef.name}` : `启用 ${toolDef.name}`}
+                      onChange={() => toggleTool(toolDef.id)}
+                    />
                   </div>
-                  <Switch
-                    checked={enabled}
-                    label={enabled ? `禁用 ${toolDef.name}` : `启用 ${toolDef.name}`}
-                    onChange={() => toggleTool(toolDef.id)}
-                  />
+
+                  <p className="line-clamp-4 text-xs leading-5 text-muted-foreground">{toolDef.description}</p>
                 </div>
-                <div className="flex min-h-0 flex-1 items-end pt-3">
-                  <p className="line-clamp-4 text-xs leading-6 text-[#64748b] dark:text-zinc-400">{toolDef.description}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -116,32 +79,35 @@ function ToolLibrarySection({
 
 function AboutSection() {
   return (
-    <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">
-      <div className="px-4 py-5">
-        <div className="flex items-center gap-4">
-          <img src={appIcon} alt="神笔写作 Logo" className="h-14 w-14 shrink-0 rounded-[14px] object-contain" />
-          <div className="min-w-0">
-            <h2 className="truncate text-[22px] font-semibold tracking-[-0.04em] text-[#0f172a] dark:text-white">
-              神笔写作
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-[#64748b] dark:text-zinc-400">版本 {APP_VERSION}</p>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
+      <SettingsSectionHeader title="关于我们" icon={<Info className="h-4 w-4" />} />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="px-4 py-5">
+          <div className="flex items-center gap-4">
+            <img src={appIcon} alt="神笔写作 Logo" className="h-14 w-14 shrink-0 rounded-[14px] object-contain" />
+            <div className="min-w-0">
+              <h2 className="truncate text-[22px] font-semibold tracking-[-0.04em] text-[#0f172a] dark:text-white">
+                神笔写作
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-[#64748b] dark:text-zinc-400">版本 {APP_VERSION}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="border-t border-[#e2e8f0] dark:border-[#20242b]" />
+        <div className="border-t border-[#e2e8f0] dark:border-[#20242b]" />
 
-      <div className="px-4 py-4">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm leading-6 text-[#64748b] dark:text-zinc-400">官网</p>
-          <a
-            href={OFFICIAL_WEBSITE}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-9 shrink-0 items-center rounded-[10px] border border-[#dbe3ee] px-3 text-sm font-medium text-[#0f172a] transition hover:border-[#cbd5e1] dark:border-[#2b313b] dark:text-zinc-100 dark:hover:border-[#334155]"
-          >
-            打开官网
-          </a>
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm leading-6 text-[#64748b] dark:text-zinc-400">官网</p>
+            <a
+              href={OFFICIAL_WEBSITE}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 shrink-0 items-center rounded-[10px] border border-[#dbe3ee] px-3 text-sm font-medium text-[#0f172a] transition hover:border-[#cbd5e1] dark:border-[#2b313b] dark:text-zinc-100 dark:hover:border-[#334155]"
+            >
+              打开官网
+            </a>
+          </div>
         </div>
       </div>
     </section>
@@ -159,8 +125,6 @@ export function SettingPage() {
   const refreshDefaultAgentMarkdown = useAgentSettingsStore((state) => state.refreshDefaultAgentMarkdown);
   const toggleTool = useAgentSettingsStore((state) => state.toggleTool);
   const updateDefaultAgentMarkdown = useAgentSettingsStore((state) => state.updateDefaultAgentMarkdown);
-  const theme = useThemeStore((state) => state.theme);
-  const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const [activeSection, setActiveSection] = useState<SettingSectionKey>("agents");
   const [agentsDraft, setAgentsDraft] = useState(defaultAgentMarkdown);
   const [agentsDirty, setAgentsDirty] = useState(false);
@@ -250,10 +214,6 @@ export function SettingPage() {
       );
     }
 
-    if (activeSection === "basic") {
-      return <ThemeSection theme={theme} toggleTheme={toggleTheme} />;
-    }
-
     if (activeSection === "usage") {
       return <UsageAnalyticsSection />;
     }
@@ -290,7 +250,7 @@ export function SettingPage() {
       contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
     >
       <div className="flex h-full min-h-0 flex-col gap-0 lg:flex-row">
-        <aside className="w-full shrink-0 overflow-hidden border-b border-[#e2e8f0] dark:border-[#20242b] lg:w-[240px] lg:border-r lg:border-b-0">
+        <aside className="w-full shrink-0 overflow-hidden border-b border-border bg-app lg:w-[240px] lg:border-r lg:border-b-0">
           <div>
             {settingNavItems.map(({ icon: Icon, key, title }) => {
               const isActive = activeSection === key;
@@ -301,10 +261,10 @@ export function SettingPage() {
                   aria-label={title}
                   onClick={() => setActiveSection(key)}
                   className={[
-                    "flex h-11 w-full items-center gap-3 border-b border-[#e2e8f0] px-3 text-left transition dark:border-[#20242b]",
+                    "flex h-11 w-full items-center gap-3 border-b border-border px-3 text-left transition",
                     isActive
-                      ? "bg-[#eaf3ff] text-[#0f172a] dark:bg-[#162131] dark:text-[#f8fbff]"
-                      : "text-[#334155] hover:bg-[#eef2f7] dark:text-[#cbd5e1] dark:hover:bg-[#171b21]",
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   ].join(" ")}
                 >
                   <Icon className="h-4.5 w-4.5 shrink-0" />
@@ -316,7 +276,7 @@ export function SettingPage() {
         </aside>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto">{renderSectionContent()}</div>
+          <div className="min-h-0 flex-1 overflow-hidden">{renderSectionContent()}</div>
         </div>
       </div>
     </PageShell>

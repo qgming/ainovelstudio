@@ -3,6 +3,7 @@ import { Activity, DatabaseZap, Filter, History, RefreshCw } from "lucide-react"
 import { readUsageLogs } from "../../lib/usage/api";
 import type { UsageLogEntry } from "../../lib/usage/types";
 import { UsageHeatmap } from "./UsageHeatmap";
+import { SettingsHeaderIconButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 import { UsageLogTable } from "./UsageLogTable";
 
 type TimeRangeKey = "7d" | "30d" | "90d" | "all";
@@ -213,79 +214,80 @@ export function UsageAnalyticsSection() {
   }, [filteredLogs]);
 
   return (
-    <section className="min-h-full border-b border-[#e2e8f0] dark:border-[#20242b]">
-      <div className="flex items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-4 dark:border-[#20242b]">
-        <div className="flex items-center gap-2 text-[#111827] dark:text-[#f3f4f6]">
-          <Activity className="h-4 w-4" />
-          <h2 className="text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">用量统计</h2>
-        </div>
-        <button
-          type="button"
-          aria-label="刷新用量统计"
-          onClick={() => void loadUsageLogs()}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d7dde8] text-[#475569] transition-colors hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#2a3038] dark:text-zinc-200 dark:hover:bg-[#1b1f26]"
-          disabled={status === "loading"}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`} />
-        </button>
-      </div>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
+      <SettingsSectionHeader
+        title="用量统计"
+        icon={<Activity className="h-4 w-4" />}
+        actions={
+          <SettingsHeaderIconButton
+            type="button"
+            aria-label="刷新用量统计"
+            onClick={() => void loadUsageLogs()}
+            disabled={status === "loading"}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`} />
+          </SettingsHeaderIconButton>
+        }
+      />
 
-      <div className="border-b border-[#e2e8f0] px-4 py-3 dark:border-[#20242b]">
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <div className="inline-flex items-center gap-2 border border-[#dbe3ee] px-3 py-2 dark:border-[#2a3038]">
-            <Filter className="h-4 w-4 text-[#64748b] dark:text-zinc-400" />
-            <select
-              aria-label="时间范围"
-              className="bg-transparent text-[#0f172a] outline-none dark:text-zinc-100"
-              value={timeRange}
-              onChange={(event) => setTimeRange(event.target.value as TimeRangeKey)}
-            >
-              <option value="7d">最近 7 天</option>
-              <option value="30d">最近 30 天</option>
-              <option value="90d">最近 90 天</option>
-              <option value="all">全部时间</option>
-            </select>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="border-b border-border px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <div className="inline-flex items-center gap-2 border border-[#dbe3ee] px-3 py-2 dark:border-[#2a3038]">
+              <Filter className="h-4 w-4 text-[#64748b] dark:text-zinc-400" />
+              <select
+                aria-label="时间范围"
+                className="bg-transparent text-[#0f172a] outline-none dark:text-zinc-100"
+                value={timeRange}
+                onChange={(event) => setTimeRange(event.target.value as TimeRangeKey)}
+              >
+                <option value="7d">最近 7 天</option>
+                <option value="30d">最近 30 天</option>
+                <option value="90d">最近 90 天</option>
+                <option value="all">全部时间</option>
+              </select>
+            </div>
+            <div className="inline-flex items-center gap-2 border border-[#dbe3ee] px-3 py-2 dark:border-[#2a3038]">
+              <DatabaseZap className="h-4 w-4 text-[#64748b] dark:text-zinc-400" />
+              <select
+                aria-label="模型筛选"
+                className="max-w-[220px] bg-transparent text-[#0f172a] outline-none dark:text-zinc-100"
+                value={modelFilter}
+                onChange={(event) => setModelFilter(event.target.value)}
+              >
+                {modelOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option === "all" ? "全部模型" : option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="text-xs text-[#94a3b8] dark:text-[#64748b]">当前日志 {formatMetric(filteredLogs.length)} 条</span>
           </div>
-          <div className="inline-flex items-center gap-2 border border-[#dbe3ee] px-3 py-2 dark:border-[#2a3038]">
-            <DatabaseZap className="h-4 w-4 text-[#64748b] dark:text-zinc-400" />
-            <select
-              aria-label="模型筛选"
-              className="max-w-[220px] bg-transparent text-[#0f172a] outline-none dark:text-zinc-100"
-              value={modelFilter}
-              onChange={(event) => setModelFilter(event.target.value)}
-            >
-              {modelOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option === "all" ? "全部模型" : option}
-                </option>
-              ))}
-            </select>
+        </div>
+
+        <UsageHeatmap formatMetric={formatMetric} weeks={heatmapWeeks} />
+
+        <div className="grid border-b border-border sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="总请求数" value={summary.requests} />
+          <MetricCard label="总 Tokens" value={summary.totalTokens} />
+          <MetricCard label="总输入数" value={summary.inputTokens} />
+          <MetricCard label="总输出数" value={summary.outputTokens} />
+        </div>
+
+        <div className="min-h-[320px] px-4 py-4">
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-[#64748b] dark:text-zinc-400" />
+            <h3 className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">对话日志</h3>
           </div>
-          <span className="text-xs text-[#94a3b8] dark:text-[#64748b]">当前日志 {formatMetric(filteredLogs.length)} 条</span>
+          <UsageLogTable
+            errorMessage={errorMessage}
+            filteredLogs={filteredLogs}
+            formatDateTime={formatDateTime}
+            formatMetric={formatMetric}
+            status={status}
+          />
         </div>
-      </div>
-
-      <UsageHeatmap formatMetric={formatMetric} weeks={heatmapWeeks} />
-
-      <div className="grid border-b border-[#e2e8f0] sm:grid-cols-2 xl:grid-cols-4 dark:border-[#20242b]">
-        <MetricCard label="总请求数" value={summary.requests} />
-        <MetricCard label="总 Tokens" value={summary.totalTokens} />
-        <MetricCard label="总输入数" value={summary.inputTokens} />
-        <MetricCard label="总输出数" value={summary.outputTokens} />
-      </div>
-
-      <div className="min-h-[320px] px-4 py-4">
-        <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-[#64748b] dark:text-zinc-400" />
-          <h3 className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">对话日志</h3>
-        </div>
-        <UsageLogTable
-          errorMessage={errorMessage}
-          filteredLogs={filteredLogs}
-          formatDateTime={formatDateTime}
-          formatMetric={formatMetric}
-          status={status}
-        />
       </div>
     </section>
   );

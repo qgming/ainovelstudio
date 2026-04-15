@@ -264,7 +264,7 @@ textarea {
   }
 
   .editor-block-grid {
-    @apply relative grid overflow-hidden border-t border-border bg-transparent;
+    @apply relative grid overflow-hidden bg-transparent;
   }
 
   .editor-block-tile {

@@ -56,7 +56,7 @@ export function Sidebar() {
             <Moon className="h-[22px] w-[22px]" strokeWidth={2.1} />
           )}
         </button>
-        <nav className="flex w-full flex-col gap-1.5 border-t border-border pt-2">
+        <nav className="flex w-full flex-col gap-1.5">
           {bottomItems.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}

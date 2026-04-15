@@ -7,6 +7,7 @@ import { testAgentProviderConnection } from "../../lib/agent/modelGateway";
 import type { ProviderConnectionTestResult } from "../../lib/agent/modelGateway";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import { MODEL_PROVIDER_RECOMMENDATIONS } from "./modelProviderRecommendations";
+import { SettingsHeaderButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 
 type ModelProviderCardProps = {
   config: AgentProviderConfig;
@@ -139,7 +140,7 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
   }
 
   return (
-    <section className="border-b border-[#e2e8f0] dark:border-[#20242b]">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
       <Toast
         open={toast !== null}
         title={toast?.title ?? ""}
@@ -147,41 +148,36 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
         tone={toast?.tone}
         onClose={() => setToast(null)}
       />
-      <div className="flex items-center justify-between gap-3 px-3 py-3">
-        <div className="flex items-center gap-2 text-[#111827] dark:text-[#f3f4f6]">
-          <PlugZap className="h-4 w-4" />
-          <h2 className="text-[15px] font-semibold tracking-[-0.03em]">模型设置</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={!canSave}
-            onClick={() => void onSave()}
-            className="inline-flex h-8 items-center rounded-[8px] border border-[#0f172a] bg-[#0f172a] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#1e293b] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#f3f4f6] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white"
-          >
-            {isSaving ? "保存中..." : "保存"}
-          </button>
-          <button
-            type="button"
-            disabled={!canTestConnection}
-            onClick={() => void handleTestConnection()}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[#d7dde8] px-3 text-[12px] font-medium text-[#475569] transition-colors hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#2a3038] dark:text-zinc-200 dark:hover:bg-[#1b1f26]"
-          >
-            {isTesting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Cable className="h-3.5 w-3.5" />}
-            {isTesting ? "测试中..." : "测试连接"}
-          </button>
-          <button
-            type="button"
-            onClick={onReset}
-            className="inline-flex h-8 items-center rounded-[8px] border border-[#d7dde8] px-3 text-[12px] font-medium text-[#475569] transition-colors hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-200 dark:hover:bg-[#1b1f26]"
-          >
-            重置
-          </button>
-        </div>
-      </div>
+      <SettingsSectionHeader
+        title="模型设置"
+        icon={<PlugZap className="h-4 w-4" />}
+        actions={
+          <>
+            <SettingsHeaderButton
+              type="button"
+              disabled={!canSave}
+              onClick={() => void onSave()}
+            >
+              {isSaving ? "保存中..." : "保存"}
+            </SettingsHeaderButton>
+            <SettingsHeaderButton
+              type="button"
+              disabled={!canTestConnection}
+              onClick={() => void handleTestConnection()}
+            >
+              {isTesting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Cable className="h-3.5 w-3.5" />}
+              {isTesting ? "测试中..." : "测试连接"}
+            </SettingsHeaderButton>
+            <SettingsHeaderButton type="button" onClick={onReset}>
+              重置
+            </SettingsHeaderButton>
+          </>
+        }
+      />
 
-      <div className="grid gap-3 border-t border-[#e2e8f0] px-3 py-3 lg:grid-cols-2 dark:border-[#20242b]">
-        <label className="block">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="grid gap-3 px-3 py-3 lg:grid-cols-2">
+          <label className="block">
           <span className="mb-1.5 inline-flex items-center gap-2 text-xs font-medium text-[#475569] dark:text-zinc-300">
             <Cable className="h-3.5 w-3.5" />
             Base URL
@@ -226,9 +222,9 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
           />
         </label>
 
-        <div className="lg:col-span-2">
-          <div className="border-t border-[#e2e8f0] pt-3 dark:border-[#20242b]">
-            <div className="grid grid-cols-5 border-t border-l border-[#e2e8f0] 2xl:grid-cols-7 dark:border-[#20242b]">
+          <div className="lg:col-span-2">
+            <div className="border-t border-[#e2e8f0] pt-3 dark:border-[#20242b]">
+              <div className="grid grid-cols-5 border-t border-l border-[#e2e8f0] 2xl:grid-cols-7 dark:border-[#20242b]">
               {MODEL_PROVIDER_RECOMMENDATIONS.map((recommendation) => {
                 const isSelected = normalizeUrlForCompare(recommendation.baseURL) === normalizedBaseUrl;
 
@@ -281,6 +277,7 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
         </div>

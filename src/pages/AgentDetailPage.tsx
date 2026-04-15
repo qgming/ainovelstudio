@@ -32,10 +32,10 @@ function FileTreeButton({
       type="button"
       onClick={onClick}
       className={[
-        "flex w-full items-center border-b border-[#e2e8f0] px-3 py-2 text-left transition dark:border-[#20242b]",
+        "flex w-full items-center border-b border-border px-3 py-2 text-left transition",
         active
-          ? "bg-[#eaf3ff] text-[#0f172a] dark:bg-[#162131] dark:text-[#f8fbff]"
-          : "text-[#334155] hover:bg-[#eef2f7] dark:text-zinc-300 dark:hover:bg-[#171b21]",
+          ? "bg-accent text-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
       ].join(" ")}
     >
       <span className="block min-w-0 truncate text-sm font-medium">{label}</span>
@@ -149,7 +149,7 @@ export function AgentDetailPage() {
 
   if (!agent) {
     return (
-      <PageShell title={<DetailTitle currentLabel="代理详情" parentLabel="代理中心" parentTo="/agents" />}>
+      <PageShell title={<DetailTitle currentLabel="代理详情" parentLabel="代理库" parentTo="/agents" />}>
         <div className="flex h-full min-h-0 items-center justify-center px-6 text-sm text-[#64748b] dark:text-zinc-400">
           <div className="space-y-3 text-center">
             <h2 className="text-base font-semibold text-[#111827] dark:text-zinc-100">未找到该代理</h2>
@@ -159,7 +159,7 @@ export function AgentDetailPage() {
               onClick={() => navigate("/agents")}
               className="inline-flex h-9 items-center rounded-[10px] border border-[#d7dde8] px-4 text-sm font-medium text-[#111827] transition-colors hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-100 dark:hover:bg-[#1b1f26]"
             >
-              返回代理中心
+              返回代理库
             </button>
           </div>
         </div>
@@ -170,7 +170,7 @@ export function AgentDetailPage() {
   return (
     <>
       <PageShell
-        title={<DetailTitle currentLabel={agent.name} parentLabel="代理中心" parentTo="/agents" />}
+        title={<DetailTitle currentLabel={agent.name} parentLabel="代理库" parentTo="/agents" />}
         contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
         headerRight={
           <div className="flex items-center gap-2">
@@ -191,7 +191,7 @@ export function AgentDetailPage() {
         }
       >
         <div className="flex h-full min-h-0 flex-col gap-0 lg:flex-row">
-          <aside className="w-full shrink-0 overflow-y-auto border-b border-[#e2e8f0] bg-[#f7f7f8] dark:border-[#20242b] dark:bg-[#111214] lg:w-[240px] lg:border-r lg:border-b-0">
+          <aside className="w-full shrink-0 overflow-y-auto border-b border-border bg-app lg:w-[240px] lg:border-r lg:border-b-0">
             <div>
               {PRIMARY_FILES.map((path) => (
                 <FileTreeButton key={path} active={selectedPath === path} label={path} onClick={() => void handleSelectPath(path)} />

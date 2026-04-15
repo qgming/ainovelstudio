@@ -65,7 +65,7 @@ export function BookTreeItem({
         role="treeitem"
         aria-expanded={isDirectory ? isExpanded : undefined}
         className={[
-          "group flex items-center gap-1 pr-2 transition",
+          "group flex items-center gap-1 transition",
           isSelected
             ? "bg-accent text-foreground"
             : "text-muted-foreground hover:bg-accent hover:text-foreground",
