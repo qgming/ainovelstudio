@@ -1,0 +1,12 @@
+{
+  "id": "boring-detect",
+  "name": "boring-detect",
+  "description": "流水账检测文件处理器，负责扫描小说目录、解析章节范围，并逐章检测无冲突、无情绪、无期待感的流水账问题。",
+  "role": "流水账检测",
+  "dispatchHint": "当用户要求流水账检测、检查流水账、平淡检测，或给出小说目录与章节范围要求逐章检测时优先委派。",
+  "tags": ["流水账检测", "流水账", "检测", "检查", "检查流水账", "平淡检测", "章节", "chapter"],
+  "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0",
+  "maxTurns": 8
+}

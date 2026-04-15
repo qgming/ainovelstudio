@@ -306,7 +306,7 @@ fn build_agent_manifest_from_files(
         .get("TOOLS.md")
         .and_then(|content| preview_text(content))
         .or_else(|| {
-            warnings.push("建议提供 TOOLS.md，用于描述该代理的工具与技能边界。".into());
+            warnings.push("建议提供 TOOLS.md，用于描述该代理的常用工具与工作方式。".into());
             None
         });
     let memory_preview = files
@@ -545,7 +545,7 @@ fn build_agent_manifest_template(name: &str, description: &str) -> String {
         "role": name,
         "dispatchHint": "当任务与该代理专长高度相关时优先委派。",
         "tags": ["writing"],
-        "suggestedTools": ["read_file", "write_file"],
+        "suggestedTools": [],
         "defaultEnabled": false,
         "version": "1.0.0",
         "maxTurns": 5
@@ -604,7 +604,7 @@ fn create_agent_record(app: &AppHandle, name: &str, description: &str) -> Comman
         ),
         (
             "TOOLS.md".to_string(),
-            "# TOOLS\n\n- 记录该代理可用的工具与技能。\n".into(),
+            "# TOOLS\n\n- 当前代理继承主会话全部已启用工具。\n- 在这里记录常用工具组合、偏好顺序与工作方式。\n".into(),
         ),
         (
             "MEMORY.md".to_string(),

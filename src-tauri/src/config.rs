@@ -42,6 +42,7 @@ fn build_document(markdown: String, initialized_from_builtin: bool) -> DefaultAg
 
 fn ensure_default_agent_document(app: &AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
     let connection = open_database(app)?;
+    let builtin_markdown = normalize_markdown(DEFAULT_AGENT_TEMPLATE);
     let existing = connection
         .query_row(
             "SELECT markdown, initialized_from_builtin FROM config_documents WHERE key = ?1",
@@ -52,20 +53,47 @@ fn ensure_default_agent_document(app: &AppHandle) -> CommandResult<DefaultAgentC
         .map_err(error_to_string)?;
 
     if let Some((markdown, initialized_from_builtin)) = existing {
+        let normalized_markdown = normalize_markdown(&markdown);
+        if initialized_from_builtin && normalized_markdown != builtin_markdown {
+            connection
+                .execute(
+                    r#"
+                    UPDATE config_documents
+                    SET markdown = ?2,
+                        updated_at = ?3
+                    WHERE key = ?1
+                    "#,
+                    params![
+                        DEFAULT_AGENT_CONFIG_KEY,
+                        builtin_markdown,
+                        current_timestamp()
+                    ],
+                )
+                .map_err(error_to_string)?;
+
+            return Ok(build_document(
+                normalize_markdown(DEFAULT_AGENT_TEMPLATE),
+                true,
+            ));
+        }
+
         return Ok(build_document(
-            normalize_markdown(&markdown),
+            normalized_markdown,
             initialized_from_builtin,
         ));
     }
 
-    let markdown = normalize_markdown(DEFAULT_AGENT_TEMPLATE);
     connection
         .execute(
             r#"
             INSERT INTO config_documents (key, markdown, initialized_from_builtin, updated_at)
             VALUES (?1, ?2, 1, ?3)
             "#,
-            params![DEFAULT_AGENT_CONFIG_KEY, markdown, current_timestamp()],
+            params![
+                DEFAULT_AGENT_CONFIG_KEY,
+                builtin_markdown,
+                current_timestamp()
+            ],
         )
         .map_err(error_to_string)?;
 

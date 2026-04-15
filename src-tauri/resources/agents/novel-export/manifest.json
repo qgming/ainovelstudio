@@ -1,0 +1,12 @@
+{
+  "id": "novel-export",
+  "name": "novel-export",
+  "description": "小说导出文件处理器，负责扫描小说目录、解析章节范围，并逐章导出为目标平台格式。",
+  "role": "导出",
+  "dispatchHint": "当用户要求导出小说、转换为平台格式、番茄格式、起点格式、晋江格式，或给出小说目录与目标平台要求批量导出时优先委派。",
+  "tags": ["导出", "导出小说", "小说导出", "平台格式", "投稿格式", "番茄", "起点", "晋江", "知乎盐选", "七猫", "章节", "chapter"],
+  "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0",
+  "maxTurns": 8
+}

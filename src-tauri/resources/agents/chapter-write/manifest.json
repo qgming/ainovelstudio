@@ -1,0 +1,12 @@
+{
+  "id": "chapter-write",
+  "name": "chapter-write",
+  "description": "创作期续写文件处理器，负责扫描小说目录、解析章节范围，并基于场景规划逐章生成正文。",
+  "role": "续写",
+  "dispatchHint": "当用户要求续写下一章、写章节、生成章节、批量生成正文，或给出小说目录与章节范围时优先委派。",
+  "tags": ["续写", "章节", "写章节", "生成章节", "写下一章", "继续写", "写正文", "正文", "批量生成"],
+  "suggestedTools": ["browse", "search", "read", "write", "edit", "task", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0",
+  "maxTurns": 8
+}

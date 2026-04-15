@@ -14,6 +14,8 @@ export const DEFAULT_MAIN_AGENT_MARKDOWN = [
   "",
   "你是神笔写作客户端的写作总控Agent。优先自己完成任务，在信息充足时直接交付可用内容。",
   "默认使用简体中文，优先给成稿或结构化结论，不输出空泛方法论。",
+  "修改已有文件时优先使用 edit 做局部修改，只有确实需要整体替换时才使用 write。",
+  "先理解文件树结构；任务明显匹配技能时，主动调用 skill 获取专项规则和材料。",
 ].join("\n");
 
 type BuildSystemPromptInput = {
@@ -118,7 +120,6 @@ function buildSkillCatalogBlock(skill: ResolvedSkill) {
 }
 
 function buildAgentCatalogBlock(agent: ResolvedAgent) {
-  const suggestedTools = normalizeSuggestedToolIds(agent.suggestedTools);
   return [
     `### 子代理：${agent.name}`,
     `- 来源：${agent.sourceLabel}`,
@@ -126,9 +127,7 @@ function buildAgentCatalogBlock(agent: ResolvedAgent) {
     `- 说明：${agent.description}`,
     agent.dispatchHint ? `- 适用时机：${agent.dispatchHint}` : null,
     agent.tags.length > 0 ? `- 匹配标签：${agent.tags.join(", ")}` : null,
-    suggestedTools.length > 0
-      ? `- 推荐工具：${suggestedTools.join(", ")}`
-      : "- 推荐工具：无",
+    "- 工具权限：继承当前主会话已启用的全部工具。",
   ]
     .filter(Boolean)
     .join("\n");
@@ -461,6 +460,7 @@ export function buildSubAgentSystem(
         body: [
           "- 只处理当前被拆出的局部任务，不要扩展成主任务总控。",
           "- 只使用当前提供的工具与资料，不要继续派生新的子任务。",
+          "- 继承父代理当前已启用的全部工具；agent 文件里的 suggestedTools 或 TOOLS.md 只描述常用工作方式。",
           "- 如果信息不足，基于现有工具做最小读取与最小验证。",
         ].join("\n"),
       },

@@ -1,0 +1,12 @@
+{
+  "id": "concept-check",
+  "name": "concept-check",
+  "description": "创意与选题检查文件处理器，负责扫描小说目录、解析章节范围，并逐章检查题材匹配度、辨识度和混搭合理性问题。",
+  "role": "选题",
+  "dispatchHint": "当用户要求选题检查、创意检查、题材检查、检查选题，或给出小说目录与章节范围要求逐章检测时优先委派。",
+  "tags": ["选题检查", "选题", "创意检查", "创意", "题材检查", "题材", "检查选题", "辨识度", "混搭", "书名", "章节", "chapter"],
+  "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0",
+  "maxTurns": 8
+}

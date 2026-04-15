@@ -86,7 +86,7 @@ version: 1.3.0
 
 **传入上下文**：`01-五句式大纲.md`、`03-人物卡片/`、`04-人物背景/`（agent 自主读取）
 **输出物**：`02-一页纸大纲.md`、`05-完整大纲.md`
-**参考**：[outline-builder agent](../../agents/outline-builder.md)
+**参考**：[outline-builder agent](../../agents/outline-builder/AGENTS.md)
 
 #### 步骤 7：人物宝典
 
@@ -118,7 +118,7 @@ version: 1.3.0
 
 **传入上下文**：`08-场景规划/`、`06-人物宝典/`、`00-写作风格.md`、`正文/`（agent 自主读取）
 **输出物**：`正文/第N章.md`
-**参考**：[chapter-write skill](../chapter-write/SKILL.md) | [chapter-write agent](../../agents/chapter-write.md)
+**参考**：[chapter-write skill](../chapter-write/SKILL.md) | [chapter-write agent](../../agents/chapter-write/AGENTS.md)
 
 单章生成、批量生成和并发控制均由 chapter-write agent 负责。
 
@@ -203,13 +203,13 @@ version: 1.3.0
 
 ## 相关资源
 
-- [snowflake-fiction agent](../../agents/snowflake-fiction.md)（文件处理器：目录扫描、批量生成）
+- [snowflake-fiction agent](../../agents/snowflake-fiction/AGENTS.md)（文件处理器：目录扫描、批量生成）
 - [outline-concept skill](../outline-concept/SKILL.md)
 - [character-design skill](../character-design/SKILL.md)
-- [outline-builder agent](../../agents/outline-builder.md)
+- [outline-builder agent](../../agents/outline-builder/AGENTS.md)
 - [scene-plan skill](../scene-plan/SKILL.md)
 - [chapter-write skill](../chapter-write/SKILL.md)
-- [chapter-write agent](../../agents/chapter-write.md)
+- [chapter-write agent](../../agents/chapter-write/AGENTS.md)
 - [humanize-text skill](../humanize-text/SKILL.md)
 - [humanize-text agent](../../agents/humanize-text.md)
 - [novel-export skill](../novel-export/SKILL.md)
