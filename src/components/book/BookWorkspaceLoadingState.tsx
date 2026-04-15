@@ -6,7 +6,7 @@ type BookWorkspaceLoadingStateProps = {
 };
 
 export function BookWorkspaceLoadingState({
-  description = "已检测到上次打开的书籍，正在恢复目录和编辑内容。",
+  description = "已检测到上次打开的书籍，正在恢复书籍结构和编辑内容。",
   title = "正在恢复书籍工作区...",
 }: BookWorkspaceLoadingStateProps) {
   return (

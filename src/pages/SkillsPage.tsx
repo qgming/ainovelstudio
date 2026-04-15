@@ -9,7 +9,6 @@ import { useNavigate } from "react-router-dom";
 export function SkillsPage() {
   const navigate = useNavigate();
   const errorMessage = useSkillsStore((state) => state.errorMessage);
-  const lastScannedAt = useSkillsStore((state) => state.lastScannedAt);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
   const status = useSkillsStore((state) => state.status);
@@ -31,9 +30,6 @@ export function SkillsPage() {
   }, [initialize, status]);
 
   const skills = getResolvedSkills({ manifests, preferences });
-  const builtinCount = skills.filter((skill) => skill.sourceKind === "builtin-package").length;
-  const installedCount = skills.filter((skill) => skill.sourceKind === "installed-package").length;
-  const invalidCount = skills.filter((skill) => !skill.validation.isValid).length;
 
   async function handleCreateSkill() {
     if (createBusy) {
@@ -79,7 +75,6 @@ export function SkillsPage() {
   return (
     <>
       <PageShell
-        title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">技能中心</h1>}
         actions={[
           { icon: RefreshCw, label: "刷新技能库", tone: "default", onClick: () => void refresh() },
           { icon: Upload, label: "导入技能", tone: "default", onClick: () => importInputRef.current?.click() },
@@ -94,18 +89,9 @@ export function SkillsPage() {
           onChange={(event) => void handleImportChange(event)}
         />
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-[#e2e8f0] px-4 py-3 text-xs text-[#526074] dark:border-[#20242b] dark:text-zinc-400 sm:px-5">
-            <span>共 {skills.length} 个技能</span>
-            <span>内置 {builtinCount}</span>
-            <span>已安装 {installedCount}</span>
-            {invalidCount > 0 ? <span>异常 {invalidCount}</span> : null}
-            {lastScannedAt ? <span>最近扫描 {new Date(lastScannedAt).toLocaleTimeString()}</span> : null}
-          </div>
-
           {errorMessage ? (
             <div className="border-b border-[#f1d1d1] bg-[#fff5f5] px-4 py-3 text-sm text-[#b42318] dark:border-[#4a2323] dark:bg-[#221314] dark:text-[#ffb4ab] sm:px-5">
-              <p className="font-medium">技能导入/扫描失败</p>
-              <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
+              <pre className="whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
             </div>
           ) : null}
 

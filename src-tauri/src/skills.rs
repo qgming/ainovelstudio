@@ -1,4 +1,6 @@
-use crate::{db::open_database, embedded_resources::EMBEDDED_SKILL_FILES, ToolCancellationRegistry};
+use crate::{
+    db::open_database, embedded_resources::EMBEDDED_SKILL_FILES, ToolCancellationRegistry,
+};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -235,8 +237,8 @@ fn parse_skill_markdown(raw: &str) -> CommandResult<ParsedSkillMarkdown> {
         });
     }
 
-    let parsed =
-        serde_yaml::from_str::<Value>(&yaml_raw).map_err(|error| format!("YAML 解析失败：{error}"))?;
+    let parsed = serde_yaml::from_str::<Value>(&yaml_raw)
+        .map_err(|error| format!("YAML 解析失败：{error}"))?;
 
     match parsed {
         Value::Object(_) => Ok(ParsedSkillMarkdown {
@@ -553,7 +555,9 @@ fn load_skill_record(
         .transpose()
 }
 
-fn load_all_skill_records(connection: &Connection) -> CommandResult<Vec<(SkillManifest, SkillFiles)>> {
+fn load_all_skill_records(
+    connection: &Connection,
+) -> CommandResult<Vec<(SkillManifest, SkillFiles)>> {
     let mut statement = connection
         .prepare("SELECT manifest_json, files_json FROM skill_packages")
         .map_err(error_to_string)?;
@@ -572,7 +576,10 @@ fn load_all_skill_records(connection: &Connection) -> CommandResult<Vec<(SkillMa
 
 fn delete_skill_record(connection: &Connection, skill_id: &str) -> CommandResult<()> {
     connection
-        .execute("DELETE FROM skill_packages WHERE id = ?1", params![skill_id])
+        .execute(
+            "DELETE FROM skill_packages WHERE id = ?1",
+            params![skill_id],
+        )
         .map_err(error_to_string)?;
     Ok(())
 }
@@ -583,9 +590,12 @@ fn collect_embedded_skill_files(skill_id: &str) -> SkillFiles {
         .iter()
         .filter(|file| file.path.starts_with(&prefix))
         .filter_map(|file| {
-            file.path
-                .strip_prefix(&prefix)
-                .map(|relative_path| (relative_path.to_string(), normalize_text_content(file.content)))
+            file.path.strip_prefix(&prefix).map(|relative_path| {
+                (
+                    relative_path.to_string(),
+                    normalize_text_content(file.content),
+                )
+            })
         })
         .collect()
 }
@@ -662,7 +672,10 @@ fn scan_all_skills(
     Ok(manifests)
 }
 
-fn read_skill_package(app: &AppHandle, skill_id: &str) -> CommandResult<(SkillManifest, SkillFiles)> {
+fn read_skill_package(
+    app: &AppHandle,
+    skill_id: &str,
+) -> CommandResult<(SkillManifest, SkillFiles)> {
     ensure_builtin_skills_seeded(app)?;
     let connection = open_database(app)?;
     load_skill_record(&connection, skill_id)?.ok_or_else(|| "未找到对应技能。".into())
@@ -713,7 +726,8 @@ fn create_skill_record(app: &AppHandle, name: &str, description: &str) -> Comman
         SKILL_PRIMARY_FILE.to_string(),
         build_skill_markdown_template(&safe_name, trimmed_description),
     )]);
-    let manifest = build_skill_manifest_from_files(&safe_name, &files, SKILL_SOURCE_INSTALLED, false)?;
+    let manifest =
+        build_skill_manifest_from_files(&safe_name, &files, SKILL_SOURCE_INSTALLED, false)?;
     if !manifest.validation.is_valid {
         let error_details = manifest.validation.errors.join("；");
         return Err(if error_details.is_empty() {
@@ -757,10 +771,15 @@ fn write_skill_content(
     save_skill_files(app, skill_id, &files, SKILL_SOURCE_INSTALLED, false)
 }
 
-fn read_skill_content(app: &AppHandle, skill_id: &str, relative_path: &str) -> CommandResult<String> {
+fn read_skill_content(
+    app: &AppHandle,
+    skill_id: &str,
+    relative_path: &str,
+) -> CommandResult<String> {
     let path = validate_skill_file_path(relative_path)?;
     let (_, files) = read_skill_package(app, skill_id)?;
-    files.get(&path)
+    files
+        .get(&path)
         .cloned()
         .ok_or_else(|| "未找到对应技能文件。".into())
 }
@@ -898,7 +917,8 @@ fn read_skill_files_from_archive<R: Read + std::io::Seek>(
 }
 
 fn derive_skill_id(files: &SkillFiles, file_name: &str) -> String {
-    files.get(SKILL_PRIMARY_FILE)
+    files
+        .get(SKILL_PRIMARY_FILE)
         .and_then(|raw| parse_skill_markdown(raw).ok())
         .and_then(|parsed| {
             parsed
@@ -921,20 +941,25 @@ fn install_skill_archive(
     file_name: &str,
     archive_bytes: Vec<u8>,
 ) -> CommandResult<Vec<SkillManifest>> {
-    let mut archive =
-        ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
+    let mut archive = ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
     let files = read_skill_files_from_archive(&mut archive)?;
     let skill_id = derive_skill_id(&files, file_name);
-    let manifest = build_skill_manifest_from_files(&skill_id, &files, SKILL_SOURCE_INSTALLED, false)?;
+    let manifest =
+        build_skill_manifest_from_files(&skill_id, &files, SKILL_SOURCE_INSTALLED, false)?;
     if !manifest.validation.is_valid {
         let error_details = manifest.validation.errors.join("；");
         let warning_details = manifest.validation.warnings.join("；");
-        return Err(match (error_details.is_empty(), warning_details.is_empty()) {
-            (false, false) => format!("技能包校验失败：{}。警告：{}", error_details, warning_details),
-            (false, true) => format!("技能包校验失败：{}", error_details),
-            (true, false) => format!("技能包校验失败，警告：{}", warning_details),
-            (true, true) => "技能包校验失败。".into(),
-        });
+        return Err(
+            match (error_details.is_empty(), warning_details.is_empty()) {
+                (false, false) => format!(
+                    "技能包校验失败：{}。警告：{}",
+                    error_details, warning_details
+                ),
+                (false, true) => format!("技能包校验失败：{}", error_details),
+                (true, false) => format!("技能包校验失败，警告：{}", warning_details),
+                (true, true) => "技能包校验失败。".into(),
+            },
+        );
     }
 
     let connection = open_database(app)?;

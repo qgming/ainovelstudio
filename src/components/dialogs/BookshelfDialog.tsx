@@ -26,7 +26,7 @@ export function BookshelfDialog({
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm leading-6 text-[#64748b] dark:text-[#94a3b8]">
-            从应用内置书库中切换当前书籍，Windows 和 Android 共用同一套书架。
+            从 SQLite 书库中切换当前书籍，Windows 和 Android 共用同一套书架。
           </p>
           <button
             type="button"
@@ -63,7 +63,7 @@ export function BookshelfDialog({
                       {book.name}
                     </span>
                     <span className="mt-1 block truncate text-xs text-[#64748b] dark:text-[#94a3b8]">
-                      {book.path}
+                      书库标识：{book.path}
                     </span>
                   </span>
                 </button>

@@ -12,10 +12,10 @@ import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 
 const rootPath = "C:/books/北境余烬";
 const bookId = "book-1";
-const chapterPath = `${rootPath}/04_正文/第一卷/第001章_待命名.md`;
+const chapterPath = `${rootPath}/正文/第一卷/第001章_待命名.md`;
 const otherRootPath = "C:/books/星河回声";
 const otherBookId = "book-2";
-const otherChapterPath = `${otherRootPath}/04_正文/第一卷/第001章_启程.md`;
+const otherChapterPath = `${otherRootPath}/正文/第一卷/第001章_启程.md`;
 
 const initialTree = {
   kind: "directory",
@@ -24,13 +24,13 @@ const initialTree = {
   children: [
     {
       kind: "directory",
-      name: "04_正文",
-      path: `${rootPath}/04_正文`,
+      name: "正文",
+      path: `${rootPath}/正文`,
       children: [
         {
           kind: "directory",
           name: "第一卷",
-          path: `${rootPath}/04_正文/第一卷`,
+          path: `${rootPath}/正文/第一卷`,
           children: [
             {
               kind: "file",
@@ -52,13 +52,13 @@ const otherTree = {
   children: [
     {
       kind: "directory",
-      name: "04_正文",
-      path: `${otherRootPath}/04_正文`,
+      name: "正文",
+      path: `${otherRootPath}/正文`,
       children: [
         {
           kind: "directory",
           name: "第一卷",
-          path: `${otherRootPath}/04_正文/第一卷`,
+          path: `${otherRootPath}/正文/第一卷`,
           children: [
             {
               kind: "file",

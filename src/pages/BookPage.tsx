@@ -359,7 +359,7 @@ export function BookPage({
           <BookWorkspaceLoadingState />
         ) : shouldShowWorkspaceOpenState ? (
           <BookWorkspaceLoadingState
-            description="正在读取书籍目录、文件树和编辑上下文，请稍候。"
+            description="正在读取书籍结构、文件树和编辑上下文，请稍候。"
             title="正在打开书籍工作区..."
           />
         ) : rootNode ? (

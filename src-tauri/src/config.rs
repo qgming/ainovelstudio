@@ -32,10 +32,7 @@ fn current_timestamp() -> i64 {
         .unwrap_or(0)
 }
 
-fn build_document(
-    markdown: String,
-    initialized_from_builtin: bool,
-) -> DefaultAgentConfigDocument {
+fn build_document(markdown: String, initialized_from_builtin: bool) -> DefaultAgentConfigDocument {
     DefaultAgentConfigDocument {
         initialized_from_builtin,
         markdown,

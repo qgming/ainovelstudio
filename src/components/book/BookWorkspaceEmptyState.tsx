@@ -21,7 +21,7 @@ export function BookWorkspaceEmptyState({
           选择一本书，或新建一本书。
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-center text-base leading-7 text-[#6b7280] dark:text-[#9aa4b2]">
-          从应用内置书库中切换已有作品，或者生成一套适合 AI 小说创作的中文模板结构。
+          从 SQLite 书库中切换已有作品，或者生成一套适合 AI 小说创作的中文模板结构。
         </p>
         <div className="mt-10 grid gap-px overflow-hidden border border-[#e2e8f0] bg-[#e2e8f0] md:grid-cols-2 dark:border-[#262a31] dark:bg-[#262a31]">
           <button

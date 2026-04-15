@@ -17,10 +17,10 @@ const bookId = "book-1";
 const rootPath = "C:/books/北境余烬";
 const otherBookId = "book-2";
 const otherRootPath = "C:/books/星河回声";
-const chapterPath = `${rootPath}/04_正文/第一卷/第001章_待命名.md`;
-const secondVolumePath = `${rootPath}/04_正文/第二卷/第002章_并行线.md`;
-const trackerPath = `${rootPath}/04_正文/创作状态追踪器.json`;
-const otherChapterPath = `${otherRootPath}/04_正文/第一卷/第001章_启程.md`;
+const chapterPath = `${rootPath}/正文/第一卷/第001章_待命名.md`;
+const secondVolumePath = `${rootPath}/正文/第二卷/第002章_并行线.md`;
+const trackerPath = `${rootPath}/正文/创作状态追踪器.json`;
+const otherChapterPath = `${otherRootPath}/正文/第一卷/第001章_启程.md`;
 const tree = {
   kind: "directory",
   name: "北境余烬",
@@ -28,13 +28,13 @@ const tree = {
   children: [
     {
       kind: "directory",
-      name: "04_正文",
-      path: `${rootPath}/04_正文`,
+      name: "正文",
+      path: `${rootPath}/正文`,
       children: [
         {
           kind: "directory",
           name: "第一卷",
-          path: `${rootPath}/04_正文/第一卷`,
+          path: `${rootPath}/正文/第一卷`,
           children: [
             {
               kind: "file",
@@ -47,7 +47,7 @@ const tree = {
         {
           kind: "directory",
           name: "第二卷",
-          path: `${rootPath}/04_正文/第二卷`,
+          path: `${rootPath}/正文/第二卷`,
           children: [
             {
               kind: "file",
@@ -66,10 +66,10 @@ const tree = {
       ],
     },
     {
-      kind: "directory",
-      name: "03_剧情大纲",
-      path: `${rootPath}/03_剧情大纲`,
-      children: [],
+      kind: "file",
+      name: "05-完整大纲.md",
+      path: `${rootPath}/05-完整大纲.md`,
+      extension: ".md",
     },
   ],
 } as const;
@@ -81,13 +81,13 @@ const otherTree = {
   children: [
     {
       kind: "directory",
-      name: "04_正文",
-      path: `${otherRootPath}/04_正文`,
+      name: "正文",
+      path: `${otherRootPath}/正文`,
       children: [
         {
           kind: "directory",
           name: "第一卷",
-          path: `${otherRootPath}/04_正文/第一卷`,
+          path: `${otherRootPath}/正文/第一卷`,
           children: [
             {
               kind: "file",

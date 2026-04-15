@@ -209,7 +209,6 @@ export function HomePage() {
   return (
     <>
       <PageShell
-        title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">首页</h1>}
         actions={[
           { icon: RefreshCw, label: "刷新书架", tone: "default", onClick: () => void refreshBooks() },
           {
@@ -236,16 +235,9 @@ export function HomePage() {
         />
 
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-[#e2e8f0] px-4 py-3 text-xs text-[#526074] dark:border-[#20242b] dark:text-zinc-400 sm:px-5">
-            <span>共 {books.length} 本书籍</span>
-            <span>支持导入 ZIP 到内置书库</span>
-            <span>点击图书可进入图书工作区</span>
-          </div>
-
           {errorMessage ? (
             <div className="border-b border-[#f1d1d1] bg-[#fff5f5] px-4 py-3 text-sm text-[#b42318] dark:border-[#4a2323] dark:bg-[#221314] dark:text-[#ffb4ab] sm:px-5">
-              <p className="font-medium">书籍操作失败</p>
-              <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
+              <pre className="whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
             </div>
           ) : null}
 
@@ -313,7 +305,7 @@ export function HomePage() {
                     先导入一本书，或新建一本书。
                   </h2>
                   <p className="mt-3 text-sm leading-7 text-[#64748b] dark:text-zinc-400">
-                    支持导入标准 ZIP 书籍包并自动解压到内置书库。导入完成后会直接进入工作区，新建书籍则会生成默认创作模板。
+                    支持将标准 ZIP 书籍包导入 SQLite 书库。导入完成后会直接进入工作区，新建书籍则会生成默认创作模板。
                   </p>
                   <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                     <button
@@ -375,7 +367,7 @@ export function HomePage() {
         <PromptDialog
           busy={createBusy}
           confirmLabel="创建书籍"
-          description="输入书名后，系统会在应用内置书库中自动初始化中文模板结构。"
+          description="输入书名后，系统会在 SQLite 书库中初始化中文模板结构。"
           label="书名"
           onCancel={() => {
             if (createBusy) {
@@ -395,7 +387,7 @@ export function HomePage() {
         <ConfirmDialog
           busy={deleteBusyPath === deleteTarget.path}
           confirmLabel="删除图书"
-          description={`将《${deleteTarget.name}》从内置书库中永久删除。`}
+          description={`将《${deleteTarget.name}》从 SQLite 书库中永久删除。`}
           onCancel={() => {
             if (deleteBusyPath) {
               return;

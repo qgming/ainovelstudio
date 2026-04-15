@@ -1,3 +1,4 @@
+use crate::workspace_db::run_workspace_migrations;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::fs;
@@ -103,7 +104,10 @@ fn migrate_active_session_state_key(
     }
 
     connection
-        .execute("DELETE FROM app_state WHERE key = ?1", params![previous_key])
+        .execute(
+            "DELETE FROM app_state WHERE key = ?1",
+            params![previous_key],
+        )
         .map_err(error_to_string)?;
     Ok(())
 }
@@ -258,6 +262,7 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
 
     ensure_chat_sessions_book_id_column(connection)?;
     cleanup_book_workspace_registry(connection)?;
+    run_workspace_migrations(connection)?;
 
     connection
         .execute_batch(

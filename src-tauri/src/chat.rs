@@ -290,7 +290,10 @@ fn create_session(connection: &rusqlite::Connection, book_id: &str) -> CommandRe
     Ok(session_id)
 }
 
-fn ensure_active_session(connection: &rusqlite::Connection, book_id: &str) -> CommandResult<String> {
+fn ensure_active_session(
+    connection: &rusqlite::Connection,
+    book_id: &str,
+) -> CommandResult<String> {
     let sessions = load_sessions(connection, book_id)?;
     if sessions.is_empty() {
         let session_id = create_session(connection, book_id)?;

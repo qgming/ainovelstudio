@@ -52,7 +52,7 @@ import { useThemeStore } from "./stores/themeStore";
 
 const rootPath = "C:/books/北境余烬";
 const bookId = "book-1";
-const chapterPath = `${rootPath}/04_正文/第一卷/第001章_待命名.md`;
+const chapterPath = `${rootPath}/正文/第一卷/第001章_待命名.md`;
 const chatBootstrap = {
   bookId: "__global__",
   sessions: [
@@ -206,11 +206,10 @@ describe("App shell", () => {
   });
 
   it("可以切换到代理页", async () => {
+    window.location.hash = "#/agents";
     render(<App />);
 
-    fireEvent.click(screen.getByRole("link", { name: "代理" }));
-
-    expect(await screen.findByRole("heading", { name: "代理中心" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "刷新代理库" })).toBeInTheDocument();
   });
 
   it("默认进入首页并展示书籍入口动作", async () => {
@@ -226,7 +225,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "首页" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "刷新书架" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导入书籍" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建书籍" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开书籍 北境余烬" })).toBeInTheDocument();
@@ -246,7 +245,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "首页" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "刷新书架" })).toBeInTheDocument();
     expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_builtin_skills")).toHaveLength(0);
     expect(mockInvoke.mock.calls.filter(([command]) => command === "scan_installed_skills")).toHaveLength(0);
     expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_builtin_agents")).toHaveLength(0);
@@ -433,7 +432,7 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "主题切换" }));
 
     expect(document.documentElement).not.toHaveClass("dark");
-    expect(await screen.findByRole("heading", { name: "技能中心" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "刷新技能库" })).toBeInTheDocument();
   });
 
   it("设置页支持编辑默认 AGENTS，并可切换到工具库", async () => {

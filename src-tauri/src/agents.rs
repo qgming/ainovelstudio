@@ -1,4 +1,6 @@
-use crate::{db::open_database, embedded_resources::EMBEDDED_AGENT_FILES, ToolCancellationRegistry};
+use crate::{
+    db::open_database, embedded_resources::EMBEDDED_AGENT_FILES, ToolCancellationRegistry,
+};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -409,7 +411,9 @@ fn load_agent_record(
         .transpose()
 }
 
-fn load_all_agent_records(connection: &Connection) -> CommandResult<Vec<(AgentManifest, AgentFiles)>> {
+fn load_all_agent_records(
+    connection: &Connection,
+) -> CommandResult<Vec<(AgentManifest, AgentFiles)>> {
     let mut statement = connection
         .prepare("SELECT manifest_json, files_json FROM agent_packages")
         .map_err(error_to_string)?;
@@ -428,7 +432,10 @@ fn load_all_agent_records(connection: &Connection) -> CommandResult<Vec<(AgentMa
 
 fn delete_agent_record(connection: &Connection, agent_id: &str) -> CommandResult<()> {
     connection
-        .execute("DELETE FROM agent_packages WHERE id = ?1", params![agent_id])
+        .execute(
+            "DELETE FROM agent_packages WHERE id = ?1",
+            params![agent_id],
+        )
         .map_err(error_to_string)?;
     Ok(())
 }
@@ -439,9 +446,12 @@ fn collect_embedded_agent_files(agent_id: &str) -> AgentFiles {
         .iter()
         .filter(|file| file.path.starts_with(&prefix))
         .filter_map(|file| {
-            file.path
-                .strip_prefix(&prefix)
-                .map(|relative_path| (relative_path.to_string(), normalize_text_content(file.content)))
+            file.path.strip_prefix(&prefix).map(|relative_path| {
+                (
+                    relative_path.to_string(),
+                    normalize_text_content(file.content),
+                )
+            })
         })
         .collect()
 }
@@ -518,7 +528,10 @@ fn scan_all_agents(
     Ok(manifests)
 }
 
-fn read_agent_package(app: &AppHandle, agent_id: &str) -> CommandResult<(AgentManifest, AgentFiles)> {
+fn read_agent_package(
+    app: &AppHandle,
+    agent_id: &str,
+) -> CommandResult<(AgentManifest, AgentFiles)> {
     ensure_builtin_agents_seeded(app)?;
     let connection = open_database(app)?;
     load_agent_record(&connection, agent_id)?.ok_or_else(|| "未找到对应代理。".into())
@@ -581,12 +594,25 @@ fn create_agent_record(app: &AppHandle, name: &str, description: &str) -> Comman
     }
 
     let files = AgentFiles::from([
-        ("manifest.json".to_string(), build_agent_manifest_template(safe_name, trimmed_description)),
-        ("AGENTS.md".to_string(), build_agent_markdown_template(safe_name)),
-        ("TOOLS.md".to_string(), "# TOOLS\n\n- 记录该代理可用的工具与技能。\n".into()),
-        ("MEMORY.md".to_string(), "# MEMORY\n\n- 记录用户对该代理的长期偏好。\n".into()),
+        (
+            "manifest.json".to_string(),
+            build_agent_manifest_template(safe_name, trimmed_description),
+        ),
+        (
+            "AGENTS.md".to_string(),
+            build_agent_markdown_template(safe_name),
+        ),
+        (
+            "TOOLS.md".to_string(),
+            "# TOOLS\n\n- 记录该代理可用的工具与技能。\n".into(),
+        ),
+        (
+            "MEMORY.md".to_string(),
+            "# MEMORY\n\n- 记录用户对该代理的长期偏好。\n".into(),
+        ),
     ]);
-    let manifest = build_agent_manifest_from_files(safe_name, &files, AGENT_SOURCE_INSTALLED, false)?;
+    let manifest =
+        build_agent_manifest_from_files(safe_name, &files, AGENT_SOURCE_INSTALLED, false)?;
     if !manifest.validation.is_valid {
         let error_details = manifest.validation.errors.join("；");
         return Err(if error_details.is_empty() {
@@ -610,10 +636,15 @@ fn write_agent_content(
     save_agent_files(app, agent_id, &files, AGENT_SOURCE_INSTALLED, false)
 }
 
-fn read_agent_content(app: &AppHandle, agent_id: &str, relative_path: &str) -> CommandResult<String> {
+fn read_agent_content(
+    app: &AppHandle,
+    agent_id: &str,
+    relative_path: &str,
+) -> CommandResult<String> {
     let path = validate_agent_file_path(relative_path)?;
     let (_, files) = read_agent_package(app, agent_id)?;
-    files.get(&path)
+    files
+        .get(&path)
         .cloned()
         .ok_or_else(|| "未找到对应代理文件。".into())
 }
@@ -739,7 +770,8 @@ fn read_agent_files_from_archive<R: Read + std::io::Seek>(
 }
 
 fn derive_agent_id(files: &AgentFiles, file_name: &str) -> String {
-    files.get("manifest.json")
+    files
+        .get("manifest.json")
         .and_then(|content| serde_json::from_str::<AgentPackageManifest>(content).ok())
         .map(|manifest| manifest.id)
         .unwrap_or_else(|| {
@@ -756,11 +788,11 @@ fn install_agent_archive(
     file_name: &str,
     archive_bytes: Vec<u8>,
 ) -> CommandResult<Vec<AgentManifest>> {
-    let mut archive =
-        ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
+    let mut archive = ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
     let files = read_agent_files_from_archive(&mut archive)?;
     let agent_id = derive_agent_id(&files, file_name);
-    let manifest = build_agent_manifest_from_files(&agent_id, &files, AGENT_SOURCE_INSTALLED, false)?;
+    let manifest =
+        build_agent_manifest_from_files(&agent_id, &files, AGENT_SOURCE_INSTALLED, false)?;
     if !manifest.validation.is_valid {
         let error_details = manifest.validation.errors.join("；");
         return Err(if error_details.is_empty() {

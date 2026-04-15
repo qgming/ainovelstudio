@@ -14,7 +14,7 @@ type PageShellProps = {
   children: ReactNode;
   contentClassName?: string;
   headerRight?: ReactNode;
-  title: ReactNode;
+  title?: ReactNode;
 };
 
 const actionVariants: Record<NonNullable<PageAction["tone"]>, "outline" | "secondary" | "default"> = {
@@ -30,11 +30,18 @@ export function PageShell({
   headerRight,
   title,
 }: PageShellProps) {
+  const hasHeaderContent = Boolean(title) || Boolean(headerRight) || actions.length > 0;
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]">
-      <header className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b border-[#e2e8f0] px-4 py-1 dark:border-[#20242b] sm:px-5">
-        <div className="min-w-0 flex-1">{title}</div>
-        {headerRight || actions.length > 0 ? (
+      {hasHeaderContent ? (
+        <header
+          className={[
+            "flex min-h-10 shrink-0 items-center gap-3 border-b border-[#e2e8f0] px-4 py-1 dark:border-[#20242b] sm:px-5",
+            title ? "justify-between" : "justify-end",
+          ].join(" ")}
+        >
+          {title ? <div className="min-w-0 flex-1">{title}</div> : null}
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {headerRight}
             {actions.map(({ icon: Icon, label, onClick, tone = "default" }) => (
@@ -50,8 +57,8 @@ export function PageShell({
               </Button>
             ))}
           </div>
-        ) : null}
-      </header>
+        </header>
+      ) : null}
       <div
         className={[
           "min-h-0 flex-1 overflow-hidden",

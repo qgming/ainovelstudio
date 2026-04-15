@@ -103,7 +103,7 @@ const initialState = {
 function buildCreateBookPrompt(): PromptState {
   return {
     confirmLabel: "创建书籍",
-    description: "输入书名后，系统会在应用内置书库中自动初始化中文模板结构。",
+    description: "输入书名后，系统会在 SQLite 书库中初始化中文模板结构。",
     label: "书名",
     mode: "createBook",
     title: "新建书籍",
@@ -114,7 +114,7 @@ function buildCreateBookPrompt(): PromptState {
 function buildCreateFolderPrompt(parentPath: string): PromptState {
   return {
     confirmLabel: "确认新建",
-    description: "在当前目录下创建一个新的文件夹。",
+    description: "在当前结构节点下创建一个新的文件夹。",
     label: "文件夹名",
     mode: "createFolder",
     parentPath,
@@ -554,12 +554,12 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
             bookshelfError: null,
             isBookshelfOpen: false,
           });
-          set({ isBusy: false });
+      set({ isBusy: false });
           return;
         }
 
         if (!rootPath) {
-          throw new Error("当前没有打开的书籍目录。");
+          throw new Error("当前没有打开书籍工作区。");
         }
 
         if (promptState.mode === "createFolder" && promptState.parentPath) {

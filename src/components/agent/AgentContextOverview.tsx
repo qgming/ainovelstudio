@@ -60,13 +60,14 @@ export function AgentContextOverview({
   rootPath,
 }: AgentContextOverviewProps) {
   const workspaceName = rootPath ? getBaseName(rootPath) : "未打开工作区";
+  const workspaceId = rootPath ?? "未打开工作区";
 
   return (
     <div className="space-y-1">
       <SectionLabel title="工作区" />
       <div className="space-y-1">
         <StaticMenuRow label="名称" value={workspaceName} />
-        <StaticMenuRow label="路径" value={rootPath ?? "未打开工作区"} />
+        <StaticMenuRow label="书库标识" value={workspaceId} />
         <StaticMenuRow label="当前文件" value={activeFilePath ?? "未选中文件"} />
       </div>
       <SectionLabel title={`启用技能 (${enabledSkills.length})`} />

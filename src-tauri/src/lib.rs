@@ -7,6 +7,7 @@ mod embedded_resources;
 mod skills;
 mod usage;
 mod workspace;
+mod workspace_db;
 
 use crate::app_control::terminate_application;
 use std::{collections::HashSet, sync::Mutex};

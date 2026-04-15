@@ -288,7 +288,7 @@ function buildAiSdkTools(
       defineTool({
         description: "在指定目录创建新的文本文件。适合新增文件；如果目标文件已经存在或你只是想修改旧文件内容，不要用它。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          parentPath: z.string().describe("新文件所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 03_剧情大纲。"),
+          parentPath: z.string().describe("新文件所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 正文/第一卷。"),
           name: z.string().describe("要创建的文件名，通常应包含扩展名，如 chapter-01.md。"),
         }),
         execute: async (input: { parentPath: string; name: string }) => {
@@ -300,7 +300,7 @@ function buildAiSdkTools(
       defineTool({
         description: "在指定目录创建文件夹。适合补齐目录结构，不负责创建文件内容。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          parentPath: z.string().describe("新文件夹所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 03_剧情大纲。"),
+          parentPath: z.string().describe("新文件夹所在的父目录路径，必须位于工作区内。优先使用相对工作区根目录的路径，例如 08-场景规划。"),
           name: z.string().describe("要创建的文件夹名称，不要传完整路径。"),
         }),
         execute: async (input: { parentPath: string; name: string }) => {
@@ -327,7 +327,7 @@ function buildAiSdkTools(
           contents: z.string().optional().describe("仅在 action=replace 时传入。必须是单行文本，不能包含换行符，也不应附带行号。"),
           lineNumber: z.number().int().positive().describe("从 1 开始的目标行号。get 支持任意正整数；replace 超出文件末尾时会自动补空行到目标位置。"),
           nextLine: z.string().optional().describe("仅在 action=replace 时使用。目标行后一行的当前内容，用于防止行号漂移导致误改；如果后一行不存在，传空字符串。"),
-          path: z.string().describe("要操作的工作区文本文件路径，必须是已经存在的文本文件。优先使用相对工作区根目录的路径，例如 03_剧情大纲/全书架构总纲.md。"),
+          path: z.string().describe("要操作的工作区文本文件路径，必须是已经存在的文本文件。优先使用相对工作区根目录的路径，例如 05-完整大纲.md。"),
           previousLine: z.string().optional().describe("仅在 action=replace 时使用。目标行前一行的当前内容，用于防止行号漂移导致误改；如果前一行不存在，传空字符串。"),
         }),
         execute: async (input: {
@@ -405,7 +405,7 @@ function buildAiSdkTools(
       defineTool({
         description: "读取完整文本文件内容。仅在你已经知道准确路径、并且需要查看全文上下文时使用；如果还不知道文件或目录在哪里，先用 search_workspace_content 或 read_workspace_tree 缩小范围。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          path: z.string().describe("工作区内的准确文本文件路径。优先使用相对工作区根目录的路径，例如 03_剧情大纲/全书架构总纲.md；该工具不会帮你搜索路径，因此未知路径时不要直接调用。"),
+          path: z.string().describe("工作区内的准确文本文件路径。优先使用相对工作区根目录的路径，例如 05-完整大纲.md；该工具不会帮你搜索路径，因此未知路径时不要直接调用。"),
         }),
         execute: async (input: { path: string }) => {
           const result = await runTool(toolName, tool, input);
@@ -476,7 +476,7 @@ function buildAiSdkTools(
       defineTool({
         description: "整文件覆盖写入。适用于你已经准备好文件的完整新内容时；调用后会覆盖原文件全部文本。若目标目录或文件不存在，会自动创建；如果只是小改动，优先使用 line_edit。涉及工作区路径时优先传相对工作区根目录的路径，不要传绝对路径。",
         inputSchema: z.object({
-          path: z.string().describe("要覆盖写入的目标文件路径。优先使用相对工作区根目录的路径，例如 03_剧情大纲/全书架构总纲.md；若上级目录或文件不存在，会在工作区内自动创建。"),
+          path: z.string().describe("要覆盖写入的目标文件路径。优先使用相对工作区根目录的路径，例如 05-完整大纲.md；若上级目录或文件不存在，会在工作区内自动创建。"),
           contents: z.string().describe("文件的新完整内容。会整体覆盖旧内容，不是追加写入。"),
         }),
         execute: async (input: { path: string; contents: string }) => {
@@ -665,7 +665,6 @@ export async function* runAgentTurn({
 }
 
 export { createSystemMessage };
-
 
 
 
