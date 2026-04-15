@@ -67,8 +67,8 @@ export function BookTreeItem({
         className={[
           "group flex items-center gap-1 pr-2 transition",
           isSelected
-            ? "bg-[#eaf3ff] text-[#0f172a] dark:bg-[#162131] dark:text-[#f8fbff]"
-            : "text-[#334155] hover:bg-[#eef2f7] dark:text-[#cbd5e1] dark:hover:bg-[#171b21]",
+            ? "bg-accent text-foreground"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground",
         ].join(" ")}
         style={{ paddingLeft: 10 + depth * 14 }}
       >
@@ -88,7 +88,7 @@ export function BookTreeItem({
           {isDirectory ? (
             <ChevronRight
               className={[
-                "h-4 w-4 shrink-0 text-[#94a3b8] transition-transform duration-150 dark:text-[#64748b]",
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150",
                 isExpanded ? "rotate-90" : "rotate-0",
               ].join(" ")}
             />
@@ -97,17 +97,17 @@ export function BookTreeItem({
           )}
           {isDirectory ? (
             isExpanded ? (
-              <FolderOpen className="h-4 w-4 shrink-0 text-[#0b84e7] dark:text-[#7cc4ff]" />
+              <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
             ) : (
-              <FolderClosed className="h-4 w-4 shrink-0 text-[#0b84e7] dark:text-[#7cc4ff]" />
+              <FolderClosed className="h-4 w-4 shrink-0 text-primary" />
             )
           ) : (
             <FileText
               className={[
                 "h-4 w-4 shrink-0",
                 isEditable
-                  ? "text-[#64748b] dark:text-[#94a3b8]"
-                  : "text-[#cbd5e1] dark:text-[#475569]",
+                  ? "text-muted-foreground"
+                  : "text-muted-foreground/45",
               ].join(" ")}
             />
           )}
@@ -125,7 +125,7 @@ export function BookTreeItem({
           aria-label={`${node.name} 更多操作`}
           onClick={openMenu}
           className={[
-            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[#94a3b8] transition hover:bg-[#eff6ff] hover:text-[#0b84e7] dark:text-[#758295] dark:hover:bg-[#162131] dark:hover:text-[#7cc4ff]",
+            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition hover:border-border hover:bg-panel-subtle hover:text-foreground",
             menuAnchorRect || isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
           ].join(" ")}
         >

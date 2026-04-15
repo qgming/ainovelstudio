@@ -15,7 +15,7 @@ export function BookPanelResizeHandle({
       aria-label={ariaLabel}
       aria-orientation="vertical"
       onPointerDown={onPointerDown}
-      className="group relative flex w-1 shrink-0 cursor-col-resize touch-none items-stretch justify-center bg-transparent before:absolute before:left-0 before:right-0 before:top-10 before:h-px before:bg-[#e2e8f0] dark:before:bg-[#20242b]"
+      className="group relative flex w-1 shrink-0 cursor-col-resize touch-none items-stretch justify-center bg-transparent"
     >
       <div
         className={[

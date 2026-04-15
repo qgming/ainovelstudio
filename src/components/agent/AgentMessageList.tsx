@@ -36,7 +36,11 @@ const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProp
             return (
               <div
                 key={`${message.id}-${index}`}
-                className={`rounded-[10px] px-3.5 py-2.5 text-sm ${isUser ? "bg-[#111827] text-white dark:bg-[#f3f4f6] dark:text-[#111827]" : "border border-[#e2e8f0] bg-white text-[#1f2937] dark:border-[#20242b] dark:bg-[#15171b] dark:text-[#eef2f7]"}`}
+                className={`rounded-md text-sm ${
+                  isUser
+                    ? "bg-message-card px-3 py-2 text-foreground"
+                    : "bg-message-card px-3.5 py-2.5 text-foreground"
+                }`}
               >
                 <AgentPartRenderer part={part} />
               </div>
@@ -57,7 +61,7 @@ const ThinkingTail = memo(function ThinkingTail({ visible }: ThinkingTailProps) 
 
   return (
     <article className="flex justify-start" data-testid="agent-thinking-tail">
-      <div className="max-w-[94%] px-1 py-1 text-sm text-[#6b7280] dark:text-[#94a3b8]">
+      <div className="max-w-[94%] px-1 py-1 text-sm text-muted-foreground">
         <AgentPartRenderer part={{ type: "placeholder", text: "正在思考" }} />
       </div>
     </article>
@@ -122,7 +126,7 @@ export function AgentMessageList({ messages, runStatus }: AgentMessageListProps)
   };
 
   return (
-    <div ref={scrollRef} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+    <div ref={scrollRef} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-app px-3 py-3">
       <div className="space-y-4">
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />

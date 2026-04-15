@@ -1,5 +1,6 @@
 import { FileText, Settings, Sparkles, Sun, Moon, Users } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { useThemeStore } from "../stores/themeStore";
 
 const topItems = [
@@ -17,12 +18,12 @@ function SidebarLink({ to, label, Icon, end }: (typeof topItems)[number]) {
       end={end}
       aria-label={label}
       className={({ isActive }) =>
-        [
-          "flex h-10 w-10 items-center justify-center rounded-[10px] transition-colors duration-200",
+        cn(
+          "group relative flex h-11 w-full items-center justify-center px-0 text-muted-foreground transition-colors duration-150",
           isActive
-            ? "bg-[#0b84e7] text-white dark:bg-zinc-100 dark:text-black"
-            : "text-[#111827] hover:bg-[#edf1f6] dark:text-zinc-300 dark:hover:bg-[#1a1c21]",
-        ].join(" ")
+            ? "text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-current before:content-['']"
+            : "hover:text-foreground",
+        )
       }
     >
       <Icon className="h-[22px] w-[22px]" strokeWidth={2.1} />
@@ -35,19 +36,19 @@ export function Sidebar() {
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
 
   return (
-    <aside className="flex h-full w-[56px] shrink-0 flex-col items-center justify-between overflow-hidden border-r border-[#e8eaee] bg-[#f7f7f8] py-3 dark:border-[#23252b] dark:bg-[#111214]">
-      <nav className="flex flex-col gap-2">
+    <aside className="flex h-full w-11 shrink-0 flex-col items-center justify-between overflow-hidden border-r border-border bg-sidebar py-2">
+      <nav className="flex w-full flex-col gap-1.5">
         {topItems.map((item) => (
           <SidebarLink key={item.to} {...item} />
         ))}
       </nav>
 
-      <div className="flex flex-col items-center gap-2">
+      <div className="flex w-full flex-col items-stretch gap-2">
         <button
           type="button"
           aria-label="主题切换"
           onClick={toggleTheme}
-          className="flex h-10 w-10 items-center justify-center rounded-[10px] px-0 text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
+          className="flex h-11 w-full items-center justify-center px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground"
         >
           {theme === "dark" ? (
             <Sun className="h-[22px] w-[22px]" strokeWidth={2.1} />
@@ -55,7 +56,7 @@ export function Sidebar() {
             <Moon className="h-[22px] w-[22px]" strokeWidth={2.1} />
           )}
         </button>
-        <nav className="flex flex-col gap-2">
+        <nav className="flex w-full flex-col gap-1.5 border-t border-border pt-2">
           {bottomItems.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}

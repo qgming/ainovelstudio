@@ -31,7 +31,7 @@ const SkillsPage = lazy(() =>
 
 function AppRouteLoadingState() {
   return (
-    <section className="flex h-full min-h-0 items-center justify-center bg-[#f7f8fb] px-6 text-sm text-[#64748b] dark:bg-[#0f1012] dark:text-zinc-400">
+    <section className="editor-shell flex h-full min-h-0 items-center justify-center px-6 text-sm text-muted-foreground">
       正在启动工作区...
     </section>
   );
@@ -72,12 +72,12 @@ function AppShell() {
   }, [mobileRuntime]);
 
   return (
-    <div className="h-dvh min-h-dvh overflow-hidden bg-white text-[#111827] transition-colors duration-200 dark:bg-[#0a0a0b] dark:text-zinc-50">
+    <div className="editor-shell h-dvh min-h-dvh overflow-hidden transition-colors duration-150">
       <div className="flex h-full flex-col overflow-hidden">
         {mobileRuntime ? null : <TitleBar />}
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <Sidebar />
-          <main className="min-h-0 flex-1 overflow-hidden bg-[#f7f8fb] dark:bg-[#0f1012]">
+          <main className="min-h-0 flex-1 overflow-hidden bg-app">
             <Suspense fallback={<AppRouteLoadingState />}>
               <Routes>
                 <Route path="/" element={<HomePage />} />

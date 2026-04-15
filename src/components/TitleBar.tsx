@@ -49,13 +49,13 @@ export function TitleBar() {
   }
 
   return (
-    <header className="flex h-8 shrink-0 items-center justify-between border-b border-[#e8eaee] bg-[#f7f7f8] pl-3 dark:border-[#23252b] dark:bg-[#111214]">
+    <header className="flex h-9 shrink-0 items-center justify-between border-b border-border-strong bg-panel-subtle pl-3">
       <div
         data-tauri-drag-region
         className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden select-none"
       >
         <img src={appIcon} alt="神笔写作图标" className="h-4 w-4 shrink-0 rounded-sm" />
-        <span className="truncate text-[12px] font-bold tracking-[-0.02em] text-[#111827] dark:text-zinc-50">
+        <span className="truncate text-[12px] font-medium tracking-[0.02em] text-muted-foreground">
           神笔写作
         </span>
       </div>
@@ -100,10 +100,10 @@ function WindowButton({ ariaLabel, children, danger = false, onClick }: WindowBu
       aria-label={ariaLabel}
       onClick={onClick}
       className={[
-        "flex w-8 items-center justify-center text-[#344256] transition-colors duration-150 dark:text-zinc-300",
+        "flex w-10 items-center justify-center border-l border-border text-muted-foreground transition-colors duration-150",
         danger
           ? "hover:bg-[#ef4444] hover:text-white"
-          : "hover:bg-[#edf1f6] dark:hover:bg-[#1a1c21]",
+          : "hover:bg-accent hover:text-foreground",
       ].join(" ")}
     >
       {children}

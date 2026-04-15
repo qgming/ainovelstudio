@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState, type KeyboardEvent } from "react";
+import { Button } from "@/components/ui/button";
 import { getBaseName } from "../../lib/bookWorkspace/paths";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
 import type { ManualTurnContextSelection } from "../../lib/agent/manualTurnContext";
@@ -176,7 +177,7 @@ export function AgentComposer({
   };
 
   return (
-    <div className="border-t border-[#e2e8f0] bg-[#f7f7f8] dark:border-[#20242b] dark:bg-[#111214]">
+    <div className="bg-app">
       <ActionMenu
         anchorRect={resourceAnchorRect}
         maxHeight={680}
@@ -203,29 +204,31 @@ export function AgentComposer({
       </ActionMenu>
 
       {showPlan ? (
-        <div className="border-b border-[#e7edf5] px-3 py-1 dark:border-[#232833]">
+        <div className="bg-panel-subtle px-3 py-2">
           <div className="flex min-h-8 items-center justify-between gap-3">
-            <div className="min-w-0 text-[13px] font-medium text-[#526074] dark:text-[#98a4b6]">
+            <div className="min-w-0 text-[12px] font-medium text-muted-foreground">
               共 {planningState.items.length} 个任务，已经完成 {completedCount}{" "}
               个
             </div>
-            <button
+            <Button
               type="button"
               aria-expanded={isPlanExpanded}
               aria-label={isPlanExpanded ? "收起待办计划" : "展开待办计划"}
               onClick={() => setIsPlanExpanded((current) => !current)}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#7b8798] transition hover:bg-[#eef2f7] hover:text-[#111827] dark:text-[#8b97a8] dark:hover:bg-[#171b22] dark:hover:text-white"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
             >
               {isPlanExpanded ? (
                 <Minimize2 className="h-4 w-4" />
               ) : (
                 <Maximize2 className="h-4 w-4" />
               )}
-            </button>
+            </Button>
           </div>
           {isPlanExpanded ? (
-            <div className="max-h-[168px] overflow-y-auto pt-2 pr-1 [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin] dark:[scrollbar-color:#2f3540_transparent]">
-              <div className="border-t border-[#e7edf5] pt-2 dark:border-[#232833]">
+            <div className="max-h-[168px] overflow-y-auto pt-2 pr-1">
+              <div className="pt-2">
                 <div className="space-y-3">
                   {planningState.items.map((item, index) => (
                     <div
@@ -236,10 +239,10 @@ export function AgentComposer({
                         aria-hidden="true"
                         className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center ${
                           item.status === "completed"
-                            ? "text-[#111827] dark:text-[#f3f4f6]"
+                            ? "text-foreground"
                             : item.status === "in_progress"
-                              ? "text-[#526074] dark:text-[#98a4b6]"
-                              : "text-[#9aa4b2] dark:text-[#657184]"
+                              ? "text-muted-foreground"
+                              : "text-muted-foreground/70"
                         }`}
                       >
                         {getPlanIcon(item)}
@@ -248,14 +251,14 @@ export function AgentComposer({
                         <div
                           className={`break-words text-sm font-medium leading-6 ${
                             item.status === "completed"
-                              ? "text-[#7b8798] line-through decoration-[#aeb8c5] dark:text-[#657184] dark:decoration-[#4b5563]"
-                              : "text-[#1f2937] dark:text-[#eef2f7]"
+                              ? "text-muted-foreground line-through decoration-muted-foreground/50"
+                              : "text-foreground"
                           }`}
                         >
                           {index + 1}. {item.content}
                         </div>
                         {item.status === "in_progress" && item.activeForm ? (
-                          <div className="mt-0.5 text-xs leading-5 text-[#7b8798] dark:text-[#657184]">
+                          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
                             {item.activeForm}
                           </div>
                         ) : null}
@@ -264,7 +267,7 @@ export function AgentComposer({
                   ))}
                 </div>
                 {hasStalePlan ? (
-                  <div className="mt-3 rounded-[10px] border border-[#e7edf5] bg-[#f3f6fb] px-3 py-2 text-xs leading-5 text-[#526074] dark:border-[#232833] dark:bg-[#161b22] dark:text-[#98a4b6]">
+                  <div className="mt-3 rounded-md border border-border bg-panel px-3 py-2 text-xs leading-5 text-muted-foreground">
                     <span className="font-medium">{planningState.roundsSinceUpdate} 轮未更新</span>
                     ，连续几轮没有刷新计划，建议让 agent 同步一下最新进展。
                   </div>
@@ -276,41 +279,43 @@ export function AgentComposer({
       ) : null}
 
       {selectedItems.length > 0 ? (
-        <div className="flex flex-wrap gap-2 border-b border-[#e7edf5] px-3 py-2 dark:border-[#232833]">
+        <div className="flex flex-wrap gap-2 px-3 py-2">
           {selectedItems.map((item) => (
             <span
               key={`${item.kind}-${item.id}`}
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#dbe4f0] px-2.5 py-1 text-xs font-medium text-[#526074] dark:border-[#2a3039] dark:text-[#98a4b6]"
+              className="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground"
             >
               <span className="shrink-0">
                 {item.kind === "file" ? "@" : "/"}
               </span>
               <span className="truncate">{item.label}</span>
-              <button
+              <Button
                 type="button"
                 aria-label={`移除 ${item.label}`}
                 onClick={() => handleRemoveSelected(item)}
-                className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[#7b8798] transition hover:bg-[#eef2f7] hover:text-[#111827] dark:text-[#8b97a8] dark:hover:bg-[#171b22] dark:hover:text-white"
+                variant="ghost"
+                size="icon-xs"
+                className="h-4 w-4 text-muted-foreground"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </span>
           ))}
         </div>
       ) : null}
 
-      <div className="overflow-hidden">
+      <div className="overflow-hidden border-t border-border">
         <textarea
           aria-label="Agent 输入框"
-          className="min-h-[96px] w-full resize-none border-none bg-transparent px-3 py-3 text-sm leading-6 text-[#1f2937] outline-none placeholder:text-[#8c97a8] dark:text-[#eef2f7] dark:placeholder:text-[#5f6b7d]"
+          className="editor-textarea min-h-[104px] px-3 py-3 leading-6"
           onChange={(event) => onInputChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="让 agent 读取当前章节、调用技能和工具完成创作任务..."
+          placeholder="输入新想法"
           value={input}
         />
-        <div className="flex items-center gap-3 border-t border-[#e7edf5] px-3 py-2 dark:border-[#232833]">
-          <div className="flex min-w-0 flex-1 items-center gap-1">
-            <button
+        <div className="flex h-11 items-center gap-2 border-t border-border px-2">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <Button
               type="button"
               aria-label="选择技能或子 Agent"
               disabled={isRunning}
@@ -323,11 +328,13 @@ export function AgentComposer({
                   current ? null : nextAnchorRect,
                 );
               }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#526074] transition hover:bg-[#eef2f7] hover:text-[#111827] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#98a4b6] dark:hover:bg-[#171b22] dark:hover:text-white"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
             >
               <SquareSlash className="h-4 w-4" />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               aria-label="选择工作区文件"
               disabled={isRunning}
@@ -340,31 +347,36 @@ export function AgentComposer({
                   current ? null : nextAnchorRect,
                 );
               }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#526074] transition hover:bg-[#eef2f7] hover:text-[#111827] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#98a4b6] dark:hover:bg-[#171b22] dark:hover:text-white"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
             >
               <AtSign className="h-4 w-4" />
-            </button>
-            <span className="truncate text-[11px] text-[#7b8798] dark:text-[#657184]">
-              Enter 发送，Shift + Enter 换行
-            </span>
+            </Button>
           </div>
           <div
             aria-hidden="true"
-            className="h-8 w-px shrink-0 bg-[#e3e9f2] dark:bg-[#2a3039]"
+            className="h-6 w-px shrink-0 bg-border"
           />
-          <button
+          <Button
             type="button"
             aria-label={isRunning ? "停止输出" : "发送消息"}
             onClick={isRunning ? onStop : handleSubmit}
             disabled={!isRunning && !input.trim()}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#111827] text-white transition hover:bg-[#0b1220] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white"
+            variant={isRunning ? "secondary" : "default"}
+            size="icon-sm"
+            className={
+              isRunning
+                ? "h-7 w-7 rounded-full"
+                : "h-7 w-7 rounded-full border-transparent bg-foreground text-background hover:bg-foreground/88"
+            }
           >
             {isRunning ? (
-              <Square className="h-4 w-4 fill-current" />
+              <Square className="h-3.5 w-3.5 fill-current" />
             ) : (
-              <SendHorizontal className="h-4 w-4" />
+              <SendHorizontal className="h-3.5 w-3.5" />
             )}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

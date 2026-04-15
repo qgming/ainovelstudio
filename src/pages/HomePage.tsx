@@ -1,5 +1,6 @@
 import { BookOpenText, Download, Ellipsis, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent } from "react";
+import { Button } from "@/components/ui/button";
 import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../components/common/ActionMenu";
 import { Toast, type ToastTone } from "../components/common/Toast";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
@@ -236,95 +237,102 @@ export function HomePage() {
 
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {errorMessage ? (
-            <div className="border-b border-[#f1d1d1] bg-[#fff5f5] px-4 py-3 text-sm text-[#b42318] dark:border-[#4a2323] dark:bg-[#221314] dark:text-[#ffb4ab] sm:px-5">
+            <div className="editor-callout" data-tone="error">
               <pre className="whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {status === "loading" ? (
-              <div className="flex h-full min-h-[240px] items-center justify-center rounded-[20px] border border-[#e2e8f0] bg-white px-6 text-sm text-[#64748b] dark:border-[#20242b] dark:bg-[#111214] dark:text-zinc-400">
+              <div className="editor-empty-state border-solid bg-panel">
                 正在加载书架...
               </div>
             ) : books.length > 0 ? (
-              <div className="px-1 py-2">
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(138px,1fr))] items-stretch gap-4 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] xl:grid-cols-[repeat(auto-fill,minmax(176px,1fr))]">
+              <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                   {books.map((book) => {
                     const isDeleting = deleteBusyPath === book.path;
                     const isExporting = exportBusyPath === book.path;
 
                     return (
-                      <div
+                      <article
                         key={book.id}
                         className={[
-                          "group relative aspect-[3/4] overflow-hidden border border-[#e2e8f0] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition-all duration-200 dark:border-[#20242b] dark:bg-[#111214]",
+                          "editor-block-tile",
                           isDeleting || isExporting
                             ? "opacity-70"
-                            : "hover:-translate-y-1 hover:border-[#cfd8e3] hover:shadow-[0_16px_30px_rgba(15,23,42,0.1)] dark:hover:border-[#2a313b] dark:hover:shadow-[0_16px_30px_rgba(0,0,0,0.28)]",
+                            : "",
                         ].join(" ")}
                       >
-                        <button
+                        <div className="editor-block-content">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Book</p>
+                              <h2 className="mt-2 line-clamp-3 text-[24px] font-semibold leading-[1.15] tracking-[-0.05em] text-foreground">
+                                {book.name}
+                              </h2>
+                            </div>
+                            <Button
+                              type="button"
+                              aria-label={`更多操作 ${book.name}`}
+                              disabled={hasPendingBookAction}
+                              onClick={(event) => openBookMenu(book, event)}
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground"
+                            >
+                              <Ellipsis className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          <button
                           type="button"
                           aria-label={`打开书籍 ${book.name}`}
                           onClick={() => navigate(buildBookWorkspaceRoute(book.id))}
-                          className="flex h-full w-full flex-col justify-between p-4 pr-12 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b84e7] focus-visible:ring-inset dark:focus-visible:ring-[#7cc4ff]"
+                          className="flex min-h-0 flex-1 flex-col justify-end text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
                         >
-                          <div className="space-y-4">
-                            <div className="h-px w-full bg-[#eef2f6] dark:bg-[#20242b]" />
-                            <h2 className="line-clamp-5 break-words text-[22px] font-semibold leading-[1.14] tracking-[-0.05em] text-[#111827] dark:text-zinc-100">
-                              {book.name}
-                            </h2>
-                          </div>
-
-                          <div className="border-t border-[#eef2f6] pt-3 dark:border-[#20242b]">
-                            <p className="text-xs leading-6 text-[#64748b] dark:text-zinc-400">{formatUpdatedAt(book.updatedAt)}</p>
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          aria-label={`更多操作 ${book.name}`}
-                          disabled={hasPendingBookAction}
-                          onClick={(event) => openBookMenu(book, event)}
-                          className="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center border border-transparent text-[#64748b] transition-colors duration-200 hover:border-[#e2e8f0] hover:bg-[#f8fafc] hover:text-[#111827] disabled:cursor-not-allowed disabled:opacity-60 dark:text-zinc-400 dark:hover:border-[#20242b] dark:hover:bg-[#15181d] dark:hover:text-zinc-100"
-                        >
-                          <Ellipsis className="h-4 w-4" />
-                        </button>
-                      </div>
+                            <div className="mt-auto border-t border-border pt-3">
+                              <p className="truncate text-xs leading-5 text-muted-foreground">
+                                {formatUpdatedAt(book.updatedAt)}
+                              </p>
+                              <p className="mt-1 truncate text-[11px] leading-5 text-muted-foreground">
+                                SQLite 工作区 / {book.id}
+                              </p>
+                            </div>
+                          </button>
+                        </div>
+                      </article>
                     );
                   })}
-                </div>
               </div>
             ) : (
-              <div className="flex h-full min-h-[280px] items-center justify-center rounded-[24px] border border-dashed border-[#d8e1ec] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] px-6 text-center dark:border-[#2a3038] dark:bg-[linear-gradient(180deg,#13161b_0%,#101318_100%)]">
+              <div className="editor-empty-state min-h-[320px]">
                 <div className="max-w-xl">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[18px] bg-[#0b84e7]/10 text-[#0b84e7] dark:bg-[#7cc4ff]/12 dark:text-[#7cc4ff]">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-border bg-panel-subtle text-primary">
                     <BookOpenText className="h-7 w-7" />
                   </div>
-                  <h2 className="mt-5 text-[28px] font-semibold tracking-[-0.05em] text-[#111827] dark:text-zinc-100">
+                  <h2 className="mt-5 text-[28px] font-semibold tracking-[-0.05em] text-foreground">
                     先导入一本书，或新建一本书。
                   </h2>
-                  <p className="mt-3 text-sm leading-7 text-[#64748b] dark:text-zinc-400">
+                  <p className="mt-3 text-sm leading-7 text-muted-foreground">
                     支持将标准 ZIP 书籍包导入 SQLite 书库。导入完成后会直接进入工作区，新建书籍则会生成默认创作模板。
                   </p>
                   <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       disabled={importBusy}
                       onClick={() => importInputRef.current?.click()}
-                      className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#d7dde8] px-4 text-sm font-medium text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#2a3038] dark:text-zinc-100 dark:hover:bg-[#1b1f26]"
                     >
                       <Upload className="h-4 w-4" />
                       导入书籍 ZIP
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       onClick={() => setCreateDialogOpen(true)}
-                      className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#0f172a] px-4 text-sm font-medium text-white transition-colors duration-200 hover:bg-[#1e293b] dark:bg-[#f3f4f6] dark:text-[#111827] dark:hover:bg-white"
                     >
                       <Plus className="h-4 w-4" />
                       新建书籍
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>

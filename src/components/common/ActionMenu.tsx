@@ -161,10 +161,10 @@ export function ActionMenuItem({
       disabled={disabled}
       onClick={onClick}
       className={[
-        "flex min-h-10 w-full items-center rounded-[10px] px-3 py-2 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-100",
+        "flex min-h-9 w-full items-center rounded-md border border-transparent px-2.5 py-1.5 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-100",
         active
-          ? "bg-[#eaf3ff] font-medium text-black dark:bg-[#162131] dark:text-[#f8fbff]"
-          : "text-black hover:bg-[#eef2f7] dark:text-[#e2e8f0] dark:hover:bg-[#171b21]",
+          ? "border-border bg-accent font-medium text-foreground"
+          : "text-foreground hover:border-border hover:bg-accent",
       ].join(" ")}
     >
       <span className="min-w-0 truncate">{children}</span>
@@ -297,7 +297,7 @@ export function ActionMenu({
           overflowY: position?.scrollable ? "auto" : "hidden",
           visibility: position ? "visible" : "hidden",
         }}
-        className="fixed z-50 overflow-x-hidden rounded-[14px] border border-[#e2e8f0] bg-white/96 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.18)] backdrop-blur-sm dark:border-[#28303a] dark:bg-[#14181de8] dark:shadow-[0_20px_50px_rgba(0,0,0,0.38)]"
+        className="fixed z-50 overflow-x-hidden rounded-lg border border-border-strong bg-popover/98 p-1 ring-1 ring-black/5 backdrop-blur-sm"
       >
         <div ref={contentRef}>{children}</div>
       </div>

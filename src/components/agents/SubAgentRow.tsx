@@ -17,26 +17,29 @@ export function SubAgentRow({ agent, onOpen, onToggle }: SubAgentRowProps) {
   };
 
   return (
-    <article className="flex aspect-square flex-col border-r border-b border-[#e2e8f0] px-3 py-3 transition-colors hover:bg-[#f5f8fc] dark:border-[#20242b] dark:hover:bg-[#171b21]">
+    <article className="editor-block-tile">
       <div
         role="link"
         tabIndex={0}
         onClick={onOpen}
         onKeyDown={handleKeyDown}
-        className="flex min-h-0 flex-1 cursor-pointer flex-col rounded-[12px] outline-none focus-visible:ring-2 focus-visible:ring-[#0b84e7] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#111214]"
+        className="editor-block-content cursor-pointer rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
       >
         <div className="flex items-start justify-between gap-3">
-          <h3 className="min-w-0 flex-1 line-clamp-2 text-sm font-semibold text-[#111827] dark:text-zinc-100">
-            {agent.name}
-          </h3>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Agent</p>
+            <h3 className="mt-2 line-clamp-2 text-lg font-medium leading-6 text-foreground">{agent.name}</h3>
+          </div>
           <Switch checked={agent.enabled} label={`切换代理 ${agent.name}`} onChange={() => onToggle()} />
         </div>
 
-        <div className="min-h-0 flex-1 pt-3">
-          <p className="line-clamp-3 text-xs leading-5 text-[#64748b] dark:text-zinc-400">
-            {agent.description}
-          </p>
-        </div>
+        <p className="line-clamp-4 text-xs leading-6 text-muted-foreground">
+          {agent.description}
+        </p>
+
+        <p className="mt-auto line-clamp-2 text-[11px] leading-5 text-muted-foreground">
+          {agent.id}
+        </p>
       </div>
     </article>
   );

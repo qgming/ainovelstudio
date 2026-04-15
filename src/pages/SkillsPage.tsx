@@ -1,5 +1,6 @@
 import { Plus, RefreshCw, Upload } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { Button } from "@/components/ui/button";
 import { PageShell } from "../components/PageShell";
 import { CreateSkillDialog } from "../components/dialogs/CreateSkillDialog";
 import { SkillCard } from "../components/skills/SkillCard";
@@ -90,18 +91,18 @@ export function SkillsPage() {
         />
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {errorMessage ? (
-            <div className="border-b border-[#f1d1d1] bg-[#fff5f5] px-4 py-3 text-sm text-[#b42318] dark:border-[#4a2323] dark:bg-[#221314] dark:text-[#ffb4ab] sm:px-5">
+            <div className="editor-callout" data-tone="error">
               <pre className="whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
             </div>
           ) : null}
 
           <div className="h-full overflow-y-auto">
             {status === "loading" ? (
-              <div className="flex h-full min-h-[240px] items-center justify-center border-t border-[#e2e8f0] px-6 text-sm text-[#64748b] dark:border-[#20242b] dark:text-zinc-400">
+              <div className="editor-empty-state border-t-0 border-solid bg-panel">
                 正在扫描技能库…
               </div>
             ) : skills.length > 0 ? (
-              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-7 dark:border-[#20242b]">
+              <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {skills.map((skill) => (
                   <SkillCard
                     key={skill.id}
@@ -112,8 +113,23 @@ export function SkillsPage() {
                 ))}
               </div>
             ) : (
-              <div className="flex h-full min-h-[240px] items-center justify-center border-t border-[#e2e8f0] px-6 text-sm text-[#64748b] dark:border-[#20242b] dark:text-zinc-400">
-                暂无可用技能，请导入标准 ZIP 技能包或新建技能。
+              <div className="editor-empty-state border-t-0">
+                <div>
+                  <h2 className="editor-empty-state-title text-xl">暂无可用技能</h2>
+                  <p className="editor-empty-state-copy">
+                    请导入标准 ZIP 技能包，或直接创建一个新的技能工作区。
+                  </p>
+                  <div className="mt-6 flex items-center justify-center gap-3">
+                    <Button variant="outline" onClick={() => importInputRef.current?.click()}>
+                      <Upload className="h-4 w-4" />
+                      导入技能
+                    </Button>
+                    <Button onClick={() => setCreateDialogOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                      新建技能
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type PageAction = {
   icon: LucideIcon;
@@ -33,13 +34,13 @@ export function PageShell({
   const hasHeaderContent = Boolean(title) || Boolean(headerRight) || actions.length > 0;
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]">
+    <section className="editor-shell flex h-full min-h-0 flex-col overflow-hidden">
       {hasHeaderContent ? (
         <header
-          className={[
-            "flex min-h-10 shrink-0 items-center gap-3 border-b border-[#e2e8f0] px-4 py-1 dark:border-[#20242b] sm:px-5",
+          className={cn(
+            "flex min-h-10 shrink-0 items-center gap-3 border-b border-border bg-panel-subtle px-4 py-1.5 sm:px-5",
             title ? "justify-between" : "justify-end",
-          ].join(" ")}
+          )}
         >
           {title ? <div className="min-w-0 flex-1">{title}</div> : null}
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
@@ -50,7 +51,10 @@ export function PageShell({
                 onClick={onClick}
                 size="sm"
                 variant={actionVariants[tone]}
-                className="gap-1.5"
+                className={cn(
+                  "gap-1.5",
+                  tone === "dark" && "border-border bg-secondary text-foreground",
+                )}
               >
                 <Icon className="h-4 w-4" strokeWidth={2.1} />
                 <span>{label}</span>
@@ -60,10 +64,7 @@ export function PageShell({
         </header>
       ) : null}
       <div
-        className={[
-          "min-h-0 flex-1 overflow-hidden",
-          contentClassName ?? "",
-        ].join(" ")}
+        className={cn("min-h-0 flex-1 overflow-hidden", contentClassName)}
       >
         {children}
       </div>

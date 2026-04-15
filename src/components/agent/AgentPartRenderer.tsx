@@ -143,16 +143,16 @@ function AccordionCard({
   const Chevron = open ? ChevronDown : ChevronRight;
 
   return (
-    <section className="rounded-[8px] border border-[#e2e8f0] bg-[#fbfbfc] dark:border-[#20242b] dark:bg-[#15171b]">
+    <section className="rounded-[8px] border border-border bg-message-card">
       <button
         type="button"
         onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
-        <Chevron className="h-3.5 w-3.5 shrink-0 text-[#8c97a8] dark:text-zinc-500" />
-        <Icon className="h-3.5 w-3.5 shrink-0 text-[#64748b] dark:text-zinc-400" />
-        <span className="text-[12px] font-medium text-[#475569] dark:text-zinc-300">{label}</span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-[#8c97a8] dark:text-zinc-500">
+        <Chevron className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="text-[12px] font-medium text-foreground">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
           {summary}
         </span>
         {status ? <StatusPill status={status} /> : null}
@@ -172,7 +172,7 @@ function AccordionCard({
                 }
               : undefined
           }
-          className={`border-t border-[#e2e8f0] px-3 py-2.5 dark:border-[#20242b] ${collapseOnContentClick ? "cursor-pointer" : ""}`.trim()}
+          className={`border-t border-border px-3 py-2.5 ${collapseOnContentClick ? "cursor-pointer" : ""}`.trim()}
         >
           {children}
         </div>
@@ -268,7 +268,7 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
   if (part.type === "reasoning") {
     return (
       <AccordionCard collapseOnContentClick icon={Brain} label="思考" summary={part.summary}>
-        <MarkdownText className="text-[#51627c] dark:text-[#95a7c1]" text={[part.summary, part.detail].filter(Boolean).join("\n\n")} />
+        <MarkdownText className="text-foreground" text={[part.summary, part.detail].filter(Boolean).join("\n\n")} />
       </AccordionCard>
     );
   }
@@ -285,10 +285,10 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
         summary={part.status === "running" ? part.inputSummary : part.outputSummary ?? part.inputSummary}
         status={part.status}
       >
-        <div className="space-y-2 text-sm leading-6 text-[#607089] dark:text-[#98a6bc]">
+        <div className="space-y-2 text-sm leading-6 text-foreground">
           <MarkdownText text={formattedInput} />
           {formattedOutput ? (
-            <div className="px-0 py-0 text-[#42536b] dark:text-[#c1cede]">
+            <div className="px-0 py-0 text-foreground">
               <MarkdownText text={formattedOutput} />
             </div>
           ) : null}
@@ -316,7 +316,7 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
         summary={part.validationError}
         status={part.status}
       >
-        <div className="space-y-2 text-sm leading-6 text-[#607089] dark:text-[#98a6bc]">
+        <div className="space-y-2 text-sm leading-6 text-foreground">
           <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
             {part.validationError}
           </div>
@@ -336,7 +336,7 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
     <AccordionCard icon={Users} label={part.name} summary={part.summary} status={part.status}>
       <div className="space-y-3">
         <div>
-          <h3 className="text-sm font-medium leading-6 text-[#42536b] dark:text-[#e2e8f0]">时间线</h3>
+          <h3 className="text-sm font-medium leading-6 text-foreground">时间线</h3>
           <div>
             <div className="flex items-start gap-3">
               <div className="flex w-4 shrink-0 flex-col items-center self-stretch pt-1">
@@ -344,7 +344,7 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
                 <div className="mt-1 w-px flex-1 border-l border-dashed border-[#cbd5e1] dark:border-[#334155]" />
               </div>
               <div className="min-w-0 flex-1 pb-3">
-                <p className="text-sm leading-6 text-[#42536b] dark:text-[#c1cede]">已接收任务</p>
+                <p className="text-sm leading-6 text-foreground">已接收任务</p>
               </div>
             </div>
             {timeline.map((item, index) => {
@@ -356,8 +356,8 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
                     {!isLast ? <div className="mt-1 w-px flex-1 border-l border-dashed border-[#cbd5e1] dark:border-[#334155]" /> : null}
                   </div>
                   <div className={`min-w-0 flex-1 ${!isLast ? "pb-3" : ""}`}>
-                    <p className="text-sm font-medium leading-6 text-[#42536b] dark:text-[#e2e8f0]">{item.label}</p>
-                    <p className="line-clamp-3 text-sm leading-6 text-[#6b7280] dark:text-[#94a3b8]">{item.preview}</p>
+                    <p className="text-sm font-medium leading-6 text-foreground">{item.label}</p>
+                    <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{item.preview}</p>
                   </div>
                 </div>
               );
@@ -368,4 +368,3 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
     </AccordionCard>
   );
 }
-

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Copy, ReceiptText, Save } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "@/components/ui/button";
 
 type BookEditorPanelProps = {
   activeFileName: string | null;
@@ -32,12 +33,12 @@ export function BookEditorPanel({
 
   if (!activeFileName) {
     return (
-      <section className="flex min-h-0 flex-1 items-center justify-center bg-[#f7f7f8] px-8 py-10 dark:bg-[#111214]">
+      <section className="flex min-h-0 flex-1 items-center justify-center bg-panel px-8 py-10">
         <div className="max-w-md text-center">
-          <h2 className="text-3xl font-semibold tracking-[-0.05em] text-[#111827] dark:text-[#f3f4f6]">
+          <h2 className="editor-empty-state-title">
             从左侧打开一个文件。
           </h2>
-          <p className="mt-4 text-base leading-7 text-[#6b7280] dark:text-[#9aa4b2]">
+          <p className="editor-empty-state-copy text-base">
             章节、大纲和设定文件会在这里直接编辑，并保存回原文件。
           </p>
         </div>
@@ -46,59 +47,58 @@ export function BookEditorPanel({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e2e8f0] px-3 py-1 dark:border-[#20242b]">
-        <h2 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-[#f3f4f6]">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-panel">
+      <header className="editor-panel-header">
+        <h2 className="editor-panel-title text-[13px]">
           {activeFileName}
         </h2>
-        <div className="flex items-center gap-1.5">
+        <div className="editor-toolbar">
           {isDirty ? (
-            <span className="px-2 py-1 text-xs font-medium text-[#b45309] dark:text-[#f7c680]">
-              未保存
-            </span>
+            <span className="editor-status-chip" data-tone="warning">未保存</span>
           ) : null}
           {supportsMarkdownPreview ? (
-            <button
+            <Button
               type="button"
               aria-label={isMarkdownPreview ? "切换到文本编辑" : "切换到 Markdown 预览"}
               aria-pressed={isMarkdownPreview}
               disabled={busy}
               onClick={() => setIsMarkdownPreview((current) => !current)}
-              className={[
-                "flex h-8 w-8 items-center justify-center rounded-[8px] p-0 transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50",
-                isMarkdownPreview
-                  ? "bg-[#e8f1ff] text-[#0b84e7] hover:bg-[#dce9ff] dark:bg-[#162131] dark:text-[#7cc4ff] dark:hover:bg-[#1b2a3d]"
-                  : "text-[#111827] hover:bg-[#edf1f6] dark:text-zinc-300 dark:hover:bg-[#1a1c21]",
-              ].join(" ")}
+              variant={isMarkdownPreview ? "secondary" : "ghost"}
+              size="icon-sm"
+              className="text-muted-foreground"
             >
               <ReceiptText className="h-4 w-4" />
-            </button>
+            </Button>
           ) : null}
-          <button
+          <Button
             type="button"
             aria-label="复制当前内容"
             disabled={busy}
             onClick={() => void copyContent()}
-            className="flex h-8 w-8 items-center justify-center rounded-[8px] p-0 text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
           >
             <Copy className="h-4 w-4" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             aria-label={busy ? "保存中" : "保存当前文件"}
             disabled={busy}
             onClick={onSave}
-            className="flex h-8 w-8 items-center justify-center rounded-[8px] p-0 text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
           >
             <Save className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
         {isMarkdownPreview ? (
-          <div className="h-full overflow-y-auto px-6 py-5">
+          <div className="h-full overflow-y-auto bg-panel px-6 py-5">
             {content.trim() ? (
-              <div className="book-markdown mx-auto max-w-4xl text-[15px] leading-7 text-[#111827] dark:text-[#f3f4f6]">
+              <div className="book-markdown mx-auto max-w-4xl text-[14px] leading-7 text-foreground">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -122,20 +122,20 @@ export function BookEditorPanel({
                     ol: ({ children }) => <ol className="mb-4 list-decimal pl-6 last:mb-0">{children}</ol>,
                     li: ({ children }) => <li className="mb-1.5 text-inherit last:mb-0">{children}</li>,
                     blockquote: ({ children }) => (
-                      <blockquote className="mb-4 border-l-2 border-[#bfdbfe] pl-4 text-[#475569] dark:border-[#31506e] dark:text-[#cbd5e1] last:mb-0">
+                      <blockquote className="mb-4 border-l-2 border-primary/35 pl-4 text-muted-foreground last:mb-0">
                         {children}
                       </blockquote>
                     ),
                     code: ({ children, className, ...props }) => (
                       <code
                         {...props}
-                        className={`rounded bg-[#eef2f7] px-1.5 py-0.5 font-mono text-[0.92em] text-[#0f172a] dark:bg-[#1b2027] dark:text-[#e2e8f0] ${className ?? ""}`.trim()}
+                        className={`rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.92em] text-foreground ${className ?? ""}`.trim()}
                       >
                         {children}
                       </code>
                     ),
                     pre: ({ children }) => (
-                      <pre className="mb-4 overflow-x-auto rounded-[12px] bg-[#f3f6fb] px-4 py-3 font-mono text-[0.92em] text-[#0f172a] dark:bg-[#1b2027] dark:text-[#e2e8f0] last:mb-0">
+                      <pre className="mb-4 overflow-x-auto rounded-md border border-border bg-panel-subtle px-4 py-3 font-mono text-[0.92em] text-foreground last:mb-0">
                         {children}
                       </pre>
                     ),
@@ -144,24 +144,24 @@ export function BookEditorPanel({
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-[#0b84e7] underline underline-offset-2 hover:text-[#086fc0] dark:text-[#7cc4ff] dark:hover:text-[#a6d8ff]"
+                        className="text-primary underline underline-offset-2 hover:text-primary/80"
                       >
                         {children}
                       </a>
                     ),
-                    hr: () => <hr className="my-5 border-[#e2e8f0] dark:border-[#20242b]" />,
+                    hr: () => <hr className="my-5 border-border" />,
                     table: ({ children }) => (
                       <div className="mb-4 overflow-x-auto last:mb-0">
                         <table className="w-full border-collapse text-left text-inherit">{children}</table>
                       </div>
                     ),
                     th: ({ children }) => (
-                      <th className="border border-[#d8e0ea] bg-[#f8fafc] px-3 py-2 font-semibold dark:border-[#26303b] dark:bg-[#171b21]">
+                      <th className="border border-border bg-panel-subtle px-3 py-2 font-semibold">
                         {children}
                       </th>
                     ),
                     td: ({ children }) => (
-                      <td className="border border-[#d8e0ea] px-3 py-2 align-top dark:border-[#26303b]">
+                      <td className="border border-border px-3 py-2 align-top">
                         {children}
                       </td>
                     ),
@@ -171,7 +171,7 @@ export function BookEditorPanel({
                 </ReactMarkdown>
               </div>
             ) : (
-              <div className="flex h-full min-h-[220px] items-center justify-center px-6 text-center text-sm leading-6 text-[#64748b] dark:text-[#94a3b8]">
+              <div className="flex h-full min-h-[220px] items-center justify-center px-6 text-center text-sm leading-6 text-muted-foreground">
                 当前 Markdown 内容为空，切回文本模式后即可直接开始编辑。
               </div>
             )}
@@ -181,7 +181,7 @@ export function BookEditorPanel({
             aria-label="文件编辑器"
             value={content}
             onChange={(event) => onChange(event.target.value)}
-            className="h-full min-h-0 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1 text-[15px] leading-8 text-[#111827] outline-none dark:text-[#f3f4f6]"
+            className="editor-textarea h-full px-4 py-4 text-[15px] leading-8"
             spellCheck={false}
           />
         )}

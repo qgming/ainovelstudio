@@ -21,7 +21,7 @@ export function BookCollapsedPanelToggle({
   return (
     <div
       style={{ width: COLLAPSED_PANEL_TOGGLE_WIDTH }}
-      className="relative flex h-full shrink-0 bg-[#f7f7f8] dark:bg-[#111214] before:absolute before:left-0 before:right-0 before:top-12 before:h-px before:bg-[#e2e8f0] dark:before:bg-[#20242b]"
+      className="relative flex h-full shrink-0 bg-app"
     >
       <button
         type="button"
