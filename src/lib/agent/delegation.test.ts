@@ -22,7 +22,6 @@ function createAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
     discoveredAt: Date.now(),
     isBuiltin: true,
     manifestFilePath: "agents/plot-agent/manifest.json",
-    maxTurns: 5,
     ...overrides,
   };
 }

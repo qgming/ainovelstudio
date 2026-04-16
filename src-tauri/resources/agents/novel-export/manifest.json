@@ -7,6 +7,5 @@
   "tags": ["导出", "导出小说", "小说导出", "平台格式", "投稿格式", "番茄", "起点", "晋江", "知乎盐选", "七猫", "章节", "chapter"],
   "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }

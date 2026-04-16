@@ -26,7 +26,6 @@ describe("manual turn context", () => {
           files: [],
           isBuiltin: true,
           manifestFilePath: "agents/writer-agent/manifest.json",
-          maxTurns: 5,
           role: "擅长续写与润色",
           sourceKind: "builtin-package",
           sourceLabel: "内置",

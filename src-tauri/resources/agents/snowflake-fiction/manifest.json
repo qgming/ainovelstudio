@@ -7,6 +7,5 @@
   "tags": ["/snowflake-fiction", "snowflake-fiction", "雪花写作法", "雪花法", "创作进度", "恢复创作", "继续下一步", "项目进度", "批量生成章节", "批量生成", "步骤"],
   "suggestedTools": ["browse", "search", "read", "write", "edit", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 10
+  "version": "1.0.0"
 }

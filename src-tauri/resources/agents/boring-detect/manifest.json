@@ -7,6 +7,5 @@
   "tags": ["流水账检测", "流水账", "检测", "检查", "检查流水账", "平淡检测", "章节", "chapter"],
   "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }

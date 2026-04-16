@@ -302,7 +302,6 @@ export const useSubAgentStore = create<SubAgentStore>((set, get) => ({
           discoveredAt: 0,
           isBuiltin: false,
           manifestFilePath: undefined,
-          maxTurns: 5,
           name: agentId,
           sourceKind: "installed-package",
           suggestedTools: [],

@@ -359,7 +359,6 @@ describe("agent session (streaming)", () => {
       discoveredAt: 1,
       isBuiltin: true,
       manifestFilePath: "agents/plot-agent/manifest.json",
-      maxTurns: 5,
     };
 
     const stream = runAgentTurn({
@@ -1234,7 +1233,6 @@ describe("agent session (streaming)", () => {
       discoveredAt: 1,
       isBuiltin: true,
       manifestFilePath: "agents/plot-agent/manifest.json",
-      maxTurns: 5,
     };
 
     const stream = runAgentTurn({
@@ -1359,7 +1357,6 @@ describe("agent session (streaming)", () => {
       discoveredAt: 1,
       isBuiltin: true,
       manifestFilePath: "agents/plot-agent/manifest.json",
-      maxTurns: 5,
     };
 
     const stream = runAgentTurn({
@@ -1456,10 +1453,117 @@ describe("agent session (streaming)", () => {
       delta: "主代理已整合子代理建议。",
     });
     expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
-    expect(mockSubagentStreamFn.mock.calls[0][0].maxSteps).toBe(5);
+    expect(mockSubagentStreamFn.mock.calls[0][0].maxSteps).toBeUndefined();
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain(
       "## s11 子任务摘要（剧情代理）",
     );
+  });
+
+  it("子代理继承已启用的写入与结构工具", async () => {
+    async function* mockSubagentFullStream() {
+      yield { type: "text-delta" as const, text: "子代理已收到工具集。" };
+    }
+
+    const mockSubagentStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockSubagentFullStream(),
+    });
+    const mockStreamFn = vi
+      .fn()
+      .mockImplementation(
+        (request: {
+          tools?: Record<
+            string,
+            {
+              execute?: (
+                input: { prompt: string; agentId?: string },
+                options: unknown,
+              ) => Promise<unknown>;
+            }
+          >;
+        }) => {
+          const taskTool = request.tools?.task;
+          return {
+            fullStream: (async function* () {
+              yield {
+                type: "tool-call" as const,
+                toolName: "task",
+                toolCallId: "task-call-write-1",
+                input: { prompt: "请生成报告并删除旧文件", agentId: "plot-agent" },
+              };
+              const output = await taskTool?.execute?.(
+                { prompt: "请生成报告并删除旧文件", agentId: "plot-agent" },
+                {} as never,
+              );
+              yield {
+                type: "tool-result" as const,
+                toolName: "task",
+                toolCallId: "task-call-write-1",
+                output: output ?? "",
+              };
+            })(),
+          };
+        },
+      );
+    const enabledAgent: ResolvedAgent = {
+      id: "plot-agent",
+      name: "剧情代理",
+      description: "负责剧情推进",
+      role: "剧情",
+      tags: ["剧情", "动机"],
+      sourceLabel: "内置",
+      body: "专注处理剧情与人物动机。",
+      toolsPreview: "可读写报告并处理路径结构",
+      memoryPreview: "记住当前故事走向",
+      suggestedTools: ["read", "write", "path", "json"],
+      enabled: true,
+      files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
+      sourceKind: "builtin-package",
+      dispatchHint: "当用户询问剧情推进时",
+      validation: { errors: [], isValid: true, warnings: [] },
+      discoveredAt: 1,
+      isBuiltin: true,
+      manifestFilePath: "agents/plot-agent/manifest.json",
+    };
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      enabledAgents: [enabledAgent],
+      enabledSkills: [],
+      enabledToolIds: ["task", "write", "json", "path"],
+      prompt: "请生成报告并删除旧文件",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {
+        write: {
+          description: "写入文件",
+          execute: async () => ({ ok: true, summary: "已写入报告" }),
+        },
+        json: {
+          description: "更新 JSON",
+          execute: async () => ({ ok: true, summary: "已更新 JSON", data: {} }),
+        },
+        path: {
+          description: "处理路径",
+          execute: async () => ({ ok: true, summary: "已删除旧文件" }),
+        },
+      },
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
+    const subagentTools = mockSubagentStreamFn.mock.calls[0][0].tools;
+    expect(subagentTools?.write).toBeDefined();
+    expect(subagentTools?.json).toBeDefined();
+    expect(subagentTools?.path).toBeDefined();
+    expect(subagentTools?.task).toBeUndefined();
   });
 });

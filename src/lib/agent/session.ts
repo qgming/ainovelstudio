@@ -223,7 +223,6 @@ async function runSubAgentTask(params: {
 
   const result = streamFn({
     abortSignal,
-    maxSteps: matchedAgent.maxTurns,
     messages: [{ role: "user", content: subagentPrompt }],
     providerConfig,
     system: buildSubAgentSystem(matchedAgent, enabledSkills),

@@ -37,7 +37,6 @@ function createAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
     files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
     isBuiltin: true,
     manifestFilePath: "agents/writer/manifest.json",
-    maxTurns: 5,
     role: "续写与润色",
     sourceKind: "builtin-package",
     sourceLabel: "内置",

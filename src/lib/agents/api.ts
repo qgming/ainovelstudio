@@ -21,7 +21,6 @@ export type AgentManifest = {
   installPath?: string;
   isBuiltin: boolean;
   manifestFilePath?: string;
-  maxTurns?: number;
   memoryFilePath?: string;
   memoryPreview?: string;
   name: string;

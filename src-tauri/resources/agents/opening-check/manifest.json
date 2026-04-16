@@ -7,6 +7,5 @@
   "tags": ["开篇检查", "开篇", "黄金三章", "检查开篇", "检查前三章", "前三章", "第1章", "章节", "chapter"],
   "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }

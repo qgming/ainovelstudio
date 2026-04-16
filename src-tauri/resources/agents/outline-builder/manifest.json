@@ -7,6 +7,5 @@
   "tags": ["大纲", "生成大纲", "构建大纲", "写大纲", "大纲重建", "重新生成大纲", "一页纸大纲", "完整大纲", "步骤4", "步骤6", "--rebuild", "--step4-only"],
   "suggestedTools": ["browse", "search", "read", "write"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }

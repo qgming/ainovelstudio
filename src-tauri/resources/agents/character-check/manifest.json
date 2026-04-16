@@ -7,6 +7,5 @@
   "tags": ["角色检查", "角色", "人设检查", "人物检查", "检查角色", "角色质量", "章节", "chapter", "检查"],
   "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }

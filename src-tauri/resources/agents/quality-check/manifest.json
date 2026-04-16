@@ -7,6 +7,5 @@
   "tags": ["质量检查", "内容检查", "综合评估", "检查质量", "小说质量", "内容质量", "质量评估", "质量", "章节", "chapter", "评估"],
   "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }

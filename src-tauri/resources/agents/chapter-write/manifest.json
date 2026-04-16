@@ -7,6 +7,5 @@
   "tags": ["续写", "章节", "写章节", "生成章节", "写下一章", "继续写", "写正文", "正文", "批量生成"],
   "suggestedTools": ["browse", "search", "read", "write", "edit", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }

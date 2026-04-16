@@ -50,8 +50,6 @@ pub struct AgentManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_file_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_turns: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     memory_file_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     memory_preview: Option<String>,
@@ -92,8 +90,6 @@ struct AgentPackageManifest {
     version: Option<String>,
     #[serde(default)]
     author: Option<String>,
-    #[serde(default)]
-    max_turns: Option<u32>,
 }
 
 #[derive(Clone, Serialize)]
@@ -332,7 +328,6 @@ fn build_agent_manifest_from_files(
         install_path: Some(format!("sqlite://agents/{agent_id}")),
         is_builtin,
         manifest_file_path: Some(build_agent_virtual_path(agent_id, "manifest.json")),
-        max_turns: package_manifest.max_turns,
         memory_file_path: files
             .contains_key("MEMORY.md")
             .then(|| build_agent_virtual_path(agent_id, "MEMORY.md")),
@@ -547,12 +542,11 @@ fn build_agent_manifest_template(name: &str, description: &str) -> String {
         "tags": ["writing"],
         "suggestedTools": [],
         "defaultEnabled": false,
-        "version": "1.0.0",
-        "maxTurns": 5
+        "version": "1.0.0"
     }))
     .unwrap_or_else(|_| {
         format!(
-            "{{\n  \"id\": \"{name}\",\n  \"name\": \"{name}\",\n  \"description\": \"{description}\",\n  \"defaultEnabled\": false,\n  \"version\": \"1.0.0\",\n  \"maxTurns\": 5\n}}"
+            "{{\n  \"id\": \"{name}\",\n  \"name\": \"{name}\",\n  \"description\": \"{description}\",\n  \"defaultEnabled\": false,\n  \"version\": \"1.0.0\"\n}}"
         )
     })
 }

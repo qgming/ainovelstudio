@@ -7,6 +7,5 @@
   "tags": ["选题检查", "选题", "创意检查", "创意", "题材检查", "题材", "检查选题", "辨识度", "混搭", "书名", "章节", "chapter"],
   "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
   "defaultEnabled": true,
-  "version": "1.0.0",
-  "maxTurns": 8
+  "version": "1.0.0"
 }
