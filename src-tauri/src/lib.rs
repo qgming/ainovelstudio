@@ -4,6 +4,7 @@ mod chat;
 mod config;
 mod db;
 mod embedded_resources;
+mod provider_proxy;
 mod skills;
 mod usage;
 mod workspace;
@@ -100,6 +101,9 @@ pub fn run() {
             chat::read_agent_settings,
             chat::write_agent_settings,
             chat::clear_agent_settings,
+            provider_proxy::fetch_provider_models,
+            provider_proxy::probe_provider_connection,
+            provider_proxy::forward_provider_request,
             config::initialize_default_agent_config,
             config::read_default_agent_config,
             config::write_default_agent_config,

@@ -333,4 +333,28 @@ describe("ModelProviderCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "隐藏 API Key" }));
     expect(input).toHaveAttribute("type", "password");
   });
+
+  it("支持切换模拟 OpenCode（beta）开关", () => {
+    const handleChange = vi.fn();
+
+    render(
+      <ModelProviderCard
+        config={{
+          apiKey: "sk-secret",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+          simulateOpencodeBeta: false,
+        }}
+        isDirty={false}
+        onChange={handleChange}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: "切换模拟 OpenCode（beta）" }));
+
+    expect(screen.getByText("模拟 OpenCode（beta）")).toBeInTheDocument();
+    expect(handleChange).toHaveBeenCalledWith({ simulateOpencodeBeta: true });
+  });
 });

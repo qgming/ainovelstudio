@@ -1,11 +1,9 @@
 import { APICallError, generateText, isLoopFinished, stepCountIs, streamText, tool as defineTool } from "ai";
 import type { ModelMessage, ToolSet } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import type { AgentUsage } from "./types";
-
-const CONNECTION_TEST_SYSTEM = "你是连接测试助手。请直接回复一句不超过20字的自然语言，确认你已收到这条测试消息。不要调用工具，不要返回 JSON。";
-const CONNECTION_TEST_PROMPT = "请直接回复一句简短的话，确认你已收到这条测试消息。";
+import { createProvider } from "./providerRequest";
+import { probeProviderConnectionViaTauri } from "./providerApi";
 
 export type AgentTextGenerationInput = {
   prompt: string;
@@ -69,11 +67,7 @@ type ProbeExecutionFailure = {
 
 /** 非流式文本生成（子代理等场景） */
 export async function generateAgentText({ prompt, providerConfig, system }: AgentTextGenerationInput) {
-  const provider = createOpenAICompatible({
-    name: "ainovelstudio-provider",
-    apiKey: providerConfig.apiKey,
-    baseURL: providerConfig.baseURL,
-  });
+  const provider = createProvider(providerConfig);
 
   const { text } = await generateText({
     model: provider(providerConfig.model),
@@ -132,6 +126,7 @@ function validateProviderConfig(providerConfig: AgentProviderConfig): ProviderCo
     apiKey: providerConfig.apiKey.trim(),
     baseURL: providerConfig.baseURL.trim(),
     model: providerConfig.model.trim(),
+    simulateOpencodeBeta: Boolean(providerConfig.simulateOpencodeBeta),
   };
 
   if (!normalizedConfig.baseURL) {
@@ -206,21 +201,48 @@ function validateProviderConfig(providerConfig: AgentProviderConfig): ProviderCo
   };
 }
 
+function parseProbeResult(body: string): ProbeGenerateResult {
+  const payload = JSON.parse(body) as {
+    choices?: Array<{
+      finish_reason?: string | null;
+      native_finish_reason?: string | null;
+      message?: {
+        content?: string | null;
+        tool_calls?: unknown[];
+      };
+    }>;
+  };
+  const choice = payload.choices?.[0];
+  const content: ProbeContentPart[] = [];
+
+  if (typeof choice?.message?.content === "string" && choice.message.content.trim()) {
+    content.push({ type: "text", text: choice.message.content });
+  }
+
+  if (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0) {
+    content.push({ type: "tool-call" });
+  }
+
+  return {
+    content,
+    finishReason: choice?.finish_reason ?? undefined,
+    rawFinishReason: choice?.native_finish_reason ?? choice?.finish_reason ?? undefined,
+  };
+}
+
 async function executeProviderProbe(providerConfig: AgentProviderConfig): Promise<ProbeExecutionSuccess | ProbeExecutionFailure> {
   const startedAt = Date.now();
 
   try {
-    const provider = createOpenAICompatible({
-      name: "ainovelstudio-provider",
-      apiKey: providerConfig.apiKey,
-      baseURL: providerConfig.baseURL,
-    });
+    const response = await probeProviderConnectionViaTauri(providerConfig);
+    if (!response.ok) {
+      return {
+        durationMs: Date.now() - startedAt,
+        error: { body: response.body, status: response.status },
+      };
+    }
 
-    const result = (await generateText({
-      model: provider(providerConfig.model),
-      messages: [{ role: "user", content: CONNECTION_TEST_PROMPT }],
-      system: CONNECTION_TEST_SYSTEM,
-    })) as ProbeGenerateResult;
+    const result = parseProbeResult(response.body);
 
     return {
       durationMs: Date.now() - startedAt,
@@ -379,6 +401,47 @@ function classifyRequestError(
   error: unknown,
   durationMs: number,
 ): ProviderConnectionTestResult {
+  if (typeof error === "object" && error !== null && "status" in error && typeof (error as { status?: unknown }).status === "number") {
+    const statusCode = (error as { status: number }).status;
+    const responseBodyValue = Reflect.get(error, "body");
+    const responseBody = typeof responseBodyValue === "string" ? responseBodyValue.toLowerCase() : "";
+    const diagnostics = {
+      durationMs,
+      httpStatus: statusCode,
+    };
+
+    if (statusCode === 401 || statusCode === 403) {
+      return createTestResult(providerConfig, {
+        ok: false,
+        status: "auth_error",
+        stage: "request",
+        message: "鉴权失败，请检查 API Key 是否有效或是否具备调用权限。",
+        diagnostics,
+      });
+    }
+
+    if (
+      statusCode === 404 ||
+      includesAnyKeyword(responseBody, ["model not found", "no such model", "unknown model"])
+    ) {
+      return createTestResult(providerConfig, {
+        ok: false,
+        status: "model_error",
+        stage: "request",
+        message: "模型不可用，请检查模型名称是否正确，或当前服务是否支持该模型。",
+        diagnostics,
+      });
+    }
+
+    return createTestResult(providerConfig, {
+      ok: false,
+      status: "unknown_error",
+      stage: "request",
+      message: "模型连接测试失败，请稍后重试。",
+      diagnostics,
+    });
+  }
+
   const message = getErrorMessage(error);
   const normalizedMessage = message.toLowerCase();
   const causeCode = getErrorCauseCode(error).toLowerCase();
@@ -560,11 +623,7 @@ export function streamAgentText({
   system,
   tools,
 }: StreamAgentTextInput): StreamAgentTextResult {
-  const provider = createOpenAICompatible({
-    name: "ainovelstudio-provider",
-    apiKey: providerConfig.apiKey,
-    baseURL: providerConfig.baseURL,
-  });
+  const provider = createProvider(providerConfig);
 
   const result = streamText({
     abortSignal,

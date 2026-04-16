@@ -2,10 +2,12 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { Claude, Gemini, ProviderIcon, Qwen, SiliconCloud, XiaomiMiMo, Zhipu } from "@lobehub/icons";
 import { Cable, ExternalLink, Eye, EyeOff, KeyRound, LoaderCircle, PlugZap } from "lucide-react";
+import { ModelCatalogButton } from "./ModelCatalogButton";
 import { Toast, type ToastTone } from "../common/Toast";
 import { testAgentProviderConnection } from "../../lib/agent/modelGateway";
 import type { ProviderConnectionTestResult } from "../../lib/agent/modelGateway";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
+import { Switch } from "../ui/Switch";
 import { MODEL_PROVIDER_RECOMMENDATIONS } from "./modelProviderRecommendations";
 import { SettingsHeaderButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 
@@ -112,7 +114,7 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
 
   useEffect(() => {
     setToast(null);
-  }, [baseUrl, apiKey, model]);
+  }, [baseUrl, apiKey, model, config.simulateOpencodeBeta]);
 
   async function handleTestConnection() {
     if (!canTestConnection) {
@@ -139,6 +141,14 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
     }
   }
 
+  function handleCatalogError(message: string) {
+    setToast({
+      title: "获取失败",
+      description: message,
+      tone: "error",
+    });
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
       <Toast
@@ -153,6 +163,11 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
         icon={<PlugZap className="h-4 w-4" />}
         actions={
           <>
+            <ModelCatalogButton
+              config={config}
+              onSelectModel={(nextModel) => onChange({ model: nextModel })}
+              onError={handleCatalogError}
+            />
             <SettingsHeaderButton
               type="button"
               disabled={!canSave}
@@ -221,6 +236,19 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
             value={config.model}
           />
         </label>
+
+        <div className="lg:col-span-2">
+          <div className="flex items-start justify-between gap-4 border-t border-[#e2e8f0] pt-3 dark:border-[#20242b]">
+            <div className="min-w-0 pr-4">
+              <p className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">模拟 OpenCode（beta）</p>
+            </div>
+            <Switch
+              checked={Boolean(config.simulateOpencodeBeta)}
+              label="切换模拟 OpenCode（beta）"
+              onChange={(checked) => onChange({ simulateOpencodeBeta: checked })}
+            />
+          </div>
+        </div>
 
           <div className="lg:col-span-2">
             <div className="border-t border-[#e2e8f0] pt-3 dark:border-[#20242b]">

@@ -4,6 +4,7 @@ export type AgentProviderConfigDocument = {
   apiKey: string;
   baseURL: string;
   model: string;
+  simulateOpencodeBeta?: boolean;
 };
 
 export type AgentSettingsDocument = {

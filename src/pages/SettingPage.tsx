@@ -31,6 +31,18 @@ const settingNavItems: SettingNavItem[] = [
 const APP_VERSION = packageJson.version;
 const OFFICIAL_WEBSITE = "https://www.qgming.com";
 
+function isSameProviderConfig(
+  left: ReturnType<typeof getDefaultAgentProviderConfig>,
+  right: ReturnType<typeof getDefaultAgentProviderConfig>,
+) {
+  return (
+    left.apiKey === right.apiKey &&
+    left.baseURL === right.baseURL &&
+    left.model === right.model &&
+    Boolean(left.simulateOpencodeBeta) === Boolean(right.simulateOpencodeBeta)
+  );
+}
+
 function ToolLibrarySection({
   enabledCount,
   enabledTools,
@@ -171,11 +183,7 @@ export function SettingPage() {
   function handleModelDraftChange(patch: Partial<typeof modelDraft>) {
     setModelDraft((current) => {
       const next = { ...current, ...patch };
-      setModelDirty(
-        next.apiKey !== config.apiKey ||
-          next.baseURL !== config.baseURL ||
-          next.model !== config.model,
-      );
+      setModelDirty(!isSameProviderConfig(next, config));
       return next;
     });
   }
@@ -183,11 +191,7 @@ export function SettingPage() {
   function handleResetModel() {
     const next = getDefaultAgentProviderConfig();
     setModelDraft(next);
-    setModelDirty(
-      next.apiKey !== config.apiKey ||
-        next.baseURL !== config.baseURL ||
-        next.model !== config.model,
-    );
+    setModelDirty(!isSameProviderConfig(next, config));
   }
 
   async function handleSaveModel() {

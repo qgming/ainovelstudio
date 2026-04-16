@@ -85,6 +85,8 @@ pub struct AgentProviderConfig {
     base_url: String,
     #[serde(default)]
     model: String,
+    #[serde(default)]
+    simulate_opencode_beta: bool,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]

@@ -20,6 +20,7 @@ export type AgentProviderConfig = {
   apiKey: string;
   baseURL: string;
   model: string;
+  simulateOpencodeBeta?: boolean;
 };
 
 type AgentSettingsState = {
@@ -49,6 +50,7 @@ function getDefaultConfig(): AgentProviderConfig {
     apiKey: "",
     baseURL: "",
     model: "",
+    simulateOpencodeBeta: false,
   };
 }
 

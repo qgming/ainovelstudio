@@ -46,6 +46,7 @@ describe("agent settings store", () => {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
         model: "gpt-4o-mini",
+        simulateOpencodeBeta: true,
       },
       enabledTools: {},
     });
@@ -54,6 +55,7 @@ describe("agent settings store", () => {
       baseURL: "https://example.com/v1",
       apiKey: "test-key",
       model: "gpt-4o-mini",
+      simulateOpencodeBeta: true,
     });
     await Promise.resolve();
 
@@ -62,6 +64,7 @@ describe("agent settings store", () => {
         config: expect.objectContaining({
           baseURL: "https://example.com/v1",
           model: "gpt-4o-mini",
+          simulateOpencodeBeta: true,
         }),
       }),
     });
@@ -107,6 +110,7 @@ describe("agent settings store", () => {
             apiKey: "sqlite-key",
             baseURL: "https://example.com/v1",
             model: "sqlite-model",
+            simulateOpencodeBeta: true,
           },
           enabledTools: { read_file: false },
         });
@@ -123,6 +127,7 @@ describe("agent settings store", () => {
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("sqlite-model");
+    expect(state.config.simulateOpencodeBeta).toBe(true);
     expect(state.enabledTools.read).toBe(false);
     expect(state.enabledTools.write).toBe(true);
     expect(mockInvoke).not.toHaveBeenCalledWith(
@@ -164,6 +169,7 @@ describe("agent settings store", () => {
     expect(state.config.apiKey).toBe("sqlite-key");
     expect(state.config.baseURL).toBe("https://example.com/v1");
     expect(state.config.model).toBe("sqlite-model");
+    expect(state.config.simulateOpencodeBeta).toBe(false);
   });
 
   it("initialize 在 SQLite 没有设置时保持默认值", async () => {
@@ -194,6 +200,7 @@ describe("agent settings store", () => {
       apiKey: "",
       baseURL: "",
       model: "",
+      simulateOpencodeBeta: false,
     });
   });
 
@@ -282,6 +289,7 @@ describe("agent settings store", () => {
         apiKey: "",
         baseURL: "",
         model: "",
+        simulateOpencodeBeta: false,
       },
       enabledTools: {},
     });
@@ -293,11 +301,13 @@ describe("agent settings store", () => {
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("");
+    expect(state.config.simulateOpencodeBeta).toBe(false);
     expect(state.defaultAgentMarkdown).toBe("# 文件主代理");
   });
 
   it("默认模型配置不注入 Base URL", () => {
     expect(useAgentSettingsStore.getState().config.baseURL).toBe("");
+    expect(useAgentSettingsStore.getState().config.simulateOpencodeBeta).toBe(false);
   });
 
   it("reset 恢复默认值", () => {
@@ -315,6 +325,7 @@ describe("agent settings store", () => {
     const state = useAgentSettingsStore.getState();
     expect(state.enabledTools.write).toBe(true);
     expect(state.config.model).toBe("");
+    expect(state.config.simulateOpencodeBeta).toBe(false);
     expect(state.defaultAgentMarkdown).toBe("");
   });
 });

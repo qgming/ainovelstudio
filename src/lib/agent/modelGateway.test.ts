@@ -1,9 +1,9 @@
-import { APICallError } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockCreateOpenAICompatible, mockGenerateText, mockStreamText } = vi.hoisted(() => ({
+const { mockCreateOpenAICompatible, mockGenerateText, mockProbeProviderConnectionViaTauri, mockStreamText } = vi.hoisted(() => ({
   mockCreateOpenAICompatible: vi.fn(),
   mockGenerateText: vi.fn(),
+  mockProbeProviderConnectionViaTauri: vi.fn(),
   mockStreamText: vi.fn(),
 }));
 
@@ -23,11 +23,16 @@ vi.mock("@ai-sdk/openai-compatible", () => ({
   createOpenAICompatible: mockCreateOpenAICompatible,
 }));
 
-import { testAgentProviderConnection } from "./modelGateway";
+vi.mock("./providerApi", () => ({
+  probeProviderConnectionViaTauri: mockProbeProviderConnectionViaTauri,
+}));
+
+import { generateAgentText, testAgentProviderConnection } from "./modelGateway";
 
 describe("modelGateway", () => {
   beforeEach(() => {
     mockGenerateText.mockReset();
+    mockProbeProviderConnectionViaTauri.mockReset();
     mockStreamText.mockReset();
     mockCreateOpenAICompatible.mockReset();
     mockCreateOpenAICompatible.mockReturnValue((model: string) => `provider:${model}`);
@@ -64,10 +69,20 @@ describe("modelGateway", () => {
   });
 
   it("真实测试通过时返回结构化成功结果", async () => {
-    mockGenerateText.mockResolvedValue({
-      content: [{ type: "text" as const, text: "你好，我已收到测试消息。" }],
-      finishReason: "stop",
-      rawFinishReason: "stop",
+    mockProbeProviderConnectionViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: JSON.stringify({
+        choices: [
+          {
+            finish_reason: "stop",
+            native_finish_reason: "stop",
+            message: {
+              content: "你好，我已收到测试消息。",
+            },
+          },
+        ],
+      }),
     });
 
     await expect(
@@ -92,25 +107,50 @@ describe("modelGateway", () => {
       },
     });
 
-    expect(mockGenerateText).toHaveBeenCalledWith(
+    expect(mockProbeProviderConnectionViaTauri).toHaveBeenCalledWith({
+      apiKey: "sk-test",
+      baseURL: "https://example.com/v1",
+      model: "gpt-4.1",
+      simulateOpencodeBeta: false,
+    });
+  });
+
+  it("启用模拟 OpenCode 时注入额外请求头", async () => {
+    mockGenerateText.mockResolvedValue({
+      text: "你好",
+    });
+
+    await generateAgentText({
+      prompt: "你好",
+      providerConfig: {
+        apiKey: "sk-test",
+        baseURL: "https://example.com/v1",
+        model: "gpt-4.1",
+        simulateOpencodeBeta: true,
+      },
+      system: "test-system",
+    });
+
+    expect(mockCreateOpenAICompatible).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: "provider:gpt-4.1",
-        messages: [{ role: "user", content: "请直接回复一句简短的话，确认你已收到这条测试消息。" }],
+        apiKey: "sk-test",
+        baseURL: "https://example.com/v1",
+        headers: expect.objectContaining({
+          "x-opencode-client": "cli",
+          "x-opencode-project": "global",
+          "x-opencode-request": expect.stringMatching(/^msg_/),
+          "x-opencode-session": expect.stringMatching(/^ses_/),
+        }),
       }),
     );
   });
 
   it("鉴权失败时返回 auth_error", async () => {
-    mockGenerateText.mockRejectedValue(
-      new APICallError({
-        message: "Unauthorized",
-        requestBodyValues: { model: "gpt-4.1" },
-        responseHeaders: {},
-        responseBody: '{"error":{"message":"invalid api key"}}',
-        statusCode: 401,
-        url: "https://example.com/v1/chat/completions",
-      }),
-    );
+    mockProbeProviderConnectionViaTauri.mockResolvedValue({
+      ok: false,
+      status: 401,
+      body: '{"error":{"message":"invalid api key"}}',
+    });
 
     await expect(
       testAgentProviderConnection({
@@ -133,7 +173,7 @@ describe("modelGateway", () => {
     Object.assign(error, {
       cause: { code: "ECONNREFUSED", message: "connect ECONNREFUSED" },
     });
-    mockGenerateText.mockRejectedValue(error);
+    mockProbeProviderConnectionViaTauri.mockRejectedValue(error);
 
     await expect(
       testAgentProviderConnection({
@@ -150,16 +190,11 @@ describe("modelGateway", () => {
   });
 
   it("模型不存在时返回 model_error", async () => {
-    mockGenerateText.mockRejectedValue(
-      new APICallError({
-        message: "Model not found",
-        requestBodyValues: { model: "unknown-model" },
-        responseHeaders: {},
-        responseBody: '{"error":{"message":"model not found"}}',
-        statusCode: 404,
-        url: "https://example.com/v1/chat/completions",
-      }),
-    );
+    mockProbeProviderConnectionViaTauri.mockResolvedValue({
+      ok: false,
+      status: 404,
+      body: '{"error":{"message":"model not found"}}',
+    });
 
     await expect(
       testAgentProviderConnection({
@@ -178,10 +213,20 @@ describe("modelGateway", () => {
   });
 
   it("模型只返回工具调用时返回 response_invalid", async () => {
-    mockGenerateText.mockResolvedValue({
-      content: [{ type: "tool-call" as const, toolCallId: "call_1", toolName: "search", input: {} }],
-      finishReason: "tool-calls",
-      rawFinishReason: "tool_calls",
+    mockProbeProviderConnectionViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: JSON.stringify({
+        choices: [
+          {
+            finish_reason: "tool-calls",
+            native_finish_reason: "tool_calls",
+            message: {
+              tool_calls: [{ id: "call_1" }],
+            },
+          },
+        ],
+      }),
     });
 
     await expect(
@@ -204,10 +249,18 @@ describe("modelGateway", () => {
   });
 
   it("模型响应被过滤时返回 response_invalid", async () => {
-    mockGenerateText.mockResolvedValue({
-      content: [],
-      finishReason: "content-filter",
-      rawFinishReason: "content_filter",
+    mockProbeProviderConnectionViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: JSON.stringify({
+        choices: [
+          {
+            finish_reason: "content-filter",
+            native_finish_reason: "content_filter",
+            message: {},
+          },
+        ],
+      }),
     });
 
     await expect(
@@ -225,10 +278,18 @@ describe("modelGateway", () => {
   });
 
   it("返回非文本内容时返回 response_invalid", async () => {
-    mockGenerateText.mockResolvedValue({
-      content: [{ type: "image" as const }],
-      finishReason: "stop",
-      rawFinishReason: "stop",
+    mockProbeProviderConnectionViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: JSON.stringify({
+        choices: [
+          {
+            finish_reason: "stop",
+            native_finish_reason: "stop",
+            message: {},
+          },
+        ],
+      }),
     });
 
     await expect(
@@ -241,10 +302,7 @@ describe("modelGateway", () => {
       ok: false,
       status: "response_invalid",
       stage: "response",
-      message: "模型未返回文本内容，收到的内容类型：image。",
-      diagnostics: {
-        contentTypes: ["image"],
-      },
+      message: "模型未返回有效文本响应。finishReason=stop，raw=stop。",
     });
   });
 });
