@@ -243,10 +243,6 @@ function hasRemainingLoops(maxLoops: number | null, nextLoopIndex: number) {
   return maxLoops === null || nextLoopIndex <= maxLoops;
 }
 
-function hasRemainingRework(maxReworkPerLoop: number | null, attemptIndex: number) {
-  return maxReworkPerLoop === null || attemptIndex - 1 < maxReworkPerLoop;
-}
-
 function updateRuntimeFromStepRun(runtime: WorkflowRuntimeState, stepRun: WorkflowStepRun) {
   runtime.latestStepRunsByStepId.set(stepRun.stepId, stepRun);
   runtime.lastDecision = stepRun.decision;
@@ -474,23 +470,17 @@ function evaluateReviewGate(params: {
   reviewStepRun: WorkflowStepRun;
   attemptIndex: number;
 }): { stepRun: WorkflowStepRun; nextStepId: string | null; nextAttemptIndex: number; endReason: WorkflowRunStopReason | null } {
-  const { run, step, reviewStepRun, attemptIndex } = params;
+  const { step, reviewStepRun, attemptIndex } = params;
   const passed = reviewStepRun.resultJson?.pass === true;
-  const canRetry = hasRemainingRework(run.loopConfigSnapshot.maxReworkPerLoop, attemptIndex + 1);
-  const stopOnFailure = run.loopConfigSnapshot.stopOnReviewFailure;
 
   const stepRun: WorkflowStepRun = {
     ...reviewStepRun,
     decision: {
-      outcome: passed ? "pass" : canRetry ? "retry" : stopOnFailure ? "end" : "fail",
+      outcome: passed ? "pass" : "fail",
       reason: passed
         ? "review_json.pass == true"
-        : canRetry
-          ? "review_json.pass == false，且仍可继续返工当前章节"
-          : stopOnFailure
-            ? "review_json.pass == false，且已达到返工上限，将结束运行"
-            : "review_json.pass == false，且已达到返工上限，沿失败分支结束当前运行",
-      branchKey: passed ? "pass" : canRetry ? "fail_retry_current_chapter" : stopOnFailure ? "fail_stop" : "fail_limit_reached",
+        : "review_json.pass == false，反馈当前审查问题并返回失败分支。",
+      branchKey: passed ? "pass" : "fail_feedback_current_chapter",
     },
     resultText: reviewStepRun.resultText || (passed ? "审查通过。" : "审查未通过。"),
   };
@@ -504,20 +494,11 @@ function evaluateReviewGate(params: {
     };
   }
 
-  if (canRetry) {
-    return {
-      stepRun,
-      nextStepId: step.failNextStepId,
-      nextAttemptIndex: attemptIndex + 1,
-      endReason: null,
-    };
-  }
-
   return {
     stepRun,
-    nextStepId: stopOnFailure ? null : step.failNextStepId,
-    nextAttemptIndex: attemptIndex,
-    endReason: "max_rework_reached",
+    nextStepId: step.failNextStepId,
+    nextAttemptIndex: attemptIndex + 1,
+    endReason: step.failNextStepId ? null : "review_failed",
   };
 }
 
@@ -561,13 +542,7 @@ function evaluateDecision(params: {
   let passed = false;
   let reason = "";
 
-  const configMaxReworkRaw = step.conditionConfig.maxReworkPerLoop;
   const configMaxLoopsRaw = step.conditionConfig.maxLoops;
-  const maxRework = typeof configMaxReworkRaw === "number" && configMaxReworkRaw > 0
-    ? configMaxReworkRaw
-    : configMaxReworkRaw === null
-      ? null
-      : run.loopConfigSnapshot.maxReworkPerLoop;
   const maxLoops = typeof configMaxLoopsRaw === "number" && configMaxLoopsRaw > 0
     ? configMaxLoopsRaw
     : configMaxLoopsRaw === null
@@ -584,10 +559,8 @@ function evaluateDecision(params: {
       reason = passed ? "最近一次审查通过。" : "最近一次审查未通过。";
       break;
     case "rework_available":
-      passed = hasRemainingRework(maxRework, attemptIndex + 1);
-      reason = passed
-        ? `仍可返工当前章节，当前第 ${attemptIndex} 次尝试，返工上限 ${maxRework ?? "无限"}。`
-        : `已达到当前章节返工上限 ${maxRework ?? "无限"}。`;
+      passed = true;
+      reason = `兼容旧版返工判断节点：当前第 ${attemptIndex} 次尝试，继续回到修订分支。`;
       break;
     case "remaining_loops_available":
       passed = hasRemainingLoops(maxLoops, loopIndex + 1);
@@ -645,7 +618,7 @@ function buildCompletionSummary(stopReason: Exclude<WorkflowRunStopReason, null>
     case "max_loops_reached":
       return `已达到最大循环次数 ${runtime.loopIndex}，工作流结束。`;
     case "review_failed":
-      return "审查失败，且当前配置要求立即结束工作流。";
+      return "审查失败，且当前工作流未提供失败分支，运行结束。";
     case "max_rework_reached":
       return `当前轮返工次数已达上限 ${runtime.attemptIndex}，工作流结束。`;
     case "end_node_reached":
@@ -788,17 +761,16 @@ export async function startWorkflowRun(workflowId: string) {
         };
         await store.saveRun(run);
 
-        if (evaluation.endReason) {
-          run = applyRunCompletion(run, evaluation.endReason, buildCompletionSummary(evaluation.endReason, runtime));
-          await store.saveRun(run);
-          break;
-        }
-
         runtime.attemptIndex = evaluation.nextAttemptIndex;
         run = {
           ...run,
           currentLoopIndex: runtime.loopIndex,
         };
+        if (evaluation.endReason) {
+          run = applyRunCompletion(run, evaluation.endReason, buildCompletionSummary(evaluation.endReason, runtime));
+          await store.saveRun(run);
+          break;
+        }
         currentStep = getStepById(detail, evaluation.nextStepId);
         continue;
       }
@@ -818,12 +790,6 @@ export async function startWorkflowRun(workflowId: string) {
           currentLoopIndex: runtime.loopIndex,
         };
         await store.saveRun(run);
-
-        if (!evaluation.passed && currentStep.conditionKind === "rework_available") {
-          run = applyRunCompletion(run, "max_rework_reached", buildCompletionSummary("max_rework_reached", runtime));
-          await store.saveRun(run);
-          break;
-        }
 
         currentStep = getStepById(detail, evaluation.nextStepId);
         continue;

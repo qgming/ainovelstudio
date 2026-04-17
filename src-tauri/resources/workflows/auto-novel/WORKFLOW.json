@@ -1,11 +1,10 @@
 {
   "templateKey": "builtin:auto-novel",
   "name": "全自动写小说",
-  "description": "自动执行章节规划、写作、审查、返工、设定维护与循环收尾的完整工作流模板。",
-  "basePrompt": "直接使用内置代理完成章节创作流水线。每个节点都先通过工具读取当前绑定书籍工作区中的文件，再执行本节点任务并把结果写回工作区。共享工作区文件是长期事实源，结构化节点消息只用于当前轮次协作。步骤跳转、返工和循环由程序控制。",
+  "description": "自动执行章节规划、写作、审查、设定维护与循环收尾的完整工作流模板。",
+  "basePrompt": "直接使用内置代理完成章节创作流水线。每个节点都先通过工具读取当前绑定书籍工作区中的文件，再执行本节点任务并把结果写回工作区。共享工作区文件是长期事实源，结构化节点消息只用于当前轮次协作。步骤跳转、修订反馈和循环由程序控制。",
   "loopConfig": {
     "maxLoops": 5,
-    "maxReworkPerLoop": 2,
     "stopOnReviewFailure": true
   },
   "teamMembers": [
@@ -21,7 +20,7 @@
       "agentId": "chapter-write",
       "name": "写作代理",
       "roleLabel": "章节写作",
-      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的正文、大纲、场景规划和相关设定文件，再继续推进章节创作，并把正文直接写回工作区。若收到 revision_brief，则按修订要求返工。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的正文、大纲、场景规划和相关设定文件，再继续推进章节创作，并把正文直接写回工作区。若收到 revision_brief，则按修订要求修订当前章节。"
     },
     {
       "key": "reviewer",
@@ -71,19 +70,8 @@
       "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节及相关设定文件，再完成审查，并输出严格 JSON：{\"pass\":boolean,\"issues\":[],\"revision_brief\":string}。",
       "sourceStepKey": "write-chapter",
       "passNextStepKey": "update-lore",
-      "failNextStepKey": "rework-allowed",
+      "failNextStepKey": "write-chapter",
       "passRule": "review_json.pass == true"
-    },
-    {
-      "key": "rework-allowed",
-      "type": "decision",
-      "name": "允许返工吗",
-      "conditionKind": "rework_available",
-      "conditionConfig": {
-        "source": "loop_config.maxReworkPerLoop"
-      },
-      "trueNextStepKey": "write-chapter",
-      "falseNextStepKey": "review-failed-end"
     },
     {
       "key": "update-lore",
@@ -104,13 +92,6 @@
       },
       "trueNextStepKey": "scene-plan",
       "falseNextStepKey": "success-end"
-    },
-    {
-      "key": "review-failed-end",
-      "type": "end",
-      "name": "审查失败结束",
-      "stopReason": "review_failed",
-      "summaryTemplate": "当前轮次审查未通过，且已达到返工上限，工作流结束。"
     },
     {
       "key": "success-end",

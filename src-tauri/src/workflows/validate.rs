@@ -43,7 +43,6 @@ pub(crate) fn create_id(prefix: &str) -> String {
 pub(crate) fn default_loop_config() -> WorkflowLoopConfig {
     WorkflowLoopConfig {
         max_loops: Some(1),
-        max_rework_per_loop: Some(1),
         stop_on_review_failure: true,
     }
 }
@@ -137,9 +136,6 @@ pub(crate) fn validate_binding_input(binding: &WorkflowWorkspaceBindingInput) ->
 pub(crate) fn validate_loop_config(loop_config: &WorkflowLoopConfig) -> CommandResult<()> {
     if matches!(loop_config.max_loops, Some(0)) {
         return Err("最大循环次数必须大于 0，或留空表示无限。".into());
-    }
-    if matches!(loop_config.max_rework_per_loop, Some(0)) {
-        return Err("每轮最大返工次数必须大于 0，或留空表示无限。".into());
     }
     Ok(())
 }
@@ -341,7 +337,7 @@ pub(crate) fn clear_deleted_step_references(
 pub(crate) fn default_decision_condition_config(kind: &str) -> Value {
     match kind {
         "review_pass" => json!({ "source": "latest_review" }),
-        "rework_available" => json!({ "source": "loop_config.maxReworkPerLoop" }),
+        "rework_available" => json!({ "source": "legacy_rework" }),
         "remaining_loops_available" => json!({ "source": "loop_config.maxLoops" }),
         "stop_on_review_failure" => json!({ "source": "loop_config.stopOnReviewFailure" }),
         _ => json!({}),

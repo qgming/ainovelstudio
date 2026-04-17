@@ -1,6 +1,6 @@
 use crate::embedded_resources::EMBEDDED_WORKFLOW_FILES;
 use rusqlite::{params, Connection, OptionalExtension};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::{
     repository::{
@@ -36,7 +36,7 @@ pub(crate) fn collect_embedded_workflow_files(workflow_id: &str) -> WorkflowFile
 }
 
 pub(crate) fn embedded_workflow_ids() -> Vec<String> {
-    let mut ids = EMBEDDED_WORKFLOW_FILES
+  let mut ids = EMBEDDED_WORKFLOW_FILES
         .iter()
         .filter_map(|file| file.path.split('/').next())
         .map(ToString::to_string)
@@ -44,6 +44,43 @@ pub(crate) fn embedded_workflow_ids() -> Vec<String> {
     ids.sort();
     ids.dedup();
     ids
+}
+
+fn list_builtin_package_ids(connection: &Connection) -> CommandResult<Vec<String>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id FROM workflow_packages WHERE source_kind = ?1 OR is_builtin = 1 ORDER BY id ASC",
+        )
+        .map_err(super::validate::error_to_string)?;
+    let rows = statement
+        .query_map(params![WORKFLOW_SOURCE_BUILTIN], |row| row.get::<_, String>(0))
+        .map_err(super::validate::error_to_string)?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(super::validate::error_to_string)
+}
+
+fn remove_stale_builtin_workflows(connection: &Connection) -> CommandResult<()> {
+    let active_package_ids = embedded_workflow_ids().into_iter().collect::<HashSet<_>>();
+    let stored_package_ids = list_builtin_package_ids(connection)?;
+
+    for package_id in stored_package_ids {
+        if active_package_ids.contains(&package_id) {
+            continue;
+        }
+
+        let template_key = format!("builtin:{package_id}");
+        connection
+            .execute(
+                "DELETE FROM workflows WHERE source = ?1 AND (package_id = ?2 OR template_key = ?3)",
+                params![WORKFLOW_SOURCE_BUILTIN, package_id, template_key],
+            )
+            .map_err(super::validate::error_to_string)?;
+        connection
+            .execute("DELETE FROM workflow_packages WHERE id = ?1", params![package_id])
+            .map_err(super::validate::error_to_string)?;
+    }
+
+    Ok(())
 }
 
 pub(crate) fn save_workflow_package_record(
@@ -528,6 +565,7 @@ pub(crate) fn sync_builtin_workflows_to_database(
     connection: &Connection,
 ) -> CommandResult<BuiltinWorkflowsInitializationResult> {
     ensure_workflow_package_id_column(connection)?;
+    remove_stale_builtin_workflows(connection)?;
     let packages = sync_builtin_workflow_packages_to_database(connection)?;
     let mut initialized_workflow_ids = Vec::new();
     let mut skipped_template_keys = Vec::new();

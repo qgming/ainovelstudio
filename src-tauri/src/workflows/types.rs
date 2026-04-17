@@ -24,7 +24,6 @@ pub struct WorkflowWorkspaceBindingInput {
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowLoopConfig {
     pub(crate) max_loops: Option<u64>,
-    pub(crate) max_rework_per_loop: Option<u64>,
     pub(crate) stop_on_review_failure: bool,
 }
 

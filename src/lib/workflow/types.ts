@@ -2,19 +2,13 @@ import type { AgentPart, AgentUsage, AgentRunStatus } from "../agent/types";
 
 export type WorkflowRunStatus = "idle" | "queued" | "running" | "completed" | "failed" | "stopped";
 
-export type WorkflowStepType = "start" | "agent_task" | "review_gate" | "decision" | "loop_control" | "end";
+export type WorkflowStepType = "start" | "agent_task" | "decision" | "end";
 
 export type WorkflowStepOutputMode = "text" | "review_json";
 
 export type WorkflowMessageType = "scene_plan" | "review_result" | "revision_brief" | "lore_update_summary" | string;
 
 export type WorkflowMessagePayload = Record<string, unknown>;
-
-export type WorkflowDecisionConditionKind =
-  | "review_pass"
-  | "rework_available"
-  | "remaining_loops_available"
-  | "stop_on_review_failure";
 
 export type WorkflowWorkspaceBinding = {
   workflowId: string;
@@ -26,8 +20,6 @@ export type WorkflowWorkspaceBinding = {
 
 export type WorkflowLoopConfig = {
   maxLoops: number | null;
-  maxReworkPerLoop: number | null;
-  stopOnReviewFailure: boolean;
 };
 
 export type WorkflowTeamMember = {
@@ -46,12 +38,14 @@ export type WorkflowTeamMember = {
 export type WorkflowRunStopReason =
   | "completed"
   | "manual_stop"
-  | "max_loops_reached"
-  | "max_rework_reached"
   | "end_node_reached"
   | "error"
   | "review_failed"
   | null;
+
+export type WorkflowEndLoopBehavior = "finish" | "continue_if_possible";
+
+export type WorkflowEndStopReason = "completed" | "review_failed";
 
 export type WorkflowStartStepDefinition = {
   id: string;
@@ -74,41 +68,18 @@ export type WorkflowAgentStepDefinition = {
   nextStepId: string | null;
 };
 
-export type WorkflowReviewGateStepDefinition = {
-  id: string;
-  workflowId: string;
-  type: "review_gate";
-  name: string;
-  order: number;
-  memberId: string;
-  promptTemplate: string;
-  sourceStepId: string;
-  passNextStepId: string | null;
-  failNextStepId: string | null;
-  passRule: "review_json.pass == true";
-};
-
 export type WorkflowDecisionStepDefinition = {
   id: string;
   workflowId: string;
   type: "decision";
   name: string;
   order: number;
-  conditionKind: WorkflowDecisionConditionKind;
-  conditionConfig: WorkflowMessagePayload;
+  memberId: string;
+  promptTemplate: string;
+  sourceStepId: string;
   trueNextStepId: string | null;
   falseNextStepId: string | null;
-};
-
-export type WorkflowLoopControlStepDefinition = {
-  id: string;
-  workflowId: string;
-  type: "loop_control";
-  name: string;
-  order: number;
-  loopTargetStepId: string | null;
-  continueWhen: "remainingLoops > 0";
-  finishWhen: "remainingLoops <= 0";
+  passRule: "review_json.pass == true";
 };
 
 export type WorkflowEndStepDefinition = {
@@ -117,24 +88,22 @@ export type WorkflowEndStepDefinition = {
   type: "end";
   name: string;
   order: number;
-  stopReason: Exclude<WorkflowRunStopReason, null>;
+  stopReason: WorkflowEndStopReason;
   summaryTemplate: string;
+  loopBehavior: WorkflowEndLoopBehavior;
+  loopTargetStepId: string | null;
 };
 
 export type WorkflowStepDefinition =
   | WorkflowStartStepDefinition
   | WorkflowAgentStepDefinition
-  | WorkflowReviewGateStepDefinition
   | WorkflowDecisionStepDefinition
-  | WorkflowLoopControlStepDefinition
   | WorkflowEndStepDefinition;
 
 export type WorkflowStepInput =
   | Omit<WorkflowStartStepDefinition, "id" | "workflowId" | "order">
   | Omit<WorkflowAgentStepDefinition, "id" | "workflowId" | "order">
-  | Omit<WorkflowReviewGateStepDefinition, "id" | "workflowId" | "order">
   | Omit<WorkflowDecisionStepDefinition, "id" | "workflowId" | "order">
-  | Omit<WorkflowLoopControlStepDefinition, "id" | "workflowId" | "order">
   | Omit<WorkflowEndStepDefinition, "id" | "workflowId" | "order">;
 
 export type WorkflowSource = "builtin" | "user";

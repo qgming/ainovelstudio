@@ -49,7 +49,6 @@ const STEP_TYPE_OPTIONS: Array<{ label: string; value: WorkflowStepType }> = [
 
 const DECISION_KIND_OPTIONS: Array<{ label: string; value: WorkflowDecisionConditionKind }> = [
   { label: "审查是否通过", value: "review_pass" },
-  { label: "是否还能返工", value: "rework_available" },
   { label: "是否还有下一轮", value: "remaining_loops_available" },
   { label: "失败时是否停止", value: "stop_on_review_failure" },
 ];
@@ -57,7 +56,6 @@ const DECISION_KIND_OPTIONS: Array<{ label: string; value: WorkflowDecisionCondi
 const END_REASON_OPTIONS = [
   { label: "完成", value: "completed" },
   { label: "审查失败", value: "review_failed" },
-  { label: "返工次数耗尽", value: "max_rework_reached" },
   { label: "达到最大轮次", value: "max_loops_reached" },
   { label: "手动停止", value: "manual_stop" },
   { label: "异常结束", value: "error" },
@@ -100,8 +98,6 @@ function buildLoopDraft(loopConfig: WorkflowLoopConfig) {
   return {
     maxLoopsMode: loopConfig.maxLoops === null ? "infinite" : "finite",
     maxLoopsValue: loopConfig.maxLoops === null ? "1" : String(loopConfig.maxLoops),
-    maxReworkMode: loopConfig.maxReworkPerLoop === null ? "infinite" : "finite",
-    maxReworkValue: loopConfig.maxReworkPerLoop === null ? "1" : String(loopConfig.maxReworkPerLoop),
     stopOnReviewFailure: loopConfig.stopOnReviewFailure,
   } as const;
 }
@@ -244,7 +240,6 @@ export function WorkflowDetailPage() {
   const [loopDraft, setLoopDraft] = useState(() =>
     buildLoopDraft({
       maxLoops: 1,
-      maxReworkPerLoop: 1,
       stopOnReviewFailure: true,
     }),
   );
@@ -553,7 +548,6 @@ export function WorkflowDetailPage() {
       setPageNotice(null);
       await updateLoopConfig(detail.workflow.id, {
         maxLoops: normalizeLoopValue(loopDraft.maxLoopsMode, loopDraft.maxLoopsValue),
-        maxReworkPerLoop: normalizeLoopValue(loopDraft.maxReworkMode, loopDraft.maxReworkValue),
         stopOnReviewFailure: loopDraft.stopOnReviewFailure,
       });
     } catch (error) {
@@ -839,7 +833,7 @@ export function WorkflowDetailPage() {
                       </Button>
                     </div>
                     <div className="rounded-md bg-foreground/[0.03] px-3 py-2 text-xs text-muted-foreground">
-                      当前配置：主循环 {formatLoopLimit(detail.workflow.loopConfig.maxLoops)} / 返工 {formatLoopLimit(detail.workflow.loopConfig.maxReworkPerLoop)} / {detail.workflow.loopConfig.stopOnReviewFailure ? "失败即停" : "失败后按分支继续"}
+                      当前配置：主循环 {formatLoopLimit(detail.workflow.loopConfig.maxLoops)} / {detail.workflow.loopConfig.stopOnReviewFailure ? "失败即停" : "失败后按分支继续"}
                     </div>
                     <div className="space-y-3">
                       <div className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)] md:items-end">
@@ -874,42 +868,10 @@ export function WorkflowDetailPage() {
                           <div className="flex h-10 items-center text-sm text-muted-foreground">当前为无限（{formatLoopLimit(null)}）</div>
                         )}
                       </div>
-                      <div className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)] md:items-end">
-                        <label className="block space-y-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">每轮最大返工次数</span>
-                          <Select
-                            value={loopDraft.maxReworkMode}
-                            onValueChange={(value) =>
-                              setLoopDraft((current) => ({ ...current, maxReworkMode: value as "finite" | "infinite" }))
-                            }
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="finite">有限</SelectItem>
-                              <SelectItem value="infinite">无限</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </label>
-                        {loopDraft.maxReworkMode === "finite" ? (
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">次数</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={loopDraft.maxReworkValue}
-                              onChange={(event) =>
-                                setLoopDraft((current) => ({ ...current, maxReworkValue: event.target.value }))
-                              }
-                            />
-                          </label>
-                        ) : (
-                          <div className="flex h-10 items-center text-sm text-muted-foreground">当前为无限（{formatLoopLimit(null)}）</div>
-                        )}
-                      </div>
                       <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
                         <div>
                           <p className="text-sm font-medium text-foreground">审查失败时停止</p>
-                          <p className="text-xs text-muted-foreground">达到返工上限后直接结束本次运行。</p>
+                          <p className="text-xs text-muted-foreground">供条件节点读取，用来决定审查失败后是否结束流程。</p>
                         </div>
                         <Switch
                           checked={loopDraft.stopOnReviewFailure}
