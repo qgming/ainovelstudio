@@ -69,7 +69,10 @@ fn normalize_base_url(base_url: &str) -> String {
     base_url.trim().trim_end_matches('/').to_string()
 }
 
-fn build_request_headers(config: &AgentProviderConfig, include_json_body: bool) -> CommandResult<HeaderMap> {
+fn build_request_headers(
+    config: &AgentProviderConfig,
+    include_json_body: bool,
+) -> CommandResult<HeaderMap> {
     let mut headers = HeaderMap::new();
     let auth_value = format!("Bearer {}", config.api_key.trim());
     headers.insert(
@@ -79,7 +82,7 @@ fn build_request_headers(config: &AgentProviderConfig, include_json_body: bool) 
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
     if include_json_body {
-      headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     }
 
     if config.simulate_opencode_beta {
@@ -93,7 +96,8 @@ fn build_request_headers(config: &AgentProviderConfig, include_json_body: bool) 
         );
         headers.insert(
             HeaderName::from_static("x-opencode-request"),
-            HeaderValue::from_str(&create_opencode_id("msg_")).map_err(|error| error.to_string())?,
+            HeaderValue::from_str(&create_opencode_id("msg_"))
+                .map_err(|error| error.to_string())?,
         );
         headers.insert(
             HeaderName::from_static("x-opencode-session"),
@@ -136,7 +140,8 @@ fn build_forward_headers(headers: HashMap<String, String>) -> CommandResult<Head
     let mut header_map = HeaderMap::new();
 
     for (key, value) in headers {
-        let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|error| error.to_string())?;
+        let header_name =
+            HeaderName::from_bytes(key.as_bytes()).map_err(|error| error.to_string())?;
         let header_value = HeaderValue::from_str(&value).map_err(|error| error.to_string())?;
         header_map.insert(header_name, header_value);
     }
@@ -145,12 +150,16 @@ fn build_forward_headers(headers: HashMap<String, String>) -> CommandResult<Head
 }
 
 #[tauri::command]
-pub async fn fetch_provider_models(config: AgentProviderConfig) -> CommandResult<ProviderHttpResponse> {
+pub async fn fetch_provider_models(
+    config: AgentProviderConfig,
+) -> CommandResult<ProviderHttpResponse> {
     send_request(config, "/models", reqwest::Method::GET, None).await
 }
 
 #[tauri::command]
-pub async fn probe_provider_connection(config: AgentProviderConfig) -> CommandResult<ProviderHttpResponse> {
+pub async fn probe_provider_connection(
+    config: AgentProviderConfig,
+) -> CommandResult<ProviderHttpResponse> {
     let body = json!({
         "model": config.model.trim(),
         "messages": [
@@ -165,7 +174,13 @@ pub async fn probe_provider_connection(config: AgentProviderConfig) -> CommandRe
         ]
     });
 
-    send_request(config, "/chat/completions", reqwest::Method::POST, Some(body)).await
+    send_request(
+        config,
+        "/chat/completions",
+        reqwest::Method::POST,
+        Some(body),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -175,7 +190,8 @@ pub async fn forward_provider_request(
     let client = reqwest::Client::builder()
         .build()
         .map_err(|error| error.to_string())?;
-    let method = reqwest::Method::from_bytes(request.method.trim().as_bytes()).map_err(|error| error.to_string())?;
+    let method = reqwest::Method::from_bytes(request.method.trim().as_bytes())
+        .map_err(|error| error.to_string())?;
     let mut request_builder = client
         .request(method, request.url)
         .headers(build_forward_headers(request.headers)?);
@@ -184,13 +200,21 @@ pub async fn forward_provider_request(
         request_builder = request_builder.body(body);
     }
 
-    let response = request_builder.send().await.map_err(|error| error.to_string())?;
+    let response = request_builder
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status().as_u16();
     let ok = response.status().is_success();
     let headers = response
         .headers()
         .iter()
-        .filter_map(|(key, value)| value.to_str().ok().map(|parsed| (key.to_string(), parsed.to_string())))
+        .filter_map(|(key, value)| {
+            value
+                .to_str()
+                .ok()
+                .map(|parsed| (key.to_string(), parsed.to_string()))
+        })
         .collect::<HashMap<_, _>>();
     let body = response.text().await.map_err(|error| error.to_string())?;
 

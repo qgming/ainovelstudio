@@ -7,6 +7,7 @@ mod embedded_resources;
 mod provider_proxy;
 mod skills;
 mod usage;
+mod workflows;
 mod workspace;
 mod workspace_db;
 
@@ -108,6 +109,25 @@ pub fn run() {
             config::read_default_agent_config,
             config::write_default_agent_config,
             usage::read_usage_logs,
+            workflows::commands::initialize_builtin_workflows,
+            workflows::commands::list_workflows,
+            workflows::commands::create_workflow,
+            workflows::commands::export_workflow_zip,
+            workflows::commands::delete_workflow,
+            workflows::commands::get_workflow_detail,
+            workflows::commands::save_workflow_basics,
+            workflows::commands::bind_workflow_workspace,
+            workflows::commands::update_workflow_loop_config,
+            workflows::commands::add_workflow_team_member,
+            workflows::commands::update_workflow_team_member,
+            workflows::commands::remove_workflow_team_member,
+            workflows::commands::reorder_workflow_team_members,
+            workflows::commands::add_workflow_step,
+            workflows::commands::update_workflow_step,
+            workflows::commands::remove_workflow_step,
+            workflows::commands::reorder_workflow_steps,
+            workflows::commands::save_workflow_run,
+            workflows::commands::save_workflow_step_run,
             workspace::pick_book_directory,
             workspace::list_book_workspaces,
             workspace::get_book_workspace_summary,

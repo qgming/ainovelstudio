@@ -57,6 +57,7 @@ fn main() {
     println!("cargo:rerun-if-changed=icons/icon.png");
     println!("cargo:rerun-if-changed=resources/skills");
     println!("cargo:rerun-if-changed=resources/agents");
+    println!("cargo:rerun-if-changed=resources/workflows");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("missing manifest dir"));
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("missing out dir"));
@@ -64,11 +65,13 @@ fn main() {
 
     let skills_root = manifest_dir.join("resources").join("skills");
     let agents_root = manifest_dir.join("resources").join("agents");
+    let workflows_root = manifest_dir.join("resources").join("workflows");
 
     let contents = format!(
-        "pub struct EmbeddedTextFile {{\n    pub path: &'static str,\n    pub content: &'static str,\n}}\n\n{}\n\n{}\n",
+        "pub struct EmbeddedTextFile {{\n    pub path: &'static str,\n    pub content: &'static str,\n}}\n\n{}\n\n{}\n\n{}\n",
         build_embedded_const(&skills_root, "EMBEDDED_SKILL_FILES"),
-        build_embedded_const(&agents_root, "EMBEDDED_AGENT_FILES")
+        build_embedded_const(&agents_root, "EMBEDDED_AGENT_FILES"),
+        build_embedded_const(&workflows_root, "EMBEDDED_WORKFLOW_FILES")
     );
 
     fs::write(generated_file, contents).expect("failed to write embedded resources");

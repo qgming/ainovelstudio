@@ -28,6 +28,12 @@ const SkillDetailPage = lazy(() =>
 const SkillsPage = lazy(() =>
   import("./pages/SkillsPage").then((module) => ({ default: module.SkillsPage })),
 );
+const WorkflowDetailPage = lazy(() =>
+  import("./pages/WorkflowDetailPage").then((module) => ({ default: module.WorkflowDetailPage })),
+);
+const WorkflowsPage = lazy(() =>
+  import("./pages/WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })),
+);
 
 function AppRouteLoadingState() {
   return (
@@ -88,6 +94,8 @@ function AppShell() {
                 <Route path="/skills/:skillId" element={<SkillDetailPage />} />
                 <Route path="/agents" element={<AgentsPage />} />
                 <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+                <Route path="/workflows" element={<WorkflowsPage />} />
+                <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
                 <Route path="/setting" element={<SettingPage />} />
               </Routes>
             </Suspense>

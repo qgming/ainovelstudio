@@ -156,7 +156,7 @@ function mergeSubagentInnerParts(
   return [...parts, part];
 }
 
-async function runSubAgentTask(params: {
+export async function runSubAgentTask(params: {
   abortSignal?: AbortSignal;
   agentId?: string;
   enabledAgents: ResolvedAgent[];

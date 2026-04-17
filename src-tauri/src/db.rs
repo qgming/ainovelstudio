@@ -1,4 +1,4 @@
-use crate::workspace_db::run_workspace_migrations;
+use crate::{workflows::run_workflow_migrations, workspace_db::run_workspace_migrations};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::fs;
@@ -263,6 +263,7 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
     ensure_chat_sessions_book_id_column(connection)?;
     cleanup_book_workspace_registry(connection)?;
     run_workspace_migrations(connection)?;
+    run_workflow_migrations(connection)?;
 
     connection
         .execute_batch(

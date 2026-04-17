@@ -1,0 +1,79 @@
+{
+  "templateKey": "builtin:auto-novel",
+  "name": "全自动写小说",
+  "description": "自动执行章节创作、审查、返工与设定维护的完整工作流模板。",
+  "loopConfig": {
+    "maxLoops": 5,
+    "maxReworkPerLoop": 2,
+    "stopOnReviewFailure": true
+  },
+  "teamMembers": [
+    {
+      "key": "writer",
+      "agentId": "chapter-write",
+      "name": "写作代理",
+      "roleLabel": "章节写作",
+      "responsibilityPrompt": "读取当前工作区，继续推进章节创作并输出可直接写回工作区的正文内容。"
+    },
+    {
+      "key": "reviewer",
+      "agentId": "novel-review",
+      "name": "审查代理",
+      "roleLabel": "结构审查",
+      "responsibilityPrompt": "检查最新章节的设定一致性、节奏、伏笔与冲突，并严格返回 review_json。"
+    },
+    {
+      "key": "lore-maintainer",
+      "agentId": "snowflake-fiction",
+      "name": "设定维护代理",
+      "roleLabel": "设定更新",
+      "responsibilityPrompt": "根据通过审查的章节结果更新人物设定、背景资料与创作追踪文件。"
+    }
+  ],
+  "steps": [
+    {
+      "key": "write-chapter",
+      "type": "agent_task",
+      "name": "章节写作",
+      "memberKey": "writer",
+      "promptTemplate": "请读取工作区已有内容，创作下一章并把结果写入合适文件。",
+      "outputMode": "text",
+      "nextStepKey": "review-chapter"
+    },
+    {
+      "key": "review-chapter",
+      "type": "agent_task",
+      "name": "章节审查",
+      "memberKey": "reviewer",
+      "promptTemplate": "请审查最新章节，必须仅返回 review_json。",
+      "outputMode": "review_json",
+      "nextStepKey": "review-gate"
+    },
+    {
+      "key": "review-gate",
+      "type": "review_gate",
+      "name": "审查判断",
+      "sourceStepKey": "review-chapter",
+      "passNextStepKey": "update-lore",
+      "failNextStepKey": "write-chapter",
+      "passRule": "review_json.pass == true"
+    },
+    {
+      "key": "update-lore",
+      "type": "agent_task",
+      "name": "设定更新",
+      "memberKey": "lore-maintainer",
+      "promptTemplate": "请根据通过审查的最新章节，更新角色、背景、线索与项目追踪资料。",
+      "outputMode": "text",
+      "nextStepKey": "loop-control"
+    },
+    {
+      "key": "loop-control",
+      "type": "loop_control",
+      "name": "循环控制",
+      "loopTargetStepKey": "write-chapter",
+      "continueWhen": "remainingLoops > 0",
+      "finishWhen": "remainingLoops <= 0"
+    }
+  ]
+}

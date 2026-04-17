@@ -1,0 +1,10 @@
+{
+  "id": "auto-lore-update",
+  "name": "全自动设定更新",
+  "description": "自动扫描最新章节与资料，更新人物、背景和项目追踪文件的工作流模板。",
+  "version": "1.0.0",
+  "author": "builtin",
+  "tags": ["工作流", "设定", "人物", "背景", "追踪"],
+  "entry": "WORKFLOW.json",
+  "schemaVersion": 1
+}

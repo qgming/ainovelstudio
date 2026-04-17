@@ -1,0 +1,63 @@
+{
+  "templateKey": "builtin:auto-lore-update",
+  "name": "全自动设定更新",
+  "description": "自动扫描最新章节与资料，更新人物、背景和项目追踪文件的工作流模板。",
+  "loopConfig": {
+    "maxLoops": 2,
+    "maxReworkPerLoop": 1,
+    "stopOnReviewFailure": true
+  },
+  "teamMembers": [
+    {
+      "key": "maintainer",
+      "agentId": "snowflake-fiction",
+      "name": "设定整理代理",
+      "roleLabel": "设定维护",
+      "responsibilityPrompt": "扫描最新章节和资料，更新角色、背景、时间线与项目追踪文件。"
+    },
+    {
+      "key": "reviewer",
+      "agentId": "character-check",
+      "name": "设定审查代理",
+      "roleLabel": "设定校验",
+      "responsibilityPrompt": "检查设定更新是否完整、一致，并严格返回 review_json。"
+    }
+  ],
+  "steps": [
+    {
+      "key": "scan-and-update",
+      "type": "agent_task",
+      "name": "设定扫描与更新",
+      "memberKey": "maintainer",
+      "promptTemplate": "请读取最新章节和资料文件，更新人物、背景、时间线与追踪信息。",
+      "outputMode": "text",
+      "nextStepKey": "review-update"
+    },
+    {
+      "key": "review-update",
+      "type": "agent_task",
+      "name": "设定审查",
+      "memberKey": "reviewer",
+      "promptTemplate": "请审查刚更新的设定内容，必须仅返回 review_json。",
+      "outputMode": "review_json",
+      "nextStepKey": "review-gate"
+    },
+    {
+      "key": "review-gate",
+      "type": "review_gate",
+      "name": "设定审查判断",
+      "sourceStepKey": "review-update",
+      "passNextStepKey": "loop-control",
+      "failNextStepKey": "scan-and-update",
+      "passRule": "review_json.pass == true"
+    },
+    {
+      "key": "loop-control",
+      "type": "loop_control",
+      "name": "循环控制",
+      "loopTargetStepKey": "scan-and-update",
+      "continueWhen": "remainingLoops > 0",
+      "finishWhen": "remainingLoops <= 0"
+    }
+  ]
+}
