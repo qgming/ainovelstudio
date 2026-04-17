@@ -26,14 +26,72 @@ import {
   getAbortContext,
   type LocalResourceToolContext,
   ensureString,
+  isPlainObject,
   ok,
 } from "./shared";
+import type {
+  WorkflowReviewIssue,
+  WorkflowReviewResult,
+} from "../../workflow/types";
+
+type LocalResourceToolsetContext = LocalResourceToolContext & {
+  onWorkflowDecision?: (decision: WorkflowReviewResult) => void;
+};
+
+const WORKFLOW_DECISION_SEVERITIES = new Set(["low", "medium", "high"]);
+
+function normalizeWorkflowDecisionIssue(
+  issue: unknown,
+  index: number,
+): WorkflowReviewIssue {
+  if (!isPlainObject(issue)) {
+    throw new Error(`workflow_decision.issues[${index}] 必须是对象。`);
+  }
+
+  const type = ensureString(issue.type, `workflow_decision.issues[${index}].type`);
+  const message = ensureString(
+    issue.message,
+    `workflow_decision.issues[${index}].message`,
+  );
+  const severityValue = String(issue.severity ?? "").trim();
+  const severity = WORKFLOW_DECISION_SEVERITIES.has(severityValue)
+    ? (severityValue as WorkflowReviewIssue["severity"])
+    : "medium";
+
+  return {
+    type,
+    severity,
+    message,
+  };
+}
+
+function normalizeWorkflowDecision(
+  input: Record<string, unknown>,
+): WorkflowReviewResult {
+  if (typeof input.pass !== "boolean") {
+    throw new Error("workflow_decision.pass 必须是布尔值。");
+  }
+
+  const issues = Array.isArray(input.issues)
+    ? input.issues.map((issue, index) =>
+        normalizeWorkflowDecisionIssue(issue, index),
+      )
+    : [];
+
+  return {
+    pass: input.pass,
+    issues,
+    revision_brief:
+      typeof input.revision_brief === "string" ? input.revision_brief.trim() : "",
+  };
+}
 
 export function createLocalResourceToolset({
   refreshAgents,
   refreshSkills,
-}: LocalResourceToolContext = {}): Record<string, AgentTool> {
-  return {
+  onWorkflowDecision,
+}: LocalResourceToolsetContext = {}): Record<string, AgentTool> {
+  const tools: Record<string, AgentTool> = {
     todo: {
       description: "更新当前会话中的待办计划",
       execute: async (input) => {
@@ -193,4 +251,20 @@ export function createLocalResourceToolset({
       },
     },
   };
+
+  if (onWorkflowDecision) {
+    tools.workflow_decision = {
+      description: "向当前工作流判断节点提交结构化判定结果。",
+      execute: async (input) => {
+        const decision = normalizeWorkflowDecision(input);
+        onWorkflowDecision(decision);
+        return ok(
+          decision.pass ? "已记录判断结果：通过。" : "已记录判断结果：不通过。",
+          decision,
+        );
+      },
+    };
+  }
+
+  return tools;
 }

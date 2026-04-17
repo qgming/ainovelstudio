@@ -24,7 +24,6 @@ pub struct WorkflowWorkspaceBindingInput {
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowLoopConfig {
     pub(crate) max_loops: Option<u64>,
-    pub(crate) stop_on_review_failure: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,7 +84,7 @@ pub enum WorkflowStepDefinition {
         output_mode: String,
         next_step_id: Option<String>,
     },
-    ReviewGate {
+    Decision {
         id: String,
         workflow_id: String,
         name: String,
@@ -93,28 +92,9 @@ pub enum WorkflowStepDefinition {
         member_id: String,
         prompt_template: String,
         source_step_id: String,
-        pass_next_step_id: Option<String>,
-        fail_next_step_id: Option<String>,
-        pass_rule: String,
-    },
-    Decision {
-        id: String,
-        workflow_id: String,
-        name: String,
-        order: u64,
-        condition_kind: String,
-        condition_config: Value,
         true_next_step_id: Option<String>,
         false_next_step_id: Option<String>,
-    },
-    LoopControl {
-        id: String,
-        workflow_id: String,
-        name: String,
-        order: u64,
-        loop_target_step_id: Option<String>,
-        continue_when: String,
-        finish_when: String,
+        pass_rule: String,
     },
     End {
         id: String,
@@ -123,6 +103,8 @@ pub enum WorkflowStepDefinition {
         order: u64,
         stop_reason: String,
         summary_template: String,
+        loop_behavior: String,
+        loop_target_step_id: Option<String>,
     },
 }
 
@@ -144,32 +126,21 @@ pub enum WorkflowStepInput {
         output_mode: String,
         next_step_id: Option<String>,
     },
-    ReviewGate {
+    Decision {
         name: String,
         member_id: String,
         prompt_template: String,
         source_step_id: String,
-        pass_next_step_id: Option<String>,
-        fail_next_step_id: Option<String>,
-        pass_rule: String,
-    },
-    Decision {
-        name: String,
-        condition_kind: String,
-        condition_config: Value,
         true_next_step_id: Option<String>,
         false_next_step_id: Option<String>,
-    },
-    LoopControl {
-        name: String,
-        loop_target_step_id: Option<String>,
-        continue_when: String,
-        finish_when: String,
+        pass_rule: String,
     },
     End {
         name: String,
         stop_reason: String,
         summary_template: String,
+        loop_behavior: String,
+        loop_target_step_id: Option<String>,
     },
 }
 
@@ -182,7 +153,6 @@ pub struct WorkflowStepDecision {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct WorkflowReviewIssue {
     pub(crate) r#type: String,
     pub(crate) severity: String,
@@ -190,7 +160,6 @@ pub struct WorkflowReviewIssue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct WorkflowReviewResult {
     pub(crate) pass: bool,
     pub(crate) issues: Vec<WorkflowReviewIssue>,
@@ -336,7 +305,7 @@ pub(crate) enum WorkflowTemplateStep {
         output_mode: String,
         next_step_key: Option<String>,
     },
-    ReviewGate {
+    Decision {
         key: String,
         name: String,
         #[serde(default)]
@@ -344,25 +313,9 @@ pub(crate) enum WorkflowTemplateStep {
         #[serde(default = "default_review_prompt_template")]
         prompt_template: String,
         source_step_key: String,
-        pass_next_step_key: Option<String>,
-        fail_next_step_key: Option<String>,
-        pass_rule: String,
-    },
-    Decision {
-        key: String,
-        name: String,
-        condition_kind: String,
-        #[serde(default)]
-        condition_config: Value,
         true_next_step_key: Option<String>,
         false_next_step_key: Option<String>,
-    },
-    LoopControl {
-        key: String,
-        name: String,
-        loop_target_step_key: Option<String>,
-        continue_when: String,
-        finish_when: String,
+        pass_rule: String,
     },
     End {
         key: String,
@@ -370,7 +323,15 @@ pub(crate) enum WorkflowTemplateStep {
         stop_reason: String,
         #[serde(default)]
         summary_template: String,
+        #[serde(default = "default_end_loop_behavior")]
+        loop_behavior: String,
+        #[serde(default)]
+        loop_target_step_key: Option<String>,
     },
+}
+
+fn default_end_loop_behavior() -> String {
+    "finish".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -403,7 +364,7 @@ pub struct WorkflowTeamMemberPatch {
 
 #[cfg(test)]
 mod tests {
-    use super::{WorkflowStepDefinition, WorkflowStepInput};
+    use super::{WorkflowReviewResult, WorkflowStepDefinition, WorkflowStepInput};
     use serde_json::json;
 
     #[test]
@@ -459,18 +420,43 @@ mod tests {
             "workflowId": "workflow-1",
             "name": "是否通过",
             "order": 1,
-            "conditionKind": "review_pass",
-            "conditionConfig": {"source": "latest_review"},
+            "memberId": "member-1",
+            "promptTemplate": "判断是否通过",
+            "sourceStepId": "step-1",
             "trueNextStepId": "step-3",
-            "falseNextStepId": "step-4"
+            "falseNextStepId": "step-4",
+            "passRule": "workflow_decision.pass == true"
         });
 
         let parsed: WorkflowStepDefinition = serde_json::from_value(value.clone()).unwrap();
         let serialized = serde_json::to_value(parsed).unwrap();
 
-        assert_eq!(serialized["conditionKind"], "review_pass");
-        assert_eq!(serialized["conditionConfig"]["source"], "latest_review");
+        assert_eq!(serialized["memberId"], "member-1");
+        assert_eq!(serialized["promptTemplate"], "判断是否通过");
+        assert_eq!(serialized["sourceStepId"], "step-1");
         assert_eq!(serialized["trueNextStepId"], "step-3");
         assert_eq!(serialized["falseNextStepId"], "step-4");
+        assert_eq!(serialized["passRule"], "workflow_decision.pass == true");
+    }
+
+    #[test]
+    fn workflow_review_result_uses_revision_brief_field_name() {
+        let value = json!({
+            "pass": false,
+            "issues": [
+                {
+                    "type": "consistency",
+                    "severity": "high",
+                    "message": "编号设定冲突"
+                }
+            ],
+            "revision_brief": "统一编号 7 的真实身份。"
+        });
+
+        let parsed: WorkflowReviewResult = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(parsed).unwrap();
+
+        assert_eq!(serialized["revision_brief"], "统一编号 7 的真实身份。");
+        assert!(serialized.get("revisionBrief").is_none());
     }
 }

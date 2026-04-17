@@ -13,19 +13,19 @@
 1. `start` 程序节点初始化本轮运行状态
 2. 内置 `scene-plan` 代理读取工作区并生成本章场景规划
 3. 内置 `chapter-write` 代理基于工作区事实与 `scene_plan` 消息创作正文
-4. 内置 `novel-review` 代理输出结构化审查 JSON
-5. 审查未通过时，直接把问题反馈给章节写作节点修订当前章节；通过时进入设定更新
+4. 内置 `novel-review` 代理在判断节点中完成章节审查，并通过 `workflow_decision` 工具提交结构化结果
+5. 判断未通过时，直接把问题反馈给章节写作节点修订当前章节；通过时进入设定更新
 6. 内置 `snowflake-fiction` 代理更新人物、背景与追踪资料
-7. 由条件节点判断是否进入下一轮；否则进入结束节点
+7. 结束节点根据最大轮次决定是否回到开始节点继续下一轮
 
 ## 运行语义
 
 - 工作区文件是长期事实源，所有代理都必须先读工作区再行动
 - 结构化节点消息只传递当前轮次的关键协作信息，如 `scene_plan`、`review_result`、`revision_brief`、`lore_update_summary`
-- 审查步骤必须返回严格 JSON：`pass`、`issues`、`revision_brief`
+- 判断步骤通过 `workflow_decision` 工具传递 `pass`、`issues`、`revision_brief`
 - 同一章节修订时，写作节点只能修订当前章节，不能误写下一章
 - 审查失败后会直接回到章节写作节点，直到当前章节通过审查
-- 当前章节通过审查并完成设定更新后，工作流才会进入下一章
+- 当前章节通过判断并完成设定更新后，工作流才会进入下一章
 
 ## 绑定建议
 
@@ -36,7 +36,7 @@
 ## 输出要求
 
 - `scene-plan` 节点应输出 `messageType=scene_plan`
-- 审查节点必须返回结构化 `review_json`
+- 判断节点正文只需简短说明，程序分支以 `workflow_decision` 工具结果为准
 - 设定更新节点建议输出 `messageType=lore_update_summary`
 - 工作流本身不自动绑定书籍，进入详情页后由用户手动绑定
 - 左侧基础区可直接设置最大循环次数，并支持切换为无限

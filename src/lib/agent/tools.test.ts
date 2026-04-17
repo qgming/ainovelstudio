@@ -416,4 +416,48 @@ describe("createLocalResourceToolset", () => {
       }),
     ).rejects.toThrow("Only one item can be in_progress");
   });
+
+  it("workflow_decision 工具会提交结构化判断结果", async () => {
+    const onWorkflowDecision = vi.fn();
+    const toolset = createLocalResourceToolset({ onWorkflowDecision });
+
+    const result = await toolset.workflow_decision.execute({
+      issues: [
+        {
+          message: "主角上一段刚受伤，这一段直接高速奔跑。",
+          severity: "high",
+          type: "continuity",
+        },
+      ],
+      pass: false,
+      revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
+    });
+
+    expect(onWorkflowDecision).toHaveBeenCalledWith({
+      issues: [
+        {
+          message: "主角上一段刚受伤，这一段直接高速奔跑。",
+          severity: "high",
+          type: "continuity",
+        },
+      ],
+      pass: false,
+      revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
+    });
+    expect(result).toEqual({
+      ok: true,
+      summary: "已记录判断结果：不通过。",
+      data: {
+        issues: [
+          {
+            message: "主角上一段刚受伤，这一段直接高速奔跑。",
+            severity: "high",
+            type: "continuity",
+          },
+        ],
+        pass: false,
+        revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
+      },
+    });
+  });
 });

@@ -79,7 +79,7 @@ export type WorkflowDecisionStepDefinition = {
   sourceStepId: string;
   trueNextStepId: string | null;
   falseNextStepId: string | null;
-  passRule: "review_json.pass == true";
+  passRule: "workflow_decision.pass == true";
 };
 
 export type WorkflowEndStepDefinition = {

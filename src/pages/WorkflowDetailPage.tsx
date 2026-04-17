@@ -22,13 +22,11 @@ import { BookshelfDialog } from "../components/dialogs/BookshelfDialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Switch } from "../components/ui/Switch";
 import { Textarea } from "../components/ui/textarea";
 import { listBookWorkspaces } from "../lib/bookWorkspace/api";
 import { cn } from "../lib/utils";
 import { startWorkflowRun } from "../lib/workflow/engine";
 import type {
-  WorkflowDecisionConditionKind,
   WorkflowLoopConfig,
   WorkflowStepDefinition,
   WorkflowStepRun,
@@ -41,25 +39,18 @@ import { useWorkflowStore } from "../stores/workflowStore";
 const STEP_TYPE_OPTIONS: Array<{ label: string; value: WorkflowStepType }> = [
   { label: "开始节点", value: "start" },
   { label: "代理节点", value: "agent_task" },
-  { label: "审查节点", value: "review_gate" },
-  { label: "条件节点", value: "decision" },
-  { label: "循环节点", value: "loop_control" },
+  { label: "判断节点", value: "decision" },
   { label: "结束节点", value: "end" },
-];
-
-const DECISION_KIND_OPTIONS: Array<{ label: string; value: WorkflowDecisionConditionKind }> = [
-  { label: "审查是否通过", value: "review_pass" },
-  { label: "是否还有下一轮", value: "remaining_loops_available" },
-  { label: "失败时是否停止", value: "stop_on_review_failure" },
 ];
 
 const END_REASON_OPTIONS = [
   { label: "完成", value: "completed" },
   { label: "审查失败", value: "review_failed" },
-  { label: "达到最大轮次", value: "max_loops_reached" },
-  { label: "手动停止", value: "manual_stop" },
-  { label: "异常结束", value: "error" },
-  { label: "结束节点到达", value: "end_node_reached" },
+] as const;
+
+const END_LOOP_OPTIONS = [
+  { label: "直接结束", value: "finish" },
+  { label: "有下一轮就继续", value: "continue_if_possible" },
 ] as const;
 
 function DetailTitle({ currentLabel }: { currentLabel: string }) {
@@ -98,7 +89,6 @@ function buildLoopDraft(loopConfig: WorkflowLoopConfig) {
   return {
     maxLoopsMode: loopConfig.maxLoops === null ? "infinite" : "finite",
     maxLoopsValue: loopConfig.maxLoops === null ? "1" : String(loopConfig.maxLoops),
-    stopOnReviewFailure: loopConfig.stopOnReviewFailure,
   } as const;
 }
 
@@ -129,12 +119,8 @@ function formatStepType(type: WorkflowStepDefinition["type"]) {
       return "开始节点";
     case "agent_task":
       return "代理节点";
-    case "review_gate":
-      return "审查节点";
     case "decision":
-      return "条件节点";
-    case "loop_control":
-      return "循环节点";
+      return "判断节点";
     case "end":
       return "结束节点";
     default:
@@ -144,8 +130,8 @@ function formatStepType(type: WorkflowStepDefinition["type"]) {
 
 function isMemberStep(
   step: WorkflowStepDefinition,
-): step is Extract<WorkflowStepDefinition, { type: "agent_task" | "review_gate" }> {
-  return step.type === "agent_task" || step.type === "review_gate";
+): step is Extract<WorkflowStepDefinition, { type: "agent_task" | "decision" }> {
+  return step.type === "agent_task" || step.type === "decision";
 }
 
 function getMemberById(members: WorkflowTeamMember[], memberId: string | null) {
@@ -168,20 +154,15 @@ function formatStepLinks(step: WorkflowStepDefinition, steps: WorkflowStepDefini
   if (step.type === "agent_task") {
     return `下一步：${step.nextStepId ? nameById.get(step.nextStepId) ?? "未命名节点" : "结束"}`;
   }
-  if (step.type === "review_gate") {
-    const passLabel = step.passNextStepId ? nameById.get(step.passNextStepId) ?? "未命名节点" : "结束";
-    const failLabel = step.failNextStepId ? nameById.get(step.failNextStepId) ?? "未命名节点" : "结束";
-    return `通过 → ${passLabel} / 不通过 → ${failLabel}`;
-  }
   if (step.type === "decision") {
     const trueLabel = step.trueNextStepId ? nameById.get(step.trueNextStepId) ?? "未命名节点" : "结束";
     const falseLabel = step.falseNextStepId ? nameById.get(step.falseNextStepId) ?? "未命名节点" : "结束";
-    return `是 → ${trueLabel} / 否 → ${falseLabel}`;
+    return `通过/是 → ${trueLabel} / 不通过/否 → ${falseLabel}`;
   }
-  if (step.type === "loop_control") {
-    return `回到：${step.loopTargetStepId ? nameById.get(step.loopTargetStepId) ?? "未命名节点" : "结束"}`;
-  }
-  return `结束：${step.stopReason}`;
+  const loopLabel = step.loopBehavior === "continue_if_possible"
+    ? ` / 有下一轮时回到 ${step.loopTargetStepId ? nameById.get(step.loopTargetStepId) ?? "未命名节点" : "未设置"}`
+    : "";
+  return `结束：${step.stopReason}${loopLabel}`;
 }
 
 function Panel({
@@ -240,7 +221,6 @@ export function WorkflowDetailPage() {
   const [loopDraft, setLoopDraft] = useState(() =>
     buildLoopDraft({
       maxLoops: 1,
-      stopOnReviewFailure: true,
     }),
   );
   const [saveBusy, setSaveBusy] = useState(false);
@@ -336,7 +316,7 @@ export function WorkflowDetailPage() {
     setStepDraftAgentId(isMemberStep(selectedStep) ? getAgentIdForStep(selectedStep) : "");
   }, [selectedStep, detail]);
 
-  function getAgentIdForStep(step: Extract<WorkflowStepDefinition, { type: "agent_task" | "review_gate" }>) {
+  function getAgentIdForStep(step: Extract<WorkflowStepDefinition, { type: "agent_task" | "decision" }>) {
     return getMemberById(detail?.teamMembers ?? [], step.memberId)?.agentId ?? "";
   }
 
@@ -368,13 +348,9 @@ export function WorkflowDetailPage() {
         ? currentStep.nextStepId
         : currentStep.type === "agent_task"
           ? currentStep.nextStepId
-          : currentStep.type === "review_gate"
-            ? currentStep.passNextStepId ?? currentStep.failNextStepId
-            : currentStep.type === "decision"
-              ? currentStep.trueNextStepId ?? currentStep.falseNextStepId
-              : currentStep.type === "loop_control"
-                ? currentStep.loopTargetStepId
-                : null;
+          : currentStep.type === "decision"
+            ? currentStep.trueNextStepId ?? currentStep.falseNextStepId
+            : currentStep.loopTargetStepId;
 
     if (nextType === "start") {
       return {
@@ -401,47 +377,20 @@ export function WorkflowDetailPage() {
       };
     }
 
-    if (nextType === "review_gate") {
-      const sourceCandidates = detail?.steps.filter((item) => item.id !== currentStep.id && item.type === "agent_task") ?? [];
-      return {
-        id: currentStep.id,
-        workflowId: currentStep.workflowId,
-        type: "review_gate",
-        name: currentStep.name,
-        order: currentStep.order,
-        memberId: isMemberStep(currentStep) ? currentStep.memberId : fallbackMemberId,
-        promptTemplate: isMemberStep(currentStep) ? currentStep.promptTemplate : "",
-        sourceStepId: currentStep.type === "review_gate" ? currentStep.sourceStepId : sourceCandidates[0]?.id ?? "",
-        passNextStepId: currentStep.type === "review_gate" ? currentStep.passNextStepId : fallbackNextStepId,
-        failNextStepId: currentStep.type === "review_gate" ? currentStep.failNextStepId : null,
-        passRule: "review_json.pass == true",
-      };
-    }
-
     if (nextType === "decision") {
+      const sourceCandidates = detail?.steps.filter((item) => item.id !== currentStep.id && item.type === "agent_task") ?? [];
       return {
         id: currentStep.id,
         workflowId: currentStep.workflowId,
         type: "decision",
         name: currentStep.name,
         order: currentStep.order,
-        conditionKind: "review_pass",
-        conditionConfig: { source: "latest_review" },
+        memberId: isMemberStep(currentStep) ? currentStep.memberId : fallbackMemberId,
+        promptTemplate: isMemberStep(currentStep) ? currentStep.promptTemplate : "",
+        sourceStepId: currentStep.type === "decision" ? currentStep.sourceStepId : sourceCandidates[0]?.id ?? "",
         trueNextStepId: currentStep.type === "decision" ? currentStep.trueNextStepId : fallbackNextStepId,
         falseNextStepId: currentStep.type === "decision" ? currentStep.falseNextStepId : null,
-      };
-    }
-
-    if (nextType === "loop_control") {
-      return {
-        id: currentStep.id,
-        workflowId: currentStep.workflowId,
-        type: "loop_control",
-        name: currentStep.name,
-        order: currentStep.order,
-        loopTargetStepId: currentStep.type === "loop_control" ? currentStep.loopTargetStepId : fallbackNextStepId,
-        continueWhen: "remainingLoops > 0",
-        finishWhen: "remainingLoops <= 0",
+        passRule: "workflow_decision.pass == true",
       };
     }
 
@@ -453,6 +402,8 @@ export function WorkflowDetailPage() {
       order: currentStep.order,
       stopReason: currentStep.type === "end" ? currentStep.stopReason : "completed",
       summaryTemplate: currentStep.type === "end" ? currentStep.summaryTemplate : "",
+      loopBehavior: currentStep.type === "end" ? currentStep.loopBehavior : "finish",
+      loopTargetStepId: currentStep.type === "end" ? currentStep.loopTargetStepId : detail?.steps[0]?.id ?? null,
     };
   }
 
@@ -465,7 +416,7 @@ export function WorkflowDetailPage() {
       : agents.find((agent) => agent.validation.isValid)?.id ?? agents[0]?.id ?? "";
     const fallbackMemberId = isMemberStep(stepDraft) ? stepDraft.memberId : "";
     setStepDraft(buildStepDraftForType(stepDraft, nextType, fallbackMemberId));
-    setStepDraftAgentId(nextType === "agent_task" || nextType === "review_gate" ? fallbackAgentId : "");
+    setStepDraftAgentId(nextType === "agent_task" || nextType === "decision" ? fallbackAgentId : "");
   }
 
   async function createHiddenMember(agentId: string) {
@@ -548,7 +499,6 @@ export function WorkflowDetailPage() {
       setPageNotice(null);
       await updateLoopConfig(detail.workflow.id, {
         maxLoops: normalizeLoopValue(loopDraft.maxLoopsMode, loopDraft.maxLoopsValue),
-        stopOnReviewFailure: loopDraft.stopOnReviewFailure,
       });
     } catch (error) {
       setPageNotice(getReadableError(error, "保存循环设置失败。"));
@@ -651,8 +601,8 @@ export function WorkflowDetailPage() {
         if (!stepDraftAgentId) {
           throw new Error("请先为节点选择一个代理。");
         }
-        if (stepDraft.type === "review_gate" && !stepDraft.sourceStepId) {
-          throw new Error("请先为审查节点选择一个来源节点。");
+        if (stepDraft.type === "decision" && !stepDraft.sourceStepId) {
+          throw new Error("请先为判断节点选择一个来源节点。");
         }
         const selectedAgent = agentById.get(stepDraftAgentId);
         if (!selectedAgent || !selectedAgent.validation.isValid) {
@@ -833,7 +783,7 @@ export function WorkflowDetailPage() {
                       </Button>
                     </div>
                     <div className="rounded-md bg-foreground/[0.03] px-3 py-2 text-xs text-muted-foreground">
-                      当前配置：主循环 {formatLoopLimit(detail.workflow.loopConfig.maxLoops)} / {detail.workflow.loopConfig.stopOnReviewFailure ? "失败即停" : "失败后按分支继续"}
+                      当前配置：主循环 {formatLoopLimit(detail.workflow.loopConfig.maxLoops)}
                     </div>
                     <div className="space-y-3">
                       <div className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)] md:items-end">
@@ -867,17 +817,6 @@ export function WorkflowDetailPage() {
                         ) : (
                           <div className="flex h-10 items-center text-sm text-muted-foreground">当前为无限（{formatLoopLimit(null)}）</div>
                         )}
-                      </div>
-                      <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">审查失败时停止</p>
-                          <p className="text-xs text-muted-foreground">供条件节点读取，用来决定审查失败后是否结束流程。</p>
-                        </div>
-                        <Switch
-                          checked={loopDraft.stopOnReviewFailure}
-                          onChange={(checked) => setLoopDraft((current) => ({ ...current, stopOnReviewFailure: checked }))}
-                          label="审查失败时停止"
-                        />
                       </div>
                     </div>
                   </div>
@@ -1129,10 +1068,10 @@ export function WorkflowDetailPage() {
                         </>
                       ) : null}
 
-                      {stepDraft.type === "review_gate" ? (
+                      {stepDraft.type === "decision" ? (
                         <>
                           <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">审查代理</span>
+                            <span className="text-xs font-medium text-muted-foreground">判断代理</span>
                             <Select value={stepDraftAgentId} onValueChange={setStepDraftAgentId}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -1143,7 +1082,7 @@ export function WorkflowDetailPage() {
                             </Select>
                           </label>
                           <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">审查来源</span>
+                            <span className="text-xs font-medium text-muted-foreground">判断来源</span>
                             <Select
                               value={stepDraft.sourceStepId || "__none__"}
                               onValueChange={(value) => setStepDraft({ ...stepDraft, sourceStepId: value === "__none__" ? "" : value })}
@@ -1159,10 +1098,10 @@ export function WorkflowDetailPage() {
                           </label>
                           <div className="grid gap-4 md:grid-cols-2">
                             <label className="block space-y-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">通过后</span>
+                              <span className="text-xs font-medium text-muted-foreground">通过/是 时</span>
                               <Select
-                                value={stepDraft.passNextStepId ?? "__none__"}
-                                onValueChange={(value) => setStepDraft({ ...stepDraft, passNextStepId: value === "__none__" ? null : value })}
+                                value={stepDraft.trueNextStepId ?? "__none__"}
+                                onValueChange={(value) => setStepDraft({ ...stepDraft, trueNextStepId: value === "__none__" ? null : value })}
                               >
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -1174,10 +1113,10 @@ export function WorkflowDetailPage() {
                               </Select>
                             </label>
                             <label className="block space-y-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">不通过后</span>
+                              <span className="text-xs font-medium text-muted-foreground">不通过/否 时</span>
                               <Select
-                                value={stepDraft.failNextStepId ?? "__none__"}
-                                onValueChange={(value) => setStepDraft({ ...stepDraft, failNextStepId: value === "__none__" ? null : value })}
+                                value={stepDraft.falseNextStepId ?? "__none__"}
+                                onValueChange={(value) => setStepDraft({ ...stepDraft, falseNextStepId: value === "__none__" ? null : value })}
                               >
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -1201,97 +1140,6 @@ export function WorkflowDetailPage() {
                         </>
                       ) : null}
 
-                      {stepDraft.type === "decision" ? (
-                        <>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">条件类型</span>
-                            <Select
-                              value={stepDraft.conditionKind}
-                              onValueChange={(value) =>
-                                setStepDraft({
-                                  ...stepDraft,
-                                  conditionKind: value as WorkflowDecisionConditionKind,
-                                  conditionConfig: { ...stepDraft.conditionConfig },
-                                })
-                              }
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {DECISION_KIND_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <label className="block space-y-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">条件为真时</span>
-                              <Select
-                                value={stepDraft.trueNextStepId ?? "__none__"}
-                                onValueChange={(value) => setStepDraft({ ...stepDraft, trueNextStepId: value === "__none__" ? null : value })}
-                              >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">结束</SelectItem>
-                                  {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </label>
-                            <label className="block space-y-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">条件为假时</span>
-                              <Select
-                                value={stepDraft.falseNextStepId ?? "__none__"}
-                                onValueChange={(value) => setStepDraft({ ...stepDraft, falseNextStepId: value === "__none__" ? null : value })}
-                              >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">结束</SelectItem>
-                                  {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </label>
-                          </div>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">条件配置（JSON）</span>
-                            <Textarea
-                              value={JSON.stringify(stepDraft.conditionConfig, null, 2)}
-                              onChange={(event) => {
-                                try {
-                                  setStepDraft({ ...stepDraft, conditionConfig: JSON.parse(event.target.value) as Record<string, unknown> });
-                                  setPageNotice(null);
-                                } catch {
-                                  setPageNotice("条件配置必须是合法的 JSON。保存前请修正。");
-                                }
-                              }}
-                              className="min-h-32"
-                              disabled={stepBusy === selectedStep.id}
-                            />
-                          </label>
-                        </>
-                      ) : null}
-
-                      {stepDraft.type === "loop_control" ? (
-                        <label className="block space-y-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">回到节点</span>
-                          <Select
-                            value={stepDraft.loopTargetStepId ?? "__none__"}
-                            onValueChange={(value) => setStepDraft({ ...stepDraft, loopTargetStepId: value === "__none__" ? null : value })}
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">结束</SelectItem>
-                              {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </label>
-                      ) : null}
-
                       {stepDraft.type === "end" ? (
                         <>
                           <label className="block space-y-1.5">
@@ -1308,6 +1156,37 @@ export function WorkflowDetailPage() {
                               </SelectContent>
                             </Select>
                           </label>
+                          <label className="block space-y-1.5">
+                            <span className="text-xs font-medium text-muted-foreground">结束后动作</span>
+                            <Select
+                              value={stepDraft.loopBehavior}
+                              onValueChange={(value) => setStepDraft({ ...stepDraft, loopBehavior: value as typeof stepDraft.loopBehavior })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {END_LOOP_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </label>
+                          {stepDraft.loopBehavior === "continue_if_possible" ? (
+                            <label className="block space-y-1.5">
+                              <span className="text-xs font-medium text-muted-foreground">下一轮从哪个节点开始</span>
+                              <Select
+                                value={stepDraft.loopTargetStepId ?? "__none__"}
+                                onValueChange={(value) => setStepDraft({ ...stepDraft, loopTargetStepId: value === "__none__" ? null : value })}
+                              >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">未选择</SelectItem>
+                                  {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </label>
+                          ) : null}
                           <label className="block space-y-1.5">
                             <span className="text-xs font-medium text-muted-foreground">结束摘要模板</span>
                             <Textarea

@@ -8,9 +8,9 @@ use super::{
         WorkflowStepDefinition, WorkflowStepInput, WorkflowStepRun, WorkflowTeamMember,
     },
     validate::{
-        default_decision_condition_config, deserialize_json, error_to_string, now_timestamp,
-        parse_optional_json, serialize_json, step_id, validate_loop_config,
-        validate_member_payload, validate_run_status,
+        deserialize_json, error_to_string, now_timestamp, parse_optional_json,
+        serialize_json, step_id, validate_loop_config, validate_member_payload,
+        validate_run_status,
     },
     CommandResult,
 };
@@ -56,55 +56,31 @@ pub(crate) fn validate_step_input(
                 }
             }
         }
-        WorkflowStepInput::ReviewGate {
+        WorkflowStepInput::Decision {
             name,
             member_id,
             prompt_template,
             source_step_id,
-            pass_next_step_id,
-            fail_next_step_id,
+            true_next_step_id,
+            false_next_step_id,
             pass_rule,
         } => {
             if name.trim().is_empty() {
                 return Err("步骤名称不能为空。".into());
             }
             if member_id.trim().is_empty() || !has_member(connection, workflow_id, member_id)? {
-                return Err("审查节点引用的团队成员不存在。".into());
+                return Err("判断节点引用的团队成员不存在。".into());
             }
             if prompt_template.trim().is_empty() {
-                return Err("审查节点提示词不能为空。".into());
+                return Err("判断节点提示词不能为空。".into());
             }
             if source_step_id.trim().is_empty()
                 || !has_step(connection, workflow_id, source_step_id)?
             {
-                return Err("审查判断引用的来源步骤不存在。".into());
+                return Err("判断节点引用的来源步骤不存在。".into());
             }
             if pass_rule.trim().is_empty() {
-                return Err("审查判断规则不能为空。".into());
-            }
-            if let Some(pass_next_step_id) = pass_next_step_id {
-                if !has_step(connection, workflow_id, pass_next_step_id)? {
-                    return Err("审查判断的通过分支引用不存在。".into());
-                }
-            }
-            if let Some(fail_next_step_id) = fail_next_step_id {
-                if !has_step(connection, workflow_id, fail_next_step_id)? {
-                    return Err("审查判断的失败分支引用不存在。".into());
-                }
-            }
-        }
-        WorkflowStepInput::Decision {
-            name,
-            condition_kind,
-            true_next_step_id,
-            false_next_step_id,
-            ..
-        } => {
-            if name.trim().is_empty() {
-                return Err("步骤名称不能为空。".into());
-            }
-            if condition_kind.trim().is_empty() {
-                return Err("判断节点条件类型不能为空。".into());
+                return Err("判断节点规则不能为空。".into());
             }
             if let Some(true_next_step_id) = true_next_step_id {
                 if !has_step(connection, workflow_id, true_next_step_id)? {
@@ -117,32 +93,26 @@ pub(crate) fn validate_step_input(
                 }
             }
         }
-        WorkflowStepInput::LoopControl {
-            name,
-            loop_target_step_id,
-            continue_when,
-            finish_when,
-        } => {
-            if name.trim().is_empty() {
-                return Err("步骤名称不能为空。".into());
-            }
-            if continue_when.trim().is_empty() || finish_when.trim().is_empty() {
-                return Err("循环控制条件不能为空。".into());
-            }
-            if let Some(loop_target_step_id) = loop_target_step_id {
-                if !has_step(connection, workflow_id, loop_target_step_id)? {
-                    return Err("循环控制引用的目标步骤不存在。".into());
-                }
-            }
-        }
         WorkflowStepInput::End {
-            name, stop_reason, ..
+            name,
+            stop_reason,
+            loop_behavior,
+            loop_target_step_id,
+            ..
         } => {
             if name.trim().is_empty() {
                 return Err("步骤名称不能为空。".into());
             }
             if stop_reason.trim().is_empty() {
                 return Err("结束节点必须提供 stopReason。".into());
+            }
+            if !matches!(loop_behavior.as_str(), "finish" | "continue_if_possible") {
+                return Err("结束节点的 loopBehavior 不合法。".into());
+            }
+            if let Some(loop_target_step_id) = loop_target_step_id {
+                if !has_step(connection, workflow_id, loop_target_step_id)? {
+                    return Err("结束节点引用的循环目标不存在。".into());
+                }
             }
         }
     }
@@ -205,15 +175,15 @@ pub(crate) fn validate_step_definition(
                 }
             }
         }
-        WorkflowStepDefinition::ReviewGate {
+        WorkflowStepDefinition::Decision {
             id,
             workflow_id: step_workflow_id,
             name,
             member_id,
             prompt_template,
             source_step_id,
-            pass_next_step_id,
-            fail_next_step_id,
+            true_next_step_id,
+            false_next_step_id,
             pass_rule,
             ..
         } => {
@@ -224,49 +194,18 @@ pub(crate) fn validate_step_definition(
                 return Err("步骤名称不能为空。".into());
             }
             if member_id.trim().is_empty() || !has_member(connection, workflow_id, member_id)? {
-                return Err("审查节点引用的团队成员不存在。".into());
+                return Err("判断节点引用的团队成员不存在。".into());
             }
             if prompt_template.trim().is_empty() {
-                return Err("审查节点提示词不能为空。".into());
+                return Err("判断节点提示词不能为空。".into());
             }
             if source_step_id.trim().is_empty()
                 || !has_step(connection, workflow_id, source_step_id)?
             {
-                return Err("审查判断引用的来源步骤不存在。".into());
+                return Err("判断节点引用的来源步骤不存在。".into());
             }
             if pass_rule.trim().is_empty() {
-                return Err("审查判断规则不能为空。".into());
-            }
-            if let Some(pass_next_step_id) = pass_next_step_id {
-                if !has_step(connection, workflow_id, pass_next_step_id)? && pass_next_step_id != id
-                {
-                    return Err("审查判断的通过分支引用不存在。".into());
-                }
-            }
-            if let Some(fail_next_step_id) = fail_next_step_id {
-                if !has_step(connection, workflow_id, fail_next_step_id)? && fail_next_step_id != id
-                {
-                    return Err("审查判断的失败分支引用不存在。".into());
-                }
-            }
-        }
-        WorkflowStepDefinition::Decision {
-            id,
-            workflow_id: step_workflow_id,
-            name,
-            condition_kind,
-            true_next_step_id,
-            false_next_step_id,
-            ..
-        } => {
-            if id.trim().is_empty() || step_workflow_id != workflow_id {
-                return Err("步骤标识不合法。".into());
-            }
-            if name.trim().is_empty() {
-                return Err("步骤名称不能为空。".into());
-            }
-            if condition_kind.trim().is_empty() {
-                return Err("判断节点条件类型不能为空。".into());
+                return Err("判断节点规则不能为空。".into());
             }
             if let Some(true_next_step_id) = true_next_step_id {
                 if !has_step(connection, workflow_id, true_next_step_id)? && true_next_step_id != id
@@ -282,37 +221,13 @@ pub(crate) fn validate_step_definition(
                 }
             }
         }
-        WorkflowStepDefinition::LoopControl {
-            id,
-            workflow_id: step_workflow_id,
-            name,
-            loop_target_step_id,
-            continue_when,
-            finish_when,
-            ..
-        } => {
-            if id.trim().is_empty() || step_workflow_id != workflow_id {
-                return Err("步骤标识不合法。".into());
-            }
-            if name.trim().is_empty() {
-                return Err("步骤名称不能为空。".into());
-            }
-            if continue_when.trim().is_empty() || finish_when.trim().is_empty() {
-                return Err("循环控制条件不能为空。".into());
-            }
-            if let Some(loop_target_step_id) = loop_target_step_id {
-                if !has_step(connection, workflow_id, loop_target_step_id)?
-                    && loop_target_step_id != id
-                {
-                    return Err("循环控制引用的目标步骤不存在。".into());
-                }
-            }
-        }
         WorkflowStepDefinition::End {
             id,
             workflow_id: step_workflow_id,
             name,
             stop_reason,
+            loop_behavior,
+            loop_target_step_id,
             ..
         } => {
             if id.trim().is_empty() || step_workflow_id != workflow_id {
@@ -323,6 +238,16 @@ pub(crate) fn validate_step_definition(
             }
             if stop_reason.trim().is_empty() {
                 return Err("结束节点必须提供 stopReason。".into());
+            }
+            if !matches!(loop_behavior.as_str(), "finish" | "continue_if_possible") {
+                return Err("结束节点的 loopBehavior 不合法。".into());
+            }
+            if let Some(loop_target_step_id) = loop_target_step_id {
+                if !has_step(connection, workflow_id, loop_target_step_id)?
+                    && loop_target_step_id != id
+                {
+                    return Err("结束节点引用的循环目标不存在。".into());
+                }
             }
         }
     }
@@ -469,9 +394,7 @@ fn upsert_step_internal(
     let workflow_id = match step {
         WorkflowStepDefinition::Start { workflow_id, .. }
         | WorkflowStepDefinition::AgentTask { workflow_id, .. }
-        | WorkflowStepDefinition::ReviewGate { workflow_id, .. }
         | WorkflowStepDefinition::Decision { workflow_id, .. }
-        | WorkflowStepDefinition::LoopControl { workflow_id, .. }
         | WorkflowStepDefinition::End { workflow_id, .. } => workflow_id.as_str(),
     };
     if validate_references {
@@ -515,39 +438,16 @@ fn upsert_step_internal(
                 "nextStepId": next_step_id,
             }))?,
         ),
-        WorkflowStepDefinition::ReviewGate {
+        WorkflowStepDefinition::Decision {
             id,
             name,
             order,
             member_id,
             prompt_template,
             source_step_id,
-            pass_next_step_id,
-            fail_next_step_id,
-            pass_rule,
-            ..
-        } => (
-            id.clone(),
-            "review_gate".to_string(),
-            name.clone(),
-            *order,
-            serialize_json(&serde_json::json!({
-                "memberId": member_id,
-                "promptTemplate": prompt_template,
-                "sourceStepId": source_step_id,
-                "passNextStepId": pass_next_step_id,
-                "failNextStepId": fail_next_step_id,
-                "passRule": pass_rule,
-            }))?,
-        ),
-        WorkflowStepDefinition::Decision {
-            id,
-            name,
-            order,
-            condition_kind,
-            condition_config,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
             ..
         } => (
             id.clone(),
@@ -555,29 +455,12 @@ fn upsert_step_internal(
             name.clone(),
             *order,
             serialize_json(&serde_json::json!({
-                "conditionKind": condition_kind,
-                "conditionConfig": condition_config,
+                "memberId": member_id,
+                "promptTemplate": prompt_template,
+                "sourceStepId": source_step_id,
                 "trueNextStepId": true_next_step_id,
                 "falseNextStepId": false_next_step_id,
-            }))?,
-        ),
-        WorkflowStepDefinition::LoopControl {
-            id,
-            name,
-            order,
-            loop_target_step_id,
-            continue_when,
-            finish_when,
-            ..
-        } => (
-            id.clone(),
-            "loop_control".to_string(),
-            name.clone(),
-            *order,
-            serialize_json(&serde_json::json!({
-                "loopTargetStepId": loop_target_step_id,
-                "continueWhen": continue_when,
-                "finishWhen": finish_when,
+                "passRule": pass_rule,
             }))?,
         ),
         WorkflowStepDefinition::End {
@@ -586,6 +469,8 @@ fn upsert_step_internal(
             order,
             stop_reason,
             summary_template,
+            loop_behavior,
+            loop_target_step_id,
             ..
         } => (
             id.clone(),
@@ -595,6 +480,8 @@ fn upsert_step_internal(
             serialize_json(&serde_json::json!({
                 "stopReason": stop_reason,
                 "summaryTemplate": summary_template,
+                "loopBehavior": loop_behavior,
+                "loopTargetStepId": loop_target_step_id,
             }))?,
         ),
     };
@@ -820,7 +707,7 @@ pub(crate) fn list_steps(
                     .and_then(Value::as_str)
                     .map(ToString::to_string),
             },
-            "review_gate" => WorkflowStepDefinition::ReviewGate {
+            "decision" => WorkflowStepDefinition::Decision {
                 id,
                 workflow_id,
                 name,
@@ -833,41 +720,13 @@ pub(crate) fn list_steps(
                 prompt_template: payload_value
                     .get("promptTemplate")
                     .and_then(Value::as_str)
-                    .unwrap_or("请基于来源节点的输出进行审查，并按 JSON 格式返回结论。")
+                    .unwrap_or("请基于来源步骤结果进行判断，并按 JSON 格式返回结论。")
                     .to_string(),
                 source_step_id: payload_value
                     .get("sourceStepId")
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string(),
-                pass_next_step_id: payload_value
-                    .get("passNextStepId")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string),
-                fail_next_step_id: payload_value
-                    .get("failNextStepId")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string),
-                pass_rule: payload_value
-                    .get("passRule")
-                    .and_then(Value::as_str)
-                    .unwrap_or("review_json.pass == true")
-                    .to_string(),
-            },
-            "decision" => WorkflowStepDefinition::Decision {
-                id,
-                workflow_id,
-                name,
-                order,
-                condition_kind: payload_value
-                    .get("conditionKind")
-                    .and_then(Value::as_str)
-                    .unwrap_or("review_pass")
-                    .to_string(),
-                condition_config: payload_value
-                    .get("conditionConfig")
-                    .cloned()
-                    .unwrap_or_else(|| default_decision_condition_config("review_pass")),
                 true_next_step_id: payload_value
                     .get("trueNextStepId")
                     .and_then(Value::as_str)
@@ -876,6 +735,11 @@ pub(crate) fn list_steps(
                     .get("falseNextStepId")
                     .and_then(Value::as_str)
                     .map(ToString::to_string),
+                pass_rule: payload_value
+                    .get("passRule")
+                    .and_then(Value::as_str)
+                    .unwrap_or("workflow_decision.pass == true")
+                    .to_string(),
             },
             "end" => WorkflowStepDefinition::End {
                 id,
@@ -892,27 +756,17 @@ pub(crate) fn list_steps(
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string(),
-            },
-            _ => WorkflowStepDefinition::LoopControl {
-                id,
-                workflow_id,
-                name,
-                order,
                 loop_target_step_id: payload_value
                     .get("loopTargetStepId")
                     .and_then(Value::as_str)
                     .map(ToString::to_string),
-                continue_when: payload_value
-                    .get("continueWhen")
+                loop_behavior: payload_value
+                    .get("loopBehavior")
                     .and_then(Value::as_str)
-                    .unwrap_or("remainingLoops > 0")
-                    .to_string(),
-                finish_when: payload_value
-                    .get("finishWhen")
-                    .and_then(Value::as_str)
-                    .unwrap_or("remainingLoops <= 0")
+                    .unwrap_or("finish")
                     .to_string(),
             },
+            _ => continue,
         };
         result.push(step);
     }

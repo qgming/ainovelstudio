@@ -371,9 +371,7 @@ pub fn update_workflow_step(
     let order = match existing {
         WorkflowStepDefinition::Start { order, .. }
         | WorkflowStepDefinition::AgentTask { order, .. }
-        | WorkflowStepDefinition::ReviewGate { order, .. }
         | WorkflowStepDefinition::Decision { order, .. }
-        | WorkflowStepDefinition::LoopControl { order, .. }
         | WorkflowStepDefinition::End { order, .. } => order,
     };
     let next_step = match payload {
@@ -403,63 +401,33 @@ pub fn update_workflow_step(
             output_mode,
             next_step_id,
         },
-        WorkflowStepDefinition::ReviewGate {
-            name,
-            member_id,
-            prompt_template,
-            source_step_id,
-            pass_next_step_id,
-            fail_next_step_id,
-            pass_rule,
-            ..
-        } => WorkflowStepDefinition::ReviewGate {
-            id: stepId,
-            workflow_id: workflowId.clone(),
-            name,
-            order,
-            member_id,
-            prompt_template,
-            source_step_id,
-            pass_next_step_id,
-            fail_next_step_id,
-            pass_rule,
-        },
         WorkflowStepDefinition::Decision {
             name,
-            condition_kind,
-            condition_config,
+            member_id,
+            prompt_template,
+            source_step_id,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
             ..
         } => WorkflowStepDefinition::Decision {
             id: stepId,
             workflow_id: workflowId.clone(),
             name,
             order,
-            condition_kind,
-            condition_config,
+            member_id,
+            prompt_template,
+            source_step_id,
             true_next_step_id,
             false_next_step_id,
-        },
-        WorkflowStepDefinition::LoopControl {
-            name,
-            loop_target_step_id,
-            continue_when,
-            finish_when,
-            ..
-        } => WorkflowStepDefinition::LoopControl {
-            id: stepId,
-            workflow_id: workflowId.clone(),
-            name,
-            order,
-            loop_target_step_id,
-            continue_when,
-            finish_when,
+            pass_rule,
         },
         WorkflowStepDefinition::End {
             name,
             stop_reason,
             summary_template,
+            loop_behavior,
+            loop_target_step_id,
             ..
         } => WorkflowStepDefinition::End {
             id: stepId,
@@ -468,6 +436,8 @@ pub fn update_workflow_step(
             order,
             stop_reason,
             summary_template,
+            loop_behavior,
+            loop_target_step_id,
         },
     };
     upsert_step(&connection, &next_step)?;

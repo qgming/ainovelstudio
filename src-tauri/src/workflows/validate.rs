@@ -1,6 +1,5 @@
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::{
@@ -41,10 +40,7 @@ pub(crate) fn create_id(prefix: &str) -> String {
 }
 
 pub(crate) fn default_loop_config() -> WorkflowLoopConfig {
-    WorkflowLoopConfig {
-        max_loops: Some(1),
-        stop_on_review_failure: true,
-    }
+    WorkflowLoopConfig { max_loops: Some(1) }
 }
 
 pub(crate) fn normalize_text_content(content: &str) -> String {
@@ -77,9 +73,7 @@ pub(crate) fn step_id(step: &WorkflowStepDefinition) -> &str {
     match step {
         WorkflowStepDefinition::Start { id, .. }
         | WorkflowStepDefinition::AgentTask { id, .. }
-        | WorkflowStepDefinition::ReviewGate { id, .. }
         | WorkflowStepDefinition::Decision { id, .. }
-        | WorkflowStepDefinition::LoopControl { id, .. }
         | WorkflowStepDefinition::End { id, .. } => id,
     }
 }
@@ -203,60 +197,32 @@ pub(crate) fn build_step_from_input(
             output_mode,
             next_step_id,
         },
-        WorkflowStepInput::ReviewGate {
-            name,
-            member_id,
-            prompt_template,
-            source_step_id,
-            pass_next_step_id,
-            fail_next_step_id,
-            pass_rule,
-        } => WorkflowStepDefinition::ReviewGate {
-            id: step_id,
-            workflow_id,
-            name,
-            order,
-            member_id,
-            prompt_template,
-            source_step_id,
-            pass_next_step_id,
-            fail_next_step_id,
-            pass_rule,
-        },
         WorkflowStepInput::Decision {
             name,
-            condition_kind,
-            condition_config,
+            member_id,
+            prompt_template,
+            source_step_id,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
         } => WorkflowStepDefinition::Decision {
             id: step_id,
             workflow_id,
             name,
             order,
-            condition_kind,
-            condition_config,
+            member_id,
+            prompt_template,
+            source_step_id,
             true_next_step_id,
             false_next_step_id,
-        },
-        WorkflowStepInput::LoopControl {
-            name,
-            loop_target_step_id,
-            continue_when,
-            finish_when,
-        } => WorkflowStepDefinition::LoopControl {
-            id: step_id,
-            workflow_id,
-            name,
-            order,
-            loop_target_step_id,
-            continue_when,
-            finish_when,
+            pass_rule,
         },
         WorkflowStepInput::End {
             name,
             stop_reason,
             summary_template,
+            loop_behavior,
+            loop_target_step_id,
         } => WorkflowStepDefinition::End {
             id: step_id,
             workflow_id,
@@ -264,6 +230,8 @@ pub(crate) fn build_step_from_input(
             order,
             stop_reason,
             summary_template,
+            loop_behavior,
+            loop_target_step_id,
         },
     }
 }
@@ -273,9 +241,7 @@ pub(crate) fn reorder_steps_in_place(steps: &mut [WorkflowStepDefinition]) {
         match step {
             WorkflowStepDefinition::Start { order, .. }
             | WorkflowStepDefinition::AgentTask { order, .. }
-            | WorkflowStepDefinition::ReviewGate { order, .. }
             | WorkflowStepDefinition::Decision { order, .. }
-            | WorkflowStepDefinition::LoopControl { order, .. }
             | WorkflowStepDefinition::End { order, .. } => *order = index as u64,
         }
     }
@@ -293,27 +259,15 @@ pub(crate) fn clear_deleted_step_references(
                     *next_step_id = None;
                 }
             }
-            WorkflowStepDefinition::ReviewGate {
+            WorkflowStepDefinition::Decision {
                 source_step_id,
-                pass_next_step_id,
-                fail_next_step_id,
+                true_next_step_id,
+                false_next_step_id,
                 ..
             } => {
                 if source_step_id == deleted_step_id {
                     *source_step_id = String::new();
                 }
-                if pass_next_step_id.as_deref() == Some(deleted_step_id) {
-                    *pass_next_step_id = None;
-                }
-                if fail_next_step_id.as_deref() == Some(deleted_step_id) {
-                    *fail_next_step_id = None;
-                }
-            }
-            WorkflowStepDefinition::Decision {
-                true_next_step_id,
-                false_next_step_id,
-                ..
-            } => {
                 if true_next_step_id.as_deref() == Some(deleted_step_id) {
                     *true_next_step_id = None;
                 }
@@ -321,7 +275,7 @@ pub(crate) fn clear_deleted_step_references(
                     *false_next_step_id = None;
                 }
             }
-            WorkflowStepDefinition::LoopControl {
+            WorkflowStepDefinition::End {
                 loop_target_step_id,
                 ..
             } => {
@@ -329,18 +283,7 @@ pub(crate) fn clear_deleted_step_references(
                     *loop_target_step_id = None;
                 }
             }
-            WorkflowStepDefinition::End { .. } => {}
         }
-    }
-}
-
-pub(crate) fn default_decision_condition_config(kind: &str) -> Value {
-    match kind {
-        "review_pass" => json!({ "source": "latest_review" }),
-        "rework_available" => json!({ "source": "legacy_rework" }),
-        "remaining_loops_available" => json!({ "source": "loop_config.maxLoops" }),
-        "stop_on_review_failure" => json!({ "source": "loop_config.stopOnReviewFailure" }),
-        _ => json!({}),
     }
 }
 

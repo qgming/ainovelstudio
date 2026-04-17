@@ -188,67 +188,41 @@ fn build_template_steps(
                 output_mode: output_mode.clone(),
                 next_step_key: optional_key(step_keys, next_step_id.as_deref()),
             }),
-            WorkflowStepDefinition::ReviewGate {
+            WorkflowStepDefinition::Decision {
                 id,
                 name,
                 member_id,
                 prompt_template,
                 source_step_id,
-                pass_next_step_id,
-                fail_next_step_id,
+                true_next_step_id,
+                false_next_step_id,
                 pass_rule,
                 ..
-            } => Ok(WorkflowTemplateStep::ReviewGate {
+            } => Ok(WorkflowTemplateStep::Decision {
                 key: required_key(step_keys, id, "步骤")?,
                 name: name.clone(),
                 member_key: required_key(member_keys, member_id, "团队成员")?,
                 prompt_template: prompt_template.clone(),
                 source_step_key: required_key(step_keys, source_step_id, "来源步骤")?,
-                pass_next_step_key: optional_key(step_keys, pass_next_step_id.as_deref()),
-                fail_next_step_key: optional_key(step_keys, fail_next_step_id.as_deref()),
-                pass_rule: pass_rule.clone(),
-            }),
-            WorkflowStepDefinition::Decision {
-                id,
-                name,
-                condition_kind,
-                condition_config,
-                true_next_step_id,
-                false_next_step_id,
-                ..
-            } => Ok(WorkflowTemplateStep::Decision {
-                key: required_key(step_keys, id, "步骤")?,
-                name: name.clone(),
-                condition_kind: condition_kind.clone(),
-                condition_config: condition_config.clone(),
                 true_next_step_key: optional_key(step_keys, true_next_step_id.as_deref()),
                 false_next_step_key: optional_key(step_keys, false_next_step_id.as_deref()),
-            }),
-            WorkflowStepDefinition::LoopControl {
-                id,
-                name,
-                loop_target_step_id,
-                continue_when,
-                finish_when,
-                ..
-            } => Ok(WorkflowTemplateStep::LoopControl {
-                key: required_key(step_keys, id, "步骤")?,
-                name: name.clone(),
-                loop_target_step_key: optional_key(step_keys, loop_target_step_id.as_deref()),
-                continue_when: continue_when.clone(),
-                finish_when: finish_when.clone(),
+                pass_rule: pass_rule.clone(),
             }),
             WorkflowStepDefinition::End {
                 id,
                 name,
                 stop_reason,
                 summary_template,
+                loop_behavior,
+                loop_target_step_id,
                 ..
             } => Ok(WorkflowTemplateStep::End {
                 key: required_key(step_keys, id, "步骤")?,
                 name: name.clone(),
                 stop_reason: stop_reason.clone(),
                 summary_template: summary_template.clone(),
+                loop_behavior: loop_behavior.clone(),
+                loop_target_step_key: optional_key(step_keys, loop_target_step_id.as_deref()),
             }),
         })
         .collect()
@@ -271,9 +245,7 @@ fn step_identifier(step: &WorkflowStepDefinition) -> String {
     match step {
         WorkflowStepDefinition::Start { id, .. }
         | WorkflowStepDefinition::AgentTask { id, .. }
-        | WorkflowStepDefinition::ReviewGate { id, .. }
         | WorkflowStepDefinition::Decision { id, .. }
-        | WorkflowStepDefinition::LoopControl { id, .. }
         | WorkflowStepDefinition::End { id, .. } => id.clone(),
     }
 }

@@ -4,8 +4,7 @@
   "description": "自动执行章节规划、写作、审查、设定维护与循环收尾的完整工作流模板。",
   "basePrompt": "直接使用内置代理完成章节创作流水线。每个节点都先通过工具读取当前绑定书籍工作区中的文件，再执行本节点任务并把结果写回工作区。共享工作区文件是长期事实源，结构化节点消息只用于当前轮次协作。步骤跳转、修订反馈和循环由程序控制。",
   "loopConfig": {
-    "maxLoops": 5,
-    "stopOnReviewFailure": true
+    "maxLoops": 5
   },
   "teamMembers": [
     {
@@ -27,7 +26,7 @@
       "agentId": "novel-review",
       "name": "审查代理",
       "roleLabel": "结构审查",
-      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节和相关设定文件，再检查设定一致性、节奏、伏笔与冲突，并输出严格 JSON：pass、issues、revision_brief。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节和相关设定文件，再检查设定一致性、节奏、伏笔与冲突。最终请使用 workflow_decision 工具提交 pass、issues、revision_brief；正文只需简短说明判断结论。"
     },
     {
       "key": "lore-maintainer",
@@ -64,14 +63,14 @@
     },
     {
       "key": "review-chapter",
-      "type": "review_gate",
+      "type": "decision",
       "name": "章节审查",
       "memberKey": "reviewer",
-      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节及相关设定文件，再完成审查，并输出严格 JSON：{\"pass\":boolean,\"issues\":[],\"revision_brief\":string}。",
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节及相关设定文件，再完成判断。最终使用 workflow_decision 工具提交 pass、issues、revision_brief；正文只需简短说明结论和关键问题。",
       "sourceStepKey": "write-chapter",
-      "passNextStepKey": "update-lore",
-      "failNextStepKey": "write-chapter",
-      "passRule": "review_json.pass == true"
+      "trueNextStepKey": "update-lore",
+      "falseNextStepKey": "write-chapter",
+      "passRule": "workflow_decision.pass == true"
     },
     {
       "key": "update-lore",
@@ -80,25 +79,16 @@
       "memberKey": "lore-maintainer",
       "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节、角色资料、背景资料和追踪文件，再更新角色、背景、线索与项目追踪资料。最终输出严格 JSON，格式为 {\"messageType\":\"lore_update_summary\",\"payload\":{...}}。",
       "outputMode": "text",
-      "nextStepKey": "more-loops"
-    },
-    {
-      "key": "more-loops",
-      "type": "decision",
-      "name": "还有下一轮吗",
-      "conditionKind": "remaining_loops_available",
-      "conditionConfig": {
-        "source": "loop_config.maxLoops"
-      },
-      "trueNextStepKey": "scene-plan",
-      "falseNextStepKey": "success-end"
+      "nextStepKey": "success-end"
     },
     {
       "key": "success-end",
       "type": "end",
       "name": "成功结束",
       "stopReason": "completed",
-      "summaryTemplate": "工作流已完成所有章节轮次，自动写小说流程顺利结束。"
+      "summaryTemplate": "工作流已完成所有章节轮次，自动写小说流程顺利结束。",
+      "loopBehavior": "continue_if_possible",
+      "loopTargetStepKey": "start"
     }
   ]
 }

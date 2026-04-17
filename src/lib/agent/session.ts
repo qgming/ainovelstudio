@@ -681,6 +681,38 @@ function buildAiSdkTools(
           return result.data ?? result.summary;
         },
       }),
+    workflow_decision: (toolName, tool) =>
+      defineTool({
+        description:
+          "向当前工作流判断节点提交最终结构化判定。程序会依据这个工具结果决定通过或失败分支。",
+        inputSchema: z.object({
+          pass: z.boolean().describe("true 表示通过，false 表示存在问题。"),
+          issues: z
+            .array(
+              z.object({
+                type: z.string().min(1).describe("问题类型，如 continuity、logic。"),
+                severity: z
+                  .enum(["low", "medium", "high"])
+                  .describe("问题严重级别。"),
+                message: z.string().min(1).describe("具体问题说明。"),
+              }),
+            )
+            .default([])
+            .describe("结构化问题列表。"),
+          revision_brief: z
+            .string()
+            .default("")
+            .describe("给下一步章节修订直接使用的简明修改摘要。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
   };
 
   for (const toolId of enabledToolIds) {

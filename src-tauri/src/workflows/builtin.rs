@@ -297,9 +297,7 @@ pub(crate) fn materialize_workflow_from_package_force(
         let key = match step {
             WorkflowTemplateStep::Start { key, .. }
             | WorkflowTemplateStep::AgentTask { key, .. }
-            | WorkflowTemplateStep::ReviewGate { key, .. }
             | WorkflowTemplateStep::Decision { key, .. }
-            | WorkflowTemplateStep::LoopControl { key, .. }
             | WorkflowTemplateStep::End { key, .. } => key,
         };
         step_ids_by_key.insert(key.clone(), create_id("workflow-step"));
@@ -350,16 +348,16 @@ pub(crate) fn materialize_workflow_from_package_force(
                         .as_ref()
                         .and_then(|value| step_ids_by_key.get(value).cloned()),
                 },
-                WorkflowTemplateStep::ReviewGate {
+                WorkflowTemplateStep::Decision {
                     key,
                     name,
                     member_key,
                     prompt_template,
                     source_step_key,
-                    pass_next_step_key,
-                    fail_next_step_key,
+                    true_next_step_key,
+                    false_next_step_key,
                     pass_rule,
-                } => WorkflowStepDefinition::ReviewGate {
+                } => WorkflowStepDefinition::Decision {
                     id: step_ids_by_key
                         .get(key)
                         .cloned()
@@ -376,63 +374,21 @@ pub(crate) fn materialize_workflow_from_package_force(
                     source_step_id: step_ids_by_key.get(source_step_key).cloned().ok_or_else(
                         || format!("workflow 模板引用了不存在的步骤键：{source_step_key}"),
                     )?,
-                    pass_next_step_id: pass_next_step_key
-                        .as_ref()
-                        .and_then(|value| step_ids_by_key.get(value).cloned()),
-                    fail_next_step_id: fail_next_step_key
-                        .as_ref()
-                        .and_then(|value| step_ids_by_key.get(value).cloned()),
-                    pass_rule: pass_rule.clone(),
-                },
-                WorkflowTemplateStep::Decision {
-                    key,
-                    name,
-                    condition_kind,
-                    condition_config,
-                    true_next_step_key,
-                    false_next_step_key,
-                } => WorkflowStepDefinition::Decision {
-                    id: step_ids_by_key
-                        .get(key)
-                        .cloned()
-                        .ok_or_else(|| "workflow 模板缺少步骤键。".to_string())?,
-                    workflow_id: workflow_id.clone(),
-                    name: name.clone(),
-                    order,
-                    condition_kind: condition_kind.clone(),
-                    condition_config: condition_config.clone(),
                     true_next_step_id: true_next_step_key
                         .as_ref()
                         .and_then(|value| step_ids_by_key.get(value).cloned()),
                     false_next_step_id: false_next_step_key
                         .as_ref()
                         .and_then(|value| step_ids_by_key.get(value).cloned()),
-                },
-                WorkflowTemplateStep::LoopControl {
-                    key,
-                    name,
-                    loop_target_step_key,
-                    continue_when,
-                    finish_when,
-                } => WorkflowStepDefinition::LoopControl {
-                    id: step_ids_by_key
-                        .get(key)
-                        .cloned()
-                        .ok_or_else(|| "workflow 模板缺少步骤键。".to_string())?,
-                    workflow_id: workflow_id.clone(),
-                    name: name.clone(),
-                    order,
-                    loop_target_step_id: loop_target_step_key
-                        .as_ref()
-                        .and_then(|value| step_ids_by_key.get(value).cloned()),
-                    continue_when: continue_when.clone(),
-                    finish_when: finish_when.clone(),
+                    pass_rule: pass_rule.clone(),
                 },
                 WorkflowTemplateStep::End {
                     key,
                     name,
                     stop_reason,
                     summary_template,
+                    loop_behavior,
+                    loop_target_step_key,
                 } => WorkflowStepDefinition::End {
                     id: step_ids_by_key
                         .get(key)
@@ -443,6 +399,10 @@ pub(crate) fn materialize_workflow_from_package_force(
                     order,
                     stop_reason: stop_reason.clone(),
                     summary_template: summary_template.clone(),
+                    loop_behavior: loop_behavior.clone(),
+                    loop_target_step_id: loop_target_step_key
+                        .as_ref()
+                        .and_then(|value| step_ids_by_key.get(value).cloned()),
                 },
             };
         steps.push(built_step);
