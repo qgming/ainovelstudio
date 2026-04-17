@@ -1,13 +1,17 @@
 import {
   ArrowDown,
   ArrowUp,
-  BookOpenText,
+  Bot,
   Check,
+  ChevronDown,
+  ChevronUp,
   Circle,
+  Flag,
+  GitBranch,
+  Grid2x2Plus,
   LoaderCircle,
   Link as LinkIcon,
   Play,
-  Plus,
   Save,
   Search,
   Square,
@@ -32,6 +36,7 @@ import type {
   WorkflowStepRun,
   WorkflowStepType,
   WorkflowTeamMember,
+  WorkflowWorkspaceBinding,
 } from "../lib/workflow/types";
 import { getResolvedAgents, useSubAgentStore } from "../stores/subAgentStore";
 import { useWorkflowStore } from "../stores/workflowStore";
@@ -81,15 +86,35 @@ function formatDateTime(value: number | null) {
   }).format(value);
 }
 
-function formatLoopLimit(value: number | null) {
-  return value === null ? "无限" : String(value);
-}
-
 function buildLoopDraft(loopConfig: WorkflowLoopConfig) {
   return {
     maxLoopsMode: loopConfig.maxLoops === null ? "infinite" : "finite",
     maxLoopsValue: loopConfig.maxLoops === null ? "1" : String(loopConfig.maxLoops),
   } as const;
+}
+
+function stripWorkspaceBinding(binding: WorkflowWorkspaceBinding | null) {
+  if (!binding) {
+    return null;
+  }
+  return {
+    bookId: binding.bookId,
+    rootPath: binding.rootPath,
+    bookName: binding.bookName,
+  };
+}
+
+function isSameWorkspaceBinding(
+  left: ReturnType<typeof stripWorkspaceBinding>,
+  right: ReturnType<typeof stripWorkspaceBinding>,
+) {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.bookId === right.bookId && left.rootPath === right.rootPath && left.bookName === right.bookName;
 }
 
 function normalizeLoopValue(mode: "finite" | "infinite", value: string) {
@@ -113,19 +138,17 @@ function StepRunStatusIcon({ status }: { status: WorkflowStepRun["status"] }) {
   return <Circle aria-hidden="true" className="h-3 w-3 text-muted-foreground" />;
 }
 
-function formatStepType(type: WorkflowStepDefinition["type"]) {
-  switch (type) {
-    case "start":
-      return "开始节点";
-    case "agent_task":
-      return "代理节点";
-    case "decision":
-      return "判断节点";
-    case "end":
-      return "结束节点";
-    default:
-      return type;
+function StepTypeIcon({ type }: { type: WorkflowStepDefinition["type"] }) {
+  if (type === "start") {
+    return <Play aria-hidden="true" className="h-3.5 w-3.5" />;
   }
+  if (type === "agent_task") {
+    return <Bot aria-hidden="true" className="h-3.5 w-3.5" />;
+  }
+  if (type === "decision") {
+    return <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />;
+  }
+  return <Flag aria-hidden="true" className="h-3.5 w-3.5" />;
 }
 
 function isMemberStep(
@@ -223,8 +246,8 @@ export function WorkflowDetailPage() {
       maxLoops: 1,
     }),
   );
+  const [draftWorkspaceBinding, setDraftWorkspaceBinding] = useState<ReturnType<typeof stripWorkspaceBinding>>(null);
   const [saveBusy, setSaveBusy] = useState(false);
-  const [loopConfigBusy, setLoopConfigBusy] = useState(false);
   const [runBusy, setRunBusy] = useState(false);
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false);
   const [availableBooks, setAvailableBooks] = useState<Awaited<ReturnType<typeof listBookWorkspaces>>>([]);
@@ -238,6 +261,7 @@ export function WorkflowDetailPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [stepDraft, setStepDraft] = useState<WorkflowStepDefinition | null>(null);
   const [stepDraftAgentId, setStepDraftAgentId] = useState("");
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
   const deferredAgentQuery = useDeferredValue(agentQuery.trim().toLowerCase());
 
   useEffect(() => {
@@ -261,6 +285,7 @@ export function WorkflowDetailPage() {
     setDraftName(detail.workflow.name);
     setDraftBasePrompt(detail.workflow.basePrompt);
     setLoopDraft(buildLoopDraft(detail.workflow.loopConfig));
+    setDraftWorkspaceBinding(stripWorkspaceBinding(detail.workflow.workspaceBinding));
     setSelectedStepId((current) =>
       detail.steps.some((item) => item.id === current) ? current : detail.steps[0]?.id ?? null,
     );
@@ -305,6 +330,25 @@ export function WorkflowDetailPage() {
     const draftAgentId = isMemberStep(stepDraft) ? stepDraftAgentId : "";
     return JSON.stringify(selectedStep) !== JSON.stringify(stepDraft) || persistedAgentId !== draftAgentId;
   }, [selectedStep, stepDraft, stepDraftAgentId]);
+  const isBasicsDirty = useMemo(() => {
+    if (!detail) {
+      return false;
+    }
+    return detail.workflow.name !== draftName || detail.workflow.basePrompt !== draftBasePrompt;
+  }, [detail, draftBasePrompt, draftName]);
+  const isLoopConfigDirty = useMemo(() => {
+    if (!detail) {
+      return false;
+    }
+    return detail.workflow.loopConfig.maxLoops !== normalizeLoopValue(loopDraft.maxLoopsMode, loopDraft.maxLoopsValue);
+  }, [detail, loopDraft.maxLoopsMode, loopDraft.maxLoopsValue]);
+  const isWorkspaceBindingDirty = useMemo(() => {
+    if (!detail) {
+      return false;
+    }
+    return !isSameWorkspaceBinding(stripWorkspaceBinding(detail.workflow.workspaceBinding), draftWorkspaceBinding);
+  }, [detail, draftWorkspaceBinding]);
+  const hasSettingsDirty = isBasicsDirty || isLoopConfigDirty || isWorkspaceBindingDirty;
 
   useEffect(() => {
     if (!selectedStep) {
@@ -315,6 +359,10 @@ export function WorkflowDetailPage() {
     setStepDraft(selectedStep);
     setStepDraftAgentId(isMemberStep(selectedStep) ? getAgentIdForStep(selectedStep) : "");
   }, [selectedStep, detail]);
+
+  useEffect(() => {
+    setIsPromptExpanded(false);
+  }, [selectedStepRun?.id]);
 
   function getAgentIdForStep(step: Extract<WorkflowStepDefinition, { type: "agent_task" | "decision" }>) {
     return getMemberById(detail?.teamMembers ?? [], step.memberId)?.agentId ?? "";
@@ -461,7 +509,7 @@ export function WorkflowDetailPage() {
     try {
       setBooksBusy(true);
       setPageNotice(null);
-      await bindWorkspace(detail.workflow.id, {
+      setDraftWorkspaceBinding({
         bookId: targetBook.id,
         rootPath: targetBook.path,
         bookName: targetBook.name,
@@ -475,35 +523,30 @@ export function WorkflowDetailPage() {
   }
 
   async function handleSaveBasics() {
-    if (!detail || saveBusy) {
+    if (!detail || saveBusy || !hasSettingsDirty) {
       return;
     }
     try {
       setSaveBusy(true);
       setPageNotice(null);
-      await saveWorkflowBasics(detail.workflow.id, {
-        name: draftName.trim() || "未命名工作流",
-        basePrompt: draftBasePrompt.trim(),
-      });
+      if (isBasicsDirty) {
+        await saveWorkflowBasics(detail.workflow.id, {
+          name: draftName.trim() || "未命名工作流",
+          basePrompt: draftBasePrompt.trim(),
+        });
+      }
+      if (isLoopConfigDirty) {
+        await updateLoopConfig(detail.workflow.id, {
+          maxLoops: normalizeLoopValue(loopDraft.maxLoopsMode, loopDraft.maxLoopsValue),
+        });
+      }
+      if (isWorkspaceBindingDirty && draftWorkspaceBinding) {
+        await bindWorkspace(detail.workflow.id, draftWorkspaceBinding);
+      }
+    } catch (error) {
+      setPageNotice(getReadableError(error, "保存基本设置失败。"));
     } finally {
       setSaveBusy(false);
-    }
-  }
-
-  async function handleSaveLoopConfig() {
-    if (!detail || loopConfigBusy) {
-      return;
-    }
-    try {
-      setLoopConfigBusy(true);
-      setPageNotice(null);
-      await updateLoopConfig(detail.workflow.id, {
-        maxLoops: normalizeLoopValue(loopDraft.maxLoopsMode, loopDraft.maxLoopsValue),
-      });
-    } catch (error) {
-      setPageNotice(getReadableError(error, "保存循环设置失败。"));
-    } finally {
-      setLoopConfigBusy(false);
     }
   }
 
@@ -721,7 +764,6 @@ export function WorkflowDetailPage() {
       <PageShell
         title={<DetailTitle currentLabel={detail.workflow.name} />}
         actions={[
-          { icon: Save, label: saveBusy ? "保存中..." : "保存", tone: "default", onClick: () => void handleSaveBasics() },
           { icon: Play, label: runBusy || isRunning ? "运行中" : "运行", tone: "primary", onClick: () => void handleStartRun() },
           { icon: Square, label: "停止", tone: "default", onClick: requestStopRun },
         ]}
@@ -731,7 +773,28 @@ export function WorkflowDetailPage() {
           <div className="grid h-full min-h-0 overflow-hidden bg-app lg:grid-cols-[320px_minmax(0,1fr)_360px]">
             <section className="min-h-0 overflow-y-auto border-b border-border lg:border-r lg:border-b-0">
               <div className="divide-y divide-border">
-                <Panel title="基础消息" bodyClassName="space-y-4">
+                <Panel
+                  title="基本设置"
+                  bodyClassName="space-y-4"
+                  actions={(
+                    <Button
+                      type="button"
+                      aria-label={saveBusy ? "基本设置保存中" : "保存基本设置"}
+                      size="icon-sm"
+                      variant="ghost"
+                      className={cn(
+                        "border-0 shadow-none hover:text-foreground",
+                        hasSettingsDirty
+                          ? "bg-accent text-foreground hover:bg-accent/85"
+                          : "bg-transparent text-muted-foreground hover:bg-transparent",
+                      )}
+                      onClick={() => void handleSaveBasics()}
+                      disabled={!hasSettingsDirty || saveBusy}
+                    >
+                      <Save className="h-4 w-4" />
+                    </Button>
+                  )}
+                >
                   {pageNotice ? (
                     <div className="editor-callout" data-tone="error">
                       <pre className="whitespace-pre-wrap break-words text-sm leading-6">{pageNotice}</pre>
@@ -747,82 +810,66 @@ export function WorkflowDetailPage() {
                     <span className="text-xs font-medium text-muted-foreground">工作流名称</span>
                     <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
                   </label>
-                  <div className="border-y border-border">
-                    <div className="flex items-center gap-3 px-0 py-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-primary">
-                        <BookOpenText className="h-4.5 w-4.5" />
-                      </div>
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">绑定书籍</span>
+                    <div className="flex items-center gap-3 rounded-lg border border-border p-3">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-foreground">
-                          {detail.workflow.workspaceBinding?.bookName ?? "尚未绑定书籍"}
+                          {draftWorkspaceBinding?.bookName ?? "尚未绑定书籍"}
                         </p>
                       </div>
                       <Button
                         type="button"
-                        variant="outline"
-                        className="shrink-0"
+                        aria-label={draftWorkspaceBinding ? "更换绑定书籍" : "绑定书籍"}
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                         onClick={() => {
                           setBindingDialogOpen(true);
                           void refreshBooks();
                         }}
                       >
                         <LinkIcon className="h-4 w-4" />
-                        {detail.workflow.workspaceBinding ? "更换书籍" : "绑定书籍"}
                       </Button>
                     </div>
                   </div>
-                  <div className="space-y-3 rounded-lg border border-border p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">循环设置</p>
-                        <p className="text-xs text-muted-foreground">支持有限次数或无限循环。</p>
-                      </div>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void handleSaveLoopConfig()} disabled={loopConfigBusy}>
-                        <Save className="h-4 w-4" />
-                        {loopConfigBusy ? "保存中..." : "保存设置"}
-                      </Button>
-                    </div>
-                    <div className="rounded-md bg-foreground/[0.03] px-3 py-2 text-xs text-muted-foreground">
-                      当前配置：主循环 {formatLoopLimit(detail.workflow.loopConfig.maxLoops)}
-                    </div>
-                    <div className="space-y-3">
-                      <div className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)] md:items-end">
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">循环配置</span>
+                    <div className="grid gap-3 rounded-lg border border-border p-3 md:grid-cols-[120px_minmax(0,1fr)] md:items-end">
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">最大循环次数</span>
+                        <Select
+                          value={loopDraft.maxLoopsMode}
+                          onValueChange={(value) =>
+                            setLoopDraft((current) => ({ ...current, maxLoopsMode: value as "finite" | "infinite" }))
+                          }
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="finite">有限</SelectItem>
+                            <SelectItem value="infinite">无限</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      {loopDraft.maxLoopsMode === "finite" ? (
                         <label className="block space-y-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">最大循环次数</span>
-                          <Select
-                            value={loopDraft.maxLoopsMode}
-                            onValueChange={(value) =>
-                              setLoopDraft((current) => ({ ...current, maxLoopsMode: value as "finite" | "infinite" }))
+                          <span className="text-xs font-medium text-muted-foreground">次数</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={loopDraft.maxLoopsValue}
+                            onChange={(event) =>
+                              setLoopDraft((current) => ({ ...current, maxLoopsValue: event.target.value }))
                             }
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="finite">有限</SelectItem>
-                              <SelectItem value="infinite">无限</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          />
                         </label>
-                        {loopDraft.maxLoopsMode === "finite" ? (
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">次数</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={loopDraft.maxLoopsValue}
-                              onChange={(event) =>
-                                setLoopDraft((current) => ({ ...current, maxLoopsValue: event.target.value }))
-                              }
-                            />
-                          </label>
-                        ) : (
-                          <div className="flex h-10 items-center text-sm text-muted-foreground">当前为无限（{formatLoopLimit(null)}）</div>
-                        )}
-                      </div>
+                      ) : (
+                        <div className="flex h-10 items-center text-sm text-muted-foreground">无限</div>
+                      )}
                     </div>
                   </div>
-
                   <label className="block space-y-1.5">
-                    <span className="text-xs font-medium text-muted-foreground">基础消息</span>
+                    <span className="text-xs font-medium text-muted-foreground">提示词内容</span>
                     <Textarea
                       value={draftBasePrompt}
                       onChange={(event) => setDraftBasePrompt(event.target.value)}
@@ -847,14 +894,14 @@ export function WorkflowDetailPage() {
                         {agent.validation.isValid ? (
                           <Button
                             type="button"
-                            size="sm"
+                            aria-label={`添加代理 ${agent.name}`}
                             variant="ghost"
-                            className="shrink-0"
+                            size="icon-sm"
+                            className="shrink-0 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                             onClick={() => void handleAddAgentStep(agent.id)}
                             disabled={stepBusy !== null || memberBusy !== null}
                           >
-                            <Plus className="h-4 w-4" />
-                            添加
+                            <Grid2x2Plus className="h-4 w-4" />
                           </Button>
                         ) : (
                           <span className="inline-flex shrink-0 items-center px-0 py-1 text-[11px] font-medium text-amber-700">
@@ -875,7 +922,10 @@ export function WorkflowDetailPage() {
                     {detail.steps.map((step, index) => (
                       <article
                         key={step.id}
-                        className={cn("editor-block-tile", selectedStepId === step.id ? "bg-primary/6" : "")}
+                        className={cn(
+                          "editor-block-tile",
+                          selectedStepId === step.id ? "bg-primary/[0.08]" : "",
+                        )}
                       >
                         <div
                           role="button"
@@ -888,18 +938,25 @@ export function WorkflowDetailPage() {
                             }
                           }}
                           className={cn(
-                            "editor-block-content w-full cursor-pointer justify-between overflow-hidden rounded-none text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset",
-                            selectedStepId === step.id ? "bg-primary/5" : "",
+                            "editor-block-content w-full cursor-pointer overflow-hidden rounded-none px-3 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset",
+                            selectedStepId === step.id ? "bg-primary/[0.04]" : "",
                           )}
                         >
-                          <div className="flex items-center justify-between gap-3 text-muted-foreground">
-                            <span className="text-xs font-medium">{index + 1}</span>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] font-medium tracking-[0.02em] text-muted-foreground">
+                              <span className="inline-flex items-center rounded-full border border-border bg-panel px-2 py-1">
+                                <StepTypeIcon type={step.type} />
+                                <span className="ml-1.5">
+                                  节点 {index + 1}
+                                </span>
+                              </span>
+                            </div>
                             <div className="flex items-center gap-1">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                className="h-6.5 w-6.5 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                                 disabled={index === 0 || stepBusy !== null}
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -912,7 +969,7 @@ export function WorkflowDetailPage() {
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                                className="h-6.5 w-6.5 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
                                 disabled={index === detail.steps.length - 1 || stepBusy !== null}
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -925,7 +982,7 @@ export function WorkflowDetailPage() {
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-destructive"
+                                className="h-6.5 w-6.5 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-destructive"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   void handleRemoveStep(step.id);
@@ -935,20 +992,30 @@ export function WorkflowDetailPage() {
                               </Button>
                             </div>
                           </div>
-
-                          <div className="space-y-2">
-                            <span className="inline-flex items-center rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80">
-                              {formatStepType(step.type)}
-                            </span>
-                            <p className="line-clamp-3 text-[20px] font-semibold leading-[1.15] tracking-[-0.04em] text-foreground">
-                              {step.name}
-                            </p>
+                          <p className="line-clamp-3 text-[20px] font-semibold leading-[1.18] tracking-[-0.04em] text-foreground">
+                            {step.name}
+                          </p>
+                          <div className="rounded-xl border border-border/80 bg-foreground/[0.03] px-2.5 py-2">
+                            <div className="grid gap-1.5">
+                              <div className="grid gap-0.5">
+                                <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                                  执行主体
+                                </p>
+                                <p className="line-clamp-1 text-sm font-medium text-foreground">
+                                  {getStepAgentLabel(step)}
+                                </p>
+                              </div>
+                              <div className="grid gap-0.5">
+                                <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+                                  流转路径
+                                </p>
+                                <p className="line-clamp-2 text-xs leading-4.5 text-muted-foreground">
+                                  {formatStepLinks(step, detail.steps)}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-
-                          <div className="space-y-1.5 text-xs leading-5 text-muted-foreground">
-                            <p className="line-clamp-2">{getStepAgentLabel(step)}</p>
-                            <p className="line-clamp-3">{formatStepLinks(step, detail.steps)}</p>
-                          </div>
+                          <div className="min-h-0 flex-1" />
                         </div>
                       </article>
                     ))}
@@ -962,12 +1029,19 @@ export function WorkflowDetailPage() {
                     selectedStep && stepDraft ? (
                       <Button
                         type="button"
-                        size="sm"
+                        aria-label={stepBusy === selectedStep.id ? "节点保存中" : "保存当前节点"}
+                        size="icon-sm"
+                        variant="ghost"
+                        className={cn(
+                          "border-0 shadow-none hover:text-foreground",
+                          isStepDraftDirty
+                            ? "bg-accent text-foreground hover:bg-accent/85"
+                            : "bg-transparent text-muted-foreground hover:bg-transparent",
+                        )}
                         onClick={() => void handleSaveStepDraft()}
                         disabled={!isStepDraftDirty || stepBusy === selectedStep.id}
                       >
                         <Save className="h-4 w-4" />
-                        {stepBusy === selectedStep.id ? "保存中..." : "保存"}
                       </Button>
                     ) : null
                   }
@@ -1259,8 +1333,24 @@ export function WorkflowDetailPage() {
                         {selectedRun ? ` · 当前运行结束原因：${selectedRun.stopReason ?? "—"}` : ""}
                       </div>
                       <div className="px-3 py-3">
-                        <p className="text-xs text-muted-foreground">输入提示词</p>
-                        <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selectedStepRun.inputPrompt || "—"}</pre>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground">输入提示词</p>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label={isPromptExpanded ? "收起输入提示词" : "展开输入提示词"}
+                            onClick={() => setIsPromptExpanded((current) => !current)}
+                          >
+                            {isPromptExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                          </Button>
+                        </div>
+                        <div className={cn("mt-2 overflow-hidden", isPromptExpanded ? "" : "max-h-[7.5rem]")}>
+                          <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
+                            {selectedStepRun.inputPrompt || "—"}
+                          </pre>
+                        </div>
                       </div>
                       {selectedStepRun.resultText ? (
                         <div className="px-3 py-3">

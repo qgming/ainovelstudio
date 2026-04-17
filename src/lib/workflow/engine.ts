@@ -527,6 +527,7 @@ async function executeConfiguredStep(params: {
     enabledAgents,
     enabledSkills,
     enabledToolIds,
+    includeAgentCatalog: false,
     manualContext: null,
     onUsage: (nextUsage) => {
       usage = nextUsage;

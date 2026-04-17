@@ -23,6 +23,7 @@ type BuildSystemPromptInput = {
   enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   enabledToolIds: string[];
+  includeAgentCatalog?: boolean;
 };
 
 type BuildUserTurnContentInput = {
@@ -355,6 +356,7 @@ export function buildSystemPrompt({
   enabledAgents,
   enabledSkills,
   enabledToolIds,
+  includeAgentCatalog = true,
 }: BuildSystemPromptInput) {
   const normalizedDefaultAgent =
     defaultAgentMarkdown && defaultAgentMarkdown.trim()
@@ -381,7 +383,7 @@ export function buildSystemPrompt({
       {
         key: "s01",
         title: "运行环境",
-        body: "你正在 AI Novel Studio 写作软件中运行。以下是当前可用的工具、技能和子代理资源。",
+        body: "你正在神笔写作应用中运行。以下是当前可用的工具、技能和子代理资源。",
       },
       {
         key: "s02",
@@ -398,11 +400,17 @@ export function buildSystemPrompt({
         title: "主代理人设",
         body: normalizedDefaultAgent,
       },
-      {
-        key: "s05",
-        title: "可委派子代理目录",
-        body: agentBlock,
-      },
+      includeAgentCatalog
+        ? {
+            key: "s05",
+            title: "可委派子代理目录",
+            body: agentBlock,
+          }
+        : {
+            key: "s05",
+            title: "可委派子代理目录",
+            body: null,
+          },
     ]),
   ]);
 }

@@ -63,6 +63,19 @@ describe("prompt context", () => {
     expect(system).not.toContain("这里是很长的完整 skill 正文");
   });
 
+  it("工作流模式下不注入可委派子代理目录", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledAgents: [createAgent()],
+      enabledSkills: [createSkill()],
+      enabledToolIds: [],
+      includeAgentCatalog: false,
+    });
+
+    expect(system).not.toContain("## s05 可委派子代理目录");
+    expect(system).not.toContain("### 子代理：续写代理");
+  });
+
   it("手动指定的大文件会裁剪成摘录并提示按需读取全文", () => {
     const content = `开头内容\n${"中间内容 ".repeat(2000)}\n结尾内容`;
     const prompt = buildUserTurnContent({

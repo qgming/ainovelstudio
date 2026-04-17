@@ -5,9 +5,9 @@ import { useThemeStore } from "../stores/themeStore";
 
 const topItems = [
   { to: "/", label: "首页", Icon: FileText, end: true },
+  { to: "/workflows", label: "工作流", Icon: GitBranch },
   { to: "/skills", label: "技能", Icon: Sparkles },
   { to: "/agents", label: "代理", Icon: Users },
-  { to: "/workflows", label: "工作流", Icon: GitBranch },
 ];
 
 const bottomItems = [{ to: "/setting", label: "设置", Icon: Settings }];

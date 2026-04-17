@@ -28,6 +28,7 @@ type RunAgentTurnInput = {
   enabledSkills: ResolvedSkill[];
   /** 启用的工具 ID 列表 */
   enabledToolIds: string[];
+  includeAgentCatalog?: boolean;
   manualContext?: ManualTurnContextPayload | null;
   planningState?: PlanningState | null;
   prompt: string;
@@ -749,6 +750,7 @@ export async function* runAgentTurn({
   enabledAgents,
   enabledSkills,
   enabledToolIds,
+  includeAgentCatalog = true,
   manualContext,
   planningState,
   prompt,
@@ -814,6 +816,7 @@ export async function* runAgentTurn({
     enabledAgents,
     enabledSkills,
     enabledToolIds,
+    includeAgentCatalog,
   });
 
   const planningIntervention = getPlanningIntervention(planningState, prompt);
