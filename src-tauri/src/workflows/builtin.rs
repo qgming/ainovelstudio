@@ -176,6 +176,7 @@ pub(crate) fn should_repair_builtin_workflow(
     connection: &Connection,
     workflow_id: &str,
     package_id: &str,
+    package_changed: bool,
 ) -> CommandResult<bool> {
     let current_package_id = connection
         .query_row(
@@ -187,7 +188,12 @@ pub(crate) fn should_repair_builtin_workflow(
         .map_err(super::validate::error_to_string)?
         .flatten();
     let (member_count, step_count) = count_workflow_related_rows(connection, workflow_id)?;
-    Ok(current_package_id.as_deref() != Some(package_id) || member_count == 0 || step_count == 0)
+    Ok(
+        package_changed
+            || current_package_id.as_deref() != Some(package_id)
+            || member_count == 0
+            || step_count == 0,
+    )
 }
 
 pub(crate) fn materialize_workflow_from_package(
@@ -215,6 +221,7 @@ pub(crate) fn materialize_workflow_from_package_force(
         &workflow_id,
         &definition.name,
         &definition.description,
+        &definition.base_prompt,
         if manifest.id.starts_with("auto-") {
             "builtin"
         } else {
@@ -224,7 +231,6 @@ pub(crate) fn materialize_workflow_from_package_force(
         definition.loop_config.clone(),
         now,
     );
-    workflow.status = definition.status.clone();
     workflow.updated_at = now;
     insert_workflow(connection, &workflow)?;
     set_workflow_package_id(connection, &workflow_id, Some(package_id))?;
@@ -243,7 +249,6 @@ pub(crate) fn materialize_workflow_from_package_force(
             order: index as u64,
             responsibility_prompt: member.responsibility_prompt.clone(),
             allowed_tool_ids: member.allowed_tool_ids.clone(),
-            enabled: member.enabled.unwrap_or(true),
             created_at: now,
             updated_at: now,
         });
@@ -294,6 +299,8 @@ pub(crate) fn materialize_workflow_from_package_force(
                 WorkflowTemplateStep::ReviewGate {
                     key,
                     name,
+                    member_key,
+                    prompt_template,
                     source_step_key,
                     pass_next_step_key,
                     fail_next_step_key,
@@ -306,6 +313,12 @@ pub(crate) fn materialize_workflow_from_package_force(
                     workflow_id: workflow_id.clone(),
                     name: name.clone(),
                     order,
+                    member_id: member_ids_by_key
+                        .get(member_key)
+                        .cloned()
+                        .or_else(|| members.first().map(|item| item.id.clone()))
+                        .unwrap_or_default(),
+                    prompt_template: prompt_template.clone(),
                     source_step_id: step_ids_by_key.get(source_step_key).cloned().ok_or_else(
                         || format!("workflow 模板引用了不存在的步骤键：{source_step_key}"),
                     )?,
@@ -371,10 +384,16 @@ pub(crate) fn sync_builtin_workflow_definition(
     package_id: &str,
     manifest: &WorkflowPackageManifest,
     definition: &WorkflowPackageDefinition,
+    package_changed: bool,
 ) -> CommandResult<Option<String>> {
     match read_workflow_id_by_template_key(connection, &definition.template_key)? {
         Some(existing_workflow_id) => {
-            if should_repair_builtin_workflow(connection, &existing_workflow_id, package_id)? {
+            if should_repair_builtin_workflow(
+                connection,
+                &existing_workflow_id,
+                package_id,
+                package_changed,
+            )? {
                 return repair_builtin_workflow_from_package(
                     connection,
                     &existing_workflow_id,
@@ -392,10 +411,11 @@ pub(crate) fn sync_builtin_workflow_definition(
 
 pub(crate) fn sync_builtin_workflow_packages_to_database(
     connection: &Connection,
-) -> CommandResult<Vec<(WorkflowPackageManifest, WorkflowPackageDefinition)>> {
+) -> CommandResult<Vec<(WorkflowPackageManifest, WorkflowPackageDefinition, bool)>> {
     let mut result = Vec::new();
     for workflow_id in embedded_workflow_ids() {
-        if let Some((existing, _, _)) = load_workflow_package_record(connection, &workflow_id)? {
+        let existing_record = load_workflow_package_record(connection, &workflow_id)?;
+        if let Some((existing, _, _)) = &existing_record {
             if existing.source_kind == WORKFLOW_SOURCE_INSTALLED {
                 continue;
             }
@@ -408,6 +428,14 @@ pub(crate) fn sync_builtin_workflow_packages_to_database(
         let manifest = deserialize_json::<WorkflowPackageManifest>(manifest_text)?;
         validate_workflow_package_manifest(&manifest, &workflow_id)?;
         let definition = parse_workflow_package_definition(&files)?;
+        let manifest_json = serialize_json(&manifest)?;
+        let files_json = serialize_json(&files)?;
+        let package_changed = existing_record
+            .as_ref()
+            .map(|(existing, _, _)| {
+                existing.manifest_json != manifest_json || existing.files_json != files_json
+            })
+            .unwrap_or(true);
         save_workflow_package_record(
             connection,
             &workflow_id,
@@ -416,7 +444,7 @@ pub(crate) fn sync_builtin_workflow_packages_to_database(
             &manifest,
             &files,
         )?;
-        result.push((manifest, definition));
+        result.push((manifest, definition, package_changed));
     }
     Ok(result)
 }
@@ -447,8 +475,14 @@ pub(crate) fn sync_builtin_workflows_to_database(
     let mut initialized_workflow_ids = Vec::new();
     let mut skipped_template_keys = Vec::new();
 
-    for (manifest, definition) in packages {
-        match sync_builtin_workflow_definition(connection, &manifest.id, &manifest, &definition)? {
+    for (manifest, definition, package_changed) in packages {
+        match sync_builtin_workflow_definition(
+            connection,
+            &manifest.id,
+            &manifest,
+            &definition,
+            package_changed,
+        )? {
             Some(workflow_id) => initialized_workflow_ids.push(workflow_id),
             None => skipped_template_keys.push(definition.template_key),
         }

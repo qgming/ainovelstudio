@@ -122,6 +122,7 @@ pub fn run() {
             workflows::commands::update_workflow_team_member,
             workflows::commands::remove_workflow_team_member,
             workflows::commands::reorder_workflow_team_members,
+            workflows::commands::add_workflow_agent_step,
             workflows::commands::add_workflow_step,
             workflows::commands::update_workflow_step,
             workflows::commands::remove_workflow_step,

@@ -16,6 +16,7 @@ const WORKFLOW_SCHEMA_SQL: &str = r#"
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
+        base_prompt TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'draft',
         source TEXT NOT NULL DEFAULT 'user',
         template_key TEXT,
@@ -130,6 +131,7 @@ pub(crate) fn run_workflow_migrations(connection: &Connection) -> CommandResult<
         .execute_batch(WORKFLOW_SCHEMA_SQL)
         .map_err(error_to_string)?;
     rebuild_legacy_run_tables(connection)?;
+    ensure_column(connection, "workflows", "base_prompt", "TEXT NOT NULL DEFAULT ''")?;
     Ok(())
 }
 
@@ -161,4 +163,23 @@ fn table_has_column(connection: &Connection, table_name: &str, column_name: &str
         .collect::<Result<Vec<_>, _>>()
         .map_err(error_to_string)?;
     Ok(columns.iter().any(|column| column == column_name))
+}
+
+fn ensure_column(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+    definition: &str,
+) -> CommandResult<()> {
+    if table_has_column(connection, table_name, column_name)? {
+        return Ok(());
+    }
+
+    connection
+        .execute(
+            &format!("ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"),
+            [],
+        )
+        .map_err(error_to_string)?;
+    Ok(())
 }

@@ -27,19 +27,6 @@ import { buildWorkflowRoute } from "../lib/workflow/routes";
 import type { Workflow } from "../lib/workflow/types";
 import { useWorkflowStore } from "../stores/workflowStore";
 
-function formatWorkflowStatus(status: "draft" | "ready" | "archived") {
-  switch (status) {
-    case "draft":
-      return "草稿";
-    case "ready":
-      return "就绪";
-    case "archived":
-      return "归档";
-    default:
-      return status;
-  }
-}
-
 function formatRunStatus(status: string) {
   switch (status) {
     case "idle":
@@ -300,24 +287,21 @@ export function WorkflowsPage() {
                           <Ellipsis className="h-4 w-4" />
                         </Button>
                       </div>
-                      <div className="space-y-3">
-                        <p className="line-clamp-3 text-xs leading-4 text-muted-foreground">
-                          {workflow.description ||
-                            "将书籍、成员和步骤组织成一条可重复执行的自动化流程。"}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="inline-flex items-center rounded-md border border-border bg-panel-subtle px-2 py-1 text-[11px] font-medium text-foreground">
-                            {formatWorkflowStatus(workflow.status)}
-                          </span>
-                          <span className="inline-flex items-center rounded-md border border-border bg-panel-subtle px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                            {workflow.workspaceBinding?.bookName ??
-                              "未绑定书籍"}
+                        <div className="space-y-3">
+                          <p className="line-clamp-3 text-xs leading-4 text-muted-foreground">
+                            {workflow.basePrompt ||
+                              workflow.description ||
+                              "将书籍、代理和步骤组织成一条可重复执行的自动化流程。"}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="inline-flex items-center rounded-md border border-border bg-panel-subtle px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                              {workflow.workspaceBinding?.bookName ??
+                                "未绑定书籍"}
                           </span>
                         </div>
                         <div className="space-y-1.5 text-[11px] leading-5 text-muted-foreground">
                           <p>
-                            步骤 {workflow.stepIds.length} · 成员{" "}
-                            {workflow.teamMemberIds.length}
+                            步骤 {workflow.stepIds.length}
                           </p>
                           <p>
                             最近运行：{formatRunStatus(workflow.lastRunStatus)}
@@ -338,7 +322,7 @@ export function WorkflowsPage() {
                     先创建一个工作流。
                   </h2>
                   <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                    将书籍、代理团队和自由编排步骤组织起来，形成可重复执行的自动化创作流程。
+                    将书籍、代理和自由编排步骤组织起来，形成可重复执行的自动化创作流程。
                   </p>
                   <div className="mt-8 flex items-center justify-center gap-3">
                     <Button
@@ -360,7 +344,7 @@ export function WorkflowsPage() {
         <PromptDialog
           busy={createBusy}
           confirmLabel="创建工作流"
-          description="输入工作流名称后，即可进入详情页继续配置书籍绑定、团队成员和步骤。"
+          description="输入工作流名称后，即可进入详情页继续配置书籍绑定、代理和步骤。"
           label="工作流名称"
           onCancel={() => {
             if (createBusy) {
@@ -421,7 +405,7 @@ export function WorkflowsPage() {
         <ConfirmDialog
           busy={deleteBusyId === deleteTarget.id}
           confirmLabel="删除工作流"
-          description={`将《${deleteTarget.name}》从工作流库中删除。相关步骤、团队成员与运行记录会一并移除。`}
+          description={`将《${deleteTarget.name}》从工作流库中删除。相关步骤、代理绑定与运行记录会一并移除。`}
           onCancel={() => {
             if (deleteBusyId) {
               return;

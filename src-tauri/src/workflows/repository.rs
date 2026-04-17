@@ -10,7 +10,6 @@ use super::{
     validate::{
         deserialize_json, error_to_string, now_timestamp, parse_optional_json, serialize_json,
         step_id, validate_loop_config, validate_member_payload, validate_run_status,
-        validate_workflow_status,
     },
     CommandResult,
 };
@@ -48,6 +47,8 @@ pub(crate) fn validate_step_input(
         }
         WorkflowStepInput::ReviewGate {
             name,
+            member_id,
+            prompt_template,
             source_step_id,
             pass_next_step_id,
             fail_next_step_id,
@@ -55,6 +56,12 @@ pub(crate) fn validate_step_input(
         } => {
             if name.trim().is_empty() {
                 return Err("步骤名称不能为空。".into());
+            }
+            if member_id.trim().is_empty() || !has_member(connection, workflow_id, member_id)? {
+                return Err("审查节点引用的团队成员不存在。".into());
+            }
+            if prompt_template.trim().is_empty() {
+                return Err("审查节点提示词不能为空。".into());
             }
             if source_step_id.trim().is_empty()
                 || !has_step(connection, workflow_id, source_step_id)?
@@ -138,6 +145,8 @@ pub(crate) fn validate_step_definition(
             id,
             workflow_id: step_workflow_id,
             name,
+            member_id,
+            prompt_template,
             source_step_id,
             pass_next_step_id,
             fail_next_step_id,
@@ -149,6 +158,12 @@ pub(crate) fn validate_step_definition(
             }
             if name.trim().is_empty() {
                 return Err("步骤名称不能为空。".into());
+            }
+            if member_id.trim().is_empty() || !has_member(connection, workflow_id, member_id)? {
+                return Err("审查节点引用的团队成员不存在。".into());
+            }
+            if prompt_template.trim().is_empty() {
+                return Err("审查节点提示词不能为空。".into());
             }
             if source_step_id.trim().is_empty()
                 || !has_step(connection, workflow_id, source_step_id)?
@@ -213,20 +228,19 @@ pub(crate) fn validate_all_step_references(
 }
 
 pub(crate) fn insert_workflow(connection: &Connection, workflow: &Workflow) -> CommandResult<()> {
-    validate_workflow_status(&workflow.status)?;
     validate_run_status(&workflow.last_run_status)?;
     validate_loop_config(&workflow.loop_config)?;
     connection
         .execute(
             r#"
             INSERT INTO workflows (
-                id, name, description, status, source, template_key, package_id, workspace_binding_json, loop_config_json,
+                id, name, description, base_prompt, source, template_key, package_id, workspace_binding_json, loop_config_json,
                 team_member_ids_json, step_ids_json, last_run_id, last_run_status, created_at, updated_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(id) DO UPDATE
             SET name = excluded.name,
                 description = excluded.description,
-                status = excluded.status,
+                base_prompt = excluded.base_prompt,
                 source = excluded.source,
                 template_key = excluded.template_key,
                 package_id = excluded.package_id,
@@ -242,7 +256,7 @@ pub(crate) fn insert_workflow(connection: &Connection, workflow: &Workflow) -> C
                 workflow.id,
                 workflow.name,
                 workflow.description,
-                workflow.status,
+                workflow.base_prompt,
                 workflow.source,
                 workflow.template_key,
                 Option::<String>::None,
@@ -288,14 +302,13 @@ pub(crate) fn upsert_team_member(
         .execute(
             r#"
             INSERT INTO workflow_team_members (
-                id, workflow_id, agent_id, name, role_label, enabled, order_index, responsibility_prompt,
+                id, workflow_id, agent_id, name, role_label, order_index, responsibility_prompt,
                 allowed_tool_ids_json, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
             ON CONFLICT(id) DO UPDATE
             SET agent_id = excluded.agent_id,
                 name = excluded.name,
                 role_label = excluded.role_label,
-                enabled = excluded.enabled,
                 order_index = excluded.order_index,
                 responsibility_prompt = excluded.responsibility_prompt,
                 allowed_tool_ids_json = excluded.allowed_tool_ids_json,
@@ -307,7 +320,6 @@ pub(crate) fn upsert_team_member(
                 member.agent_id,
                 member.name,
                 member.role_label,
-                if member.enabled { 1 } else { 0 },
                 member.order as i64,
                 member.responsibility_prompt,
                 member.allowed_tool_ids.as_ref().map(serialize_json).transpose()?,
@@ -359,6 +371,8 @@ fn upsert_step_internal(
             id,
             name,
             order,
+            member_id,
+            prompt_template,
             source_step_id,
             pass_next_step_id,
             fail_next_step_id,
@@ -370,6 +384,8 @@ fn upsert_step_internal(
             name.clone(),
             *order,
             serialize_json(&serde_json::json!({
+                "memberId": member_id,
+                "promptTemplate": prompt_template,
                 "sourceStepId": source_step_id,
                 "passNextStepId": pass_next_step_id,
                 "failNextStepId": fail_next_step_id,
@@ -434,7 +450,7 @@ pub(crate) fn read_workflow(connection: &Connection, workflow_id: &str) -> Comma
     connection
         .query_row(
             r#"
-            SELECT id, name, description, status, source, template_key, created_at, updated_at,
+            SELECT id, name, description, base_prompt, source, template_key, created_at, updated_at,
                    workspace_binding_json, loop_config_json, team_member_ids_json, step_ids_json,
                    last_run_id, last_run_status
             FROM workflows
@@ -466,7 +482,7 @@ pub(crate) fn read_workflow(connection: &Connection, workflow_id: &str) -> Comma
                 id,
                 name,
                 description,
-                status,
+                base_prompt,
                 source,
                 template_key,
                 created_at,
@@ -482,7 +498,7 @@ pub(crate) fn read_workflow(connection: &Connection, workflow_id: &str) -> Comma
                     id,
                     name,
                     description,
-                    status,
+                    base_prompt,
                     source,
                     template_key,
                     created_at: created_at as u64,
@@ -525,7 +541,7 @@ pub(crate) fn list_team_members(
     let mut statement = connection
         .prepare(
             r#"
-            SELECT id, workflow_id, agent_id, name, role_label, enabled, order_index,
+            SELECT id, workflow_id, agent_id, name, role_label, order_index,
                    responsibility_prompt, allowed_tool_ids_json, created_at, updated_at
             FROM workflow_team_members
             WHERE workflow_id = ?1
@@ -544,14 +560,13 @@ pub(crate) fn list_team_members(
             agent_id: row.get::<_, String>(2).map_err(error_to_string)?,
             name: row.get::<_, String>(3).map_err(error_to_string)?,
             role_label: row.get::<_, String>(4).map_err(error_to_string)?,
-            enabled: row.get::<_, i64>(5).map_err(error_to_string)? != 0,
-            order: row.get::<_, i64>(6).map_err(error_to_string)? as u64,
-            responsibility_prompt: row.get::<_, String>(7).map_err(error_to_string)?,
+            order: row.get::<_, i64>(5).map_err(error_to_string)? as u64,
+            responsibility_prompt: row.get::<_, String>(6).map_err(error_to_string)?,
             allowed_tool_ids: parse_optional_json(
-                row.get::<_, Option<String>>(8).map_err(error_to_string)?,
+                row.get::<_, Option<String>>(7).map_err(error_to_string)?,
             )?,
-            created_at: row.get::<_, i64>(9).map_err(error_to_string)? as u64,
-            updated_at: row.get::<_, i64>(10).map_err(error_to_string)? as u64,
+            created_at: row.get::<_, i64>(8).map_err(error_to_string)? as u64,
+            updated_at: row.get::<_, i64>(9).map_err(error_to_string)? as u64,
         });
     }
     Ok(result)
@@ -614,6 +629,16 @@ pub(crate) fn list_steps(
                 workflow_id,
                 name,
                 order,
+                member_id: payload_value
+                    .get("memberId")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                prompt_template: payload_value
+                    .get("promptTemplate")
+                    .and_then(Value::as_str)
+                    .unwrap_or("请基于来源节点的输出进行审查，并按 JSON 格式返回结论。")
+                    .to_string(),
                 source_step_id: payload_value
                     .get("sourceStepId")
                     .and_then(Value::as_str)

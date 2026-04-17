@@ -1,16 +1,15 @@
-import { getEnabledAgents, useSubAgentStore, type ResolvedAgent } from "../../stores/subAgentStore";
+import { getEnabledAgents, getResolvedAgents, useSubAgentStore } from "../../stores/subAgentStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
-import type { AgentPart } from "../agent/types";
-import { streamAgentText } from "../agent/modelGateway";
-import { runSubAgentTask } from "../agent/session";
+import { mergePart } from "../chat/sessionRuntime";
+import { derivePlanningState } from "../agent/planning";
+import { runAgentTurn } from "../agent/session";
 import { createLocalResourceToolset, createWorkspaceToolset } from "../agent/tools";
 import type {
   WorkflowDetail,
   WorkflowLoopControlStepDefinition,
-  WorkflowReviewGateStepDefinition,
   WorkflowReviewResult,
   WorkflowRun,
   WorkflowStepDefinition,
@@ -31,6 +30,7 @@ function getNow() {
 }
 
 function buildStepPrompt(params: {
+  basePrompt?: string | null;
   workflowName: string;
   teamMember: WorkflowTeamMember;
   step: WorkflowStepDefinition;
@@ -39,9 +39,17 @@ function buildStepPrompt(params: {
   previousResult?: string | null;
   reviewResult?: WorkflowReviewResult | null;
 }) {
-  const { workflowName, teamMember, step, loopIndex, attemptIndex, previousResult, reviewResult } = params;
+  const { basePrompt, workflowName, teamMember, step, loopIndex, attemptIndex, previousResult, reviewResult } = params;
   const sections = [
     `你正在执行工作流《${workflowName}》中的步骤。`,
+    basePrompt ? `工作流基础消息：\n${basePrompt}` : null,
+    [
+      "执行规则：",
+      "- 当前步骤处理的数据事实以已绑定书籍工作区中的文件为准。",
+      "- 开始前先使用 browse / search / read 等工具定位并读取相关文件，再继续处理。",
+      "- 如需产出或修订内容，使用工作区工具直接写回对应文件。",
+      "- 步骤之间的流转、返工和循环由程序控制，你只负责完成当前步骤，不要自行决定跳过、改序或结束流程。",
+    ].join("\n"),
     `当前团队成员：${teamMember.name}`,
     `成员职责：${teamMember.roleLabel}`,
     teamMember.responsibilityPrompt ? `职责补充：${teamMember.responsibilityPrompt}` : null,
@@ -49,15 +57,12 @@ function buildStepPrompt(params: {
     `返工次数：${attemptIndex}`,
     `步骤名称：${step.name}`,
     step.type === "agent_task" ? `步骤提示词：${step.promptTemplate}` : null,
-    previousResult ? `上一步结果摘要：\n${previousResult}` : null,
-    reviewResult
-      ? `最近一次审查结果：\n${JSON.stringify(reviewResult, null, 2)}`
+    step.type === "review_gate" ? `审查提示词：${step.promptTemplate}` : null,
+    previousResult
+      ? `上一步结果摘要（仅供参考，涉及事实请回到工作区文件核对）：\n${previousResult}`
       : null,
-    step.type === "agent_task" && step.outputMode === "review_json"
-      ? [
-          "你必须返回严格 JSON，不要添加代码块包裹，不要输出 JSON 之外的说明。",
-          'JSON 格式示例：{"pass": true, "issues": [], "revision_brief": ""}',
-        ].join("\n")
+    reviewResult
+      ? `最近一次审查结果（仅供参考，涉及事实请回到工作区文件核对）：\n${JSON.stringify(reviewResult, null, 2)}`
       : null,
   ].filter(Boolean);
 
@@ -76,6 +81,12 @@ function getTeamMemberById(detail: WorkflowDetail, memberId: string | null) {
     return null;
   }
   return detail.teamMembers.find((item) => item.id === memberId) ?? null;
+}
+
+function resolveWorkflowAgent(agentId: string) {
+  return getResolvedAgents(useSubAgentStore.getState()).find(
+    (item) => item.id === agentId && item.validation.isValid,
+  ) ?? null;
 }
 
 function buildInitialRun(detail: WorkflowDetail): WorkflowRun {
@@ -114,31 +125,40 @@ function getEnabledToolIds(member: WorkflowTeamMember) {
   return globallyEnabledToolIds.filter((toolId) => member.allowedToolIds?.includes(toolId));
 }
 
-async function executeAgentStep(params: {
+async function executeConfiguredStep(params: {
   detail: WorkflowDetail;
   run: WorkflowRun;
-  step: Extract<WorkflowStepDefinition, { type: "agent_task" }>;
+  outputMode: "text" | "review_json";
+  step: Extract<WorkflowStepDefinition, { type: "agent_task" | "review_gate" }>;
   loopIndex: number;
   attemptIndex: number;
   previousResult?: string | null;
   reviewResult?: WorkflowReviewResult | null;
   abortSignal: AbortSignal;
 }) {
-  const { detail, run, step, loopIndex, attemptIndex, previousResult, reviewResult, abortSignal } = params;
+  const {
+    detail,
+    run,
+    step,
+    outputMode,
+    loopIndex,
+    attemptIndex,
+    previousResult,
+    reviewResult,
+    abortSignal,
+  } = params;
   const member = getTeamMemberById(detail, step.memberId);
   if (!member) {
     throw new Error(`未找到步骤 ${step.name} 对应的团队成员。`);
   }
-  if (!member.enabled) {
-    throw new Error(`团队成员 ${member.name} 当前已禁用。`);
-  }
 
-  const agent = getEnabledAgents(useSubAgentStore.getState()).find((item) => item.id === member.agentId);
+  const agent = resolveWorkflowAgent(member.agentId);
   if (!agent) {
-    throw new Error(`未找到可用代理：${member.agentId}`);
+    throw new Error(`未找到可用代理：${member.agentId}。请检查代理中心配置。`);
   }
 
   const prompt = buildStepPrompt({
+    basePrompt: detail.workflow.basePrompt,
     workflowName: detail.workflow.name,
     teamMember: member,
     step,
@@ -176,9 +196,23 @@ async function executeAgentStep(params: {
     status: "running",
   });
 
+  const agentSettingsStore = useAgentSettingsStore.getState();
+  if (agentSettingsStore.status !== "ready") {
+    await agentSettingsStore.initialize();
+  }
+  const subAgentStore = useSubAgentStore.getState();
+  if (subAgentStore.status === "idle") {
+    await subAgentStore.initialize();
+  }
+  const skillsStore = useSkillsStore.getState();
+  if (skillsStore.status === "idle") {
+    await skillsStore.initialize();
+  }
+
   const enabledSkills = getEnabledSkills(useSkillsStore.getState());
   const providerConfig = useAgentSettingsStore.getState().config;
-  const enabledToolIds = getEnabledToolIds(member).filter((toolId) => toolId !== "task");
+  const enabledToolIds = getEnabledToolIds(member);
+  const enabledAgents = getEnabledAgents(useSubAgentStore.getState()).filter((item) => item.id !== agent.id);
   const workspaceTools = createWorkspaceToolset({
     rootPath: run.workspaceBinding.rootPath,
     onWorkspaceMutated: async () => {
@@ -197,38 +231,50 @@ async function executeAgentStep(params: {
     },
   });
 
-  const snapshots = new Map<string, AgentPart>();
-  const result = await runSubAgentTask({
+  let parts = stepRunBase.parts;
+  let usage = stepRunBase.usage;
+  const stream = runAgentTurn({
     abortSignal,
-    agentId: agent.id,
-    enabledAgents: [agent as ResolvedAgent],
+    activeFilePath: null,
+    workspaceRootPath: run.workspaceBinding.rootPath,
+    conversationHistory: [],
+    defaultAgentMarkdown: agent.body,
+    enabledAgents,
     enabledSkills,
-    taskPrompt: prompt,
-    providerConfig,
-    streamFn: streamAgentText,
-    workspaceTools: { ...workspaceTools, ...localResourceTools },
     enabledToolIds,
-    onProgress: (snapshot) => {
-      snapshots.set(snapshot.id, snapshot);
-      void useWorkflowStore.getState().saveStepRun({
-        ...stepRunBase,
-        parts: Array.from(snapshots.values()),
-      });
+    manualContext: null,
+    onUsage: (nextUsage) => {
+      usage = nextUsage;
     },
+    planningState: derivePlanningState([]),
+    prompt,
+    providerConfig,
+    workspaceTools: { ...workspaceTools, ...localResourceTools },
+    onToolRequestStateChange: () => {},
   });
+  for await (const part of stream) {
+    parts = mergePart(parts, part);
+    await useWorkflowStore.getState().saveStepRun({
+      ...stepRunBase,
+      parts,
+    });
+  }
 
-  const reviewResultValue = step.outputMode === "review_json"
-    ? useWorkflowStore.getState().parseReviewResult(result.text)
-    : null;
+  const resultText = parts
+    .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("\n\n");
+  const reviewResultValue =
+    outputMode === "review_json" ? useWorkflowStore.getState().parseReviewResult(resultText) : null;
 
   const finalStepRun: WorkflowStepRun = {
     ...stepRunBase,
     status: "completed",
     finishedAt: getNow(),
-    resultText: result.text,
+    resultText,
     resultJson: reviewResultValue,
-    parts: Array.from(snapshots.values()),
-    usage: null,
+    parts,
+    usage,
   };
 
   await useWorkflowStore.getState().saveStepRun(finalStepRun);
@@ -236,44 +282,17 @@ async function executeAgentStep(params: {
 }
 
 function evaluateReviewGate(params: {
-  detail: WorkflowDetail;
-  step: WorkflowReviewGateStepDefinition;
-  previousAgentStepRun: WorkflowStepRun;
-  run: WorkflowRun;
-  loopIndex: number;
-  attemptIndex: number;
-}) {
-  const { detail, step, previousAgentStepRun, run, loopIndex, attemptIndex } = params;
-  const review = previousAgentStepRun.resultJson;
-  if (!review) {
-    throw new Error(`审查步骤 ${step.name} 缺少可解析的 JSON 输出。`);
-  }
-
-  const passed = review.pass === true;
-  const stepRun: WorkflowStepRun = {
-    id: createId("workflow-step-run"),
-    runId: run.id,
-    workflowId: detail.workflow.id,
-    stepId: step.id,
-    loopIndex,
-    attemptIndex,
-    memberId: null,
-    status: "completed",
-    startedAt: getNow(),
-    finishedAt: getNow(),
-    inputPrompt: `根据步骤 ${previousAgentStepRun.stepId} 的结构化审查结果决定下一步。`,
-    resultText: passed ? "审查通过。" : "审查未通过。",
-    resultJson: review,
+  reviewStepRun: WorkflowStepRun;
+}): WorkflowStepRun {
+  const { reviewStepRun } = params;
+  return {
+    ...reviewStepRun,
     decision: {
-      outcome: passed ? "pass" : "fail",
-      reason: passed ? "审查 JSON 返回 pass=true" : review.revision_brief || "审查 JSON 返回 pass=false",
+      outcome: "pass",
+      reason: "审查节点已完成，后续流转按工作流程序配置继续执行。",
     },
-    parts: [],
-    usage: null,
-    errorMessage: null,
+    resultText: reviewStepRun.resultText || "审查节点已完成。",
   };
-
-  return stepRun;
 }
 
 function evaluateLoopControl(params: {
@@ -338,6 +357,7 @@ export async function startWorkflowRun(workflowId: string) {
     let loopIndex = 1;
     let attemptIndex = 1;
     let previousAgentStepRun: WorkflowStepRun | null = null;
+    const latestStepRunsByStepId = new Map<string, WorkflowStepRun>();
 
     while (currentStep) {
       if (useWorkflowStore.getState().stopRequested) {
@@ -354,8 +374,9 @@ export async function startWorkflowRun(workflowId: string) {
       }
 
       if (currentStep.type === "agent_task") {
-        previousAgentStepRun = await executeAgentStep({
+        previousAgentStepRun = await executeConfiguredStep({
           detail,
+          outputMode: currentStep.outputMode,
           run,
           step: currentStep,
           loopIndex,
@@ -364,6 +385,7 @@ export async function startWorkflowRun(workflowId: string) {
           reviewResult: previousAgentStepRun?.resultJson ?? null,
           abortSignal: abortController.signal,
         });
+        latestStepRunsByStepId.set(currentStep.id, previousAgentStepRun);
         run = {
           ...run,
           currentStepRunId: previousAgentStepRun.id,
@@ -375,45 +397,32 @@ export async function startWorkflowRun(workflowId: string) {
       }
 
       if (currentStep.type === "review_gate") {
-        if (!previousAgentStepRun) {
+        const sourceStepRun = latestStepRunsByStepId.get(currentStep.sourceStepId) ?? previousAgentStepRun;
+        if (!sourceStepRun) {
           throw new Error(`审查判断步骤 ${currentStep.name} 缺少来源步骤结果。`);
         }
-        const stepRun = evaluateReviewGate({
-          detail,
-          step: currentStep,
-          previousAgentStepRun,
-          run,
-          loopIndex,
+        const reviewStepRun = await executeConfiguredStep({
+          abortSignal: abortController.signal,
           attemptIndex,
+          step: currentStep,
+          detail,
+          loopIndex,
+          outputMode: "review_json",
+          previousResult: sourceStepRun.resultText ?? null,
+          reviewResult: sourceStepRun.resultJson ?? null,
+          run,
         });
+        const stepRun = evaluateReviewGate({ reviewStepRun });
         await store.saveStepRun(stepRun);
+        latestStepRunsByStepId.set(currentStep.id, stepRun);
         run = {
           ...run,
           currentStepRunId: stepRun.id,
           currentLoopIndex: loopIndex,
         };
         await store.saveRun(run);
-
-        if (stepRun.decision?.outcome === "fail") {
-          if (attemptIndex >= run.loopConfigSnapshot.maxReworkPerLoop && run.loopConfigSnapshot.stopOnReviewFailure) {
-            run = {
-              ...run,
-              status: "failed",
-              finishedAt: getNow(),
-              stopReason: "review_failed",
-              errorMessage: stepRun.decision.reason,
-              summary: "审查未通过，且已达到最大返工次数。",
-            };
-            await store.saveRun(run);
-            break;
-          }
-          attemptIndex += 1;
-          currentStep = getStepById(detail, currentStep.failNextStepId);
-          continue;
-        }
-
         attemptIndex = 1;
-        currentStep = getStepById(detail, currentStep.passNextStepId);
+        currentStep = getStepById(detail, currentStep.passNextStepId ?? currentStep.failNextStepId);
         continue;
       }
 

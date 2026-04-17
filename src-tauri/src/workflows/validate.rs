@@ -85,6 +85,7 @@ pub(crate) fn build_workflow(
     id: &str,
     name: &str,
     description: &str,
+    base_prompt: &str,
     source: &str,
     template_key: Option<&str>,
     loop_config: WorkflowLoopConfig,
@@ -94,7 +95,7 @@ pub(crate) fn build_workflow(
         id: id.to_string(),
         name: name.to_string(),
         description: description.to_string(),
-        status: "draft".into(),
+        base_prompt: base_prompt.to_string(),
         source: source.to_string(),
         template_key: template_key.map(ToString::to_string),
         created_at: now,
@@ -105,14 +106,6 @@ pub(crate) fn build_workflow(
         step_ids: Vec::new(),
         last_run_id: None,
         last_run_status: "idle".into(),
-    }
-}
-
-pub(crate) fn validate_workflow_status(status: &str) -> CommandResult<()> {
-    if matches!(status, "draft" | "ready" | "archived") {
-        Ok(())
-    } else {
-        Err("工作流状态不合法。".into())
     }
 }
 
@@ -177,7 +170,6 @@ pub(crate) fn validate_workflow_basics_payload(
     if name.is_empty() {
         return Err("工作流名称不能为空。".into());
     }
-    validate_workflow_status(&payload.status)?;
     Ok(name)
 }
 
@@ -206,6 +198,8 @@ pub(crate) fn build_step_from_input(
         },
         WorkflowStepInput::ReviewGate {
             name,
+            member_id,
+            prompt_template,
             source_step_id,
             pass_next_step_id,
             fail_next_step_id,
@@ -215,6 +209,8 @@ pub(crate) fn build_step_from_input(
             workflow_id,
             name,
             order,
+            member_id,
+            prompt_template,
             source_step_id,
             pass_next_step_id,
             fail_next_step_id,

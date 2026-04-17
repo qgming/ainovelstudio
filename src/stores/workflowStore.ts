@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  addWorkflowAgentStep,
   addWorkflowStep,
   addWorkflowTeamMember,
   bindWorkflowWorkspace,
@@ -20,6 +21,7 @@ import {
   updateWorkflowLoopConfig,
   updateWorkflowStep,
   updateWorkflowTeamMember,
+  type WorkflowBasicsInput,
 } from "../lib/workflow/api";
 import type {
   Workflow,
@@ -62,7 +64,7 @@ type WorkflowStoreActions = {
   exportWorkflowZip: (workflowId: string) => Promise<string | null>;
   deleteWorkflowById: (workflowId: string) => Promise<void>;
   loadWorkflowDetail: (workflowId: string) => Promise<void>;
-  saveWorkflowBasics: (workflowId: string, payload: Pick<Workflow, "name" | "description" | "status">) => Promise<void>;
+  saveWorkflowBasics: (workflowId: string, payload: WorkflowBasicsInput) => Promise<void>;
   bindWorkspace: (workflowId: string, binding: Omit<WorkflowWorkspaceBinding, "workflowId" | "boundAt">) => Promise<void>;
   updateLoopConfig: (workflowId: string, loopConfig: WorkflowLoopConfig) => Promise<void>;
   addTeamMember: (
@@ -72,11 +74,12 @@ type WorkflowStoreActions = {
   updateTeamMember: (
     workflowId: string,
     memberId: string,
-    payload: Partial<Pick<WorkflowTeamMember, "name" | "roleLabel" | "enabled" | "responsibilityPrompt" | "allowedToolIds">>,
+    payload: Partial<Pick<WorkflowTeamMember, "agentId" | "name" | "roleLabel" | "responsibilityPrompt" | "allowedToolIds">>,
   ) => Promise<void>;
   removeTeamMember: (workflowId: string, memberId: string) => Promise<void>;
   reorderTeamMembers: (workflowId: string, orderedMemberIds: string[]) => Promise<void>;
   addStep: (workflowId: string, step: WorkflowStepInput) => Promise<void>;
+  addAgentStep: (workflowId: string, agentId: string, agentName: string) => Promise<void>;
   updateStep: (workflowId: string, stepId: string, payload: Partial<WorkflowStepDefinition>) => Promise<void>;
   removeStep: (workflowId: string, stepId: string) => Promise<void>;
   reorderSteps: (workflowId: string, orderedStepIds: string[]) => Promise<void>;
@@ -246,6 +249,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
   addStep: async (workflowId, step) => {
     const detail = await addWorkflowStep(workflowId, step);
+    set({ currentDetail: detail, errorMessage: null, status: "ready" });
+  },
+  addAgentStep: async (workflowId, agentId, agentName) => {
+    const detail = await addWorkflowAgentStep(workflowId, agentId, agentName);
     set({ currentDetail: detail, errorMessage: null, status: "ready" });
   },
   updateStep: async (workflowId, stepId, payload) => {

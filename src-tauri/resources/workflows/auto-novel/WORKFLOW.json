@@ -2,6 +2,7 @@
   "templateKey": "builtin:auto-novel",
   "name": "全自动写小说",
   "description": "自动执行章节创作、审查、返工与设定维护的完整工作流模板。",
+  "basePrompt": "直接使用内置代理完成章节创作流水线。每个节点都先通过工具读取当前绑定书籍工作区中的文件，再执行本节点任务并把结果写回工作区。步骤跳转、返工和循环由程序控制。",
   "loopConfig": {
     "maxLoops": 5,
     "maxReworkPerLoop": 2,
@@ -13,21 +14,21 @@
       "agentId": "chapter-write",
       "name": "写作代理",
       "roleLabel": "章节写作",
-      "responsibilityPrompt": "读取当前工作区，继续推进章节创作并输出可直接写回工作区的正文内容。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的正文、大纲和设定文件，再继续推进章节创作，并把正文直接写回工作区。"
     },
     {
       "key": "reviewer",
       "agentId": "novel-review",
       "name": "审查代理",
       "roleLabel": "结构审查",
-      "responsibilityPrompt": "检查最新章节的设定一致性、节奏、伏笔与冲突，并严格返回 review_json。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节和相关设定文件，再检查设定一致性、节奏、伏笔与冲突，并输出清晰的审查结论与修订建议。"
     },
     {
       "key": "lore-maintainer",
       "agentId": "snowflake-fiction",
       "name": "设定维护代理",
       "roleLabel": "设定更新",
-      "responsibilityPrompt": "根据通过审查的章节结果更新人物设定、背景资料与创作追踪文件。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节、人物设定和追踪文件，再更新人物设定、背景资料与创作追踪文件。"
     }
   ],
   "steps": [
@@ -36,7 +37,7 @@
       "type": "agent_task",
       "name": "章节写作",
       "memberKey": "writer",
-      "promptTemplate": "请读取工作区已有内容，创作下一章并把结果写入合适文件。",
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的正文、大纲、场景规划和相关设定文件，再创作下一章，并把结果直接写回合适文件。",
       "outputMode": "text",
       "nextStepKey": "review-chapter"
     },
@@ -45,14 +46,16 @@
       "type": "agent_task",
       "name": "章节审查",
       "memberKey": "reviewer",
-      "promptTemplate": "请审查最新章节，必须仅返回 review_json。",
-      "outputMode": "review_json",
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节及相关设定文件，再完成审查，并输出清晰的审查结论与修订建议。",
+      "outputMode": "text",
       "nextStepKey": "review-gate"
     },
     {
       "key": "review-gate",
       "type": "review_gate",
       "name": "审查判断",
+      "memberKey": "reviewer",
+      "promptTemplate": "请结合上一审查步骤的结果，整理最终审查结论和需要执行的后续要点。",
       "sourceStepKey": "review-chapter",
       "passNextStepKey": "update-lore",
       "failNextStepKey": "write-chapter",
@@ -63,7 +66,7 @@
       "type": "agent_task",
       "name": "设定更新",
       "memberKey": "lore-maintainer",
-      "promptTemplate": "请根据通过审查的最新章节，更新角色、背景、线索与项目追踪资料。",
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节、角色资料、背景资料和追踪文件，再更新角色、背景、线索与项目追踪资料。",
       "outputMode": "text",
       "nextStepKey": "loop-control"
     },

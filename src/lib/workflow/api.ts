@@ -13,6 +13,11 @@ import type {
   WorkflowWorkspaceBinding,
 } from "./types";
 
+export type WorkflowBasicsInput = {
+  basePrompt: string;
+  name: string;
+};
+
 export function listWorkflows() {
   return invoke<Workflow[]>("list_workflows");
 }
@@ -37,7 +42,7 @@ export function getWorkflowDetail(workflowId: string): Promise<WorkflowDetail> {
   return invoke<WorkflowDetail>("get_workflow_detail", { workflowId });
 }
 
-export function saveWorkflowBasics(workflowId: string, payload: Pick<Workflow, "name" | "description" | "status">) {
+export function saveWorkflowBasics(workflowId: string, payload: WorkflowBasicsInput) {
   return invoke<WorkflowDetail>("save_workflow_basics", { workflowId, payload });
 }
 
@@ -59,7 +64,7 @@ export function addWorkflowTeamMember(
 export function updateWorkflowTeamMember(
   workflowId: string,
   memberId: string,
-  payload: Partial<Pick<WorkflowTeamMember, "name" | "roleLabel" | "enabled" | "responsibilityPrompt" | "allowedToolIds" | "agentId">>,
+  payload: Partial<Pick<WorkflowTeamMember, "name" | "roleLabel" | "responsibilityPrompt" | "allowedToolIds" | "agentId">>,
 ) {
   return invoke<WorkflowDetail>("update_workflow_team_member", { workflowId, memberId, payload });
 }
@@ -70,6 +75,10 @@ export function removeWorkflowTeamMember(workflowId: string, memberId: string) {
 
 export function reorderWorkflowTeamMembers(workflowId: string, orderedMemberIds: string[]) {
   return invoke<WorkflowDetail>("reorder_workflow_team_members", { workflowId, orderedMemberIds });
+}
+
+export function addWorkflowAgentStep(workflowId: string, agentId: string, agentName: string) {
+  return invoke<WorkflowDetail>("add_workflow_agent_step", { workflowId, agentId, agentName });
 }
 
 export function addWorkflowStep(workflowId: string, step: WorkflowStepInput) {

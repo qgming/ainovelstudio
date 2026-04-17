@@ -54,6 +54,7 @@ pub fn create_workflow(app: AppHandle, name: String) -> CommandResult<Workflow> 
         &create_id("workflow"),
         &workflow_name,
         "",
+        "",
         "user",
         None,
         default_loop_config(),
@@ -94,8 +95,8 @@ pub fn save_workflow_basics(
     let name = validate_workflow_basics_payload(&payload)?;
     connection
         .execute(
-            "UPDATE workflows SET name = ?2, description = ?3, status = ?4, updated_at = ?5 WHERE id = ?1",
-            params![workflowId, name, payload.description.trim(), payload.status, now_timestamp() as i64],
+            "UPDATE workflows SET name = ?2, base_prompt = ?3, updated_at = ?4 WHERE id = ?1",
+            params![workflowId, name, payload.base_prompt.trim(), now_timestamp() as i64],
         )
         .map_err(error_to_string)?;
     build_workflow_detail(&connection, &workflowId)
@@ -174,7 +175,6 @@ pub fn add_workflow_team_member(
         agent_id: payload.agent_id,
         name: payload.name.trim().to_string(),
         role_label: payload.role_label.trim().to_string(),
-        enabled: true,
         order,
         responsibility_prompt: payload.responsibility_prompt.trim().to_string(),
         allowed_tool_ids: payload.allowed_tool_ids,
@@ -204,9 +204,6 @@ pub fn update_workflow_team_member(
     }
     if let Some(role_label) = payload.role_label {
         member.role_label = role_label.trim().to_string();
-    }
-    if let Some(enabled) = payload.enabled {
-        member.enabled = enabled;
     }
     if let Some(responsibility_prompt) = payload.responsibility_prompt {
         member.responsibility_prompt = responsibility_prompt.trim().to_string();
@@ -266,6 +263,75 @@ pub fn reorder_workflow_team_members(
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub fn add_workflow_agent_step(
+    app: AppHandle,
+    workflowId: String,
+    agentId: String,
+    agentName: String,
+) -> CommandResult<WorkflowDetail> {
+    let connection = open_database(&app)?;
+    let display_name = if agentName.trim().is_empty() {
+        agentId.trim().to_string()
+    } else {
+        agentName.trim().to_string()
+    };
+    if display_name.is_empty() || agentId.trim().is_empty() {
+        return Err("添加代理节点时缺少代理信息。".into());
+    }
+
+    let members = list_team_members(&connection, &workflowId)?;
+    let member_name_prefix = format!("{display_name} 节点");
+    let member_name_count = members
+        .iter()
+        .filter(|member| member.name.starts_with(&member_name_prefix))
+        .count()
+        + 1;
+    let member_name = if member_name_count == 1 {
+        member_name_prefix.clone()
+    } else {
+        format!("{member_name_prefix} {member_name_count}")
+    };
+    validate_member_payload(&agentId, &member_name, &display_name, &None)?;
+
+    let now = now_timestamp();
+    let member = WorkflowTeamMember {
+        id: create_id("workflow-member"),
+        workflow_id: workflowId.clone(),
+        agent_id: agentId,
+        name: member_name,
+        role_label: display_name.clone(),
+        order: members.len() as u64,
+        responsibility_prompt: String::new(),
+        allowed_tool_ids: None,
+        created_at: now,
+        updated_at: now,
+    };
+    upsert_team_member(&connection, &member)?;
+    replace_workflow_member_ids(&connection, &workflowId)?;
+
+    let steps = list_steps(&connection, &workflowId)?;
+    let agent_step_count = steps
+        .iter()
+        .filter(|step| matches!(step, WorkflowStepDefinition::AgentTask { .. }))
+        .count()
+        + 1;
+    let step = WorkflowStepDefinition::AgentTask {
+        id: create_id("workflow-step"),
+        workflow_id: workflowId.clone(),
+        name: format!("{display_name} 节点 {agent_step_count}"),
+        order: steps.len() as u64,
+        member_id: member.id,
+        prompt_template: "请先使用工具读取当前绑定书籍工作区中的相关文件，再完成本节点任务，并把结果直接写回工作区。".to_string(),
+        output_mode: "text".to_string(),
+        next_step_id: None,
+    };
+    upsert_step(&connection, &step)?;
+    replace_workflow_step_ids(&connection, &workflowId)?;
+    build_workflow_detail(&connection, &workflowId)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 pub fn add_workflow_step(
     app: AppHandle,
     workflowId: String,
@@ -316,6 +382,8 @@ pub fn update_workflow_step(
         },
         WorkflowStepDefinition::ReviewGate {
             name,
+            member_id,
+            prompt_template,
             source_step_id,
             pass_next_step_id,
             fail_next_step_id,
@@ -326,6 +394,8 @@ pub fn update_workflow_step(
             workflow_id: workflowId.clone(),
             name,
             order,
+            member_id,
+            prompt_template,
             source_step_id,
             pass_next_step_id,
             fail_next_step_id,

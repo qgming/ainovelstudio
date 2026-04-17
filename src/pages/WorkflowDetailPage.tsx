@@ -1,5 +1,16 @@
-import { BookOpenText, GitBranch, Link as LinkIcon, Play, Plus, RefreshCw, Save, Square, Trash2, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  BookOpenText,
+  Link as LinkIcon,
+  Play,
+  Plus,
+  Save,
+  Search,
+  Square,
+  Trash2,
+} from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { AgentPartRenderer } from "../components/agent/AgentPartRenderer";
@@ -7,17 +18,11 @@ import { BookshelfDialog } from "../components/dialogs/BookshelfDialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Switch } from "../components/ui/Switch";
 import { Textarea } from "../components/ui/textarea";
 import { listBookWorkspaces } from "../lib/bookWorkspace/api";
+import { cn } from "../lib/utils";
 import { startWorkflowRun } from "../lib/workflow/engine";
-import type {
-  WorkflowDetail,
-  WorkflowRun,
-  WorkflowStepDefinition,
-  WorkflowStepRun,
-  WorkflowTeamMember,
-} from "../lib/workflow/types";
+import type { WorkflowRun, WorkflowStepDefinition, WorkflowStepRun, WorkflowTeamMember } from "../lib/workflow/types";
 import { getResolvedAgents, useSubAgentStore } from "../stores/subAgentStore";
 import { useWorkflowStore } from "../stores/workflowStore";
 
@@ -41,7 +46,6 @@ function formatDateTime(value: number | null) {
   if (!value) {
     return "—";
   }
-
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -74,54 +78,58 @@ function formatStepType(type: WorkflowStepDefinition["type"]) {
     case "agent_task":
       return "代理任务";
     case "review_gate":
-      return "审查判断";
+      return "审查节点";
     case "loop_control":
-      return "循环控制";
+      return "循环节点";
     default:
       return type;
   }
 }
 
-function getMemberName(detail: WorkflowDetail, memberId: string | null) {
+function getMemberById(members: WorkflowTeamMember[], memberId: string | null) {
   if (!memberId) {
-    return "未指定";
+    return null;
   }
-
-  return detail.teamMembers.find((item) => item.id === memberId)?.name ?? "未指定";
+  return members.find((item) => item.id === memberId) ?? null;
 }
 
-function WorkflowSection({
+function buildHiddenMemberName(agentName: string, members: WorkflowTeamMember[]) {
+  const count = members.filter((item) => item.name.startsWith(`${agentName} 节点`)).length + 1;
+  return count === 1 ? `${agentName} 节点` : `${agentName} 节点 ${count}`;
+}
+
+function formatStepLinks(step: WorkflowStepDefinition, steps: WorkflowStepDefinition[]) {
+  const nameById = new Map(steps.map((item) => [item.id, item.name]));
+  if (step.type === "agent_task") {
+    return `下一步：${step.nextStepId ? nameById.get(step.nextStepId) ?? "未命名节点" : "结束"}`;
+  }
+  if (step.type === "review_gate") {
+    const passLabel = step.passNextStepId ? nameById.get(step.passNextStepId) ?? "未命名节点" : "结束";
+    const failLabel = step.failNextStepId ? nameById.get(step.failNextStepId) ?? "未命名节点" : "结束";
+    return `通过 → ${passLabel} / 不通过 → ${failLabel}`;
+  }
+  return `回到：${step.loopTargetStepId ? nameById.get(step.loopTargetStepId) ?? "未命名节点" : "结束"}`;
+}
+
+function Panel({
   title,
   description,
   children,
+  className,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="rounded-xl border border-border bg-panel">
+    <section className={cn("rounded-xl border border-border bg-panel", className)}>
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {description ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p> : null}
       </div>
       <div className="space-y-4 p-4">{children}</div>
     </section>
-  );
-}
-
-function LabeledField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      {children}
-    </label>
   );
 }
 
@@ -136,30 +144,23 @@ export function WorkflowDetailPage() {
   const loadWorkflowDetail = useWorkflowStore((state) => state.loadWorkflowDetail);
   const saveWorkflowBasics = useWorkflowStore((state) => state.saveWorkflowBasics);
   const bindWorkspace = useWorkflowStore((state) => state.bindWorkspace);
-  const updateLoopConfig = useWorkflowStore((state) => state.updateLoopConfig);
   const addTeamMember = useWorkflowStore((state) => state.addTeamMember);
   const updateTeamMember = useWorkflowStore((state) => state.updateTeamMember);
   const removeTeamMember = useWorkflowStore((state) => state.removeTeamMember);
-  const addStep = useWorkflowStore((state) => state.addStep);
+  const addAgentStep = useWorkflowStore((state) => state.addAgentStep);
   const updateStep = useWorkflowStore((state) => state.updateStep);
   const removeStep = useWorkflowStore((state) => state.removeStep);
+  const reorderSteps = useWorkflowStore((state) => state.reorderSteps);
   const selectStepRun = useWorkflowStore((state) => state.selectStepRun);
   const requestStopRun = useWorkflowStore((state) => state.requestStopRun);
-
   const initializeAgents = useSubAgentStore((state) => state.initialize);
-  const refreshAgents = useSubAgentStore((state) => state.refresh);
   const agentStatus = useSubAgentStore((state) => state.status);
   const manifests = useSubAgentStore((state) => state.manifests);
   const preferences = useSubAgentStore((state) => state.preferences);
-  const agents = getResolvedAgents({ manifests, preferences });
-  const enabledAgents = agents.filter((item) => item.enabled);
+  const agents = useMemo(() => getResolvedAgents({ manifests, preferences }), [manifests, preferences]);
 
   const [draftName, setDraftName] = useState("");
-  const [draftDescription, setDraftDescription] = useState("");
-  const [draftStatus, setDraftStatus] = useState<"draft" | "ready" | "archived">("draft");
-  const [maxLoops, setMaxLoops] = useState("1");
-  const [maxReworkPerLoop, setMaxReworkPerLoop] = useState("1");
-  const [stopOnReviewFailure, setStopOnReviewFailure] = useState(true);
+  const [draftBasePrompt, setDraftBasePrompt] = useState("");
   const [saveBusy, setSaveBusy] = useState(false);
   const [runBusy, setRunBusy] = useState(false);
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false);
@@ -168,13 +169,18 @@ export function WorkflowDetailPage() {
   const [booksError, setBooksError] = useState<string | null>(null);
   const [memberBusy, setMemberBusy] = useState<string | null>(null);
   const [stepBusy, setStepBusy] = useState<string | null>(null);
+  const [pageNotice, setPageNotice] = useState<string | null>(null);
+  const [agentQuery, setAgentQuery] = useState("");
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [stepDraft, setStepDraft] = useState<WorkflowStepDefinition | null>(null);
+  const [stepDraftAgentId, setStepDraftAgentId] = useState("");
+  const deferredAgentQuery = useDeferredValue(agentQuery.trim().toLowerCase());
 
   useEffect(() => {
-    if (!workflowId) {
-      return;
+    if (workflowId) {
+      void loadWorkflowDetail(workflowId);
     }
-
-    void loadWorkflowDetail(workflowId);
   }, [loadWorkflowDetail, workflowId]);
 
   useEffect(() => {
@@ -183,55 +189,162 @@ export function WorkflowDetailPage() {
     }
   }, [agentStatus, initializeAgents]);
 
+  const detail = currentDetail && currentDetail.workflow.id === workflowId ? currentDetail : null;
+
   useEffect(() => {
-    if (!currentDetail || currentDetail.workflow.id !== workflowId) {
+    if (!detail) {
+      return;
+    }
+    setDraftName(detail.workflow.name);
+    setDraftBasePrompt(detail.workflow.basePrompt);
+    setSelectedStepId((current) =>
+      detail.steps.some((item) => item.id === current) ? current : detail.steps[0]?.id ?? null,
+    );
+    setSelectedRunId((current) =>
+      detail.runs.some((item) => item.id === current) ? current : activeRunId ?? detail.runs[0]?.id ?? null,
+    );
+  }, [activeRunId, detail]);
+
+  const selectedStep = useMemo(() => detail?.steps.find((item) => item.id === selectedStepId) ?? null, [detail, selectedStepId]);
+  const selectedRun = useMemo(() => {
+    if (!detail) {
+      return null;
+    }
+    const preferredRunId = activeRunId ?? selectedRunId;
+    return detail.runs.find((item) => item.id === preferredRunId) ?? detail.runs[0] ?? null;
+  }, [activeRunId, detail, selectedRunId]);
+  const selectedRunStepRuns = useMemo(() => {
+    if (!detail || !selectedRun) {
+      return [] as WorkflowStepRun[];
+    }
+    return detail.stepRuns.filter((item) => item.runId === selectedRun.id);
+  }, [detail, selectedRun]);
+  const selectedStepRun = useMemo(
+    () => selectedRunStepRuns.find((item) => item.id === selectedStepRunId) ?? selectedRunStepRuns.at(-1) ?? null,
+    [selectedRunStepRuns, selectedStepRunId],
+  );
+  const filteredAgents = useMemo(() => {
+    if (!deferredAgentQuery) {
+      return agents;
+    }
+    return agents.filter((agent) =>
+      [agent.name, agent.description, agent.tags.join(" ")].join(" ").toLowerCase().includes(deferredAgentQuery),
+    );
+  }, [agents, deferredAgentQuery]);
+  const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
+  const isStepDraftDirty = useMemo(() => {
+    if (!selectedStep || !stepDraft) {
+      return false;
+    }
+    const persistedAgentId =
+      selectedStep.type === "agent_task" || selectedStep.type === "review_gate"
+        ? getAgentIdForStep(selectedStep)
+        : "";
+    const draftAgentId =
+      stepDraft.type === "agent_task" || stepDraft.type === "review_gate"
+        ? stepDraftAgentId
+        : "";
+    return JSON.stringify(selectedStep) !== JSON.stringify(stepDraft) || persistedAgentId !== draftAgentId;
+  }, [selectedStep, stepDraft, stepDraftAgentId]);
+
+  useEffect(() => {
+    if (!selectedStep) {
+      setStepDraft(null);
+      setStepDraftAgentId("");
+      return;
+    }
+    setStepDraft(selectedStep);
+    setStepDraftAgentId(
+      selectedStep.type === "agent_task" || selectedStep.type === "review_gate"
+        ? getAgentIdForStep(selectedStep)
+        : "",
+    );
+  }, [selectedStep, detail]);
+
+  function getAgentIdForStep(step: Extract<WorkflowStepDefinition, { type: "agent_task" | "review_gate" }>) {
+    return getMemberById(detail?.teamMembers ?? [], step.memberId)?.agentId ?? "";
+  }
+
+  function getAgentName(agentId: string | null) {
+    if (!agentId) {
+      return "系统";
+    }
+    return agentById.get(agentId)?.name ?? agentId;
+  }
+
+  function getStepAgentLabel(step: WorkflowStepDefinition) {
+    if (!("memberId" in step)) {
+      return "系统";
+    }
+    return getAgentName(getAgentIdForStep(step));
+  }
+
+  function countMemberUsage(memberId: string) {
+    return detail?.steps.filter((item) => "memberId" in item && item.memberId === memberId).length ?? 0;
+  }
+
+  async function createHiddenMember(agentId: string) {
+    if (!detail) {
+      return null;
+    }
+    const agent = agentById.get(agentId);
+    if (!agent) {
+      throw new Error("未找到所选代理。");
+    }
+    await addTeamMember(detail.workflow.id, {
+      agentId: agent.id,
+      name: buildHiddenMemberName(agent.name, detail.teamMembers),
+      roleLabel: agent.name,
+      responsibilityPrompt: "",
+      allowedToolIds: undefined,
+    });
+    return useWorkflowStore.getState().currentDetail?.teamMembers.at(-1) ?? null;
+  }
+
+  async function handleStepAgentChange(
+    step: Extract<WorkflowStepDefinition, { type: "agent_task" | "review_gate" }>,
+    nextAgentId: string,
+  ) {
+    if (!detail) {
+      return;
+    }
+    const currentMember = getMemberById(detail.teamMembers, step.memberId);
+    if (currentMember?.agentId === nextAgentId) {
+      return;
+    }
+    const nextAgent = agentById.get(nextAgentId);
+    if (!nextAgent) {
       return;
     }
 
-    setDraftName(currentDetail.workflow.name);
-    setDraftDescription(currentDetail.workflow.description);
-    setDraftStatus(currentDetail.workflow.status);
-    setMaxLoops(String(currentDetail.workflow.loopConfig.maxLoops));
-    setMaxReworkPerLoop(String(currentDetail.workflow.loopConfig.maxReworkPerLoop));
-    setStopOnReviewFailure(currentDetail.workflow.loopConfig.stopOnReviewFailure);
-  }, [currentDetail, workflowId]);
+    try {
+      setStepBusy(step.id);
+      if (currentMember && countMemberUsage(currentMember.id) === 1) {
+        await updateTeamMember(detail.workflow.id, currentMember.id, {
+          agentId: nextAgent.id,
+          name: buildHiddenMemberName(nextAgent.name, detail.teamMembers.filter((item) => item.id !== currentMember.id)),
+          roleLabel: nextAgent.name,
+          responsibilityPrompt: "",
+        });
+        return;
+      }
 
-  const detail = currentDetail && currentDetail.workflow.id === workflowId ? currentDetail : null;
-
-  const currentRun = useMemo(() => {
-    if (!detail) {
-      return null;
+      const nextMember = await createHiddenMember(nextAgent.id);
+      if (!nextMember) {
+        throw new Error("为节点绑定代理失败。");
+      }
+      await updateStep(detail.workflow.id, step.id, { ...step, memberId: nextMember.id });
+    } finally {
+      setStepBusy(null);
     }
-
-    if (activeRunId) {
-      return detail.runs.find((item) => item.id === activeRunId) ?? detail.runs[0] ?? null;
-    }
-
-    return detail.runs[0] ?? null;
-  }, [activeRunId, detail]);
-
-  const currentRunStepRuns = useMemo(() => {
-    if (!detail || !currentRun) {
-      return [] as WorkflowStepRun[];
-    }
-
-    return detail.stepRuns.filter((item) => item.runId === currentRun.id);
-  }, [currentRun, detail]);
-
-  const selectedStepRun = useMemo(() => {
-    if (!detail) {
-      return null;
-    }
-
-    return detail.stepRuns.find((item) => item.id === selectedStepRunId) ?? currentRunStepRuns.at(-1) ?? null;
-  }, [currentRunStepRuns, detail, selectedStepRunId]);
+  }
 
   async function refreshBooks() {
     try {
       setBooksBusy(true);
       setBooksError(null);
-      const books = await listBookWorkspaces();
-      setAvailableBooks(books);
+      setPageNotice(null);
+      setAvailableBooks(await listBookWorkspaces());
     } catch (error) {
       setBooksError(getReadableError(error, "加载书籍列表失败。"));
     } finally {
@@ -239,23 +352,17 @@ export function WorkflowDetailPage() {
     }
   }
 
-  async function openBindingDialog() {
-    setBindingDialogOpen(true);
-    await refreshBooks();
-  }
-
   async function handleBindBook(bookId: string) {
     if (!detail) {
       return;
     }
-
     const targetBook = availableBooks.find((item) => item.id === bookId);
     if (!targetBook) {
       return;
     }
-
     try {
       setBooksBusy(true);
+      setPageNotice(null);
       await bindWorkspace(detail.workflow.id, {
         bookId: targetBook.id,
         rootPath: targetBook.path,
@@ -273,21 +380,12 @@ export function WorkflowDetailPage() {
     if (!detail || saveBusy) {
       return;
     }
-
-    const normalizedLoops = Math.max(1, Number.parseInt(maxLoops, 10) || 1);
-    const normalizedRework = Math.max(1, Number.parseInt(maxReworkPerLoop, 10) || 1);
-
     try {
       setSaveBusy(true);
+      setPageNotice(null);
       await saveWorkflowBasics(detail.workflow.id, {
         name: draftName.trim() || "未命名工作流",
-        description: draftDescription.trim(),
-        status: draftStatus,
-      });
-      await updateLoopConfig(detail.workflow.id, {
-        maxLoops: normalizedLoops,
-        maxReworkPerLoop: normalizedRework,
-        stopOnReviewFailure,
+        basePrompt: draftBasePrompt.trim(),
       });
     } finally {
       setSaveBusy(false);
@@ -298,112 +396,34 @@ export function WorkflowDetailPage() {
     if (!detail || runBusy || isRunning) {
       return;
     }
-
     try {
       setRunBusy(true);
-      await refreshAgents();
+      setPageNotice(null);
       await startWorkflowRun(detail.workflow.id);
     } catch (error) {
-      window.alert(getReadableError(error, "工作流启动失败。"));
+      setPageNotice(getReadableError(error, "工作流启动失败。"));
     } finally {
       setRunBusy(false);
     }
   }
 
-  function handleStopRun() {
-    requestStopRun();
-  }
-
-  async function handleAddMember() {
-    if (!detail || enabledAgents.length === 0 || memberBusy) {
-      return;
-    }
-
-    const agent = enabledAgents[0];
-    try {
-      setMemberBusy("create");
-      await addTeamMember(detail.workflow.id, {
-        agentId: agent.id,
-        name: agent.name,
-        roleLabel: agent.name,
-        responsibilityPrompt: "",
-        allowedToolIds: undefined,
-      });
-    } finally {
-      setMemberBusy(null);
-    }
-  }
-
-  async function handleMemberPatch(memberId: string, payload: Parameters<typeof updateTeamMember>[2]) {
-    if (!detail) {
-      return;
-    }
-
-    try {
-      setMemberBusy(memberId);
-      await updateTeamMember(detail.workflow.id, memberId, payload);
-    } finally {
-      setMemberBusy(null);
-    }
-  }
-
-  async function handleRemoveMember(memberId: string) {
-    if (!detail || memberBusy) {
-      return;
-    }
-
-    try {
-      setMemberBusy(memberId);
-      await removeTeamMember(detail.workflow.id, memberId);
-    } finally {
-      setMemberBusy(null);
-    }
-  }
-
-  async function handleAddStep(type: WorkflowStepDefinition["type"]) {
+  async function handleAddAgentStep(agentId: string) {
     if (!detail || stepBusy) {
       return;
     }
-
-    const firstMemberId = detail.teamMembers[0]?.id ?? null;
-    if (type === "agent_task" && !firstMemberId) {
-      window.alert("请先添加至少一个团队成员，再新增代理步骤。");
+    const agent = agentById.get(agentId);
+    if (!agent || !agent.validation.isValid) {
+      setPageNotice("当前代理还不能加入工作流，请先完善代理配置。");
       return;
     }
-
     try {
       setStepBusy("create");
-      if (type === "agent_task") {
-        await addStep(detail.workflow.id, {
-          type: "agent_task",
-          name: `代理步骤 ${detail.steps.length + 1}`,
-          memberId: firstMemberId!,
-          promptTemplate: "请根据当前工作区完成本步骤任务。",
-          outputMode: "text",
-          nextStepId: null,
-        });
-        return;
-      }
-
-      if (type === "review_gate") {
-        await addStep(detail.workflow.id, {
-          type: "review_gate",
-          name: `审查判断 ${detail.steps.length + 1}`,
-          sourceStepId: detail.steps.find((item) => item.type === "agent_task")?.id ?? "",
-          passNextStepId: null,
-          failNextStepId: null,
-          passRule: "review_json.pass == true",
-        });
-        return;
-      }
-
-      await addStep(detail.workflow.id, {
-        type: "loop_control",
-        name: `循环控制 ${detail.steps.length + 1}`,
-        loopTargetStepId: detail.steps[0]?.id ?? null,
-        continueWhen: "remainingLoops > 0",
-        finishWhen: "remainingLoops <= 0",
-      });
+      setPageNotice(null);
+      await addAgentStep(detail.workflow.id, agent.id, agent.name);
+      const nextStep = useWorkflowStore.getState().currentDetail?.steps.at(-1) ?? null;
+      setSelectedStepId(nextStep?.id ?? null);
+    } catch (error) {
+      setPageNotice(getReadableError(error, "添加代理到工作流失败。"));
     } finally {
       setStepBusy(null);
     }
@@ -413,12 +433,83 @@ export function WorkflowDetailPage() {
     if (!detail) {
       return;
     }
-
+    const existingStep = detail.steps.find((item) => item.id === stepId);
+    if (!existingStep) {
+      return;
+    }
     try {
       setStepBusy(stepId);
-      await updateStep(detail.workflow.id, stepId, payload);
+      setPageNotice(null);
+      await updateStep(detail.workflow.id, stepId, { ...existingStep, ...payload });
     } finally {
       setStepBusy(null);
+    }
+  }
+
+  async function handleMoveStep(stepId: string, direction: "up" | "down") {
+    if (!detail || stepBusy) {
+      return;
+    }
+    const currentIndex = detail.steps.findIndex((item) => item.id === stepId);
+    if (currentIndex === -1) {
+      return;
+    }
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= detail.steps.length) {
+      return;
+    }
+    const orderedStepIds = detail.steps.map((item) => item.id);
+    [orderedStepIds[currentIndex], orderedStepIds[targetIndex]] = [orderedStepIds[targetIndex], orderedStepIds[currentIndex]];
+    try {
+      setStepBusy(stepId);
+      setPageNotice(null);
+      await reorderSteps(detail.workflow.id, orderedStepIds);
+    } catch (error) {
+      setPageNotice(getReadableError(error, "调整节点顺序失败。"));
+    } finally {
+      setStepBusy(null);
+    }
+  }
+
+  async function handleSaveStepDraft() {
+    if (!detail || !selectedStep || !stepDraft || !isStepDraftDirty) {
+      return;
+    }
+    try {
+      setStepBusy(selectedStep.id);
+      setPageNotice(null);
+      let nextStep = stepDraft;
+      if (
+        (stepDraft.type === "agent_task" || stepDraft.type === "review_gate") &&
+        (selectedStep.type === "agent_task" || selectedStep.type === "review_gate") &&
+        stepDraftAgentId
+      ) {
+        const persistedAgentId = getAgentIdForStep(selectedStep);
+        if (persistedAgentId !== stepDraftAgentId) {
+          await handleStepAgentChange(selectedStep, stepDraftAgentId);
+          const refreshedStep = useWorkflowStore.getState().currentDetail?.steps.find((item) => item.id === selectedStep.id) ?? null;
+          if (!refreshedStep || refreshedStep.type !== stepDraft.type) {
+            throw new Error("保存节点代理失败。");
+          }
+          nextStep = {
+            ...stepDraft,
+            memberId: refreshedStep.memberId,
+          };
+        }
+      }
+      await handleStepPatch(selectedStep.id, nextStep);
+      const latestDetail = useWorkflowStore.getState().currentDetail;
+      const persistedStep = latestDetail?.steps.find((item) => item.id === selectedStep.id) ?? null;
+      if (persistedStep) {
+        setStepDraft(persistedStep);
+        setStepDraftAgentId(
+          persistedStep.type === "agent_task" || persistedStep.type === "review_gate"
+            ? getMemberById(latestDetail?.teamMembers ?? [], persistedStep.memberId)?.agentId ?? ""
+            : "",
+        );
+      }
+    } catch (error) {
+      setPageNotice(getReadableError(error, "保存节点失败。"));
     }
   }
 
@@ -426,11 +517,25 @@ export function WorkflowDetailPage() {
     if (!detail || stepBusy) {
       return;
     }
-
+    const targetStep = detail.steps.find((item) => item.id === stepId);
+    const orphanMemberId =
+      targetStep && "memberId" in targetStep && countMemberUsage(targetStep.memberId) === 1
+        ? targetStep.memberId
+        : null;
     try {
       setStepBusy(stepId);
+      setPageNotice(null);
       await removeStep(detail.workflow.id, stepId);
+      if (selectedStepId === stepId) {
+        const nextStep = useWorkflowStore.getState().currentDetail?.steps[0] ?? null;
+        setSelectedStepId(nextStep?.id ?? null);
+      }
+      if (orphanMemberId) {
+        setMemberBusy(orphanMemberId);
+        await removeTeamMember(detail.workflow.id, orphanMemberId);
+      }
     } finally {
+      setMemberBusy(null);
       setStepBusy(null);
     }
   }
@@ -452,10 +557,8 @@ export function WorkflowDetailPage() {
       <PageShell title={<DetailTitle currentLabel="工作流详情" />}>
         <div className="editor-empty-state">
           <div className="space-y-3 text-center">
-            <div>
-              <h2 className="editor-empty-state-title text-xl">未找到该工作流</h2>
-              <p className="editor-empty-state-copy">它可能已被删除，或当前链接无效。</p>
-            </div>
+            <h2 className="editor-empty-state-title text-xl">未找到该工作流</h2>
+            <p className="editor-empty-state-copy">它可能已被删除，或当前链接无效。</p>
             {errorMessage ? (
               <div className="mx-auto max-w-2xl rounded-lg border border-border bg-panel p-3 text-left">
                 <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{errorMessage}</pre>
@@ -474,47 +577,29 @@ export function WorkflowDetailPage() {
         actions={[
           { icon: Save, label: saveBusy ? "保存中..." : "保存", tone: "default", onClick: () => void handleSaveBasics() },
           { icon: Play, label: runBusy || isRunning ? "运行中" : "运行", tone: "primary", onClick: () => void handleStartRun() },
-          { icon: Square, label: "停止", tone: "default", onClick: handleStopRun },
+          { icon: Square, label: "停止", tone: "default", onClick: requestStopRun },
         ]}
         contentClassName="min-h-0 flex-1 overflow-hidden"
       >
-        <div className="flex h-full min-h-0 overflow-hidden">
-          <section className="flex min-h-0 w-[460px] shrink-0 flex-col overflow-hidden border-r border-border bg-app max-xl:w-[420px] max-lg:w-[380px] max-md:w-[340px]">
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 xl:p-5">
-              <div className="space-y-4">
+        <div className="grid h-full min-h-0 gap-4 overflow-hidden p-4 lg:grid-cols-[320px_minmax(0,1fr)_360px]">
+          <section className="min-h-0 overflow-y-auto">
+            <div className="space-y-4">
+              {pageNotice ? (
+                <div className="editor-callout" data-tone="error">
+                  <pre className="whitespace-pre-wrap break-words text-sm leading-6">{pageNotice}</pre>
+                </div>
+              ) : null}
               {errorMessage ? (
                 <div className="editor-callout" data-tone="error">
                   <pre className="whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
                 </div>
               ) : null}
 
-              <WorkflowSection title="基本信息" description="保存名称、描述和工作流状态。">
-                <LabeledField label="工作流名称">
-                  <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="例如：章节生产流" />
-                </LabeledField>
-                <LabeledField label="描述">
-                  <Textarea
-                    value={draftDescription}
-                    onChange={(event) => setDraftDescription(event.target.value)}
-                    placeholder="描述这个工作流的目标、适用场景与输出。"
-                    className="min-h-24"
-                  />
-                </LabeledField>
-                <LabeledField label="状态">
-                  <Select value={draftStatus} onValueChange={(value) => setDraftStatus(value as typeof draftStatus)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">草稿</SelectItem>
-                      <SelectItem value="ready">就绪</SelectItem>
-                      <SelectItem value="archived">归档</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </LabeledField>
-              </WorkflowSection>
-
-              <WorkflowSection title="工作区绑定" description="每个工作流绑定一本书，运行时以该书的 rootPath 作为工作区。">
+              <Panel title="基础消息" description="工作流名称、绑定书籍和全局基础消息都放在左侧。">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">工作流名称</span>
+                  <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
+                </label>
                 <div className="rounded-lg border border-border bg-panel-subtle p-3">
                   <div className="flex items-start gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-panel text-primary">
@@ -529,358 +614,378 @@ export function WorkflowDetailPage() {
                       </p>
                     </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => void openBindingDialog()}>
+                  <Button
+                    className="mt-3"
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setBindingDialogOpen(true);
+                      void refreshBooks();
+                    }}
+                  >
                     <LinkIcon className="h-4 w-4" />
                     {detail.workflow.workspaceBinding ? "更换书籍" : "绑定书籍"}
                   </Button>
                 </div>
-              </WorkflowSection>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">基础消息</span>
+                  <Textarea
+                    value={draftBasePrompt}
+                    onChange={(event) => setDraftBasePrompt(event.target.value)}
+                    placeholder="补充这条工作流的全局目标、约束、写作风格与上下文。"
+                    className="min-h-32"
+                  />
+                </label>
+              </Panel>
 
-              <WorkflowSection title="团队成员" description="工作流团队成员来自代理库，同一代理可以重复加入并扮演不同角色。">
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" onClick={() => void handleAddMember()} disabled={enabledAgents.length === 0 || memberBusy !== null}>
-                    <Plus className="h-4 w-4" />
-                    添加成员
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => void refreshAgents()}>
-                    <RefreshCw className="h-4 w-4" />
-                    刷新代理库
-                  </Button>
+              <Panel title="代理库" description="左侧展示代理中心全部代理。点击添加后，会直接在中间工作流里生成一个代理节点。">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input value={agentQuery} onChange={(event) => setAgentQuery(event.target.value)} placeholder="搜索代理" className="pl-9" />
                 </div>
-
-                {detail.teamMembers.length > 0 ? (
-                  <div className="space-y-3">
-                    {detail.teamMembers.map((member) => (
-                      <article key={member.id} className="rounded-lg border border-border bg-panel-subtle p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                            <Users className="h-4 w-4 text-primary" />
-                            <span>{member.name}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Switch
-                              checked={member.enabled}
-                              label={`切换成员 ${member.name}`}
-                              disabled={memberBusy === member.id}
-                              onChange={(checked) => void handleMemberPatch(member.id, { enabled: checked })}
-                            />
-                            <Button type="button" variant="outline" size="sm" onClick={() => void handleRemoveMember(member.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                <div className="space-y-2">
+                  {filteredAgents.map((agent) => (
+                    <div key={agent.id} className="rounded-lg border border-border bg-panel-subtle p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">{agent.name}</p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{agent.description}</p>
                         </div>
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
-                          <LabeledField label="显示名称">
-                            <Input
-                              value={member.name}
-                              onChange={(event) => void handleMemberPatch(member.id, { name: event.target.value })}
-                            />
-                          </LabeledField>
-                          <LabeledField label="代理来源">
+                        {agent.validation.isValid ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void handleAddAgentStep(agent.id)}
+                            disabled={stepBusy !== null || memberBusy !== null}
+                          >
+                            <Plus className="h-4 w-4" />
+                            添加
+                          </Button>
+                        ) : (
+                          <span className="inline-flex shrink-0 items-center rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700">
+                            待完善
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+          </section>
+          <section className="min-h-0 overflow-y-auto">
+            <div className="grid min-h-0 gap-4 lg:grid-rows-[minmax(260px,1fr)_minmax(320px,1fr)]">
+              <Panel title="工作流" description="左侧添加代理后，这里只负责节点顺序、连接方式和提示词配置。" className="min-h-0 overflow-hidden">
+                <div className="grid gap-3 overflow-y-auto lg:grid-cols-2">
+                  {detail.steps.map((step, index) => (
+                    <button
+                      key={step.id}
+                      type="button"
+                      onClick={() => setSelectedStepId(step.id)}
+                      className={cn(
+                        "flex h-full flex-col rounded-2xl border p-3.5 text-left transition-all hover:-translate-y-0.5",
+                        selectedStepId === step.id
+                          ? "border-primary bg-primary/5 shadow-[0_0_0_1px_rgba(99,102,241,0.08)]"
+                          : "border-border bg-panel-subtle hover:border-primary/30 hover:bg-background",
+                      )}
+                    >
+                      <div className="flex items-center justify-end gap-1.5 border-b border-border/70 pb-2.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                            disabled={index === 0 || stepBusy !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleMoveStep(step.id, "up");
+                            }}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                            disabled={index === detail.steps.length - 1 || stepBusy !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleMoveStep(step.id, "down");
+                            }}
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-destructive"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleRemoveStep(step.id);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                      </div>
+
+                      <div className="flex-1 space-y-2.5 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                            节点 {index + 1}
+                          </span>
+                          <span className="inline-flex items-center rounded-full bg-foreground/[0.06] px-2.5 py-1 text-[11px] font-medium text-foreground/80">
+                            {formatStepType(step.type)}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold leading-5 text-foreground">{step.name}</p>
+                          <p className="text-xs leading-5 text-muted-foreground">
+                            选中后可编辑连接方式、提示词和节点名称。
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 rounded-xl bg-background/80 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+                        {"memberId" in step ? (
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="shrink-0 font-medium text-foreground/80">执行代理</span>
+                            <span className="text-right">{getStepAgentLabel(step)}</span>
+                          </div>
+                        ) : null}
+                        <div className="text-right">
+                          <span>{formatStepLinks(step, detail.steps)}</span>
+                        </div>
+                        {"promptTemplate" in step ? (
+                          <p className="border-t border-border/70 pt-2 text-left text-[11px] leading-5 text-muted-foreground/90">
+                            {step.promptTemplate.trim() || "未填写节点提示词"}
+                          </p>
+                        ) : null}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel title="节点编辑" description="选中节点后，在这里配置代理、连接方式和节点提示词。" className="min-h-0 overflow-y-auto">
+                {selectedStep && stepDraft ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-panel-subtle px-3 py-2">
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        {isStepDraftDirty ? "当前有未保存的节点改动。" : "当前节点内容已保存。"}
+                      </p>
+                      <Button type="button" onClick={() => void handleSaveStepDraft()} disabled={!isStepDraftDirty || stepBusy === selectedStep.id}>
+                        <Save className="h-4 w-4" />
+                        {stepBusy === selectedStep.id ? "保存中..." : "保存节点"}
+                      </Button>
+                    </div>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">节点名称</span>
+                      <Input
+                        value={stepDraft.name}
+                        onChange={(event) => setStepDraft({ ...stepDraft, name: event.target.value })}
+                        disabled={stepBusy === selectedStep.id}
+                      />
+                    </label>
+
+                    {stepDraft.type === "agent_task" ? (
+                      <>
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-medium text-muted-foreground">执行代理</span>
+                          <Select value={stepDraftAgentId} onValueChange={setStepDraftAgentId}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {agents.map((agent) => (
+                                <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </label>
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-medium text-muted-foreground">下一步</span>
+                          <Select
+                            value={stepDraft.nextStepId ?? "__none__"}
+                            onValueChange={(value) => setStepDraft({ ...stepDraft, nextStepId: value === "__none__" ? null : value })}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">结束</SelectItem>
+                              {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
+                                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </label>
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-medium text-muted-foreground">节点提示词</span>
+                          <Textarea
+                            value={stepDraft.promptTemplate}
+                            onChange={(event) => setStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
+                            className="min-h-40"
+                            disabled={stepBusy === selectedStep.id}
+                          />
+                        </label>
+                      </>
+                    ) : null}
+
+                    {stepDraft.type === "review_gate" ? (
+                      <>
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-medium text-muted-foreground">审查代理</span>
+                          <Select value={stepDraftAgentId} onValueChange={setStepDraftAgentId}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {agents.map((agent) => (
+                                <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </label>
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-medium text-muted-foreground">审查来源</span>
+                          <Select
+                            value={stepDraft.sourceStepId || "__none__"}
+                            onValueChange={(value) => setStepDraft({ ...stepDraft, sourceStepId: value === "__none__" ? "" : value })}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">未选择</SelectItem>
+                              {detail.steps.filter((item) => item.id !== stepDraft.id && item.type === "agent_task").map((item) => (
+                                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </label>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <label className="block space-y-1.5">
+                            <span className="text-xs font-medium text-muted-foreground">通过后</span>
                             <Select
-                              value={member.agentId}
-                              onValueChange={(value) => {
-                                const agent = enabledAgents.find((item) => item.id === value) ?? agents.find((item) => item.id === value);
-                                void handleMemberPatch(member.id, {
-                                  agentId: value,
-                                  roleLabel: agent?.name ?? member.roleLabel,
-                                } as Partial<WorkflowTeamMember>);
-                              }}
+                              value={stepDraft.passNextStepId ?? "__none__"}
+                              onValueChange={(value) => setStepDraft({ ...stepDraft, passNextStepId: value === "__none__" ? null : value })}
                             >
-                              <SelectTrigger className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                {agents.map((agent) => (
-                                  <SelectItem key={agent.id} value={agent.id}>
-                                    {agent.name}
-                                  </SelectItem>
+                                <SelectItem value="__none__">结束</SelectItem>
+                                {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
+                                  <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                          </LabeledField>
-                          <LabeledField label="角色标签">
-                            <Input
-                              value={member.roleLabel}
-                              onChange={(event) => void handleMemberPatch(member.id, { roleLabel: event.target.value })}
-                            />
-                          </LabeledField>
-                          <div className="md:col-span-2">
-                            <LabeledField label="职责补充提示词">
-                              <Textarea
-                                value={member.responsibilityPrompt}
-                                onChange={(event) => void handleMemberPatch(member.id, { responsibilityPrompt: event.target.value })}
-                                className="min-h-20"
-                              />
-                            </LabeledField>
-                          </div>
+                          </label>
+                          <label className="block space-y-1.5">
+                            <span className="text-xs font-medium text-muted-foreground">不通过后</span>
+                            <Select
+                              value={stepDraft.failNextStepId ?? "__none__"}
+                              onValueChange={(value) => setStepDraft({ ...stepDraft, failNextStepId: value === "__none__" ? null : value })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">结束</SelectItem>
+                                {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
+                                  <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </label>
                         </div>
-                      </article>
-                    ))}
+                        <label className="block space-y-1.5">
+                          <span className="text-xs font-medium text-muted-foreground">审查提示词</span>
+                          <Textarea
+                            value={stepDraft.promptTemplate}
+                            onChange={(event) => setStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
+                            className="min-h-40"
+                            disabled={stepBusy === selectedStep.id}
+                          />
+                        </label>
+                      </>
+                    ) : null}
+
+                    {stepDraft.type === "loop_control" ? (
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">回到节点</span>
+                        <Select
+                          value={stepDraft.loopTargetStepId ?? "__none__"}
+                          onValueChange={(value) => setStepDraft({ ...stepDraft, loopTargetStepId: value === "__none__" ? null : value })}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">结束</SelectItem>
+                            {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
+                              <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    ) : null}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
-                    还没有团队成员。先从代理库中添加一个代理到工作流团队。
+                  <div className="rounded-lg border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
+                    先在上面选择一个节点，再补充它的连接方式和提示词。
                   </div>
                 )}
-              </WorkflowSection>
-
-              <WorkflowSection title="自由编排步骤" description="首版支持代理任务、审查判断和循环控制三类步骤，下一步通过引用步骤 ID 串联。">
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" onClick={() => void handleAddStep("agent_task")} disabled={stepBusy !== null}>
-                    <Plus className="h-4 w-4" />
-                    代理步骤
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => void handleAddStep("review_gate")} disabled={stepBusy !== null}>
-                    <GitBranch className="h-4 w-4" />
-                    审查判断
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => void handleAddStep("loop_control")} disabled={stepBusy !== null}>
-                    <RefreshCw className="h-4 w-4" />
-                    循环控制
-                  </Button>
-                </div>
-
-                {detail.steps.length > 0 ? (
-                  <div className="space-y-3">
-                    {detail.steps.map((step, index) => (
-                      <article key={step.id} className="rounded-lg border border-border bg-panel-subtle p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Step {index + 1} · {formatStepType(step.type)}</p>
-                            <p className="text-sm font-medium text-foreground">{step.name}</p>
-                          </div>
-                          <Button type="button" variant="outline" size="sm" onClick={() => void handleRemoveStep(step.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
-                          <LabeledField label="步骤名称">
-                            <Input value={step.name} onChange={(event) => void handleStepPatch(step.id, { name: event.target.value })} />
-                          </LabeledField>
-
-                          {step.type === "agent_task" ? (
-                            <>
-                              <LabeledField label="执行成员">
-                                <Select value={step.memberId} onValueChange={(value) => void handleStepPatch(step.id, { memberId: value })}>
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {detail.teamMembers.map((member) => (
-                                      <SelectItem key={member.id} value={member.id}>
-                                        {member.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </LabeledField>
-                              <LabeledField label="输出模式">
-                                <Select value={step.outputMode} onValueChange={(value) => void handleStepPatch(step.id, { outputMode: value as "text" | "review_json" })}>
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="text">文本</SelectItem>
-                                    <SelectItem value="review_json">审查 JSON</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </LabeledField>
-                              <div className="md:col-span-2">
-                                <LabeledField label="步骤提示词模板">
-                                  <Textarea
-                                    value={step.promptTemplate}
-                                    onChange={(event) => void handleStepPatch(step.id, { promptTemplate: event.target.value })}
-                                    className="min-h-24"
-                                  />
-                                </LabeledField>
-                              </div>
-                              <LabeledField label="下一步">
-                                <Select value={step.nextStepId ?? "__none__"} onValueChange={(value) => void handleStepPatch(step.id, { nextStepId: value === "__none__" ? null : value })}>
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">无</SelectItem>
-                                    {detail.steps.filter((item) => item.id !== step.id).map((item) => (
-                                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </LabeledField>
-                            </>
-                          ) : null}
-
-                          {step.type === "review_gate" ? (
-                            <>
-                              <LabeledField label="审查来源步骤">
-                                <Select value={step.sourceStepId || "__none__"} onValueChange={(value) => void handleStepPatch(step.id, { sourceStepId: value === "__none__" ? "" : value })}>
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">未选择</SelectItem>
-                                    {detail.steps.filter((item) => item.type === "agent_task").map((item) => (
-                                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </LabeledField>
-                              <LabeledField label="通过分支">
-                                <Select value={step.passNextStepId ?? "__none__"} onValueChange={(value) => void handleStepPatch(step.id, { passNextStepId: value === "__none__" ? null : value })}>
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">无</SelectItem>
-                                    {detail.steps.filter((item) => item.id !== step.id).map((item) => (
-                                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </LabeledField>
-                              <LabeledField label="失败分支">
-                                <Select value={step.failNextStepId ?? "__none__"} onValueChange={(value) => void handleStepPatch(step.id, { failNextStepId: value === "__none__" ? null : value })}>
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">无</SelectItem>
-                                    {detail.steps.filter((item) => item.id !== step.id).map((item) => (
-                                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </LabeledField>
-                            </>
-                          ) : null}
-
-                          {step.type === "loop_control" ? (
-                            <LabeledField label="循环目标步骤">
-                              <Select value={step.loopTargetStepId ?? "__none__"} onValueChange={(value) => void handleStepPatch(step.id, { loopTargetStepId: value === "__none__" ? null : value })}>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">无</SelectItem>
-                                  {detail.steps.filter((item) => item.id !== step.id).map((item) => (
-                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </LabeledField>
-                          ) : null}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
-                    还没有步骤。可以先添加一个代理任务步骤，再补充审查与循环控制。
-                  </div>
-                )}
-              </WorkflowSection>
-
-              <WorkflowSection title="循环参数" description="控制每次运行最多执行多少轮，以及审查失败后的返工策略。">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <LabeledField label="最大循环次数">
-                    <Input value={maxLoops} onChange={(event) => setMaxLoops(event.target.value)} inputMode="numeric" />
-                  </LabeledField>
-                  <LabeledField label="每轮最大返工次数">
-                    <Input value={maxReworkPerLoop} onChange={(event) => setMaxReworkPerLoop(event.target.value)} inputMode="numeric" />
-                  </LabeledField>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-border bg-panel-subtle px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">达到返工上限后直接终止</p>
-                    <p className="text-xs text-muted-foreground">开启后，审查失败且返工次数达到上限时直接结束本次运行。</p>
-                  </div>
-                  <Switch checked={stopOnReviewFailure} label="停止条件" onChange={setStopOnReviewFailure} />
-                </div>
-              </WorkflowSection>
-            </div>
+              </Panel>
             </div>
           </section>
-
-          <aside className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-panel-subtle">
-            <div className="border-b border-border p-4 xl:p-5">
-              <div className="mb-3 text-xs leading-5 text-muted-foreground">
-                右侧区域专门显示运行状态、步骤时间线和当前选中步骤的执行细节。
-              </div>
-              <div className="rounded-xl border border-border bg-panel p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">当前运行</p>
-                    <h2 className="mt-1 text-lg font-semibold text-foreground">{formatRunStatus(currentRun?.status ?? "idle")}</h2>
-                  </div>
-                  <div className="rounded-md border border-border bg-panel-subtle px-2 py-1 text-xs text-muted-foreground">
-                    {currentRun ? `Loop ${currentRun.currentLoopIndex} / ${currentRun.maxLoops}` : "尚未运行"}
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-lg border border-border bg-panel-subtle p-3">
-                    <p className="text-xs text-muted-foreground">开始时间</p>
-                    <p className="mt-1 text-foreground">{formatDateTime(currentRun?.startedAt ?? null)}</p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-panel-subtle p-3">
-                    <p className="text-xs text-muted-foreground">结束时间</p>
-                    <p className="mt-1 text-foreground">{formatDateTime(currentRun?.finishedAt ?? null)}</p>
-                  </div>
-                </div>
-                {currentRun?.summary ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{currentRun.summary}</p> : null}
-                {currentRun?.errorMessage ? (
-                  <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {currentRun.errorMessage}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="grid min-h-0 flex-1 grid-rows-[minmax(220px,1fr)_minmax(260px,1fr)] overflow-hidden">
-              <section className="min-h-0 overflow-y-auto border-b border-border p-4 xl:p-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-foreground">运行时间线</h3>
-                  <span className="text-xs text-muted-foreground">{currentRunStepRuns.length} 个步骤记录</span>
-                </div>
-                {currentRunStepRuns.length > 0 ? (
+          <section className="min-h-0 overflow-y-auto">
+            <div className="grid min-h-0 gap-4 lg:grid-rows-[minmax(180px,auto)_minmax(200px,1fr)_minmax(220px,1fr)]">
+              <Panel title="运行记录" description="右侧只保留运行日志，不再承载页面操作日志。">
+                {detail.runs.length > 0 ? (
                   <div className="space-y-2">
-                    {currentRunStepRuns.map((stepRun) => {
-                      const stepDefinition = detail.steps.find((item) => item.id === stepRun.stepId) ?? null;
-                      const selected = selectedStepRun?.id === stepRun.id;
+                    {detail.runs.map((run) => (
+                      <button
+                        key={run.id}
+                        type="button"
+                        onClick={() => setSelectedRunId(run.id)}
+                        className={cn(
+                          "w-full rounded-lg border p-3 text-left transition-colors",
+                          selectedRun?.id === run.id ? "border-primary bg-primary/5" : "border-border bg-panel-subtle",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-foreground">{formatRunStatus(run.status)}</p>
+                          <span className="text-xs text-muted-foreground">{formatDateTime(run.startedAt)}</span>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{run.summary ?? "暂无摘要"}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
+                    运行后，这里会显示每一次执行记录。
+                  </div>
+                )}
+              </Panel>
+
+              <Panel
+                title="步骤时间线"
+                description={selectedRun ? `${formatRunStatus(selectedRun.status)} · ${formatDateTime(selectedRun.startedAt)}` : "选择一条运行记录查看步骤时间线。"}
+                className="min-h-0 overflow-y-auto"
+              >
+                {selectedRunStepRuns.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedRunStepRuns.map((stepRun) => {
+                      const stepName = detail.steps.find((item) => item.id === stepRun.stepId)?.name ?? stepRun.stepId;
                       return (
                         <button
                           key={stepRun.id}
                           type="button"
                           onClick={() => selectStepRun(stepRun.id)}
-                          className={[
-                            "w-full rounded-lg border px-3 py-3 text-left transition-colors",
-                            selected
-                              ? "border-primary bg-primary/5"
-                              : "border-border bg-panel hover:bg-panel-subtle",
-                          ].join(" ")}
+                          className={cn(
+                            "w-full rounded-lg border p-3 text-left transition-colors",
+                            selectedStepRun?.id === stepRun.id ? "border-primary bg-primary/5" : "border-border bg-panel-subtle",
+                          )}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs text-muted-foreground">
-                                Loop {stepRun.loopIndex} · 尝试 {stepRun.attemptIndex}
-                              </p>
-                              <p className="mt-1 text-sm font-medium text-foreground">
-                                {stepDefinition?.name ?? stepRun.stepId}
-                              </p>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground">{stepName}</p>
                               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                成员：{getMemberName(detail, stepRun.memberId)}
+                                代理：{getAgentName(getMemberById(detail.teamMembers, stepRun.memberId)?.agentId ?? null)} · Loop {stepRun.loopIndex} · 尝试 {stepRun.attemptIndex}
                               </p>
-                              {stepRun.decision?.reason ? (
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{stepRun.decision.reason}</p>
-                              ) : stepRun.resultText ? (
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{stepRun.resultText}</p>
-                              ) : null}
                             </div>
-                            <div className="shrink-0 rounded-md border border-border bg-panel-subtle px-2 py-1 text-[11px] text-muted-foreground">
+                            <span className="rounded-md border border-border bg-panel px-2 py-1 text-[11px] text-muted-foreground">
                               {stepRun.status}
-                            </div>
+                            </span>
                           </div>
                         </button>
                       );
@@ -888,64 +993,40 @@ export function WorkflowDetailPage() {
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
-                    运行开始后，这里会按步骤展示时间线。
+                    当前运行还没有步骤日志。
                   </div>
                 )}
-              </section>
+              </Panel>
 
-              <section className="min-h-0 overflow-y-auto p-4 xl:p-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-foreground">步骤详情</h3>
-                  {selectedStepRun ? (
-                    <span className="text-xs text-muted-foreground">{formatDateTime(selectedStepRun.startedAt)}</span>
-                  ) : null}
-                </div>
+              <Panel title="步骤详情" description="查看选中步骤的输入、输出和错误信息。" className="min-h-0 overflow-y-auto">
                 {selectedStepRun ? (
                   <div className="space-y-3">
-                    <div className="rounded-lg border border-border bg-panel p-3">
-                      <p className="text-xs text-muted-foreground">步骤</p>
-                      <p className="mt-1 text-sm font-medium text-foreground">
-                        {detail.steps.find((item) => item.id === selectedStepRun.stepId)?.name ?? selectedStepRun.stepId}
-                      </p>
-                      <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-                        <p>成员：{getMemberName(detail, selectedStepRun.memberId)}</p>
-                        <p>状态：{selectedStepRun.status}</p>
-                        <p>循环：{selectedStepRun.loopIndex}</p>
-                        <p>返工：{selectedStepRun.attemptIndex}</p>
-                      </div>
+                    <div className="rounded-lg border border-border bg-panel-subtle p-3 text-xs leading-5 text-muted-foreground">
+                      状态：{selectedStepRun.status} · 开始：{formatDateTime(selectedStepRun.startedAt)} · 结束：{formatDateTime(selectedStepRun.finishedAt)}
                     </div>
-
-                    <div className="rounded-lg border border-border bg-panel p-3">
+                    <div className="rounded-lg border border-border bg-panel-subtle p-3">
                       <p className="text-xs text-muted-foreground">输入提示词</p>
                       <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selectedStepRun.inputPrompt || "—"}</pre>
                     </div>
-
+                    {selectedStepRun.resultText ? (
+                      <div className="rounded-lg border border-border bg-panel-subtle p-3">
+                        <p className="text-xs text-muted-foreground">输出文本</p>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selectedStepRun.resultText}</pre>
+                      </div>
+                    ) : null}
                     {selectedStepRun.resultJson ? (
-                      <div className="rounded-lg border border-border bg-panel p-3">
+                      <div className="rounded-lg border border-border bg-panel-subtle p-3">
                         <p className="text-xs text-muted-foreground">结构化结果</p>
                         <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
                           {JSON.stringify(selectedStepRun.resultJson, null, 2)}
                         </pre>
                       </div>
                     ) : null}
-
-                    {selectedStepRun.resultText ? (
-                      <div className="rounded-lg border border-border bg-panel p-3">
-                        <p className="text-xs text-muted-foreground">输出文本</p>
-                        <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selectedStepRun.resultText}</pre>
+                    {selectedStepRun.parts.map((part, index) => (
+                      <div key={`${selectedStepRun.id}-part-${index}`} className="rounded-lg border border-border bg-panel-subtle p-3">
+                        <AgentPartRenderer part={part} />
                       </div>
-                    ) : null}
-
-                    {selectedStepRun.parts.length > 0 ? (
-                      <div className="space-y-2">
-                        {selectedStepRun.parts.map((part, index) => (
-                          <div key={`${selectedStepRun.id}-part-${index}`} className="rounded-lg border border-border bg-panel p-3">
-                            <AgentPartRenderer part={part} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-
+                    ))}
                     {selectedStepRun.errorMessage ? (
                       <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                         {selectedStepRun.errorMessage}
@@ -954,15 +1035,14 @@ export function WorkflowDetailPage() {
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
-                    选择一个步骤记录后，这里会显示输入、输出、工具调用和结构化结果。
+                    选择一条步骤日志后，这里会显示输入、输出和错误信息。
                   </div>
                 )}
-              </section>
+              </Panel>
             </div>
-          </aside>
+          </section>
         </div>
       </PageShell>
-
       {bindingDialogOpen ? (
         <BookshelfDialog
           books={availableBooks}

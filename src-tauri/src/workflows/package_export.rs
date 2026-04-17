@@ -26,10 +26,10 @@ pub(crate) fn build_export_definition(
     let step_keys = build_step_key_map(steps);
 
     Ok(WorkflowPackageDefinition {
-        status: workflow.status.clone(),
         template_key: format!("exported:{package_id}"),
         name: workflow.name.clone(),
         description: workflow.description.clone(),
+        base_prompt: workflow.base_prompt.clone(),
         loop_config: workflow.loop_config.clone(),
         team_members: build_template_members(members, &member_keys)?,
         steps: build_template_steps(steps, &member_keys, &step_keys)?,
@@ -145,7 +145,6 @@ fn build_template_members(
                 name: member.name.clone(),
                 role_label: member.role_label.clone(),
                 responsibility_prompt: member.responsibility_prompt.clone(),
-                enabled: Some(member.enabled),
                 allowed_tool_ids: member.allowed_tool_ids.clone(),
             })
         })
@@ -179,6 +178,8 @@ fn build_template_steps(
             WorkflowStepDefinition::ReviewGate {
                 id,
                 name,
+                member_id,
+                prompt_template,
                 source_step_id,
                 pass_next_step_id,
                 fail_next_step_id,
@@ -187,6 +188,8 @@ fn build_template_steps(
             } => Ok(WorkflowTemplateStep::ReviewGate {
                 key: required_key(step_keys, id, "步骤")?,
                 name: name.clone(),
+                member_key: required_key(member_keys, member_id, "团队成员")?,
+                prompt_template: prompt_template.clone(),
                 source_step_key: required_key(step_keys, source_step_id, "来源步骤")?,
                 pass_next_step_key: optional_key(step_keys, pass_next_step_id.as_deref()),
                 fail_next_step_key: optional_key(step_keys, fail_next_step_id.as_deref()),

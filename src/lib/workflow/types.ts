@@ -1,7 +1,5 @@
 import type { AgentPart, AgentUsage, AgentRunStatus } from "../agent/types";
 
-export type WorkflowStatus = "draft" | "ready" | "archived";
-
 export type WorkflowRunStatus = "idle" | "queued" | "running" | "completed" | "failed" | "stopped";
 
 export type WorkflowStepType = "agent_task" | "review_gate" | "loop_control";
@@ -28,7 +26,6 @@ export type WorkflowTeamMember = {
   agentId: string;
   name: string;
   roleLabel: string;
-  enabled: boolean;
   order: number;
   responsibilityPrompt: string;
   allowedToolIds?: string[];
@@ -54,6 +51,8 @@ export type WorkflowReviewGateStepDefinition = {
   type: "review_gate";
   name: string;
   order: number;
+  memberId: string;
+  promptTemplate: string;
   sourceStepId: string;
   passNextStepId: string | null;
   failNextStepId: string | null;
@@ -87,7 +86,7 @@ export type Workflow = {
   id: string;
   name: string;
   description: string;
-  status: WorkflowStatus;
+  basePrompt: string;
   source: WorkflowSource;
   templateKey: string | null;
   createdAt: number;

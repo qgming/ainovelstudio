@@ -34,7 +34,7 @@ pub struct Workflow {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) description: String,
-    pub(crate) status: String,
+    pub(crate) base_prompt: String,
     pub(crate) source: String,
     pub(crate) template_key: Option<String>,
     pub(crate) created_at: u64,
@@ -55,7 +55,6 @@ pub struct WorkflowTeamMember {
     pub(crate) agent_id: String,
     pub(crate) name: String,
     pub(crate) role_label: String,
-    pub(crate) enabled: bool,
     pub(crate) order: u64,
     pub(crate) responsibility_prompt: String,
     pub(crate) allowed_tool_ids: Option<Vec<String>>,
@@ -64,7 +63,7 @@ pub struct WorkflowTeamMember {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum WorkflowStepDefinition {
     AgentTask {
         id: String,
@@ -81,6 +80,8 @@ pub enum WorkflowStepDefinition {
         workflow_id: String,
         name: String,
         order: u64,
+        member_id: String,
+        prompt_template: String,
         source_step_id: String,
         pass_next_step_id: Option<String>,
         fail_next_step_id: Option<String>,
@@ -98,7 +99,7 @@ pub enum WorkflowStepDefinition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum WorkflowStepInput {
     AgentTask {
         name: String,
@@ -109,6 +110,8 @@ pub enum WorkflowStepInput {
     },
     ReviewGate {
         name: String,
+        member_id: String,
+        prompt_template: String,
         source_step_id: String,
         pass_next_step_id: Option<String>,
         fail_next_step_id: Option<String>,
@@ -236,18 +239,18 @@ pub(crate) struct WorkflowPackageRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkflowPackageDefinition {
-    #[serde(default = "default_workflow_status")]
-    pub(crate) status: String,
     pub(crate) template_key: String,
     pub(crate) name: String,
     pub(crate) description: String,
+    #[serde(default)]
+    pub(crate) base_prompt: String,
     pub(crate) loop_config: WorkflowLoopConfig,
     pub(crate) team_members: Vec<WorkflowTemplateTeamMember>,
     pub(crate) steps: Vec<WorkflowTemplateStep>,
 }
 
-fn default_workflow_status() -> String {
-    "draft".to_string()
+fn default_review_prompt_template() -> String {
+    "请基于来源节点的输出进行审查，并按 JSON 格式返回结论。".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -258,8 +261,6 @@ pub(crate) struct WorkflowTemplateTeamMember {
     pub(crate) name: String,
     pub(crate) role_label: String,
     pub(crate) responsibility_prompt: String,
-    #[serde(default)]
-    pub(crate) enabled: Option<bool>,
     #[serde(default)]
     pub(crate) allowed_tool_ids: Option<Vec<String>>,
 }
@@ -282,6 +283,10 @@ pub(crate) enum WorkflowTemplateStep {
     ReviewGate {
         key: String,
         name: String,
+        #[serde(default)]
+        member_key: String,
+        #[serde(default = "default_review_prompt_template")]
+        prompt_template: String,
         source_step_key: String,
         pass_next_step_key: Option<String>,
         fail_next_step_key: Option<String>,
@@ -300,8 +305,8 @@ pub(crate) enum WorkflowTemplateStep {
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowBasicsPatch {
     pub(crate) name: String,
-    pub(crate) description: String,
-    pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) base_prompt: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,7 +325,57 @@ pub struct WorkflowTeamMemberPatch {
     pub(crate) agent_id: Option<String>,
     pub(crate) name: Option<String>,
     pub(crate) role_label: Option<String>,
-    pub(crate) enabled: Option<bool>,
     pub(crate) responsibility_prompt: Option<String>,
     pub(crate) allowed_tool_ids: Option<Vec<String>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{WorkflowStepDefinition, WorkflowStepInput};
+    use serde_json::json;
+
+    #[test]
+    fn workflow_step_definition_round_trips_with_camel_case_fields() {
+        let value = json!({
+            "type": "agent_task",
+            "id": "step-1",
+            "workflowId": "workflow-1",
+            "name": "章节写作",
+            "order": 0,
+            "memberId": "member-1",
+            "promptTemplate": "写一章",
+            "outputMode": "text",
+            "nextStepId": "step-2"
+        });
+
+        let parsed: WorkflowStepDefinition = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(parsed).unwrap();
+
+        assert_eq!(serialized["workflowId"], "workflow-1");
+        assert_eq!(serialized["memberId"], "member-1");
+        assert_eq!(serialized["promptTemplate"], "写一章");
+        assert_eq!(serialized["nextStepId"], "step-2");
+        assert!(serialized.get("workflow_id").is_none());
+        assert!(serialized.get("member_id").is_none());
+        assert_eq!(serialized["type"], value["type"]);
+    }
+
+    #[test]
+    fn workflow_step_input_round_trips_with_camel_case_fields() {
+        let value = json!({
+            "type": "agent_task",
+            "name": "章节写作",
+            "memberId": "member-1",
+            "promptTemplate": "写一章",
+            "outputMode": "text",
+            "nextStepId": null
+        });
+
+        let parsed: WorkflowStepInput = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_value(parsed).unwrap();
+
+        assert_eq!(serialized["memberId"], "member-1");
+        assert_eq!(serialized["promptTemplate"], "写一章");
+        assert!(serialized.get("member_id").is_none());
+    }
 }
