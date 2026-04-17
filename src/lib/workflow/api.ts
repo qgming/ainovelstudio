@@ -4,6 +4,7 @@ import type {
   Workflow,
   WorkflowDetail,
   WorkflowLoopConfig,
+  WorkflowMessagePayload,
   WorkflowReviewResult,
   WorkflowRun,
   WorkflowStepDefinition,
@@ -121,6 +122,23 @@ export function parseWorkflowReviewResult(text: string): WorkflowReviewResult | 
       issues: Array.isArray(parsed.issues) ? parsed.issues : [],
       revision_brief: typeof parsed.revision_brief === "string" ? parsed.revision_brief : "",
     };
+  } catch {
+    return null;
+  }
+}
+
+export function parseWorkflowMessagePayload(text: string): WorkflowMessagePayload | null {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      return null;
+    }
+    return parsed as WorkflowMessagePayload;
   } catch {
     return null;
   }

@@ -4,7 +4,10 @@ use tauri::AppHandle;
 
 use super::{
     builtin::sync_builtin_workflows_to_database,
-    management::{delete_workflow as delete_workflow_record, export_workflow_zip as export_workflow_zip_archive},
+    management::{
+        delete_workflow as delete_workflow_record,
+        export_workflow_zip as export_workflow_zip_archive,
+    },
     repository::{
         build_workflow_detail, insert_workflow, list_all_workflows, list_steps, list_team_members,
         read_member, read_step, replace_workflow_member_ids, replace_workflow_step_ids,
@@ -66,7 +69,10 @@ pub fn create_workflow(app: AppHandle, name: String) -> CommandResult<Workflow> 
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub async fn export_workflow_zip(app: AppHandle, workflowId: String) -> CommandResult<Option<String>> {
+pub async fn export_workflow_zip(
+    app: AppHandle,
+    workflowId: String,
+) -> CommandResult<Option<String>> {
     export_workflow_zip_archive(&app, &workflowId).await
 }
 
@@ -96,7 +102,12 @@ pub fn save_workflow_basics(
     connection
         .execute(
             "UPDATE workflows SET name = ?2, base_prompt = ?3, updated_at = ?4 WHERE id = ?1",
-            params![workflowId, name, payload.base_prompt.trim(), now_timestamp() as i64],
+            params![
+                workflowId,
+                name,
+                payload.base_prompt.trim(),
+                now_timestamp() as i64
+            ],
         )
         .map_err(error_to_string)?;
     build_workflow_detail(&connection, &workflowId)
@@ -358,11 +369,23 @@ pub fn update_workflow_step(
     let connection = open_database(&app)?;
     let existing = read_step(&connection, &workflowId, &stepId)?;
     let order = match existing {
-        WorkflowStepDefinition::AgentTask { order, .. }
+        WorkflowStepDefinition::Start { order, .. }
+        | WorkflowStepDefinition::AgentTask { order, .. }
         | WorkflowStepDefinition::ReviewGate { order, .. }
-        | WorkflowStepDefinition::LoopControl { order, .. } => order,
+        | WorkflowStepDefinition::Decision { order, .. }
+        | WorkflowStepDefinition::LoopControl { order, .. }
+        | WorkflowStepDefinition::End { order, .. } => order,
     };
     let next_step = match payload {
+        WorkflowStepDefinition::Start {
+            name, next_step_id, ..
+        } => WorkflowStepDefinition::Start {
+            id: stepId,
+            workflow_id: workflowId.clone(),
+            name,
+            order,
+            next_step_id,
+        },
         WorkflowStepDefinition::AgentTask {
             name,
             member_id,
@@ -401,6 +424,23 @@ pub fn update_workflow_step(
             fail_next_step_id,
             pass_rule,
         },
+        WorkflowStepDefinition::Decision {
+            name,
+            condition_kind,
+            condition_config,
+            true_next_step_id,
+            false_next_step_id,
+            ..
+        } => WorkflowStepDefinition::Decision {
+            id: stepId,
+            workflow_id: workflowId.clone(),
+            name,
+            order,
+            condition_kind,
+            condition_config,
+            true_next_step_id,
+            false_next_step_id,
+        },
         WorkflowStepDefinition::LoopControl {
             name,
             loop_target_step_id,
@@ -415,6 +455,19 @@ pub fn update_workflow_step(
             loop_target_step_id,
             continue_when,
             finish_when,
+        },
+        WorkflowStepDefinition::End {
+            name,
+            stop_reason,
+            summary_template,
+            ..
+        } => WorkflowStepDefinition::End {
+            id: stepId,
+            workflow_id: workflowId.clone(),
+            name,
+            order,
+            stop_reason,
+            summary_template,
         },
     };
     upsert_step(&connection, &next_step)?;
@@ -483,6 +536,18 @@ pub fn save_workflow_run(app: AppHandle, run: WorkflowRun) -> CommandResult<Work
     validate_loop_config(&run.loop_config_snapshot)?;
     connection
         .execute(
+            "DELETE FROM workflow_step_runs WHERE workflow_id = ?1 AND run_id != ?2",
+            params![run.workflow_id, run.id],
+        )
+        .map_err(error_to_string)?;
+    connection
+        .execute(
+            "DELETE FROM workflow_runs WHERE workflow_id = ?1 AND id != ?2",
+            params![run.workflow_id, run.id],
+        )
+        .map_err(error_to_string)?;
+    connection
+        .execute(
             r#"
             INSERT INTO workflow_runs (
                 id, workflow_id, status, started_at, finished_at, workspace_binding_json,
@@ -510,7 +575,7 @@ pub fn save_workflow_run(app: AppHandle, run: WorkflowRun) -> CommandResult<Work
                 serialize_json(&run.workspace_binding)?,
                 serialize_json(&run.loop_config_snapshot)?,
                 run.current_loop_index as i64,
-                run.max_loops as i64,
+                run.max_loops.map(|value| value as i64),
                 run.current_step_run_id,
                 run.stop_reason,
                 run.summary,
@@ -539,9 +604,9 @@ pub fn save_workflow_step_run(
             r#"
             INSERT INTO workflow_step_runs (
                 id, run_id, workflow_id, step_id, loop_index, attempt_index, member_id, status,
-                started_at, finished_at, input_prompt, result_text, result_json, decision_json,
-                parts_json, usage_json, error_message
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                started_at, finished_at, input_prompt, result_text, result_json, message_type,
+                message_json, decision_json, parts_json, usage_json, error_message
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
             ON CONFLICT(id) DO UPDATE
             SET status = excluded.status,
                 started_at = excluded.started_at,
@@ -549,6 +614,8 @@ pub fn save_workflow_step_run(
                 input_prompt = excluded.input_prompt,
                 result_text = excluded.result_text,
                 result_json = excluded.result_json,
+                message_type = excluded.message_type,
+                message_json = excluded.message_json,
                 decision_json = excluded.decision_json,
                 parts_json = excluded.parts_json,
                 usage_json = excluded.usage_json,
@@ -572,6 +639,8 @@ pub fn save_workflow_step_run(
                     .as_ref()
                     .map(serialize_json)
                     .transpose()?,
+                stepRun.message_type,
+                stepRun.message_json.as_ref().map(serialize_json).transpose()?,
                 stepRun.decision.as_ref().map(serialize_json).transpose()?,
                 serialize_json(&stepRun.parts)?,
                 stepRun.usage.as_ref().map(serialize_json).transpose()?,

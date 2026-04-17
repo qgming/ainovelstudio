@@ -94,7 +94,10 @@ pub(crate) fn build_export_package_id(workflow: &Workflow) -> String {
         .unwrap_or("workflow");
     let prefix = if base.is_empty() { "workflow" } else { &base };
     let max_prefix_len = 64usize.saturating_sub(short_id.len() + 1);
-    let compact_prefix = prefix.chars().take(max_prefix_len.max(1)).collect::<String>();
+    let compact_prefix = prefix
+        .chars()
+        .take(max_prefix_len.max(1))
+        .collect::<String>();
     trim_hyphen_edges(&format!("{compact_prefix}-{short_id}"))
 }
 
@@ -159,6 +162,16 @@ fn build_template_steps(
     steps
         .iter()
         .map(|step| match step {
+            WorkflowStepDefinition::Start {
+                id,
+                name,
+                next_step_id,
+                ..
+            } => Ok(WorkflowTemplateStep::Start {
+                key: required_key(step_keys, id, "步骤")?,
+                name: name.clone(),
+                next_step_key: optional_key(step_keys, next_step_id.as_deref()),
+            }),
             WorkflowStepDefinition::AgentTask {
                 id,
                 name,
@@ -195,6 +208,22 @@ fn build_template_steps(
                 fail_next_step_key: optional_key(step_keys, fail_next_step_id.as_deref()),
                 pass_rule: pass_rule.clone(),
             }),
+            WorkflowStepDefinition::Decision {
+                id,
+                name,
+                condition_kind,
+                condition_config,
+                true_next_step_id,
+                false_next_step_id,
+                ..
+            } => Ok(WorkflowTemplateStep::Decision {
+                key: required_key(step_keys, id, "步骤")?,
+                name: name.clone(),
+                condition_kind: condition_kind.clone(),
+                condition_config: condition_config.clone(),
+                true_next_step_key: optional_key(step_keys, true_next_step_id.as_deref()),
+                false_next_step_key: optional_key(step_keys, false_next_step_id.as_deref()),
+            }),
             WorkflowStepDefinition::LoopControl {
                 id,
                 name,
@@ -208,6 +237,18 @@ fn build_template_steps(
                 loop_target_step_key: optional_key(step_keys, loop_target_step_id.as_deref()),
                 continue_when: continue_when.clone(),
                 finish_when: finish_when.clone(),
+            }),
+            WorkflowStepDefinition::End {
+                id,
+                name,
+                stop_reason,
+                summary_template,
+                ..
+            } => Ok(WorkflowTemplateStep::End {
+                key: required_key(step_keys, id, "步骤")?,
+                name: name.clone(),
+                stop_reason: stop_reason.clone(),
+                summary_template: summary_template.clone(),
             }),
         })
         .collect()
@@ -228,9 +269,12 @@ fn write_archive_file(
 
 fn step_identifier(step: &WorkflowStepDefinition) -> String {
     match step {
-        WorkflowStepDefinition::AgentTask { id, .. }
+        WorkflowStepDefinition::Start { id, .. }
+        | WorkflowStepDefinition::AgentTask { id, .. }
         | WorkflowStepDefinition::ReviewGate { id, .. }
-        | WorkflowStepDefinition::LoopControl { id, .. } => id.clone(),
+        | WorkflowStepDefinition::Decision { id, .. }
+        | WorkflowStepDefinition::LoopControl { id, .. }
+        | WorkflowStepDefinition::End { id, .. } => id.clone(),
     }
 }
 

@@ -188,12 +188,10 @@ pub(crate) fn should_repair_builtin_workflow(
         .map_err(super::validate::error_to_string)?
         .flatten();
     let (member_count, step_count) = count_workflow_related_rows(connection, workflow_id)?;
-    Ok(
-        package_changed
-            || current_package_id.as_deref() != Some(package_id)
-            || member_count == 0
-            || step_count == 0,
-    )
+    Ok(package_changed
+        || current_package_id.as_deref() != Some(package_id)
+        || member_count == 0
+        || step_count == 0)
 }
 
 pub(crate) fn materialize_workflow_from_package(
@@ -260,9 +258,12 @@ pub(crate) fn materialize_workflow_from_package_force(
     let mut step_ids_by_key = HashMap::<String, String>::new();
     for step in &definition.steps {
         let key = match step {
-            WorkflowTemplateStep::AgentTask { key, .. }
+            WorkflowTemplateStep::Start { key, .. }
+            | WorkflowTemplateStep::AgentTask { key, .. }
             | WorkflowTemplateStep::ReviewGate { key, .. }
-            | WorkflowTemplateStep::LoopControl { key, .. } => key,
+            | WorkflowTemplateStep::Decision { key, .. }
+            | WorkflowTemplateStep::LoopControl { key, .. }
+            | WorkflowTemplateStep::End { key, .. } => key,
         };
         step_ids_by_key.insert(key.clone(), create_id("workflow-step"));
     }
@@ -272,6 +273,22 @@ pub(crate) fn materialize_workflow_from_package_force(
         let order = index as u64;
         let built_step =
             match step {
+                WorkflowTemplateStep::Start {
+                    key,
+                    name,
+                    next_step_key,
+                } => WorkflowStepDefinition::Start {
+                    id: step_ids_by_key
+                        .get(key)
+                        .cloned()
+                        .ok_or_else(|| "workflow 模板缺少步骤键。".to_string())?,
+                    workflow_id: workflow_id.clone(),
+                    name: name.clone(),
+                    order,
+                    next_step_id: next_step_key
+                        .as_ref()
+                        .and_then(|value| step_ids_by_key.get(value).cloned()),
+                },
                 WorkflowTemplateStep::AgentTask {
                     key,
                     name,
@@ -330,6 +347,30 @@ pub(crate) fn materialize_workflow_from_package_force(
                         .and_then(|value| step_ids_by_key.get(value).cloned()),
                     pass_rule: pass_rule.clone(),
                 },
+                WorkflowTemplateStep::Decision {
+                    key,
+                    name,
+                    condition_kind,
+                    condition_config,
+                    true_next_step_key,
+                    false_next_step_key,
+                } => WorkflowStepDefinition::Decision {
+                    id: step_ids_by_key
+                        .get(key)
+                        .cloned()
+                        .ok_or_else(|| "workflow 模板缺少步骤键。".to_string())?,
+                    workflow_id: workflow_id.clone(),
+                    name: name.clone(),
+                    order,
+                    condition_kind: condition_kind.clone(),
+                    condition_config: condition_config.clone(),
+                    true_next_step_id: true_next_step_key
+                        .as_ref()
+                        .and_then(|value| step_ids_by_key.get(value).cloned()),
+                    false_next_step_id: false_next_step_key
+                        .as_ref()
+                        .and_then(|value| step_ids_by_key.get(value).cloned()),
+                },
                 WorkflowTemplateStep::LoopControl {
                     key,
                     name,
@@ -349,6 +390,22 @@ pub(crate) fn materialize_workflow_from_package_force(
                         .and_then(|value| step_ids_by_key.get(value).cloned()),
                     continue_when: continue_when.clone(),
                     finish_when: finish_when.clone(),
+                },
+                WorkflowTemplateStep::End {
+                    key,
+                    name,
+                    stop_reason,
+                    summary_template,
+                } => WorkflowStepDefinition::End {
+                    id: step_ids_by_key
+                        .get(key)
+                        .cloned()
+                        .ok_or_else(|| "workflow 模板缺少步骤键。".to_string())?,
+                    workflow_id: workflow_id.clone(),
+                    name: name.clone(),
+                    order,
+                    stop_reason: stop_reason.clone(),
+                    summary_template: summary_template.clone(),
                 },
             };
         steps.push(built_step);

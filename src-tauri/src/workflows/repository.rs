@@ -8,8 +8,9 @@ use super::{
         WorkflowStepDefinition, WorkflowStepInput, WorkflowStepRun, WorkflowTeamMember,
     },
     validate::{
-        deserialize_json, error_to_string, now_timestamp, parse_optional_json, serialize_json,
-        step_id, validate_loop_config, validate_member_payload, validate_run_status,
+        default_decision_condition_config, deserialize_json, error_to_string, now_timestamp,
+        parse_optional_json, serialize_json, step_id, validate_loop_config,
+        validate_member_payload, validate_run_status,
     },
     CommandResult,
 };
@@ -20,6 +21,16 @@ pub(crate) fn validate_step_input(
     step: &WorkflowStepInput,
 ) -> CommandResult<()> {
     match step {
+        WorkflowStepInput::Start { name, next_step_id } => {
+            if name.trim().is_empty() {
+                return Err("步骤名称不能为空。".into());
+            }
+            if let Some(next_step_id) = next_step_id {
+                if !has_step(connection, workflow_id, next_step_id)? {
+                    return Err("开始节点的下一步引用不存在。".into());
+                }
+            }
+        }
         WorkflowStepInput::AgentTask {
             name,
             member_id,
@@ -82,6 +93,30 @@ pub(crate) fn validate_step_input(
                 }
             }
         }
+        WorkflowStepInput::Decision {
+            name,
+            condition_kind,
+            true_next_step_id,
+            false_next_step_id,
+            ..
+        } => {
+            if name.trim().is_empty() {
+                return Err("步骤名称不能为空。".into());
+            }
+            if condition_kind.trim().is_empty() {
+                return Err("判断节点条件类型不能为空。".into());
+            }
+            if let Some(true_next_step_id) = true_next_step_id {
+                if !has_step(connection, workflow_id, true_next_step_id)? {
+                    return Err("判断节点的 true 分支引用不存在。".into());
+                }
+            }
+            if let Some(false_next_step_id) = false_next_step_id {
+                if !has_step(connection, workflow_id, false_next_step_id)? {
+                    return Err("判断节点的 false 分支引用不存在。".into());
+                }
+            }
+        }
         WorkflowStepInput::LoopControl {
             name,
             loop_target_step_id,
@@ -100,6 +135,16 @@ pub(crate) fn validate_step_input(
                 }
             }
         }
+        WorkflowStepInput::End {
+            name, stop_reason, ..
+        } => {
+            if name.trim().is_empty() {
+                return Err("步骤名称不能为空。".into());
+            }
+            if stop_reason.trim().is_empty() {
+                return Err("结束节点必须提供 stopReason。".into());
+            }
+        }
     }
     Ok(())
 }
@@ -110,6 +155,25 @@ pub(crate) fn validate_step_definition(
     step: &WorkflowStepDefinition,
 ) -> CommandResult<()> {
     match step {
+        WorkflowStepDefinition::Start {
+            id,
+            workflow_id: step_workflow_id,
+            name,
+            next_step_id,
+            ..
+        } => {
+            if id.trim().is_empty() || step_workflow_id != workflow_id {
+                return Err("步骤标识不合法。".into());
+            }
+            if name.trim().is_empty() {
+                return Err("步骤名称不能为空。".into());
+            }
+            if let Some(next_step_id) = next_step_id {
+                if !has_step(connection, workflow_id, next_step_id)? && next_step_id != id {
+                    return Err("开始节点的下一步引用不存在。".into());
+                }
+            }
+        }
         WorkflowStepDefinition::AgentTask {
             id,
             workflow_id: step_workflow_id,
@@ -186,6 +250,38 @@ pub(crate) fn validate_step_definition(
                 }
             }
         }
+        WorkflowStepDefinition::Decision {
+            id,
+            workflow_id: step_workflow_id,
+            name,
+            condition_kind,
+            true_next_step_id,
+            false_next_step_id,
+            ..
+        } => {
+            if id.trim().is_empty() || step_workflow_id != workflow_id {
+                return Err("步骤标识不合法。".into());
+            }
+            if name.trim().is_empty() {
+                return Err("步骤名称不能为空。".into());
+            }
+            if condition_kind.trim().is_empty() {
+                return Err("判断节点条件类型不能为空。".into());
+            }
+            if let Some(true_next_step_id) = true_next_step_id {
+                if !has_step(connection, workflow_id, true_next_step_id)? && true_next_step_id != id
+                {
+                    return Err("判断节点的 true 分支引用不存在。".into());
+                }
+            }
+            if let Some(false_next_step_id) = false_next_step_id {
+                if !has_step(connection, workflow_id, false_next_step_id)?
+                    && false_next_step_id != id
+                {
+                    return Err("判断节点的 false 分支引用不存在。".into());
+                }
+            }
+        }
         WorkflowStepDefinition::LoopControl {
             id,
             workflow_id: step_workflow_id,
@@ -212,6 +308,23 @@ pub(crate) fn validate_step_definition(
                 }
             }
         }
+        WorkflowStepDefinition::End {
+            id,
+            workflow_id: step_workflow_id,
+            name,
+            stop_reason,
+            ..
+        } => {
+            if id.trim().is_empty() || step_workflow_id != workflow_id {
+                return Err("步骤标识不合法。".into());
+            }
+            if name.trim().is_empty() {
+                return Err("步骤名称不能为空。".into());
+            }
+            if stop_reason.trim().is_empty() {
+                return Err("结束节点必须提供 stopReason。".into());
+            }
+        }
     }
     Ok(())
 }
@@ -221,8 +334,21 @@ pub(crate) fn validate_all_step_references(
     workflow_id: &str,
 ) -> CommandResult<()> {
     let steps = list_steps(connection, workflow_id)?;
-    for step in &steps {
-        validate_step_definition(connection, workflow_id, step)?;
+    let start_count = steps
+        .iter()
+        .filter(|step| matches!(step, WorkflowStepDefinition::Start { .. }))
+        .count();
+    if start_count > 0 {
+        for step in &steps {
+            validate_step_definition(connection, workflow_id, step)?;
+        }
+        if start_count == 0 {
+            return Err("工作流至少需要一个开始节点。".into());
+        }
+    } else {
+        for step in &steps {
+            validate_step_definition(connection, workflow_id, step)?;
+        }
     }
     Ok(())
 }
@@ -322,7 +448,11 @@ pub(crate) fn upsert_team_member(
                 member.role_label,
                 member.order as i64,
                 member.responsibility_prompt,
-                member.allowed_tool_ids.as_ref().map(serialize_json).transpose()?,
+                member
+                    .allowed_tool_ids
+                    .as_ref()
+                    .map(serialize_json)
+                    .transpose()?,
                 member.created_at as i64,
                 member.updated_at as i64,
             ],
@@ -337,15 +467,33 @@ fn upsert_step_internal(
     validate_references: bool,
 ) -> CommandResult<()> {
     let workflow_id = match step {
-        WorkflowStepDefinition::AgentTask { workflow_id, .. }
+        WorkflowStepDefinition::Start { workflow_id, .. }
+        | WorkflowStepDefinition::AgentTask { workflow_id, .. }
         | WorkflowStepDefinition::ReviewGate { workflow_id, .. }
-        | WorkflowStepDefinition::LoopControl { workflow_id, .. } => workflow_id.as_str(),
+        | WorkflowStepDefinition::Decision { workflow_id, .. }
+        | WorkflowStepDefinition::LoopControl { workflow_id, .. }
+        | WorkflowStepDefinition::End { workflow_id, .. } => workflow_id.as_str(),
     };
     if validate_references {
         validate_step_definition(connection, workflow_id, step)?;
     }
 
     let (id, step_type, name, order, payload_json) = match step {
+        WorkflowStepDefinition::Start {
+            id,
+            name,
+            order,
+            next_step_id,
+            ..
+        } => (
+            id.clone(),
+            "start".to_string(),
+            name.clone(),
+            *order,
+            serialize_json(&serde_json::json!({
+                "nextStepId": next_step_id,
+            }))?,
+        ),
         WorkflowStepDefinition::AgentTask {
             id,
             name,
@@ -392,6 +540,27 @@ fn upsert_step_internal(
                 "passRule": pass_rule,
             }))?,
         ),
+        WorkflowStepDefinition::Decision {
+            id,
+            name,
+            order,
+            condition_kind,
+            condition_config,
+            true_next_step_id,
+            false_next_step_id,
+            ..
+        } => (
+            id.clone(),
+            "decision".to_string(),
+            name.clone(),
+            *order,
+            serialize_json(&serde_json::json!({
+                "conditionKind": condition_kind,
+                "conditionConfig": condition_config,
+                "trueNextStepId": true_next_step_id,
+                "falseNextStepId": false_next_step_id,
+            }))?,
+        ),
         WorkflowStepDefinition::LoopControl {
             id,
             name,
@@ -409,6 +578,23 @@ fn upsert_step_internal(
                 "loopTargetStepId": loop_target_step_id,
                 "continueWhen": continue_when,
                 "finishWhen": finish_when,
+            }))?,
+        ),
+        WorkflowStepDefinition::End {
+            id,
+            name,
+            order,
+            stop_reason,
+            summary_template,
+            ..
+        } => (
+            id.clone(),
+            "end".to_string(),
+            name.clone(),
+            *order,
+            serialize_json(&serde_json::json!({
+                "stopReason": stop_reason,
+                "summaryTemplate": summary_template,
             }))?,
         ),
     };
@@ -599,6 +785,16 @@ pub(crate) fn list_steps(
         let payload = row.get::<_, String>(5).map_err(error_to_string)?;
         let payload_value = serde_json::from_str::<Value>(&payload).map_err(error_to_string)?;
         let step = match step_type.as_str() {
+            "start" => WorkflowStepDefinition::Start {
+                id,
+                workflow_id,
+                name,
+                order,
+                next_step_id: payload_value
+                    .get("nextStepId")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+            },
             "agent_task" => WorkflowStepDefinition::AgentTask {
                 id,
                 workflow_id,
@@ -656,6 +852,45 @@ pub(crate) fn list_steps(
                     .get("passRule")
                     .and_then(Value::as_str)
                     .unwrap_or("review_json.pass == true")
+                    .to_string(),
+            },
+            "decision" => WorkflowStepDefinition::Decision {
+                id,
+                workflow_id,
+                name,
+                order,
+                condition_kind: payload_value
+                    .get("conditionKind")
+                    .and_then(Value::as_str)
+                    .unwrap_or("review_pass")
+                    .to_string(),
+                condition_config: payload_value
+                    .get("conditionConfig")
+                    .cloned()
+                    .unwrap_or_else(|| default_decision_condition_config("review_pass")),
+                true_next_step_id: payload_value
+                    .get("trueNextStepId")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                false_next_step_id: payload_value
+                    .get("falseNextStepId")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+            },
+            "end" => WorkflowStepDefinition::End {
+                id,
+                workflow_id,
+                name,
+                order,
+                stop_reason: payload_value
+                    .get("stopReason")
+                    .and_then(Value::as_str)
+                    .unwrap_or("completed")
+                    .to_string(),
+                summary_template: payload_value
+                    .get("summaryTemplate")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
                     .to_string(),
             },
             _ => WorkflowStepDefinition::LoopControl {
@@ -721,7 +956,10 @@ pub(crate) fn list_runs(
                 &row.get::<_, String>(6).map_err(error_to_string)?,
             )?,
             current_loop_index: row.get::<_, i64>(7).map_err(error_to_string)? as u64,
-            max_loops: row.get::<_, i64>(8).map_err(error_to_string)? as u64,
+            max_loops: row
+                .get::<_, Option<i64>>(8)
+                .map_err(error_to_string)?
+                .map(|value| value as u64),
             current_step_run_id: row.get::<_, Option<String>>(9).map_err(error_to_string)?,
             stop_reason: row.get::<_, Option<String>>(10).map_err(error_to_string)?,
             summary: row.get::<_, Option<String>>(11).map_err(error_to_string)?,
@@ -739,8 +977,8 @@ pub(crate) fn list_step_runs(
         .prepare(
             r#"
             SELECT id, run_id, workflow_id, step_id, loop_index, attempt_index, member_id, status,
-                   started_at, finished_at, input_prompt, result_text, result_json, decision_json,
-                   parts_json, usage_json, error_message
+                   started_at, finished_at, input_prompt, result_text, result_json, message_type,
+                   message_json, decision_json, parts_json, usage_json, error_message
             FROM workflow_step_runs
             WHERE workflow_id = ?1
             ORDER BY run_id DESC, loop_index ASC, attempt_index ASC, started_at ASC, id ASC
@@ -774,12 +1012,16 @@ pub(crate) fn list_step_runs(
             result_json: parse_optional_json::<WorkflowReviewResult>(
                 row.get::<_, Option<String>>(12).map_err(error_to_string)?,
             )?,
-            decision: parse_optional_json::<WorkflowStepDecision>(
-                row.get::<_, Option<String>>(13).map_err(error_to_string)?,
+            message_type: row.get::<_, Option<String>>(13).map_err(error_to_string)?,
+            message_json: parse_optional_json::<Value>(
+                row.get::<_, Option<String>>(14).map_err(error_to_string)?,
             )?,
-            parts: deserialize_json(&row.get::<_, String>(14).map_err(error_to_string)?)?,
-            usage: parse_optional_json(row.get::<_, Option<String>>(15).map_err(error_to_string)?)?,
-            error_message: row.get::<_, Option<String>>(16).map_err(error_to_string)?,
+            decision: parse_optional_json::<WorkflowStepDecision>(
+                row.get::<_, Option<String>>(15).map_err(error_to_string)?,
+            )?,
+            parts: deserialize_json(&row.get::<_, String>(16).map_err(error_to_string)?)?,
+            usage: parse_optional_json(row.get::<_, Option<String>>(17).map_err(error_to_string)?)?,
+            error_message: row.get::<_, Option<String>>(18).map_err(error_to_string)?,
         });
     }
     Ok(result)

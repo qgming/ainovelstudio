@@ -23,8 +23,8 @@ pub struct WorkflowWorkspaceBindingInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowLoopConfig {
-    pub(crate) max_loops: u64,
-    pub(crate) max_rework_per_loop: u64,
+    pub(crate) max_loops: Option<u64>,
+    pub(crate) max_rework_per_loop: Option<u64>,
     pub(crate) stop_on_review_failure: bool,
 }
 
@@ -63,8 +63,19 @@ pub struct WorkflowTeamMember {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum WorkflowStepDefinition {
+    Start {
+        id: String,
+        workflow_id: String,
+        name: String,
+        order: u64,
+        next_step_id: Option<String>,
+    },
     AgentTask {
         id: String,
         workflow_id: String,
@@ -87,6 +98,16 @@ pub enum WorkflowStepDefinition {
         fail_next_step_id: Option<String>,
         pass_rule: String,
     },
+    Decision {
+        id: String,
+        workflow_id: String,
+        name: String,
+        order: u64,
+        condition_kind: String,
+        condition_config: Value,
+        true_next_step_id: Option<String>,
+        false_next_step_id: Option<String>,
+    },
     LoopControl {
         id: String,
         workflow_id: String,
@@ -95,12 +116,28 @@ pub enum WorkflowStepDefinition {
         loop_target_step_id: Option<String>,
         continue_when: String,
         finish_when: String,
+    },
+    End {
+        id: String,
+        workflow_id: String,
+        name: String,
+        order: u64,
+        stop_reason: String,
+        summary_template: String,
     },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum WorkflowStepInput {
+    Start {
+        name: String,
+        next_step_id: Option<String>,
+    },
     AgentTask {
         name: String,
         member_id: String,
@@ -117,11 +154,23 @@ pub enum WorkflowStepInput {
         fail_next_step_id: Option<String>,
         pass_rule: String,
     },
+    Decision {
+        name: String,
+        condition_kind: String,
+        condition_config: Value,
+        true_next_step_id: Option<String>,
+        false_next_step_id: Option<String>,
+    },
     LoopControl {
         name: String,
         loop_target_step_id: Option<String>,
         continue_when: String,
         finish_when: String,
+    },
+    End {
+        name: String,
+        stop_reason: String,
+        summary_template: String,
     },
 }
 
@@ -130,6 +179,7 @@ pub enum WorkflowStepInput {
 pub struct WorkflowStepDecision {
     pub(crate) outcome: String,
     pub(crate) reason: String,
+    pub(crate) branch_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +214,8 @@ pub struct WorkflowStepRun {
     pub(crate) input_prompt: String,
     pub(crate) result_text: String,
     pub(crate) result_json: Option<WorkflowReviewResult>,
+    pub(crate) message_type: Option<String>,
+    pub(crate) message_json: Option<Value>,
     pub(crate) decision: Option<WorkflowStepDecision>,
     pub(crate) parts: Vec<Value>,
     pub(crate) usage: Option<Value>,
@@ -181,7 +233,7 @@ pub struct WorkflowRun {
     pub(crate) workspace_binding: WorkflowWorkspaceBinding,
     pub(crate) loop_config_snapshot: WorkflowLoopConfig,
     pub(crate) current_loop_index: u64,
-    pub(crate) max_loops: u64,
+    pub(crate) max_loops: Option<u64>,
     pub(crate) current_step_run_id: Option<String>,
     pub(crate) stop_reason: Option<String>,
     pub(crate) summary: Option<String>,
@@ -272,6 +324,11 @@ pub(crate) struct WorkflowTemplateTeamMember {
     rename_all_fields = "camelCase"
 )]
 pub(crate) enum WorkflowTemplateStep {
+    Start {
+        key: String,
+        name: String,
+        next_step_key: Option<String>,
+    },
     AgentTask {
         key: String,
         name: String,
@@ -292,12 +349,28 @@ pub(crate) enum WorkflowTemplateStep {
         fail_next_step_key: Option<String>,
         pass_rule: String,
     },
+    Decision {
+        key: String,
+        name: String,
+        condition_kind: String,
+        #[serde(default)]
+        condition_config: Value,
+        true_next_step_key: Option<String>,
+        false_next_step_key: Option<String>,
+    },
     LoopControl {
         key: String,
         name: String,
         loop_target_step_key: Option<String>,
         continue_when: String,
         finish_when: String,
+    },
+    End {
+        key: String,
+        name: String,
+        stop_reason: String,
+        #[serde(default)]
+        summary_template: String,
     },
 }
 
@@ -377,5 +450,28 @@ mod tests {
         assert_eq!(serialized["memberId"], "member-1");
         assert_eq!(serialized["promptTemplate"], "写一章");
         assert!(serialized.get("member_id").is_none());
+    }
+
+    #[test]
+    fn workflow_decision_step_round_trips_with_condition_config() {
+        let value = json!({
+            "type": "decision",
+            "id": "step-2",
+            "workflowId": "workflow-1",
+            "name": "是否通过",
+            "order": 1,
+            "conditionKind": "review_pass",
+            "conditionConfig": {"source": "latest_review"},
+            "trueNextStepId": "step-3",
+            "falseNextStepId": "step-4"
+        });
+
+        let parsed: WorkflowStepDefinition = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(parsed).unwrap();
+
+        assert_eq!(serialized["conditionKind"], "review_pass");
+        assert_eq!(serialized["conditionConfig"]["source"], "latest_review");
+        assert_eq!(serialized["trueNextStepId"], "step-3");
+        assert_eq!(serialized["falseNextStepId"], "step-4");
     }
 }

@@ -1,5 +1,6 @@
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::{
@@ -41,8 +42,8 @@ pub(crate) fn create_id(prefix: &str) -> String {
 
 pub(crate) fn default_loop_config() -> WorkflowLoopConfig {
     WorkflowLoopConfig {
-        max_loops: 1,
-        max_rework_per_loop: 1,
+        max_loops: Some(1),
+        max_rework_per_loop: Some(1),
         stop_on_review_failure: true,
     }
 }
@@ -75,9 +76,12 @@ pub(crate) fn validate_workflow_package_manifest(
 
 pub(crate) fn step_id(step: &WorkflowStepDefinition) -> &str {
     match step {
-        WorkflowStepDefinition::AgentTask { id, .. }
+        WorkflowStepDefinition::Start { id, .. }
+        | WorkflowStepDefinition::AgentTask { id, .. }
         | WorkflowStepDefinition::ReviewGate { id, .. }
-        | WorkflowStepDefinition::LoopControl { id, .. } => id,
+        | WorkflowStepDefinition::Decision { id, .. }
+        | WorkflowStepDefinition::LoopControl { id, .. }
+        | WorkflowStepDefinition::End { id, .. } => id,
     }
 }
 
@@ -131,11 +135,11 @@ pub(crate) fn validate_binding_input(binding: &WorkflowWorkspaceBindingInput) ->
 }
 
 pub(crate) fn validate_loop_config(loop_config: &WorkflowLoopConfig) -> CommandResult<()> {
-    if loop_config.max_loops == 0 {
-        return Err("最大循环次数必须大于 0。".into());
+    if matches!(loop_config.max_loops, Some(0)) {
+        return Err("最大循环次数必须大于 0，或留空表示无限。".into());
     }
-    if loop_config.max_rework_per_loop == 0 {
-        return Err("每轮最大返工次数必须大于 0。".into());
+    if matches!(loop_config.max_rework_per_loop, Some(0)) {
+        return Err("每轮最大返工次数必须大于 0，或留空表示无限。".into());
     }
     Ok(())
 }
@@ -180,6 +184,13 @@ pub(crate) fn build_step_from_input(
     step: WorkflowStepInput,
 ) -> WorkflowStepDefinition {
     match step {
+        WorkflowStepInput::Start { name, next_step_id } => WorkflowStepDefinition::Start {
+            id: step_id,
+            workflow_id,
+            name,
+            order,
+            next_step_id,
+        },
         WorkflowStepInput::AgentTask {
             name,
             member_id,
@@ -216,6 +227,22 @@ pub(crate) fn build_step_from_input(
             fail_next_step_id,
             pass_rule,
         },
+        WorkflowStepInput::Decision {
+            name,
+            condition_kind,
+            condition_config,
+            true_next_step_id,
+            false_next_step_id,
+        } => WorkflowStepDefinition::Decision {
+            id: step_id,
+            workflow_id,
+            name,
+            order,
+            condition_kind,
+            condition_config,
+            true_next_step_id,
+            false_next_step_id,
+        },
         WorkflowStepInput::LoopControl {
             name,
             loop_target_step_id,
@@ -230,15 +257,30 @@ pub(crate) fn build_step_from_input(
             continue_when,
             finish_when,
         },
+        WorkflowStepInput::End {
+            name,
+            stop_reason,
+            summary_template,
+        } => WorkflowStepDefinition::End {
+            id: step_id,
+            workflow_id,
+            name,
+            order,
+            stop_reason,
+            summary_template,
+        },
     }
 }
 
 pub(crate) fn reorder_steps_in_place(steps: &mut [WorkflowStepDefinition]) {
     for (index, step) in steps.iter_mut().enumerate() {
         match step {
-            WorkflowStepDefinition::AgentTask { order, .. }
+            WorkflowStepDefinition::Start { order, .. }
+            | WorkflowStepDefinition::AgentTask { order, .. }
             | WorkflowStepDefinition::ReviewGate { order, .. }
-            | WorkflowStepDefinition::LoopControl { order, .. } => *order = index as u64,
+            | WorkflowStepDefinition::Decision { order, .. }
+            | WorkflowStepDefinition::LoopControl { order, .. }
+            | WorkflowStepDefinition::End { order, .. } => *order = index as u64,
         }
     }
 }
@@ -249,7 +291,8 @@ pub(crate) fn clear_deleted_step_references(
 ) {
     for step in steps.iter_mut() {
         match step {
-            WorkflowStepDefinition::AgentTask { next_step_id, .. } => {
+            WorkflowStepDefinition::Start { next_step_id, .. }
+            | WorkflowStepDefinition::AgentTask { next_step_id, .. } => {
                 if next_step_id.as_deref() == Some(deleted_step_id) {
                     *next_step_id = None;
                 }
@@ -270,6 +313,18 @@ pub(crate) fn clear_deleted_step_references(
                     *fail_next_step_id = None;
                 }
             }
+            WorkflowStepDefinition::Decision {
+                true_next_step_id,
+                false_next_step_id,
+                ..
+            } => {
+                if true_next_step_id.as_deref() == Some(deleted_step_id) {
+                    *true_next_step_id = None;
+                }
+                if false_next_step_id.as_deref() == Some(deleted_step_id) {
+                    *false_next_step_id = None;
+                }
+            }
             WorkflowStepDefinition::LoopControl {
                 loop_target_step_id,
                 ..
@@ -278,7 +333,18 @@ pub(crate) fn clear_deleted_step_references(
                     *loop_target_step_id = None;
                 }
             }
+            WorkflowStepDefinition::End { .. } => {}
         }
+    }
+}
+
+pub(crate) fn default_decision_condition_config(kind: &str) -> Value {
+    match kind {
+        "review_pass" => json!({ "source": "latest_review" }),
+        "rework_available" => json!({ "source": "loop_config.maxReworkPerLoop" }),
+        "remaining_loops_available" => json!({ "source": "loop_config.maxLoops" }),
+        "stop_on_review_failure" => json!({ "source": "loop_config.stopOnReviewFailure" }),
+        _ => json!({}),
     }
 }
 

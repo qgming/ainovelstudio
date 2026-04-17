@@ -18,12 +18,7 @@ pub(crate) fn delete_workflow(connection: &Connection, workflow_id: &str) -> Com
         .query_row(
             "SELECT source, package_id FROM workflows WHERE id = ?1",
             params![workflow_id],
-            |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                ))
-            },
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
         )
         .optional()
         .map_err(error_to_string)?;
@@ -46,7 +41,11 @@ pub(crate) fn delete_workflow(connection: &Connection, workflow_id: &str) -> Com
                         updated_at = ?3
                     WHERE id = ?1
                     "#,
-                    params![package_id, WORKFLOW_SOURCE_INSTALLED, now_timestamp() as i64],
+                    params![
+                        package_id,
+                        WORKFLOW_SOURCE_INSTALLED,
+                        now_timestamp() as i64
+                    ],
                 )
                 .map_err(error_to_string)?;
         }
@@ -82,7 +81,10 @@ pub(crate) async fn export_workflow_zip(
             return Ok(None);
         };
 
-        let final_path = match save_path.extension().and_then(|extension| extension.to_str()) {
+        let final_path = match save_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
             Some(extension) if extension.eq_ignore_ascii_case("zip") => save_path,
             _ => save_path.with_extension("zip"),
         };

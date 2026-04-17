@@ -1,8 +1,8 @@
 {
   "templateKey": "builtin:auto-novel",
   "name": "全自动写小说",
-  "description": "自动执行章节创作、审查、返工与设定维护的完整工作流模板。",
-  "basePrompt": "直接使用内置代理完成章节创作流水线。每个节点都先通过工具读取当前绑定书籍工作区中的文件，再执行本节点任务并把结果写回工作区。步骤跳转、返工和循环由程序控制。",
+  "description": "自动执行章节规划、写作、审查、返工、设定维护与循环收尾的完整工作流模板。",
+  "basePrompt": "直接使用内置代理完成章节创作流水线。每个节点都先通过工具读取当前绑定书籍工作区中的文件，再执行本节点任务并把结果写回工作区。共享工作区文件是长期事实源，结构化节点消息只用于当前轮次协作。步骤跳转、返工和循环由程序控制。",
   "loopConfig": {
     "maxLoops": 5,
     "maxReworkPerLoop": 2,
@@ -10,73 +10,114 @@
   },
   "teamMembers": [
     {
+      "key": "planner",
+      "agentId": "scene-plan",
+      "name": "场景规划代理",
+      "roleLabel": "章节规划",
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的大纲、人物设定、世界观和最近章节，再为当前轮生成本章 scene_plan，并把规划写回工作区。输出必须是 JSON，至少包含 messageType=scene_plan 以及 payload 中的 chapter_goal、beats、risks、continuity_notes 字段。"
+    },
+    {
       "key": "writer",
       "agentId": "chapter-write",
       "name": "写作代理",
       "roleLabel": "章节写作",
-      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的正文、大纲和设定文件，再继续推进章节创作，并把正文直接写回工作区。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的正文、大纲、场景规划和相关设定文件，再继续推进章节创作，并把正文直接写回工作区。若收到 revision_brief，则按修订要求返工。"
     },
     {
       "key": "reviewer",
       "agentId": "novel-review",
       "name": "审查代理",
       "roleLabel": "结构审查",
-      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节和相关设定文件，再检查设定一致性、节奏、伏笔与冲突，并输出清晰的审查结论与修订建议。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节和相关设定文件，再检查设定一致性、节奏、伏笔与冲突，并输出严格 JSON：pass、issues、revision_brief。"
     },
     {
       "key": "lore-maintainer",
       "agentId": "snowflake-fiction",
       "name": "设定维护代理",
       "roleLabel": "设定更新",
-      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节、人物设定和追踪文件，再更新人物设定、背景资料与创作追踪文件。"
+      "responsibilityPrompt": "先用工具读取当前绑定书籍工作区中的最新章节、人物设定和追踪文件，再更新人物设定、背景资料与创作追踪文件。输出必须是 JSON，至少包含 messageType=lore_update_summary 以及 payload 中的 updated_files、continuity_changes、followups 字段。"
     }
   ],
   "steps": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "开始",
+      "nextStepKey": "scene-plan"
+    },
+    {
+      "key": "scene-plan",
+      "type": "agent_task",
+      "name": "章节规划",
+      "memberKey": "planner",
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的大纲、人物设定、最近章节与追踪文件，再生成本轮章节规划并写回工作区。最终输出严格 JSON，格式为 {\"messageType\":\"scene_plan\",\"payload\":{...}}。payload 至少包含 chapter_goal、beats、risks、continuity_notes。",
+      "outputMode": "text",
+      "nextStepKey": "write-chapter"
+    },
     {
       "key": "write-chapter",
       "type": "agent_task",
       "name": "章节写作",
       "memberKey": "writer",
-      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的正文、大纲、场景规划和相关设定文件，再创作下一章，并把结果直接写回合适文件。",
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的正文、大纲、scene_plan 消息所对应的规划内容以及相关设定文件，再创作或返工当前章节，并把结果直接写回合适文件。",
       "outputMode": "text",
       "nextStepKey": "review-chapter"
     },
     {
       "key": "review-chapter",
-      "type": "agent_task",
+      "type": "review_gate",
       "name": "章节审查",
       "memberKey": "reviewer",
-      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节及相关设定文件，再完成审查，并输出清晰的审查结论与修订建议。",
-      "outputMode": "text",
-      "nextStepKey": "review-gate"
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节及相关设定文件，再完成审查，并输出严格 JSON：{\"pass\":boolean,\"issues\":[],\"revision_brief\":string}。",
+      "sourceStepKey": "write-chapter",
+      "passNextStepKey": "update-lore",
+      "failNextStepKey": "rework-allowed",
+      "passRule": "review_json.pass == true"
     },
     {
-      "key": "review-gate",
-      "type": "review_gate",
-      "name": "审查判断",
-      "memberKey": "reviewer",
-      "promptTemplate": "请结合上一审查步骤的结果，整理最终审查结论和需要执行的后续要点。",
-      "sourceStepKey": "review-chapter",
-      "passNextStepKey": "update-lore",
-      "failNextStepKey": "write-chapter",
-      "passRule": "review_json.pass == true"
+      "key": "rework-allowed",
+      "type": "decision",
+      "name": "允许返工吗",
+      "conditionKind": "rework_available",
+      "conditionConfig": {
+        "source": "loop_config.maxReworkPerLoop"
+      },
+      "trueNextStepKey": "write-chapter",
+      "falseNextStepKey": "review-failed-end"
     },
     {
       "key": "update-lore",
       "type": "agent_task",
       "name": "设定更新",
       "memberKey": "lore-maintainer",
-      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节、角色资料、背景资料和追踪文件，再更新角色、背景、线索与项目追踪资料。",
+      "promptTemplate": "请先使用工具读取当前绑定书籍工作区中的最新章节、角色资料、背景资料和追踪文件，再更新角色、背景、线索与项目追踪资料。最终输出严格 JSON，格式为 {\"messageType\":\"lore_update_summary\",\"payload\":{...}}。",
       "outputMode": "text",
-      "nextStepKey": "loop-control"
+      "nextStepKey": "more-loops"
     },
     {
-      "key": "loop-control",
-      "type": "loop_control",
-      "name": "循环控制",
-      "loopTargetStepKey": "write-chapter",
-      "continueWhen": "remainingLoops > 0",
-      "finishWhen": "remainingLoops <= 0"
+      "key": "more-loops",
+      "type": "decision",
+      "name": "还有下一轮吗",
+      "conditionKind": "remaining_loops_available",
+      "conditionConfig": {
+        "source": "loop_config.maxLoops"
+      },
+      "trueNextStepKey": "scene-plan",
+      "falseNextStepKey": "success-end"
+    },
+    {
+      "key": "review-failed-end",
+      "type": "end",
+      "name": "审查失败结束",
+      "stopReason": "review_failed",
+      "summaryTemplate": "当前轮次审查未通过，且已达到返工上限，工作流结束。"
+    },
+    {
+      "key": "success-end",
+      "type": "end",
+      "name": "成功结束",
+      "stopReason": "completed",
+      "summaryTemplate": "工作流已完成所有章节轮次，自动写小说流程顺利结束。"
     }
   ]
 }
