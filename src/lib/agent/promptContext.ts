@@ -56,6 +56,10 @@ const SKILL_LOADING_NOTE =
 const MANUAL_CONTEXT_FILE_CHAR_LIMIT = 6_000;
 const MANUAL_CONTEXT_TOTAL_CHAR_LIMIT = 12_000;
 
+function formatCurrentSystemDate(now = new Date()) {
+  return `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+}
+
 function joinSections(sections: Array<string | null | undefined>) {
   return sections
     .filter((section): section is string => Boolean(section?.trim()))
@@ -148,9 +152,12 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
     "- 多步任务先调用 todo 写出当前计划，并在每完成一步后及时更新。",
     "- todo 只维护当前会话里的短计划，不要把它当长期任务系统。",
     "- 当任务需要子代理隔离上下文执行时，主动调用 task 工具，而不是在主上下文里展开长链路。",
+    "- 涉及公开网络资料、外部网页、平台规则或最新公开信息时，使用 web_search 获取外部结果。",
+    "- 已经拿到外部链接并需要继续阅读正文时，使用 web_fetch 读取网页主要内容。",
     "- 未知路径、未知入口或需要先看目录结构时，优先使用 browse 或 search 缩小范围。",
     "- 涉及工作区路径时，默认优先传相对工作区根目录的路径，不要传绝对路径；例如用 `05-完整大纲.md`，不要用 `C:/.../05-完整大纲.md`。",
     "- 已知准确路径且需要正文内容时，再使用 read。",
+    "- 需要校验篇幅、字符数、汉字数或段落规模时，使用 word_count 对目标文件做定量核对。",
     "- 小范围文本修改优先使用 edit；只有整份内容都准备好了才使用 write。",
     "- JSON 数据优先使用 json 做局部读取和局部更新，不要为了改一个字段整份重写。",
     "- 结构变更统一使用 path；skill 和 agent 内文件统一分别走 skill / agent 工具。",
@@ -515,6 +522,7 @@ export function buildUserTurnContent({
 }: BuildUserTurnContentInput) {
   const taskProfile = inferTaskProfile(prompt);
   const fileKind = inferFileKind(activeFilePath);
+  const currentSystemDate = formatCurrentSystemDate();
 
   return joinSections([
     "# 当前轮上下文",
@@ -529,6 +537,7 @@ export function buildUserTurnContent({
           activeFilePath
             ? `- 当前激活文件：${activeFilePath}`
             : "- 当前没有激活文件。",
+          `- 当前系统日期：${currentSystemDate}`,
           `- 当前文件类型：${fileKind}`,
           `- 本轮任务类型：${taskProfile.label}`,
           `- 优先输出：${taskProfile.outputHint}`,

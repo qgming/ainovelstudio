@@ -34,7 +34,11 @@ import { resolveManualTurnContext, type ManualTurnContextSelection } from "../li
 import { formatProviderError } from "../lib/agent/errorFormatting";
 import { derivePlanningState, type PlanningState } from "../lib/agent/planning";
 import { runAgentTurn } from "../lib/agent/session";
-import { createLocalResourceToolset, createWorkspaceToolset } from "../lib/agent/tools";
+import {
+  createGlobalToolset,
+  createLocalResourceToolset,
+  createWorkspaceToolset,
+} from "../lib/agent/tools";
 import type { AgentMessage, AgentRun, AgentRunStatus, AgentPart, AgentUsage } from "../lib/agent/types";
 import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 import { getEnabledSkills, useSkillsStore } from "./skillsStore";
@@ -602,6 +606,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         }
 
         const planningState = derivePlanningState(persistedConversationHistory);
+        const globalTools = createGlobalToolset();
         const workspaceTools = workspaceState.rootPath
           ? createWorkspaceToolset({
               onWorkspaceMutated: async () => {
@@ -633,7 +638,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           planningState,
           prompt: nextInput,
           providerConfig,
-          workspaceTools: { ...workspaceTools, ...localResourceTools },
+          workspaceTools: { ...globalTools, ...workspaceTools, ...localResourceTools },
           onToolRequestStateChange: ({ requestId, status }) => {
             if (!isCurrentRun() && status === "start") {
               return;

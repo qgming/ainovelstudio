@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
@@ -48,6 +48,10 @@ function createAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
 }
 
 describe("prompt context", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("system prompt 只保留技能目录，不常驻完整 skill 正文", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
@@ -95,5 +99,18 @@ describe("prompt context", () => {
     expect(prompt).toContain("开头内容");
     expect(prompt).toContain("结尾内容");
     expect(prompt).toContain("…（中间省略）…");
+  });
+
+  it("用户上下文会注入当前系统日期到年月日", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-18T09:30:00+08:00"));
+
+    const prompt = buildUserTurnContent({
+      activeFilePath: "章节/第一章.md",
+      prompt: "继续写这一章",
+      workspaceRootPath: "C:/books/北境余烬",
+    });
+
+    expect(prompt).toContain("- 当前系统日期：2026年4月18日");
   });
 });

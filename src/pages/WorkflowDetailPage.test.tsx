@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkflowDetail } from "../lib/workflow/types";
+import type { WorkflowBasicsInput } from "../lib/workflow/api";
+import type {
+  WorkflowDetail,
+  WorkflowStepDefinition,
+  WorkflowWorkspaceBinding,
+} from "../lib/workflow/types";
 
 const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
@@ -28,7 +33,16 @@ const initialBinding = {
   boundAt: 1710000000000,
 } as const;
 
-function createWorkflowDetail(): WorkflowDetail {
+function createWorkflowDetail(steps: WorkflowDetail["steps"] = [
+  {
+    id: "step-start",
+    workflowId,
+    type: "start",
+    name: "开始",
+    order: 0,
+    nextStepId: null,
+  },
+]): WorkflowDetail {
   return {
     workflow: {
       id: workflowId,
@@ -42,25 +56,32 @@ function createWorkflowDetail(): WorkflowDetail {
       workspaceBinding: initialBinding,
       loopConfig: { maxLoops: 1 },
       teamMemberIds: [],
-      stepIds: ["step-start"],
+      stepIds: steps.map((step) => step.id),
       lastRunId: null,
       lastRunStatus: "idle",
     },
     teamMembers: [],
-    steps: [
-      {
-        id: "step-start",
-        workflowId,
-        type: "start",
-        name: "开始",
-        order: 0,
-        nextStepId: null,
-      },
-    ],
+    steps,
     runs: [],
     stepRuns: [],
   };
 }
+
+type RenderPageOverrides = {
+  bindWorkspace?: (
+    workflowId: string,
+    binding: Omit<WorkflowWorkspaceBinding, "workflowId" | "boundAt">,
+  ) => Promise<void>;
+  saveWorkflowBasics?: (
+    workflowId: string,
+    payload: WorkflowBasicsInput,
+  ) => Promise<void>;
+  updateStep?: (
+    workflowId: string,
+    stepId: string,
+    payload: Partial<WorkflowStepDefinition>,
+  ) => Promise<void>;
+};
 
 describe("WorkflowDetailPage", () => {
   beforeEach(() => {
@@ -76,12 +97,8 @@ describe("WorkflowDetailPage", () => {
     });
   });
 
-  it("更换书籍时会自动保存左侧基本设置", async () => {
-    const detail = createWorkflowDetail();
+  function renderPage(detail: WorkflowDetail, overrides?: RenderPageOverrides) {
     const loadWorkflowDetail = vi.fn(async () => undefined);
-    const saveWorkflowBasics = vi.fn(async () => undefined);
-    const bindWorkspace = vi.fn(async () => undefined);
-
     useWorkflowStore.setState({
       workflows: [detail.workflow],
       currentDetail: detail,
@@ -94,14 +111,14 @@ describe("WorkflowDetailPage", () => {
       inflightToolRequestIds: [],
       stopRequested: false,
       loadWorkflowDetail,
-      saveWorkflowBasics,
-      bindWorkspace,
+      saveWorkflowBasics: overrides?.saveWorkflowBasics ?? vi.fn(async () => undefined),
+      bindWorkspace: overrides?.bindWorkspace ?? vi.fn(async () => undefined),
       updateLoopConfig: vi.fn(async () => undefined),
       addTeamMember: vi.fn(async () => undefined),
       updateTeamMember: vi.fn(async () => undefined),
       removeTeamMember: vi.fn(async () => undefined),
       addAgentStep: vi.fn(async () => undefined),
-      updateStep: vi.fn(async () => undefined),
+      updateStep: overrides?.updateStep ?? vi.fn(async () => undefined),
       removeStep: vi.fn(async () => undefined),
       reorderSteps: vi.fn(async () => undefined),
       selectStepRun: vi.fn(),
@@ -123,6 +140,15 @@ describe("WorkflowDetailPage", () => {
         </Routes>
       </MemoryRouter>,
     );
+
+    return { loadWorkflowDetail };
+  }
+
+  it("更换书籍时会自动保存左侧基本设置", async () => {
+    const detail = createWorkflowDetail();
+    const saveWorkflowBasics = vi.fn(async () => undefined);
+    const bindWorkspace = vi.fn(async () => undefined);
+    const { loadWorkflowDetail } = renderPage(detail, { saveWorkflowBasics, bindWorkspace });
 
     fireEvent.change(screen.getByDisplayValue("测试工作流"), {
       target: { value: "切换书籍后自动保存" },
@@ -147,5 +173,46 @@ describe("WorkflowDetailPage", () => {
     });
 
     expect(loadWorkflowDetail).toHaveBeenCalledWith(workflowId);
+  });
+
+  it("切换节点时保留未保存草稿且不会自动保存", async () => {
+    const detail = createWorkflowDetail([
+      {
+        id: "step-start",
+        workflowId,
+        type: "start",
+        name: "开始节点",
+        order: 0,
+        nextStepId: "step-end",
+      },
+      {
+        id: "step-end",
+        workflowId,
+        type: "end",
+        name: "结束节点",
+        order: 1,
+        stopReason: "completed",
+        summaryTemplate: "",
+        loopBehavior: "finish",
+        loopTargetStepId: null,
+      },
+    ]);
+    const updateStep = vi.fn(async () => undefined);
+
+    renderPage(detail, { updateStep });
+
+    fireEvent.change(screen.getByDisplayValue("开始节点"), {
+      target: { value: "开始节点草稿" },
+    });
+
+    expect(screen.getByText("当前有未保存的节点改动。点击右上角保存后才会写回工作流。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByText("结束节点")[0]);
+    expect(await screen.findByDisplayValue("结束节点")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByText("开始节点")[0]);
+
+    expect(await screen.findByDisplayValue("开始节点草稿")).toBeInTheDocument();
+    expect(updateStep).not.toHaveBeenCalled();
   });
 });

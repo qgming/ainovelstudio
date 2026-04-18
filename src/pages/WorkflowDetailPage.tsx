@@ -58,6 +58,11 @@ const END_LOOP_OPTIONS = [
   { label: "有下一轮就继续", value: "continue_if_possible" },
 ] as const;
 
+type StepDraftSnapshot = {
+  agentId: string;
+  step: WorkflowStepDefinition;
+};
+
 function DetailTitle({ currentLabel }: { currentLabel: string }) {
   return (
     <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
@@ -261,6 +266,7 @@ export function WorkflowDetailPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [stepDraft, setStepDraft] = useState<WorkflowStepDefinition | null>(null);
   const [stepDraftAgentId, setStepDraftAgentId] = useState("");
+  const [stepDraftCache, setStepDraftCache] = useState<Record<string, StepDraftSnapshot>>({});
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
   const deferredAgentQuery = useDeferredValue(agentQuery.trim().toLowerCase());
 
@@ -275,6 +281,10 @@ export function WorkflowDetailPage() {
       void initializeAgents();
     }
   }, [agentStatus, initializeAgents]);
+
+  useEffect(() => {
+    setStepDraftCache({});
+  }, [workflowId]);
 
   const detail = currentDetail && currentDetail.workflow.id === workflowId ? currentDetail : null;
 
@@ -356,9 +366,15 @@ export function WorkflowDetailPage() {
       setStepDraftAgentId("");
       return;
     }
+    const cachedDraft = stepDraftCache[selectedStep.id];
+    if (cachedDraft) {
+      setStepDraft(cachedDraft.step);
+      setStepDraftAgentId(cachedDraft.agentId);
+      return;
+    }
     setStepDraft(selectedStep);
     setStepDraftAgentId(isMemberStep(selectedStep) ? getAgentIdForStep(selectedStep) : "");
-  }, [selectedStep, detail]);
+  }, [selectedStep, stepDraftCache, detail]);
 
   useEffect(() => {
     setIsPromptExpanded(false);
@@ -384,6 +400,53 @@ export function WorkflowDetailPage() {
 
   function countMemberUsage(memberId: string) {
     return detail?.steps.filter((item) => isMemberStep(item) && item.memberId === memberId).length ?? 0;
+  }
+
+  function rememberStepDraft(stepId: string, nextStep: WorkflowStepDefinition, nextAgentId: string) {
+    setStepDraftCache((current) => ({
+      ...current,
+      [stepId]: {
+        step: nextStep,
+        agentId: nextAgentId,
+      },
+    }));
+  }
+
+  function clearStepDraft(stepId: string) {
+    setStepDraftCache((current) => {
+      if (!(stepId in current)) {
+        return current;
+      }
+      const nextCache = { ...current };
+      delete nextCache[stepId];
+      return nextCache;
+    });
+  }
+
+  function updateCurrentStepDraft(nextStep: WorkflowStepDefinition, nextAgentId?: string) {
+    if (!selectedStep) {
+      return;
+    }
+    const resolvedAgentId = isMemberStep(nextStep) ? (nextAgentId ?? stepDraftAgentId) : "";
+    setStepDraft(nextStep);
+    setStepDraftAgentId(resolvedAgentId);
+    rememberStepDraft(selectedStep.id, nextStep, resolvedAgentId);
+  }
+
+  function updateCurrentStepAgentId(nextAgentId: string) {
+    if (!selectedStep || !stepDraft || !isMemberStep(stepDraft)) {
+      return;
+    }
+    setStepDraftAgentId(nextAgentId);
+    rememberStepDraft(selectedStep.id, stepDraft, nextAgentId);
+  }
+
+  function handleSelectStep(stepId: string) {
+    if (selectedStep && stepDraft) {
+      const currentAgentId = isMemberStep(stepDraft) ? stepDraftAgentId : "";
+      rememberStepDraft(selectedStep.id, stepDraft, currentAgentId);
+    }
+    setSelectedStepId(stepId);
   }
 
   function buildStepDraftForType(
@@ -463,8 +526,10 @@ export function WorkflowDetailPage() {
       ? stepDraftAgentId
       : agents.find((agent) => agent.validation.isValid)?.id ?? agents[0]?.id ?? "";
     const fallbackMemberId = isMemberStep(stepDraft) ? stepDraft.memberId : "";
-    setStepDraft(buildStepDraftForType(stepDraft, nextType, fallbackMemberId));
-    setStepDraftAgentId(nextType === "agent_task" || nextType === "decision" ? fallbackAgentId : "");
+    updateCurrentStepDraft(
+      buildStepDraftForType(stepDraft, nextType, fallbackMemberId),
+      nextType === "agent_task" || nextType === "decision" ? fallbackAgentId : "",
+    );
   }
 
   async function createHiddenMember(agentId: string) {
@@ -717,6 +782,7 @@ export function WorkflowDetailPage() {
       const latestDetail = useWorkflowStore.getState().currentDetail;
       const persistedStep = latestDetail?.steps.find((item) => item.id === selectedStep.id) ?? null;
       if (persistedStep) {
+        clearStepDraft(selectedStep.id);
         setStepDraft(persistedStep);
         setStepDraftAgentId(isMemberStep(persistedStep) ? getMemberById(latestDetail?.teamMembers ?? [], persistedStep.memberId)?.agentId ?? "" : "");
       }
@@ -953,11 +1019,11 @@ export function WorkflowDetailPage() {
                         <div
                           role="button"
                           tabIndex={0}
-                          onClick={() => setSelectedStepId(step.id)}
+                          onClick={() => handleSelectStep(step.id)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              setSelectedStepId(step.id);
+                              handleSelectStep(step.id);
                             }
                           }}
                           className={cn(
@@ -1072,7 +1138,7 @@ export function WorkflowDetailPage() {
                   {selectedStep && stepDraft ? (
                     <div className="space-y-4">
                       <p className="text-xs leading-5 text-muted-foreground">
-                        {isStepDraftDirty ? "当前有未保存的节点改动。" : "当前节点内容已保存。"}
+                        {isStepDraftDirty ? "当前有未保存的节点改动。点击右上角保存后才会写回工作流。" : "当前节点内容已保存。"}
                       </p>
                       <label className="block space-y-1.5">
                         <span className="text-xs font-medium text-muted-foreground">节点类型</span>
@@ -1089,7 +1155,7 @@ export function WorkflowDetailPage() {
                         <span className="text-xs font-medium text-muted-foreground">节点名称</span>
                         <Input
                           value={stepDraft.name}
-                          onChange={(event) => setStepDraft({ ...stepDraft, name: event.target.value })}
+                          onChange={(event) => updateCurrentStepDraft({ ...stepDraft, name: event.target.value })}
                           disabled={stepBusy === selectedStep.id}
                         />
                       </label>
@@ -1099,7 +1165,7 @@ export function WorkflowDetailPage() {
                           <span className="text-xs font-medium text-muted-foreground">下一步</span>
                           <Select
                             value={stepDraft.nextStepId ?? "__none__"}
-                            onValueChange={(value) => setStepDraft({ ...stepDraft, nextStepId: value === "__none__" ? null : value })}
+                            onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, nextStepId: value === "__none__" ? null : value })}
                           >
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -1116,7 +1182,7 @@ export function WorkflowDetailPage() {
                         <>
                           <label className="block space-y-1.5">
                             <span className="text-xs font-medium text-muted-foreground">代理</span>
-                            <Select value={stepDraftAgentId} onValueChange={setStepDraftAgentId}>
+                            <Select value={stepDraftAgentId} onValueChange={updateCurrentStepAgentId}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {agents.map((agent) => (
@@ -1129,7 +1195,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">输出模式</span>
                             <Select
                               value={stepDraft.outputMode}
-                              onValueChange={(value) => setStepDraft({ ...stepDraft, outputMode: value as typeof stepDraft.outputMode })}
+                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, outputMode: value as typeof stepDraft.outputMode })}
                             >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -1142,7 +1208,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">下一步</span>
                             <Select
                               value={stepDraft.nextStepId ?? "__none__"}
-                              onValueChange={(value) => setStepDraft({ ...stepDraft, nextStepId: value === "__none__" ? null : value })}
+                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, nextStepId: value === "__none__" ? null : value })}
                             >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -1157,7 +1223,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">节点提示词</span>
                             <Textarea
                               value={stepDraft.promptTemplate}
-                              onChange={(event) => setStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
+                              onChange={(event) => updateCurrentStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
                               className="min-h-40"
                               disabled={stepBusy === selectedStep.id}
                             />
@@ -1169,7 +1235,7 @@ export function WorkflowDetailPage() {
                         <>
                           <label className="block space-y-1.5">
                             <span className="text-xs font-medium text-muted-foreground">判断代理</span>
-                            <Select value={stepDraftAgentId} onValueChange={setStepDraftAgentId}>
+                            <Select value={stepDraftAgentId} onValueChange={updateCurrentStepAgentId}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {agents.map((agent) => (
@@ -1182,7 +1248,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">判断来源</span>
                             <Select
                               value={stepDraft.sourceStepId || "__none__"}
-                              onValueChange={(value) => setStepDraft({ ...stepDraft, sourceStepId: value === "__none__" ? "" : value })}
+                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, sourceStepId: value === "__none__" ? "" : value })}
                             >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -1198,7 +1264,7 @@ export function WorkflowDetailPage() {
                               <span className="text-xs font-medium text-muted-foreground">通过/是 时</span>
                               <Select
                                 value={stepDraft.trueNextStepId ?? "__none__"}
-                                onValueChange={(value) => setStepDraft({ ...stepDraft, trueNextStepId: value === "__none__" ? null : value })}
+                                onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, trueNextStepId: value === "__none__" ? null : value })}
                               >
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -1213,7 +1279,7 @@ export function WorkflowDetailPage() {
                               <span className="text-xs font-medium text-muted-foreground">不通过/否 时</span>
                               <Select
                                 value={stepDraft.falseNextStepId ?? "__none__"}
-                                onValueChange={(value) => setStepDraft({ ...stepDraft, falseNextStepId: value === "__none__" ? null : value })}
+                                onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, falseNextStepId: value === "__none__" ? null : value })}
                               >
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -1229,7 +1295,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">节点提示词</span>
                             <Textarea
                               value={stepDraft.promptTemplate}
-                              onChange={(event) => setStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
+                              onChange={(event) => updateCurrentStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
                               className="min-h-40"
                               disabled={stepBusy === selectedStep.id}
                             />
@@ -1243,7 +1309,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">结束原因</span>
                             <Select
                               value={stepDraft.stopReason}
-                              onValueChange={(value) => setStepDraft({ ...stepDraft, stopReason: value as typeof stepDraft.stopReason })}
+                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, stopReason: value as typeof stepDraft.stopReason })}
                             >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -1257,7 +1323,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">结束后动作</span>
                             <Select
                               value={stepDraft.loopBehavior}
-                              onValueChange={(value) => setStepDraft({ ...stepDraft, loopBehavior: value as typeof stepDraft.loopBehavior })}
+                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, loopBehavior: value as typeof stepDraft.loopBehavior })}
                             >
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -1272,7 +1338,7 @@ export function WorkflowDetailPage() {
                               <span className="text-xs font-medium text-muted-foreground">下一轮从哪个节点开始</span>
                               <Select
                                 value={stepDraft.loopTargetStepId ?? "__none__"}
-                                onValueChange={(value) => setStepDraft({ ...stepDraft, loopTargetStepId: value === "__none__" ? null : value })}
+                                onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, loopTargetStepId: value === "__none__" ? null : value })}
                               >
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -1288,7 +1354,7 @@ export function WorkflowDetailPage() {
                             <span className="text-xs font-medium text-muted-foreground">结束摘要模板</span>
                             <Textarea
                               value={stepDraft.summaryTemplate}
-                              onChange={(event) => setStepDraft({ ...stepDraft, summaryTemplate: event.target.value })}
+                              onChange={(event) => updateCurrentStepDraft({ ...stepDraft, summaryTemplate: event.target.value })}
                               className="min-h-32"
                               disabled={stepBusy === selectedStep.id}
                             />

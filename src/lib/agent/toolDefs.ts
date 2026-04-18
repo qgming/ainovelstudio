@@ -33,10 +33,28 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "搜索文件夹名、文件名和正文内容；适合定位关键词、章节、设定或数据字段。",
   },
   {
+    id: "web_search",
+    name: "网络搜索",
+    description:
+      "搜索公开网络信息并返回标题、摘要和链接；适合补充外部资料、平台规则和最新公开网页内容。",
+  },
+  {
+    id: "web_fetch",
+    name: "网页读取",
+    description:
+      "读取指定网页正文并提取标题和主要文本；适合在搜索后继续展开阅读具体内容。",
+  },
+  {
     id: "read",
     name: "读取文件",
     description:
       "读取文本文件全文或局部行段；已知准确路径时使用，未知路径先 browse 或 search。",
+  },
+  {
+    id: "word_count",
+    name: "字数统计",
+    description:
+      "读取指定文本文件并返回字符数、非空白字符数、汉字数、英文单词数、数字数、段落数和行数。",
   },
   {
     id: "edit",

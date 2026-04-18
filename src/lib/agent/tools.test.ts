@@ -18,6 +18,7 @@ const {
   mockScanInstalledAgents,
   mockScanInstalledSkills,
   mockSearchWorkspaceContent,
+  mockForwardProviderRequestViaTauri,
   mockWriteAgentFileContent,
   mockWriteSkillFileContent,
   mockWriteWorkspaceTextFile,
@@ -39,6 +40,7 @@ const {
   mockScanInstalledAgents: vi.fn(),
   mockScanInstalledSkills: vi.fn(),
   mockSearchWorkspaceContent: vi.fn(),
+  mockForwardProviderRequestViaTauri: vi.fn(),
   mockWriteAgentFileContent: vi.fn(),
   mockWriteSkillFileContent: vi.fn(),
   mockWriteWorkspaceTextFile: vi.fn(),
@@ -73,7 +75,12 @@ vi.mock("../skills/api", () => ({
   writeSkillFileContent: mockWriteSkillFileContent,
 }));
 
-import { createLocalResourceToolset, createWorkspaceToolset } from "./tools";
+vi.mock("./providerApi", () => ({
+  forwardProviderRequestViaTauri: mockForwardProviderRequestViaTauri,
+}));
+
+import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./tools";
+import { searxngSearchService } from "./tools/searxngSearchService";
 
 describe("createWorkspaceToolset", () => {
   beforeEach(() => {
@@ -94,9 +101,14 @@ describe("createWorkspaceToolset", () => {
     mockScanInstalledAgents.mockReset();
     mockScanInstalledSkills.mockReset();
     mockSearchWorkspaceContent.mockReset();
+    mockForwardProviderRequestViaTauri.mockReset();
     mockWriteAgentFileContent.mockReset();
     mockWriteSkillFileContent.mockReset();
     mockWriteWorkspaceTextFile.mockReset();
+    searxngSearchService.setInstances([
+      "https://search-a.example",
+      "https://search-b.example",
+    ]);
   });
 
   it("write 写入文件后会触发工作区刷新回调", async () => {
@@ -233,6 +245,47 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
+  it("word_count 会返回稳定的字数统计结果", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一段有3人。\nHello world!\n\n第二段",
+    );
+
+    const result = await toolset.word_count.execute({
+      path: "章节/第一卷/第1章.md",
+    });
+
+    expect(mockReadWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第一卷/第1章.md",
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary: [
+        "已统计 章节/第一卷/第1章.md：",
+        "- 字符数：25",
+        "- 非空白字符数：21",
+        "- 汉字数：8",
+        "- 英文单词数：2",
+        "- 数字数：1",
+        "- 行数：4",
+        "- 段落数：2",
+      ].join("\n"),
+      data: {
+        path: "章节/第一卷/第1章.md",
+        characterCount: 25,
+        nonWhitespaceCharacterCount: 21,
+        hanCharacterCount: 8,
+        latinWordCount: 2,
+        digitCount: 1,
+        lineCount: 4,
+        paragraphCount: 2,
+      },
+    });
+  });
+
   it("edit 支持精确替换文本并刷新工作区", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
@@ -311,6 +364,158 @@ describe("createWorkspaceToolset", () => {
     expect(result).toEqual({
       ok: true,
       summary: "已迁移到 归档/第一卷/第001章.md",
+    });
+  });
+});
+
+describe("createGlobalToolset", () => {
+  beforeEach(() => {
+    mockForwardProviderRequestViaTauri.mockReset();
+    searxngSearchService.setInstances([
+      "https://search-a.example",
+      "https://search-b.example",
+    ]);
+  });
+
+  it("web_search 会返回解析后的公开网页结果", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: [
+        '<article class="result">',
+        '<h3><a href="https://example.com/post-1">第一条 <em>结果</em></a></h3>',
+        '<p class="content">这是第一条摘要。</p>',
+        "</article>",
+      ].join(""),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.web_search.execute({
+      limit: 5,
+      query: "番茄小说 最新规则",
+    });
+
+    expect(mockForwardProviderRequestViaTauri).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
+        Accept: "text/html,application/xhtml+xml",
+      }),
+      method: "GET",
+      url: expect.stringContaining(
+        "https://search-a.example/search?q=%E7%95%AA%E8%8C%84%E5%B0%8F%E8%AF%B4",
+      ),
+    });
+    expect(result).toEqual({
+      ok: true,
+      summary:
+        "已搜索“番茄小说 最新规则”，通过 https://search-a.example 返回 1 条结果。",
+      data: {
+        success: true,
+        query: "番茄小说 最新规则",
+        provider: "searxng",
+        instance: "https://search-a.example",
+        totalCount: 1,
+        results: [
+          {
+            url: "https://example.com/post-1",
+            title: "第一条 结果",
+            snippet: "这是第一条摘要。",
+            source: "https://example.com/post-1",
+          },
+        ],
+      },
+    });
+  });
+
+  it("web_fetch 会返回网页标题和主要正文", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: [
+        "<html><head><title>年度盘点</title></head><body>",
+        "<main>",
+        "<p>2024 年短篇小说市场持续升温，悬疑、情感反转和女性成长题材表现突出。</p>",
+        "<p>平台侧更偏好强钩子、快反转、单章高潮密度更高的故事结构。</p>",
+        "</main>",
+        "</body></html>",
+      ].join(""),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.web_fetch.execute({
+      url: "https://example.com/article-1",
+    });
+
+    expect(mockForwardProviderRequestViaTauri).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
+        Accept: "text/html,application/xhtml+xml",
+      }),
+      method: "GET",
+      url: "https://example.com/article-1",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        success: true,
+        url: "https://example.com/article-1",
+        title: "年度盘点",
+        provider: "direct_html",
+        truncated: false,
+      },
+    });
+    expect((result.data as { content: string }).content).toContain(
+      "2024 年短篇小说市场持续升温",
+    );
+    expect((result.data as { content: string }).content).toContain(
+      "平台侧更偏好强钩子",
+    );
+  });
+
+  it("web_search 会在前一个实例失败后自动切换到下一个实例", async () => {
+    mockForwardProviderRequestViaTauri
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: {},
+        body: "",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {},
+        body: [
+          '<article class="result">',
+          '<h3><a href="https://example.com/post-2">第二条结果</a></h3>',
+          '<p class="content">第二条摘要。</p>',
+          "</article>",
+        ].join(""),
+      });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.web_search.execute({
+      query: "AI 小说平台",
+    });
+
+    expect(mockForwardProviderRequestViaTauri).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        url: expect.stringContaining("https://search-a.example/search?"),
+      }),
+    );
+    expect(mockForwardProviderRequestViaTauri).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        url: expect.stringContaining("https://search-b.example/search?"),
+      }),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        success: true,
+        instance: "https://search-b.example",
+        totalCount: 1,
+      },
     });
   });
 });

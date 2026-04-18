@@ -7,7 +7,11 @@ import { mergePart } from "../chat/sessionRuntime";
 import { derivePlanningState } from "../agent/planning";
 import { runAgentTurn } from "../agent/session";
 import type { AgentPart } from "../agent/types";
-import { createLocalResourceToolset, createWorkspaceToolset } from "../agent/tools";
+import {
+  createGlobalToolset,
+  createLocalResourceToolset,
+  createWorkspaceToolset,
+} from "../agent/tools";
 import { parseWorkflowMessagePayload } from "./api";
 import type {
   WorkflowDecisionStepDefinition,
@@ -495,6 +499,7 @@ async function executeConfiguredStep(params: {
     step.type === "decision" ? [WORKFLOW_DECISION_TOOL_ID] : [],
   );
   const enabledAgents = getEnabledAgents(useSubAgentStore.getState()).filter((item) => item.id !== agent.id);
+  const globalTools = createGlobalToolset();
   const workspaceTools = createWorkspaceToolset({
     rootPath: run.workspaceBinding.rootPath,
     onWorkspaceMutated: async () => {
@@ -539,7 +544,7 @@ async function executeConfiguredStep(params: {
     planningState: derivePlanningState([]),
     prompt,
     providerConfig,
-    workspaceTools: { ...workspaceTools, ...localResourceTools },
+    workspaceTools: { ...globalTools, ...workspaceTools, ...localResourceTools },
     onToolRequestStateChange: ({ requestId, status }) => {
       useWorkflowStore.getState().trackInflightToolRequest(
         requestId,

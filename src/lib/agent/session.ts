@@ -434,6 +434,60 @@ function buildAiSdkTools(
           return result.data ?? result.summary;
         },
       }),
+    web_search: (toolName, tool) =>
+      defineTool({
+        description:
+          "搜索公开网络信息并返回标题、摘要和链接，适合查询外部资料、平台规则和最新公开网页内容。",
+        inputSchema: z.object({
+          language: z
+            .string()
+            .optional()
+            .describe("结果语言，默认 zh-CN。"),
+          limit: z
+            .number()
+            .int()
+            .positive()
+            .max(10)
+            .optional()
+            .describe("最多返回多少条结果，默认 5，最大 10。"),
+          query: z.string().min(1).describe("搜索关键词或问题。"),
+          safesearch: z
+            .union([z.literal(0), z.literal(1), z.literal(2)])
+            .optional()
+            .describe("安全搜索等级：0 关闭，1 中等，2 严格。默认 1。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    web_fetch: (toolName, tool) =>
+      defineTool({
+        description:
+          "读取指定网页并提取标题与主要正文，适合在搜索后继续展开阅读。",
+        inputSchema: z.object({
+          maxChars: z
+            .number()
+            .int()
+            .positive()
+            .max(20000)
+            .optional()
+            .describe("正文最大返回字符数，默认 8000，最大 20000。"),
+          url: z.string().url().describe("要读取的完整网页地址。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
     read: (toolName, tool) =>
       defineTool({
         description:
@@ -465,6 +519,24 @@ function buildAiSdkTools(
             .positive()
             .optional()
             .describe("仅在 mode=range 时使用。起始行号，从 1 开始。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    word_count: (toolName, tool) =>
+      defineTool({
+        description:
+          "统计指定文本文件的字符数、非空白字符数、汉字数、英文单词数、数字数、行数和段落数。",
+        inputSchema: z.object({
+          path: z
+            .string()
+            .describe("目标文本文件的相对工作区路径。"),
         }),
         execute: async (input) => {
           const result = await runTool(

@@ -1042,6 +1042,196 @@ describe("agent session (streaming)", () => {
     ]);
   });
 
+  it("web_search 工具把结构化网络结果返回给模型", async () => {
+    const parts: AgentPart[] = [];
+
+    async function* mockFullStream() {
+      yield {
+        type: "tool-call" as const,
+        toolName: "web_search",
+        toolCallId: "call-web-search-1",
+        input: { limit: 3, query: "番茄小说 最新规则" },
+      };
+      yield {
+        type: "tool-result" as const,
+        toolName: "web_search",
+        toolCallId: "call-web-search-1",
+        output: {
+          success: true,
+          query: "番茄小说 最新规则",
+          provider: "searxng",
+          instance: "https://search-a.example",
+          totalCount: 1,
+          results: [
+            {
+              url: "https://example.com/post-1",
+              title: "规则更新",
+              snippet: "这里是摘要",
+              source: "https://example.com/post-1",
+            },
+          ],
+        },
+      };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["web_search"],
+      prompt: "查一下番茄小说最新规则",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {
+        web_search: {
+          description: "网络搜索",
+          execute: async () => ({
+            ok: true,
+            summary: "已完成网络搜索",
+            data: {},
+          }),
+        },
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    expect(mockStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockStreamFn.mock.calls[0][0].tools?.web_search).toBeDefined();
+    expect(parts).toEqual([
+      {
+        type: "tool-call",
+        toolName: "web_search",
+        toolCallId: "call-web-search-1",
+        status: "running",
+        inputSummary: '{"limit":3,"query":"番茄小说 最新规则"}',
+      },
+      {
+        type: "tool-result",
+        toolName: "web_search",
+        toolCallId: "call-web-search-1",
+        status: "completed",
+        output: {
+          success: true,
+          query: "番茄小说 最新规则",
+          provider: "searxng",
+          instance: "https://search-a.example",
+          totalCount: 1,
+          results: [
+            {
+              url: "https://example.com/post-1",
+              title: "规则更新",
+              snippet: "这里是摘要",
+              source: "https://example.com/post-1",
+            },
+          ],
+        },
+        outputSummary:
+          '{"success":true,"query":"番茄小说 最新规则","provider":"searxng","instance":"https://search-a.example","totalCount":1,"results":[{"url":"https://example.com/post-1","title":"规则更新","snippet":"这里是摘要","source":"https://example.com/post-1"}]}',
+      },
+    ]);
+  });
+
+  it("web_fetch 工具把网页正文结果返回给模型", async () => {
+    const parts: AgentPart[] = [];
+
+    async function* mockFullStream() {
+      yield {
+        type: "tool-call" as const,
+        toolName: "web_fetch",
+        toolCallId: "call-web-fetch-1",
+        input: { url: "https://example.com/article-1" },
+      };
+      yield {
+        type: "tool-result" as const,
+        toolName: "web_fetch",
+        toolCallId: "call-web-fetch-1",
+        output: {
+          success: true,
+          url: "https://example.com/article-1",
+          title: "年度盘点",
+          content: "这里是网页正文。",
+          excerpt: "这里是网页正文。",
+          textLength: 8,
+          truncated: false,
+          provider: "direct_html",
+        },
+      };
+    }
+
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockFullStream(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: null,
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: ["web_fetch"],
+      prompt: "读一下这个网页",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {
+        web_fetch: {
+          description: "网页读取",
+          execute: async () => ({
+            ok: true,
+            summary: "已读取网页",
+            data: {},
+          }),
+        },
+      },
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    expect(mockStreamFn).toHaveBeenCalledTimes(1);
+    expect(mockStreamFn.mock.calls[0][0].tools?.web_fetch).toBeDefined();
+    expect(parts).toEqual([
+      {
+        type: "tool-call",
+        toolName: "web_fetch",
+        toolCallId: "call-web-fetch-1",
+        status: "running",
+        inputSummary: '{"url":"https://example.com/article-1"}',
+      },
+      {
+        type: "tool-result",
+        toolName: "web_fetch",
+        toolCallId: "call-web-fetch-1",
+        status: "completed",
+        output: {
+          success: true,
+          url: "https://example.com/article-1",
+          title: "年度盘点",
+          content: "这里是网页正文。",
+          excerpt: "这里是网页正文。",
+          textLength: 8,
+          truncated: false,
+          provider: "direct_html",
+        },
+        outputSummary:
+          '{"success":true,"url":"https://example.com/article-1","title":"年度盘点","content":"这里是网页正文。","excerpt":"这里是网页正文。","textLength":8,"truncated":false,"provider":"direct_html"}',
+      },
+    ]);
+  });
+
   it("连续多个同名工具调用时，每个完成状态都能正确回填", async () => {
     const parts: AgentPart[] = [];
 
