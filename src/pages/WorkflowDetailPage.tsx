@@ -498,34 +498,18 @@ export function WorkflowDetailPage() {
     }
   }
 
-  async function handleBindBook(bookId: string) {
-    if (!detail) {
-      return;
+  async function persistBasicSettings(nextWorkspaceBinding = draftWorkspaceBinding) {
+    if (!detail || saveBusy) {
+      return false;
     }
-    const targetBook = availableBooks.find((item) => item.id === bookId);
-    if (!targetBook) {
-      return;
+    const nextWorkspaceDirty = !isSameWorkspaceBinding(
+      stripWorkspaceBinding(detail.workflow.workspaceBinding),
+      nextWorkspaceBinding,
+    );
+    if (!isBasicsDirty && !isLoopConfigDirty && !nextWorkspaceDirty) {
+      return true;
     }
-    try {
-      setBooksBusy(true);
-      setPageNotice(null);
-      setDraftWorkspaceBinding({
-        bookId: targetBook.id,
-        rootPath: targetBook.path,
-        bookName: targetBook.name,
-      });
-      setBindingDialogOpen(false);
-    } catch (error) {
-      setBooksError(getReadableError(error, "绑定书籍失败。"));
-    } finally {
-      setBooksBusy(false);
-    }
-  }
 
-  async function handleSaveBasics() {
-    if (!detail || saveBusy || !hasSettingsDirty) {
-      return;
-    }
     try {
       setSaveBusy(true);
       setPageNotice(null);
@@ -540,14 +524,53 @@ export function WorkflowDetailPage() {
           maxLoops: normalizeLoopValue(loopDraft.maxLoopsMode, loopDraft.maxLoopsValue),
         });
       }
-      if (isWorkspaceBindingDirty && draftWorkspaceBinding) {
-        await bindWorkspace(detail.workflow.id, draftWorkspaceBinding);
+      if (nextWorkspaceDirty && nextWorkspaceBinding) {
+        await bindWorkspace(detail.workflow.id, nextWorkspaceBinding);
       }
+      return true;
     } catch (error) {
       setPageNotice(getReadableError(error, "保存基本设置失败。"));
+      return false;
     } finally {
       setSaveBusy(false);
     }
+  }
+
+  async function handleBindBook(bookId: string) {
+    if (!detail || booksBusy) {
+      return;
+    }
+    const targetBook = availableBooks.find((item) => item.id === bookId);
+    if (!targetBook) {
+      return;
+    }
+    const nextWorkspaceBinding = {
+      bookId: targetBook.id,
+      rootPath: targetBook.path,
+      bookName: targetBook.name,
+    };
+
+    try {
+      setBooksBusy(true);
+      setBooksError(null);
+      setPageNotice(null);
+      setDraftWorkspaceBinding(nextWorkspaceBinding);
+      const saved = await persistBasicSettings(nextWorkspaceBinding);
+      if (saved) {
+        setBindingDialogOpen(false);
+      }
+    } catch (error) {
+      setBooksError(getReadableError(error, "绑定书籍失败。"));
+    } finally {
+      setBooksBusy(false);
+    }
+  }
+
+  async function handleSaveBasics() {
+    if (!hasSettingsDirty) {
+      return;
+    }
+    await persistBasicSettings();
   }
 
   async function handleStartRun() {
