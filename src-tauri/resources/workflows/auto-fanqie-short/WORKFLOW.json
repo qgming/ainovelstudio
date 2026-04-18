@@ -1,0 +1,109 @@
+{
+  "templateKey": "builtin:auto-fanqie-short",
+  "name": "全自动番茄短篇",
+  "description": "围绕番茄男女频短篇的五阶段流水线，自动完成范文拆解、原创架构、黄金开篇、全本批量生成与发布前终审。",
+  "basePrompt": "直接使用内置代理完成番茄短篇五阶段流水线。所有节点都以当前绑定工作区中的阶段文件和正文文件为长期事实源：先读文件，再决定创建、更新、覆盖哪些文件。开始执行前先从输入和阶段一结果中锁定主赛道（女频 / 男频 / 中性短剧向）与主叙述者类型，后续节点严格沿用该锚点。缺少输入时优先指出缺口并写出可执行补件提示；输入齐全时优先产出可直接进入下一阶段的文件，而不是只输出聊天说明。",
+  "loopConfig": {
+    "maxLoops": 1
+  },
+  "teamMembers": [
+    {
+      "key": "style",
+      "agentId": "fanqie-style-genome",
+      "name": "文风测序代理",
+      "roleLabel": "阶段一",
+      "responsibilityPrompt": "读取绑定工作区中的范文与创作方向，产出阶段一报告。你必须先锁定主赛道和主叙述者类型，再写清18维文风基因、AI规避清单与唯一篇幅策略，并把结果写入固定阶段文件。"
+    },
+    {
+      "key": "ip",
+      "agentId": "fanqie-ip-architecture",
+      "name": "IP架构代理",
+      "roleLabel": "阶段二",
+      "responsibilityPrompt": "读取阶段一报告和创作方向，按主赛道产出原创人设、主关系线或主冲突线、金手指和6张工程化台账，并写入阶段二文件。"
+    },
+    {
+      "key": "opening",
+      "agentId": "fanqie-opening-three",
+      "name": "黄金开篇代理",
+      "roleLabel": "阶段三",
+      "responsibilityPrompt": "读取阶段一与阶段二文件，按主赛道分支生成前3章正文、逐章AI自检和台账更新，写入正文目录与阶段三文件。"
+    },
+    {
+      "key": "batch",
+      "agentId": "fanqie-short-batch",
+      "name": "批量生成代理",
+      "roleLabel": "阶段四",
+      "responsibilityPrompt": "读取阶段一到阶段三文件与已有正文，从第4章开始自动写到完结。你必须严格沿用已锁定的主赛道分支。若收到 revision_brief，则优先返工受影响章节和终稿文件。所有章节都要带自检与台账更新。"
+    },
+    {
+      "key": "audit",
+      "agentId": "fanqie-final-audit",
+      "name": "终审发布代理",
+      "roleLabel": "阶段五",
+      "responsibilityPrompt": "读取全本终稿与阶段资料，按主赛道审查并输出可直接发布的终稿、终审摘要与运营建议。最后必须使用 workflow_decision 提交是否通过；未通过时，把 revision_brief 写成可执行返工单。"
+    }
+  ],
+  "steps": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "开始",
+      "nextStepKey": "style-genome"
+    },
+    {
+      "key": "style-genome",
+      "type": "agent_task",
+      "name": "文风测序",
+      "memberKey": "style",
+      "promptTemplate": "请读取当前绑定工作区的输入文件，并先锁定主赛道和主叙述者类型，再产出阶段一文风测序报告。必须写入固定文件，确保后续阶段能直接读取复用。",
+      "outputMode": "text",
+      "nextStepKey": "ip-architecture"
+    },
+    {
+      "key": "ip-architecture",
+      "type": "agent_task",
+      "name": "IP架构",
+      "memberKey": "ip",
+      "promptTemplate": "请读取阶段一报告与创作方向，按主赛道生成原创IP架构和工程化台账。必须写入阶段二固定文件。",
+      "outputMode": "text",
+      "nextStepKey": "opening-three"
+    },
+    {
+      "key": "opening-three",
+      "type": "agent_task",
+      "name": "黄金开篇",
+      "memberKey": "opening",
+      "promptTemplate": "请读取阶段一和阶段二文件，按主赛道生成前3章正文与自检结果，并写入正文目录与阶段三固定文件。",
+      "outputMode": "text",
+      "nextStepKey": "batch-generate"
+    },
+    {
+      "key": "batch-generate",
+      "type": "agent_task",
+      "name": "全本批量生成",
+      "memberKey": "batch",
+      "promptTemplate": "请读取前三阶段文件与当前正文，按主赛道完成剩余章节批量生成、自检、台账更新和全本终稿整合。若收到 revision_brief，请按返工要求修订相关章节和终稿。",
+      "outputMode": "text",
+      "nextStepKey": "final-audit"
+    },
+    {
+      "key": "final-audit",
+      "type": "decision",
+      "name": "发布前终审",
+      "memberKey": "audit",
+      "promptTemplate": "请读取全本终稿与所有阶段文件，按主赛道输出发布终稿和终审摘要，并使用 workflow_decision 提交 pass、issues、revision_brief。若未通过，请把 revision_brief 写成可直接执行的返工动作。",
+      "sourceStepKey": "batch-generate",
+      "trueNextStepKey": "success-end",
+      "falseNextStepKey": "batch-generate",
+      "passRule": "workflow_decision.pass == true"
+    },
+    {
+      "key": "success-end",
+      "type": "end",
+      "name": "成功结束",
+      "stopReason": "completed",
+      "summaryTemplate": "番茄短篇五阶段流水线已完成，发布终稿与终审建议已写入工作区。",
+      "loopBehavior": "finish"
+    }
+  ]
+}

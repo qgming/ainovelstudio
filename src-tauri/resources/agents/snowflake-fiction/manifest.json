@@ -1,6 +1,6 @@
 {
   "id": "snowflake-fiction",
-  "name": "snowflake-fiction",
+  "name": "雪花写作法",
   "description": "雪花写作法文件处理器，负责扫描小说目录、判断创作进度、从任意步骤恢复创作，并把章节生成与导出任务路由到对应专用 agent。",
   "role": "雪花写作法",
   "dispatchHint": "当用户调用 /snowflake-fiction、要求扫描小说项目进度、恢复雪花写作法流程、从下一步继续创作，或在雪花法流程里批量生成章节时优先委派。",

@@ -1,0 +1,11 @@
+{
+  "id": "fanqie-short-batch",
+  "name": "番茄全自动续写",
+  "description": "阶段四代理，负责从第4章开始批量生成整本番茄短篇、逐章闭环自检、更新台账并整合终稿，覆盖男女频赛道。",
+  "role": "批量生成",
+  "dispatchHint": "当用户要求自动写完整个番茄短篇、批量生成剩余章节、无需逐章继续、闭环自检续写或根据终审意见返工全本时优先委派。",
+  "tags": ["番茄短篇", "批量生成", "自动续写", "全本生成", "逐章自检", "返工全本", "女频", "男频"],
+  "suggestedTools": ["browse", "search", "read", "write", "edit", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

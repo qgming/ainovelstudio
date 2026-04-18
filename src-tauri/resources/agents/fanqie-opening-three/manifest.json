@@ -1,0 +1,11 @@
+{
+  "id": "fanqie-opening-three",
+  "name": "番茄黄金开篇",
+  "description": "阶段三代理，负责生成符合番茄短篇男女频规则的黄金开篇3章、逐章AI自检与台账更新。",
+  "role": "开篇写作",
+  "dispatchHint": "当用户要求生成番茄短篇前3章、做黄金开篇、强钩子开局、开篇成稿或首章完读率优化时优先委派，男女频都适用。",
+  "tags": ["番茄短篇", "黄金开篇", "前三章", "强钩子", "第一人称主角", "完读率", "女频", "男频"],
+  "suggestedTools": ["browse", "search", "read", "write", "edit", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

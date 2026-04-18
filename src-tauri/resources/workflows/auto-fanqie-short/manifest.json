@@ -1,0 +1,10 @@
+{
+  "id": "auto-fanqie-short",
+  "name": "全自动番茄短篇",
+  "description": "自动执行番茄短篇男女频从文风测序到发布终审的完整工作流模板。",
+  "version": "1.0.0",
+  "author": "builtin",
+  "tags": ["工作流", "番茄短篇", "自动写作", "黄金开篇", "终审发布", "女频", "男频"],
+  "entry": "WORKFLOW.json",
+  "schemaVersion": 1
+}
