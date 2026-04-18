@@ -281,10 +281,14 @@ function requireWorkflowDecisionResult(
   const decisionResult = directResult ?? extractWorkflowDecisionResult(parts);
   if (!decisionResult) {
     throw new Error(
-      `判断节点《${step.name}》未提交 ${WORKFLOW_DECISION_TOOL_ID} 工具结果。请在判断结束前调用该工具传递 pass、issues、revision_brief。`,
+      `判断节点《${step.name}》缺少结构化判定结果，请补充通过结论、问题列表和修订摘要后重试。`,
     );
   }
   return decisionResult;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 function parseMessageEnvelope(text: string): StepMessage | null {
@@ -536,7 +540,12 @@ async function executeConfiguredStep(params: {
     prompt,
     providerConfig,
     workspaceTools: { ...workspaceTools, ...localResourceTools },
-    onToolRequestStateChange: () => {},
+    onToolRequestStateChange: ({ requestId, status }) => {
+      useWorkflowStore.getState().trackInflightToolRequest(
+        requestId,
+        status === "start" ? "start" : "finish",
+      );
+    },
   });
   for await (const part of stream) {
     parts = mergePart(parts, part);
@@ -665,7 +674,13 @@ export async function startWorkflowRun(workflowId: string) {
     lastDecision: null,
   };
   await store.saveRun(run);
-  store.setRunningState({ activeRunId: run.id, isRunning: true, stopRequested: false });
+  store.setRunningState({
+    activeRunId: run.id,
+    isRunning: true,
+    stopRequested: false,
+    abortController,
+    inflightToolRequestIds: [],
+  });
 
   try {
     let currentStep: WorkflowStepDefinition | null = resolveInitialStep(detail);
@@ -674,9 +689,7 @@ export async function startWorkflowRun(workflowId: string) {
     while (currentStep) {
       if (useWorkflowStore.getState().stopRequested) {
         abortController.abort();
-        run = applyRunCompletion(run, "manual_stop", buildCompletionSummary("manual_stop", runtime));
-        await store.saveRun(run);
-        break;
+        return;
       }
 
       if (currentStep.type === "start") {
@@ -835,6 +848,9 @@ export async function startWorkflowRun(workflowId: string) {
       await store.saveRun(run);
     }
   } catch (error) {
+    if (useWorkflowStore.getState().stopRequested || isAbortError(error)) {
+      return;
+    }
     const message = error instanceof Error ? error.message : "工作流运行失败。";
     run = {
       ...run,
@@ -847,6 +863,12 @@ export async function startWorkflowRun(workflowId: string) {
     await store.saveRun(run);
     throw error;
   } finally {
-    store.setRunningState({ activeRunId: null, isRunning: false, stopRequested: false });
+    store.setRunningState({
+      activeRunId: null,
+      isRunning: false,
+      stopRequested: false,
+      abortController: null,
+      inflightToolRequestIds: [],
+    });
   }
 }

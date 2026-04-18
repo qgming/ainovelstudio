@@ -115,6 +115,7 @@ pub fn run() {
             workflows::commands::export_workflow_zip,
             workflows::commands::delete_workflow,
             workflows::commands::get_workflow_detail,
+            workflows::commands::delete_workflow_run,
             workflows::commands::save_workflow_basics,
             workflows::commands::bind_workflow_workspace,
             workflows::commands::update_workflow_loop_config,

@@ -106,6 +106,10 @@ export function saveWorkflowStepRun(stepRun: WorkflowStepRun) {
   return invoke<WorkflowStepRun>("save_workflow_step_run", { stepRun });
 }
 
+export function deleteWorkflowRun(workflowId: string, runId: string) {
+  return invoke<void>("delete_workflow_run", { workflowId, runId });
+}
+
 export function parseWorkflowReviewResult(text: string): WorkflowReviewResult | null {
   const trimmed = text.trim();
   if (!trimmed) {

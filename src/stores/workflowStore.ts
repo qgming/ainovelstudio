@@ -1,10 +1,12 @@
 import { create } from "zustand";
+import { cancelToolRequests } from "../lib/bookWorkspace/api";
 import {
   addWorkflowAgentStep,
   addWorkflowStep,
   addWorkflowTeamMember,
   bindWorkflowWorkspace,
   createWorkflow,
+  deleteWorkflowRun,
   deleteWorkflow as deleteWorkflowApi,
   exportWorkflowZip as exportWorkflowZipApi,
   getWorkflowDetail,
@@ -54,6 +56,8 @@ type WorkflowStoreState = {
   errorMessage: string | null;
   isRunning: boolean;
   activeRunId: string | null;
+  abortController: AbortController | null;
+  inflightToolRequestIds: string[];
   stopRequested: boolean;
 };
 
@@ -86,8 +90,15 @@ type WorkflowStoreActions = {
   saveRun: (run: WorkflowRun) => Promise<void>;
   saveStepRun: (stepRun: WorkflowStepRun) => Promise<void>;
   selectStepRun: (stepRunId: string | null) => void;
-  setRunningState: (status: { activeRunId: string | null; isRunning: boolean; stopRequested?: boolean }) => void;
-  requestStopRun: () => void;
+  setRunningState: (status: {
+    activeRunId: string | null;
+    isRunning: boolean;
+    stopRequested?: boolean;
+    abortController?: AbortController | null;
+    inflightToolRequestIds?: string[];
+  }) => void;
+  trackInflightToolRequest: (requestId: string, action: "start" | "finish") => void;
+  requestStopRun: () => Promise<void>;
   clearStopRequest: () => void;
   parseReviewResult: (text: string) => WorkflowReviewResult | null;
 };
@@ -103,7 +114,43 @@ function buildInitialState(): WorkflowStoreState {
     errorMessage: null,
     isRunning: false,
     activeRunId: null,
+    abortController: null,
+    inflightToolRequestIds: [],
     stopRequested: false,
+  };
+}
+
+function removeRunFromDetail(
+  detail: WorkflowDetail | null,
+  runId: string,
+  selectedStepRunId: string | null,
+) {
+  if (!detail) {
+    return {
+      currentDetail: detail,
+      selectedStepRunId,
+    };
+  }
+
+  const removedStepRunIds = new Set(
+    detail.stepRuns.filter((stepRun) => stepRun.runId === runId).map((stepRun) => stepRun.id),
+  );
+  const nextDetail: WorkflowDetail = {
+    ...detail,
+    workflow: {
+      ...detail.workflow,
+      lastRunId: detail.workflow.lastRunId === runId ? null : detail.workflow.lastRunId,
+      lastRunStatus:
+        detail.workflow.lastRunId === runId ? "idle" : detail.workflow.lastRunStatus,
+    },
+    runs: detail.runs.filter((run) => run.id !== runId),
+    stepRuns: detail.stepRuns.filter((stepRun) => stepRun.runId !== runId),
+  };
+
+  return {
+    currentDetail: nextDetail,
+    selectedStepRunId:
+      selectedStepRunId && removedStepRunIds.has(selectedStepRunId) ? null : selectedStepRunId,
   };
 }
 
@@ -288,9 +335,58 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
   selectStepRun: (stepRunId) => set({ selectedStepRunId: stepRunId }),
-  setRunningState: ({ activeRunId, isRunning, stopRequested = false }) =>
-    set({ activeRunId, isRunning, stopRequested }),
-  requestStopRun: () => set({ stopRequested: true }),
+  setRunningState: ({
+    activeRunId,
+    isRunning,
+    stopRequested = false,
+    abortController,
+    inflightToolRequestIds,
+  }) =>
+    set((state) => ({
+      activeRunId,
+      isRunning,
+      stopRequested,
+      abortController:
+        abortController === undefined ? state.abortController : abortController,
+      inflightToolRequestIds:
+        inflightToolRequestIds === undefined ? state.inflightToolRequestIds : inflightToolRequestIds,
+    })),
+  trackInflightToolRequest: (requestId, action) =>
+    set((state) => ({
+      inflightToolRequestIds:
+        action === "start"
+          ? Array.from(new Set([...state.inflightToolRequestIds, requestId]))
+          : state.inflightToolRequestIds.filter((candidate) => candidate !== requestId),
+    })),
+  requestStopRun: async () => {
+    const state = get();
+    const runId = state.activeRunId;
+    if (!runId) {
+      set({
+        stopRequested: true,
+        isRunning: false,
+        abortController: null,
+        inflightToolRequestIds: [],
+      });
+      return;
+    }
+
+    state.abortController?.abort();
+    const requestIds = [...state.inflightToolRequestIds];
+    set((current) => ({
+      ...removeRunFromDetail(current.currentDetail, runId, current.selectedStepRunId),
+      activeRunId: null,
+      isRunning: false,
+      abortController: null,
+      inflightToolRequestIds: [],
+      stopRequested: true,
+    }));
+
+    await Promise.allSettled([
+      cancelToolRequests(requestIds),
+      state.currentDetail ? deleteWorkflowRun(state.currentDetail.workflow.id, runId) : Promise.resolve(),
+    ]);
+  },
   clearStopRequest: () => set({ stopRequested: false }),
   parseReviewResult: (text) => parseWorkflowReviewResult(text),
 }));

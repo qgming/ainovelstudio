@@ -92,6 +92,35 @@ pub fn get_workflow_detail(app: AppHandle, workflowId: String) -> CommandResult<
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub fn delete_workflow_run(
+    app: AppHandle,
+    workflowId: String,
+    runId: String,
+) -> CommandResult<()> {
+    let connection = open_database(&app)?;
+    connection
+        .execute(
+            "DELETE FROM workflow_step_runs WHERE workflow_id = ?1 AND run_id = ?2",
+            params![workflowId, runId],
+        )
+        .map_err(error_to_string)?;
+    connection
+        .execute(
+            "DELETE FROM workflow_runs WHERE workflow_id = ?1 AND id = ?2",
+            params![workflowId, runId],
+        )
+        .map_err(error_to_string)?;
+    connection
+        .execute(
+            "UPDATE workflows SET last_run_id = NULL, last_run_status = 'idle', updated_at = ?2 WHERE id = ?1",
+            params![workflowId, now_timestamp() as i64],
+        )
+        .map_err(error_to_string)?;
+    Ok(())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 pub fn save_workflow_basics(
     app: AppHandle,
     workflowId: String,

@@ -765,7 +765,7 @@ export function WorkflowDetailPage() {
         title={<DetailTitle currentLabel={detail.workflow.name} />}
         actions={[
           { icon: Play, label: runBusy || isRunning ? "运行中" : "运行", tone: "primary", onClick: () => void handleStartRun() },
-          { icon: Square, label: "停止", tone: "default", onClick: requestStopRun },
+          { icon: Square, label: "停止", tone: "default", onClick: () => void requestStopRun() },
         ]}
         contentClassName="min-h-0 flex-1 overflow-hidden"
       >
