@@ -44,16 +44,16 @@ function MobileWorkspaceTitle({
   onNavigateHome: () => void;
 }) {
   return (
-    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">
+    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
       <button
         type="button"
         aria-label="返回书架"
         onClick={onNavigateHome}
-        className="transition-colors hover:text-[#475569] dark:hover:text-zinc-300"
+        className="text-muted-foreground transition-colors hover:text-foreground"
       >
         书架
       </button>
-      <span className="px-1.5 text-[#94a3b8] dark:text-zinc-500">/</span>
+      <span className="px-1.5 text-muted-foreground">/</span>
       <span>{currentLabel}</span>
     </div>
   );
@@ -622,9 +622,9 @@ export function BookPage({
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-panel-subtle">
       {errorMessage ? (
-        <div className="mx-6 mt-4 flex shrink-0 items-start justify-between gap-4 border border-[#f0d7d2] bg-[#fff7f5] px-4 py-3 text-sm text-[#8a4b42] dark:border-[#4b2b2d] dark:bg-[#241617] dark:text-[#efb5af]">
+        <div className="mx-6 mt-4 flex shrink-0 items-start justify-between gap-4 rounded-md border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{errorMessage}</p>
@@ -632,7 +632,7 @@ export function BookPage({
           <button
             type="button"
             onClick={dismissError}
-            className="shrink-0 px-2 py-1 text-xs font-medium transition hover:text-[#5f2e28] dark:hover:text-white"
+            className="shrink-0 px-2 py-1 text-xs font-medium transition hover:opacity-80"
           >
             关闭
           </button>

@@ -1,7 +1,7 @@
 import { AlertCircle } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import type { ResolvedSkill } from "../../stores/skillsStore";
-import { Switch } from "../ui/Switch";
+import { Switch } from "../ui/switch";
 
 type SkillCardProps = {
   onOpen: () => void;

@@ -1,4 +1,6 @@
 import { BookOpenText, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { BookWorkspaceSummary } from "../../lib/bookWorkspace/types";
 import { DialogShell } from "./DialogShell";
 
@@ -12,6 +14,7 @@ type BookshelfDialogProps = {
   onRefresh: () => void;
 };
 
+// 选择书籍对话框：使用 shadcn Button + 主题 token；列表项支持触屏目标尺寸。
 export function BookshelfDialog({
   books,
   busy = false,
@@ -25,64 +28,67 @@ export function BookshelfDialog({
     <DialogShell title="选择书籍" onClose={onClose}>
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm leading-6 text-[#64748b] dark:text-[#94a3b8]">
+          <p className="text-sm leading-6 text-muted-foreground">
             从 SQLite 书库中切换当前书籍，Windows 和 Android 共用同一套书架。
           </p>
-          <button
+          <Button
             type="button"
             aria-label="刷新书库列表"
+            variant="ghost"
+            size="icon-sm"
             disabled={busy}
             onClick={onRefresh}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#111827] transition-colors duration-200 hover:bg-[#edf1f6] disabled:cursor-not-allowed disabled:opacity-60 dark:text-zinc-300 dark:hover:bg-[#1a1c21]"
+            className="text-muted-foreground"
           >
-            <RefreshCw className={["h-4 w-4", busy ? "animate-spin" : ""].join(" ")} />
-          </button>
+            <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
+          </Button>
         </div>
 
         {errorMessage ? (
-          <div className="rounded-[10px] border border-[#f0d7d2] bg-[#fff7f5] px-3 py-2 text-sm text-[#8a4b42] dark:border-[#4b2b2d] dark:bg-[#241617] dark:text-[#efb5af]">
+          <div className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {errorMessage}
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-auto rounded-[12px] border border-[#e2e8f0] bg-white dark:border-[#20242b] dark:bg-[#0f1115]">
+        <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-panel">
           {books.length > 0 ? (
-            <div className="divide-y divide-[#e2e8f0] dark:divide-[#20242b]">
+            <ul className="divide-y divide-border">
               {books.map((book) => (
-                <button
-                  key={book.id}
-                  type="button"
-                  aria-label={book.name}
-                  disabled={busy}
-                  onClick={() => onOpen(book.id)}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-[#eef6ff] disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-[#141c26]"
-                >
-                  <BookOpenText className="mt-0.5 h-4 w-4 shrink-0 text-[#0b84e7] dark:text-[#7cc4ff]" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-[#111827] dark:text-[#f3f4f6]">
-                      {book.name}
+                <li key={book.id}>
+                  <button
+                    type="button"
+                    aria-label={book.name}
+                    disabled={busy}
+                    onClick={() => onOpen(book.id)}
+                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <BookOpenText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {book.name}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-muted-foreground">
+                        书库标识：{book.path}
+                      </span>
                     </span>
-                    <span className="mt-1 block truncate text-xs text-[#64748b] dark:text-[#94a3b8]">
-                      书库标识：{book.path}
-                    </span>
-                  </span>
-                </button>
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           ) : (
             <div className="flex h-full min-h-[180px] items-center justify-center px-6 text-center">
               <div className="space-y-3">
-                <p className="text-sm text-[#64748b] dark:text-[#94a3b8]">
+                <p className="text-sm text-muted-foreground">
                   书库里还没有书籍，先创建一本新的书。
                 </p>
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   disabled={busy}
                   onClick={onCreate}
-                  className="inline-flex h-8 items-center rounded-[8px] bg-[#0b84e7] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#0975cd] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-black dark:hover:bg-zinc-200"
                 >
                   新建书籍
-                </button>
+                </Button>
               </div>
             </div>
           )}

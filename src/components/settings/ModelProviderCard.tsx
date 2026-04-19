@@ -7,7 +7,10 @@ import { Toast, type ToastTone } from "../common/Toast";
 import { testAgentProviderConnection } from "../../lib/agent/modelGateway";
 import type { ProviderConnectionTestResult } from "../../lib/agent/modelGateway";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
-import { Switch } from "../ui/Switch";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
 import { MODEL_PROVIDER_RECOMMENDATIONS } from "./modelProviderRecommendations";
 import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 import { cn } from "../../lib/utils";
@@ -27,9 +30,6 @@ type ToastState = {
   title: string;
   tone: ToastTone;
 };
-
-const inputClassName =
-  "h-9 w-full rounded-[8px] border border-[#d8dee8] bg-white px-3 text-sm text-[#111827] outline-none transition focus:border-[#94a3b8] dark:border-[#2b313a] dark:bg-[#16191f] dark:text-zinc-100";
 
 function formatDuration(durationMs?: number) {
   if (!durationMs || durationMs < 0) {
@@ -204,55 +204,57 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="grid gap-3 px-3 py-3 lg:grid-cols-2">
-          <label className="block">
-          <span className="mb-1.5 inline-flex items-center gap-2 text-xs font-medium text-[#475569] dark:text-zinc-300">
-            <Cable className="h-3.5 w-3.5" />
-            Base URL
-          </span>
-          <input
-            className={inputClassName}
-            onChange={(event) => onChange({ baseURL: event.target.value })}
-            placeholder="https://example.com/v1"
-            value={config.baseURL}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1.5 inline-flex items-center gap-2 text-xs font-medium text-[#475569] dark:text-zinc-300">
-            <KeyRound className="h-3.5 w-3.5" />
-            API Key
-          </span>
-          <div className="relative">
-            <input
-              type={isApiKeyVisible ? "text" : "password"}
-              className={`${inputClassName} pr-10`}
-              onChange={(event) => onChange({ apiKey: event.target.value })}
-              placeholder="sk-..."
-              value={config.apiKey}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              <Cable className="h-3.5 w-3.5" />
+              Base URL
+            </Label>
+            <Input
+              className="h-9"
+              onChange={(event) => onChange({ baseURL: event.target.value })}
+              placeholder="https://example.com/v1"
+              value={config.baseURL}
             />
-            <button
-              type="button"
-              aria-label={isApiKeyVisible ? "隐藏 API Key" : "显示 API Key"}
-              onClick={() => setIsApiKeyVisible((current) => !current)}
-              className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#64748b] transition-colors hover:text-[#0f172a] dark:text-zinc-400 dark:hover:text-zinc-100"
-            >
-              {isApiKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
           </div>
-        </label>
-        <label className="block lg:col-span-2">
-          <span className="mb-1.5 block text-xs font-medium text-[#475569] dark:text-zinc-300">Model</span>
-          <input
-            className={inputClassName}
-            onChange={(event) => onChange({ model: event.target.value })}
-            placeholder="gpt-4.1 / gpt-4o / 自定义模型名"
-            value={config.model}
-          />
-        </label>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              <KeyRound className="h-3.5 w-3.5" />
+              API Key
+            </Label>
+            <div className="relative">
+              <Input
+                type={isApiKeyVisible ? "text" : "password"}
+                className="h-9 pr-10"
+                onChange={(event) => onChange({ apiKey: event.target.value })}
+                placeholder="sk-..."
+                value={config.apiKey}
+              />
+              <Button
+                type="button"
+                aria-label={isApiKeyVisible ? "隐藏 API Key" : "显示 API Key"}
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setIsApiKeyVisible((current) => !current)}
+                className="absolute inset-y-0 right-0 my-auto mr-1 text-muted-foreground"
+              >
+                {isApiKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1.5 lg:col-span-2">
+            <Label className="text-xs text-muted-foreground">Model</Label>
+            <Input
+              className="h-9"
+              onChange={(event) => onChange({ model: event.target.value })}
+              placeholder="gpt-4.1 / gpt-4o / 自定义模型名"
+              value={config.model}
+            />
+          </div>
 
         <div className="lg:col-span-2 -mx-3">
-          <div className="flex items-start justify-between gap-4 border-t border-[#e2e8f0] px-3 pt-3 dark:border-[#20242b]">
+          <div className="flex items-start justify-between gap-4 border-t border-border px-3 pt-3">
             <div className="min-w-0 pr-4">
-              <p className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">模拟 OpenCode（beta）</p>
+              <p className="text-sm font-medium text-foreground">模拟 OpenCode（beta）</p>
             </div>
             <Switch
               checked={Boolean(config.simulateOpencodeBeta)}
@@ -263,10 +265,10 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
         </div>
 
           <div className="lg:col-span-2 -mx-3">
-            <div className="border-t border-[#e2e8f0] pt-3 dark:border-[#20242b]">
-              <div className="mb-3 border-b border-[#e2e8f0] px-3 pb-3 dark:border-[#20242b]">
+            <div className="border-t border-border pt-3">
+              <div className="mb-3 border-b border-border px-3 pb-3">
                 <div>
-                  <p className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">推荐供应商</p>
+                  <p className="text-sm font-medium text-foreground">推荐供应商</p>
                 </div>
               </div>
               <div
@@ -293,20 +295,22 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
                           "editor-block-content relative h-full cursor-pointer overflow-hidden rounded-none border border-transparent transition-colors",
                           isSelected
                             ? "bg-accent/35 text-foreground ring-1 ring-border"
-                            : "hover:bg-[#f8fafc] dark:hover:bg-[#171b21]",
+                            : "hover:bg-accent/40",
                         )}
                       >
-                        <button
+                        <Button
                           type="button"
                           aria-label={`查看 ${recommendation.name} 详情`}
+                          variant="outline"
+                          size="icon-sm"
                           onClick={(event) => {
                             event.stopPropagation();
                             void openUrl(recommendation.websiteUrl);
                           }}
-                          className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d7dde8] text-[#475569] transition-colors hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-200 dark:hover:bg-[#1b1f26]"
+                          className="absolute top-3 right-3"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
-                        </button>
+                        </Button>
 
                         <div className="flex h-full flex-col">
                           <div className="flex min-h-[40px] items-center">
@@ -314,12 +318,12 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
                           </div>
 
                           <div className="mt-3 min-w-0">
-                            <h3 className="pr-8 text-base font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">
+                            <h3 className="pr-8 text-base font-semibold tracking-[-0.03em] text-foreground">
                               {recommendation.name}
                             </h3>
                             <p
                               title={recommendation.baseURL}
-                              className="mt-2 overflow-hidden break-all pr-8 text-xs leading-5 text-[#64748b] dark:text-zinc-400"
+                              className="mt-2 overflow-hidden break-all pr-8 text-xs leading-5 text-muted-foreground"
                               style={{
                                 display: "-webkit-box",
                                 WebkitBoxOrient: "vertical",

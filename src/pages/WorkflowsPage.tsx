@@ -10,15 +10,15 @@ import {
   useEffect,
   useState,
   type KeyboardEvent,
-  type MouseEvent,
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  ActionMenu,
-  ActionMenuItem,
-  type ActionMenuAnchorRect,
-} from "../components/common/ActionMenu";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Toast, type ToastTone } from "../components/common/Toast";
 import { PageShell } from "../components/PageShell";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
@@ -52,20 +52,6 @@ type ToastState = {
   tone: ToastTone;
 };
 
-type WorkflowMenuState = {
-  anchorRect: ActionMenuAnchorRect;
-  workflow: Workflow;
-};
-
-function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
-  return {
-    bottom: rect.bottom,
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-  };
-}
-
 function getReadableError(error: unknown) {
   return error instanceof Error ? error.message : "操作失败，请重试。";
 }
@@ -87,7 +73,6 @@ export function WorkflowsPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
-  const [menuState, setMenuState] = useState<WorkflowMenuState | null>(null);
   const [exportBusyId, setExportBusyId] = useState<string | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Workflow | null>(null);
@@ -98,26 +83,6 @@ export function WorkflowsPage() {
       void initialize();
     }
   }, [initialize, status]);
-
-  function openWorkflowMenu(
-    workflow: Workflow,
-    event: MouseEvent<HTMLButtonElement>,
-  ) {
-    event.stopPropagation();
-    const nextAnchorRect = toAnchorRect(
-      event.currentTarget.getBoundingClientRect(),
-    );
-    setMenuState((current) => {
-      if (current?.workflow.id === workflow.id) {
-        return null;
-      }
-
-      return {
-        anchorRect: nextAnchorRect,
-        workflow,
-      };
-    });
-  }
 
   function handleWorkflowTileKeyDown(
     workflowId: string,
@@ -156,7 +121,6 @@ export function WorkflowsPage() {
     }
 
     try {
-      setMenuState(null);
       setExportBusyId(workflow.id);
       const savedPath = await exportWorkflowZip(workflow.id);
       if (!savedPath) {
@@ -191,7 +155,6 @@ export function WorkflowsPage() {
         tone: "success",
       });
       setDeleteTarget(null);
-      setMenuState(null);
     } catch (error) {
       setToastState({
         title: `删除《${deleteTarget.name}》失败`,
@@ -203,7 +166,6 @@ export function WorkflowsPage() {
     }
   }
 
-  const menuWorkflow = menuState?.workflow ?? null;
   const hasPendingWorkflowAction =
     exportBusyId !== null || deleteBusyId !== null;
 
@@ -275,17 +237,42 @@ export function WorkflowsPage() {
                             {workflow.name}
                           </h2>
                         </div>
-                        <Button
-                          type="button"
-                          aria-label={`更多操作 ${workflow.name}`}
-                          disabled={hasPendingWorkflowAction}
-                          onClick={(event) => openWorkflowMenu(workflow, event)}
-                          variant="ghost"
-                          size="icon-sm"
-                          className="shrink-0 text-muted-foreground"
-                        >
-                          <Ellipsis className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              aria-label={`更多操作 ${workflow.name}`}
+                              disabled={hasPendingWorkflowAction}
+                              onClick={(event) => event.stopPropagation()}
+                              variant="ghost"
+                              size="icon-sm"
+                              className="shrink-0 text-muted-foreground"
+                            >
+                              <Ellipsis className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                            <DropdownMenuItem
+                              disabled={hasPendingWorkflowAction}
+                              onSelect={() => void handleExportWorkflow(workflow)}
+                            >
+                              <Download className="h-4 w-4" />
+                              {exportBusyId === workflow.id
+                                ? "导出中..."
+                                : "导出工作流"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              disabled={hasPendingWorkflowAction}
+                              onSelect={() => setDeleteTarget(workflow)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              {deleteBusyId === workflow.id
+                                ? "删除中..."
+                                : "删除工作流"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                         <div className="space-y-3">
                           <p className="line-clamp-3 text-xs leading-4 text-muted-foreground">
@@ -358,48 +345,6 @@ export function WorkflowsPage() {
           value={draftName}
         />
       ) : null}
-
-      <ActionMenu
-        anchorRect={menuState?.anchorRect ?? null}
-        onClose={() => setMenuState(null)}
-        width={188}
-      >
-        {menuWorkflow ? (
-          <div className="space-y-1">
-            <ActionMenuItem
-              ariaLabel="导出工作流"
-              disabled={hasPendingWorkflowAction}
-              onClick={() => void handleExportWorkflow(menuWorkflow)}
-            >
-              <span className="flex items-center gap-2">
-                <Download className="h-4 w-4 shrink-0" />
-                <span>
-                  {exportBusyId === menuWorkflow.id
-                    ? "导出中..."
-                    : "导出工作流"}
-                </span>
-              </span>
-            </ActionMenuItem>
-            <ActionMenuItem
-              ariaLabel="删除工作流"
-              disabled={hasPendingWorkflowAction}
-              onClick={() => {
-                setMenuState(null);
-                setDeleteTarget(menuWorkflow);
-              }}
-            >
-              <span className="flex items-center gap-2">
-                <Trash2 className="h-4 w-4 shrink-0" />
-                <span>
-                  {deleteBusyId === menuWorkflow.id
-                    ? "删除中..."
-                    : "删除工作流"}
-                </span>
-              </span>
-            </ActionMenuItem>
-          </div>
-        ) : null}
-      </ActionMenu>
 
       {deleteTarget ? (
         <ConfirmDialog

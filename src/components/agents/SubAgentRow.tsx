@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
-import { Switch } from "../ui/Switch";
+import { Switch } from "../ui/switch";
 
 type SubAgentRowProps = {
   agent: ResolvedAgent;

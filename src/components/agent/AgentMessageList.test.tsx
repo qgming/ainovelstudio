@@ -104,7 +104,7 @@ describe("BookAgentPanel", () => {
 
     render(<BookAgentPanel width={420} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "打开工作区上下文" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "打开工作区上下文" }), { button: 0 });
 
     expect(screen.getByText("工作区")).toBeInTheDocument();
     expect(screen.getByText("北境余烬")).toBeInTheDocument();
@@ -224,7 +224,7 @@ describe("BookAgentPanel", () => {
 
     render(<BookAgentPanel width={420} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "打开历史记录" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "打开历史记录" }), { button: 0 });
 
     expect(screen.getByRole("menu")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "当前剧情讨论" })).toBeInTheDocument();

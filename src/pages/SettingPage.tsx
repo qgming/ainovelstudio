@@ -2,6 +2,7 @@ import { ChevronRight, Moon, Palette, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
+import { Button } from "../components/ui/button";
 import { SettingSectionContent } from "../components/settings/SettingSectionContent";
 import {
   getSettingNavItem,
@@ -22,14 +23,14 @@ function DetailTitle({
   parentTo: string;
 }) {
   return (
-    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">
+    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
       <Link
         to={parentTo}
-        className="transition-colors hover:text-[#475569] dark:hover:text-zinc-300"
+        className="text-muted-foreground transition-colors hover:text-foreground"
       >
         {parentLabel}
       </Link>
-      <span className="px-1.5 text-[#94a3b8] dark:text-zinc-500">/</span>
+      <span className="px-1.5 text-muted-foreground">/</span>
       <span>{currentLabel}</span>
     </div>
   );
@@ -76,21 +77,23 @@ function MobileSettingListPage() {
 
   return (
     <PageShell
-      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">设置</h1>}
+      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">设置</h1>}
       contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
     >
       <div className="h-full min-h-0 overflow-y-auto bg-app">
         <div className="flex h-14 items-center gap-3 border-b border-border px-4 text-foreground">
           <Palette className="h-4.5 w-4.5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate text-[16px] font-medium tracking-[-0.03em]">主题</span>
-          <button
+          <Button
             type="button"
             aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+            variant="ghost"
+            size="icon-sm"
             onClick={toggleTheme}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            className="text-muted-foreground"
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+          </Button>
         </div>
         {settingNavItems.map(({ icon: Icon, key, title }) => (
           <Link
@@ -154,7 +157,7 @@ export function SettingPage() {
 
   return (
     <PageShell
-      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">设置</h1>}
+      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">设置</h1>}
       contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
     >
       <div className="flex h-full min-h-0 flex-col gap-0 lg:flex-row">

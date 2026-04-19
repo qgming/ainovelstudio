@@ -12,12 +12,16 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { getBaseName } from "../../lib/bookWorkspace/paths";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
 import type { ManualTurnContextSelection } from "../../lib/agent/manualTurnContext";
 import type { PlanItem, PlanningState } from "../../lib/agent/planning";
 import type { AgentRunStatus } from "../../lib/agent/types";
-import { ActionMenu, type ActionMenuAnchorRect } from "../common/ActionMenu";
 import { AgentManualResourcePicker } from "./AgentManualResourcePicker";
 import { AgentWorkspaceFilePicker } from "./AgentWorkspaceFilePicker";
 
@@ -38,15 +42,6 @@ type AgentComposerProps = {
   rootNode: TreeNode | null;
   runStatus: AgentRunStatus;
 };
-
-function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
-  return {
-    bottom: rect.bottom,
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-  };
-}
 
 function removeValue(values: string[], value: string) {
   return values.filter((item) => item !== value);
@@ -87,10 +82,6 @@ export function AgentComposer({
   const hasStalePlan = planningState.roundsSinceUpdate >= 3;
   const completedCount = countCompletedItems(planningState.items);
   const [isPlanExpanded, setIsPlanExpanded] = useState(true);
-  const [resourceAnchorRect, setResourceAnchorRect] =
-    useState<ActionMenuAnchorRect | null>(null);
-  const [fileAnchorRect, setFileAnchorRect] =
-    useState<ActionMenuAnchorRect | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [selection, setSelection] = useState<ManualTurnContextSelection>({
     agentIds: [],
@@ -191,31 +182,6 @@ export function AgentComposer({
 
   return (
     <div className="bg-app">
-      <ActionMenu
-        anchorRect={resourceAnchorRect}
-        maxHeight={680}
-        onClose={() => setResourceAnchorRect(null)}
-        width={220}
-      >
-        <AgentManualResourcePicker
-          items={resources}
-          onToggle={handleResourceToggle}
-          selectedIds={[...selection.skillIds, ...selection.agentIds]}
-        />
-      </ActionMenu>
-      <ActionMenu
-        anchorRect={fileAnchorRect}
-        maxHeight={760}
-        onClose={() => setFileAnchorRect(null)}
-        width={220}
-      >
-        <AgentWorkspaceFilePicker
-          onToggleFile={handleFileToggle}
-          rootNode={rootNode}
-          selectedFilePaths={selection.filePaths}
-        />
-      </ActionMenu>
-
       {showPlan ? (
         <div className="bg-panel-subtle px-3 py-2">
           <div className="flex min-h-8 items-center justify-between gap-3">
@@ -330,44 +296,60 @@ export function AgentComposer({
         />
         <div className="flex h-11 items-center gap-2 border-t border-border px-2">
           <div className="flex min-w-0 flex-1 items-center gap-0.5">
-            <Button
-              type="button"
-              aria-label="选择技能或子 Agent"
-              disabled={isRunning}
-              onClick={(event) => {
-                const nextAnchorRect = toAnchorRect(
-                  event.currentTarget.getBoundingClientRect(),
-                );
-                setFileAnchorRect(null);
-                setResourceAnchorRect((current) =>
-                  current ? null : nextAnchorRect,
-                );
-              }}
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground"
-            >
-              <SquareSlash className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              aria-label="选择工作区文件"
-              disabled={isRunning}
-              onClick={(event) => {
-                const nextAnchorRect = toAnchorRect(
-                  event.currentTarget.getBoundingClientRect(),
-                );
-                setResourceAnchorRect(null);
-                setFileAnchorRect((current) =>
-                  current ? null : nextAnchorRect,
-                );
-              }}
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground"
-            >
-              <AtSign className="h-4 w-4" />
-            </Button>
+            {/* 选择技能/子 Agent */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  aria-label="选择技能或子 Agent"
+                  disabled={isRunning}
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground"
+                >
+                  <SquareSlash className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                side="top"
+                sideOffset={6}
+                className="max-h-[60vh] w-56 overflow-y-auto p-1"
+              >
+                <AgentManualResourcePicker
+                  items={resources}
+                  onToggle={handleResourceToggle}
+                  selectedIds={[...selection.skillIds, ...selection.agentIds]}
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* 选择工作区文件 */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  aria-label="选择工作区文件"
+                  disabled={isRunning}
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground"
+                >
+                  <AtSign className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                side="top"
+                sideOffset={6}
+                className="max-h-[60vh] w-56 overflow-y-auto p-1"
+              >
+                <AgentWorkspaceFilePicker
+                  onToggleFile={handleFileToggle}
+                  rootNode={rootNode}
+                  selectedFilePaths={selection.filePaths}
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div
             aria-hidden="true"

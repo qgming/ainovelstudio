@@ -102,7 +102,7 @@ function WindowButton({ ariaLabel, children, danger = false, onClick }: WindowBu
       className={[
         "flex w-10 items-center justify-center text-muted-foreground transition-colors duration-150",
         danger
-          ? "hover:bg-[#ef4444] hover:text-white"
+          ? "hover:bg-destructive hover:text-white"
           : "hover:bg-accent hover:text-foreground",
       ].join(" ")}
     >

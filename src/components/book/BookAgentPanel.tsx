@@ -1,11 +1,17 @@
 import { Blocks, ChevronRight, History, SquarePen } from "lucide-react";
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { PanelHeader, PanelNotice, PanelTitle, PanelToolbar } from "@/components/ui/panel";
 import { AgentComposer } from "../agent/AgentComposer";
 import { AgentContextOverview } from "../agent/AgentContextOverview";
 import { AgentMessageList } from "../agent/AgentMessageList";
-import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../common/ActionMenu";
 import { selectIsAgentRunActive, useAgentStore } from "../../stores/agentStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
@@ -17,26 +23,28 @@ type BookAgentPanelProps = {
 
 type ToolbarButtonProps = {
   ariaLabel: string;
-  children: React.ReactNode;
-  disabled?: boolean;
-  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
-};
+} & React.ComponentProps<typeof Button>;
 
-function ToolbarButton({ ariaLabel, children, disabled = false, onClick }: ToolbarButtonProps) {
-  return (
-    <Button
-      type="button"
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onClick={onClick}
-      variant="ghost"
-      size="icon-sm"
-      className="text-muted-foreground"
-    >
-      {children}
-    </Button>
-  );
-}
+// 顶部工具栏图标按钮：在 PanelHeader 中保持极简风。
+const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
+  ({ ariaLabel, children, className, ...props }, ref) => {
+    return (
+      <Button
+        ref={ref}
+        type="button"
+        aria-label={ariaLabel}
+        variant="ghost"
+        size="icon-sm"
+        className={cn("text-muted-foreground", className)}
+        {...props}
+      >
+        {children}
+      </Button>
+    );
+  },
+);
+
+ToolbarButton.displayName = "ToolbarButton";
 
 function AgentHeaderButton() {
   return (
@@ -45,15 +53,6 @@ function AgentHeaderButton() {
       <PanelTitle>Agent</PanelTitle>
     </div>
   );
-}
-
-function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
-  return {
-    bottom: rect.bottom,
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-  };
 }
 
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
@@ -88,8 +87,6 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const agentsStatus = useSubAgentStore((state) => state.status);
   const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
   const displayRunStatus = isRunning ? "running" : run.status;
-  const [contextAnchorRect, setContextAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
-  const [historyAnchorRect, setHistoryAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
 
   useEffect(() => {
     if (skillsStatus === "idle") {
@@ -107,42 +104,8 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
     void initializeAgentHistory(rootBookId);
   }, [initializeAgentHistory, rootBookId]);
 
-  const isContextOpen = contextAnchorRect !== null;
-
-  const handleContextToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (isContextOpen) {
-      setContextAnchorRect(null);
-      return;
-    }
-
-    setHistoryAnchorRect(null);
-    closeHistory();
-    setContextAnchorRect(toAnchorRect(event.currentTarget.getBoundingClientRect()));
-  };
-
-  const handleContextClose = () => {
-    setContextAnchorRect(null);
-  };
-
-  const handleHistoryToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (isHistoryOpen) {
-      setHistoryAnchorRect(null);
-      closeHistory();
-      return;
-    }
-
-    setContextAnchorRect(null);
-    setHistoryAnchorRect(toAnchorRect(event.currentTarget.getBoundingClientRect()));
-    openHistory();
-  };
-
-  const handleHistoryClose = () => {
-    setHistoryAnchorRect(null);
-    closeHistory();
-  };
-
   const handleSessionSelect = (sessionId: string) => {
-    handleHistoryClose();
+    closeHistory();
     void switchSession(sessionId);
   };
 
@@ -154,12 +117,60 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       <PanelHeader className="bg-transparent px-2">
         <AgentHeaderButton />
         <PanelToolbar className="gap-0.5">
-          <ToolbarButton ariaLabel={isContextOpen ? "收起工作区上下文" : "打开工作区上下文"} onClick={handleContextToggle}>
-            <Blocks className="h-4 w-4" />
-          </ToolbarButton>
-          <ToolbarButton ariaLabel={isHistoryOpen ? "收起历史记录" : "打开历史记录"} onClick={handleHistoryToggle}>
-            <History className="h-4 w-4" />
-          </ToolbarButton>
+          {/* 工作区上下文：使用 DropdownMenu 承载块状内容（非菜单项） */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <ToolbarButton ariaLabel="打开工作区上下文">
+                <Blocks className="h-4 w-4" />
+              </ToolbarButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 p-2">
+              <AgentContextOverview
+                activeFilePath={activeFilePath}
+                enabledAgents={enabledAgents.map((agent) => ({
+                  description: agent.role || agent.description,
+                  id: agent.id,
+                  name: agent.name,
+                }))}
+                enabledSkills={enabledSkills.map((skill) => ({
+                  description: skill.description,
+                  id: skill.id,
+                  name: skill.name,
+                }))}
+                rootPath={rootPath}
+              />
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* 历史会话：使用 DropdownMenu + DropdownMenuItem */}
+          <DropdownMenu
+            open={isHistoryOpen}
+            onOpenChange={(open) => (open ? openHistory() : closeHistory())}
+          >
+            <DropdownMenuTrigger asChild>
+              <ToolbarButton ariaLabel={isHistoryOpen ? "收起历史记录" : "打开历史记录"}>
+                <History className="h-4 w-4" />
+              </ToolbarButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-80 w-56 overflow-y-auto">
+              {sessions.length === 0 ? (
+                <div className="px-2 py-3 text-sm text-muted-foreground">暂无历史会话</div>
+              ) : (
+                sessions.map((session) => {
+                  const isActive = session.id === activeSessionId;
+                  return (
+                    <DropdownMenuItem
+                      key={session.id}
+                      disabled={isRunning}
+                      onSelect={() => handleSessionSelect(session.id)}
+                      className={isActive ? "bg-accent text-accent-foreground" : undefined}
+                    >
+                      <span className="min-w-0 truncate">{session.title}</span>
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ToolbarButton ariaLabel="开始新对话" disabled={isRunning} onClick={() => void createNewSession()}>
             <SquarePen className="h-4 w-4" />
           </ToolbarButton>
@@ -170,39 +181,6 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
           {errorMessage}
         </PanelNotice>
       ) : null}
-      <ActionMenu anchorRect={contextAnchorRect} onClose={handleContextClose} width={320}>
-        <AgentContextOverview
-          activeFilePath={activeFilePath}
-          enabledAgents={enabledAgents.map((agent) => ({
-            description: agent.role || agent.description,
-            id: agent.id,
-            name: agent.name,
-          }))}
-          enabledSkills={enabledSkills.map((skill) => ({
-            description: skill.description,
-            id: skill.id,
-            name: skill.name,
-          }))}
-          rootPath={rootPath}
-        />
-      </ActionMenu>
-      <ActionMenu anchorRect={isHistoryOpen ? historyAnchorRect : null} onClose={handleHistoryClose}>
-        <div className="space-y-1">
-          {sessions.map((session) => {
-            const isActive = session.id === activeSessionId;
-            return (
-              <ActionMenuItem
-                key={session.id}
-                active={isActive}
-                disabled={isRunning}
-                onClick={() => handleSessionSelect(session.id)}
-              >
-                {session.title}
-              </ActionMenuItem>
-            );
-          })}
-        </div>
-      </ActionMenu>
       <AgentMessageList messages={run.messages} runStatus={displayRunStatus} />
       <AgentComposer
         input={input}

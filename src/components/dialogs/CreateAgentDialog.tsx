@@ -1,4 +1,8 @@
 import { useId } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DialogShell } from "./DialogShell";
 
 type CreateAgentDialogProps = {
@@ -11,34 +15,7 @@ type CreateAgentDialogProps = {
   onConfirm: () => void;
 };
 
-function DialogActionButton({
-  children,
-  kind = "secondary",
-  onClick,
-  busy = false,
-}: {
-  busy?: boolean;
-  children: React.ReactNode;
-  kind?: "primary" | "secondary";
-  onClick: () => void;
-}) {
-  const className =
-    kind === "primary"
-      ? "bg-[#0b84e7] text-white hover:bg-[#0975cd] dark:bg-zinc-100 dark:text-black dark:hover:bg-zinc-200"
-      : "border border-[#d8dee6] bg-transparent text-[#334155] hover:bg-[#edf1f6] dark:border-[#2a2f36] dark:text-[#cbd5e1] dark:hover:bg-[#1a1c21]";
-
-  return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={onClick}
-      className={`inline-flex h-8 items-center justify-center rounded-[8px] px-3 text-[11px] font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
-    >
-      {children}
-    </button>
-  );
-}
-
+// 创建代理对话框：使用 shadcn Input/Textarea/Button/Label，全部 token 化。
 export function CreateAgentDialog({
   busy = false,
   description,
@@ -56,37 +33,50 @@ export function CreateAgentDialog({
       <div className="flex flex-1 flex-col justify-between gap-5">
         <div className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor={nameId} className="block text-xs font-medium text-[#64748b] dark:text-[#94a3b8]">
+            <Label htmlFor={nameId} className="text-xs text-muted-foreground">
               名称（英文）
-            </label>
-            <input
+            </Label>
+            <Input
               id={nameId}
               autoFocus
               value={name}
               onChange={(event) => onChangeName(event.target.value)}
               placeholder="例如：writer"
-              className="h-10 w-full rounded-[10px] border border-[#d8dee6] bg-white px-3 text-sm text-[#111827] outline-none transition-colors duration-200 placeholder:text-[#94a3b8] focus:border-[#0b84e7] dark:border-[#2a2f36] dark:bg-[#0f1115] dark:text-[#f3f4f6] dark:placeholder:text-[#64748b] dark:focus:border-zinc-100"
+              className="h-10"
             />
           </div>
           <div className="space-y-2">
-            <label htmlFor={descriptionId} className="block text-xs font-medium text-[#64748b] dark:text-[#94a3b8]">
+            <Label htmlFor={descriptionId} className="text-xs text-muted-foreground">
               简介
-            </label>
-            <textarea
+            </Label>
+            <Textarea
               id={descriptionId}
               value={description}
               onChange={(event) => onChangeDescription(event.target.value)}
               placeholder="输入代理简介"
               rows={4}
-              className="w-full rounded-[10px] border border-[#d8dee6] bg-white px-3 py-2.5 text-sm leading-6 text-[#111827] outline-none transition-colors duration-200 placeholder:text-[#94a3b8] focus:border-[#0b84e7] dark:border-[#2a2f36] dark:bg-[#0f1115] dark:text-[#f3f4f6] dark:placeholder:text-[#64748b] dark:focus:border-zinc-100"
+              className="leading-6"
             />
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <DialogActionButton onClick={onCancel}>取消</DialogActionButton>
-          <DialogActionButton kind="primary" busy={busy} onClick={onConfirm}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            取消
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy}
+            onClick={onConfirm}
+          >
             {busy ? "创建中..." : "确认创建"}
-          </DialogActionButton>
+          </Button>
         </div>
       </div>
     </DialogShell>

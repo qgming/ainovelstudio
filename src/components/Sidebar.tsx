@@ -1,7 +1,9 @@
 import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, RefreshCw, type LucideIcon } from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useMatch, useResolvedPath } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "../hooks/use-mobile";
 import { applyAppClientStateAndReload } from "../lib/dataManagement/clientState";
 import { useDataManagementStore } from "../stores/dataManagementStore";
@@ -14,6 +16,8 @@ type NavItem = {
   end?: boolean;
 };
 
+const DESKTOP_SIDEBAR_ICON_CLASS = "size-5";
+
 const primaryItems: NavItem[] = [
   { to: "/", label: "首页", Icon: FileText, end: true },
   { to: "/workflows", label: "工作流", Icon: GitBranch },
@@ -24,22 +28,29 @@ const primaryItems: NavItem[] = [
 const secondaryItems: NavItem[] = [{ to: "/setting", label: "设置", Icon: Settings }];
 
 function DesktopSidebarLink({ to, label, Icon, end }: NavItem) {
+  const resolvedPath = useResolvedPath(to);
+  const isActive = useMatch({ path: resolvedPath.pathname, end: end ?? false }) !== null;
+
+  // 桌面端导航项：保持极简的左侧 indicator + 居中图标
   return (
-    <NavLink
-      to={to}
-      end={end}
-      aria-label={label}
-      className={({ isActive }) =>
-        cn(
-          "group relative flex h-11 w-full items-center justify-center px-0 text-muted-foreground transition-colors duration-150",
-          isActive
-            ? "text-foreground before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-current before:content-['']"
-            : "hover:text-foreground",
-        )
-      }
-    >
-      <Icon className="h-[22px] w-[22px]" strokeWidth={2.1} />
-    </NavLink>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <NavLink
+          to={to}
+          end={end}
+          aria-label={label}
+          className={cn(
+            "group relative flex h-11 w-full items-center justify-center px-0 text-muted-foreground transition-colors duration-150 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-current before:opacity-0 before:transition-opacity before:content-['']",
+            isActive
+              ? "text-primary before:opacity-100"
+              : "hover:text-foreground",
+          )}
+        >
+          <Icon className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -99,6 +110,27 @@ export function Sidebar() {
     );
   }
 
+  function handleSyncClick() {
+    void syncNow()
+      .then((result) => {
+        if (result.action === "downloaded" && result.clientState) {
+          toast.success("云端数据已拉取", { description: "应用将刷新为云端最新数据。" });
+          applyAppClientStateAndReload(result.clientState);
+          return;
+        }
+        if (result.action === "uploaded") {
+          toast.success("本地数据已同步到云端");
+          return;
+        }
+        toast("本地与云端已一致");
+      })
+      .catch((error) => {
+        const description =
+          error instanceof Error && error.message.trim() ? error.message : "请先在数据管理中配置 WebDAV。";
+        toast.error("同步失败", { description });
+      });
+  }
+
   return (
     <aside className="flex h-full w-11 shrink-0 flex-col items-center justify-between overflow-hidden border-r border-border bg-sidebar py-2">
       <nav aria-label="主导航" className="flex w-full flex-col gap-1.5">
@@ -108,45 +140,41 @@ export function Sidebar() {
       </nav>
 
       <div className="flex w-full flex-col items-stretch gap-2">
-        <button
-          type="button"
-          aria-label="立即同步"
-          onClick={() => {
-            void syncNow()
-              .then((result) => {
-                if (result.action === "downloaded" && result.clientState) {
-                  toast.success("云端数据已拉取", { description: "应用将刷新为云端最新数据。" });
-                  applyAppClientStateAndReload(result.clientState);
-                  return;
-                }
-                if (result.action === "uploaded") {
-                  toast.success("本地数据已同步到云端");
-                  return;
-                }
-                toast("本地与云端已一致");
-              })
-              .catch((error) => {
-                const description =
-                  error instanceof Error && error.message.trim() ? error.message : "请先在数据管理中配置 WebDAV。";
-                toast.error("同步失败", { description });
-              });
-          }}
-          className="flex h-11 w-full items-center justify-center px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground"
-        >
-          <RefreshCw className={cn("h-[22px] w-[22px]", syncStatus === "syncing" && "animate-spin")} strokeWidth={2.1} />
-        </button>
-        <button
-          type="button"
-          aria-label="主题切换"
-          onClick={toggleTheme}
-          className="flex h-11 w-full items-center justify-center px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground"
-        >
-          {theme === "dark" ? (
-            <Sun className="h-[22px] w-[22px]" strokeWidth={2.1} />
-          ) : (
-            <Moon className="h-[22px] w-[22px]" strokeWidth={2.1} />
-          )}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              aria-label="立即同步"
+              variant="ghost"
+              onClick={handleSyncClick}
+              className="h-11 w-full rounded-none px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+            >
+              <RefreshCw
+                className={cn(DESKTOP_SIDEBAR_ICON_CLASS, syncStatus === "syncing" && "animate-spin")}
+                strokeWidth={2.1}
+              />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">立即同步</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              aria-label="主题切换"
+              variant="ghost"
+              onClick={toggleTheme}
+              className="h-11 w-full rounded-none px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+            >
+              {theme === "dark" ? (
+                <Sun className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />
+              ) : (
+                <Moon className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}</TooltipContent>
+        </Tooltip>
         <nav aria-label="辅助导航" className="flex w-full flex-col gap-1.5">
           {secondaryItems.map((item) => (
             <DesktopSidebarLink key={item.to} {...item} />

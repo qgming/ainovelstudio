@@ -1,7 +1,12 @@
 import { BookOpenText, Download, Ellipsis, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
-import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../components/common/ActionMenu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Toast, type ToastTone } from "../components/common/Toast";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
@@ -28,20 +33,6 @@ type ToastState = {
   tone: ToastTone;
 };
 
-type BookMenuState = {
-  anchorRect: ActionMenuAnchorRect;
-  book: BookWorkspaceSummary;
-};
-
-function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
-  return {
-    bottom: rect.bottom,
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-  };
-}
-
 function getReadableError(error: unknown) {
   return error instanceof Error ? error.message : "操作失败，请重试。";
 }
@@ -58,7 +49,6 @@ export function HomePage() {
   const [exportBusyPath, setExportBusyPath] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [toastState, setToastState] = useState<ToastState | null>(null);
-  const [bookMenuState, setBookMenuState] = useState<BookMenuState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookWorkspaceSummary | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -80,21 +70,6 @@ export function HomePage() {
     } finally {
       setStatus("ready");
     }
-  }
-
-  function openBookMenu(book: BookWorkspaceSummary, event: MouseEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-    const nextAnchorRect = toAnchorRect(event.currentTarget.getBoundingClientRect());
-    setBookMenuState((current) => {
-      if (current?.book.id === book.id) {
-        return null;
-      }
-
-      return {
-        anchorRect: nextAnchorRect,
-        book,
-      };
-    });
   }
 
   function handleBookTileKeyDown(bookId: string, event: KeyboardEvent<HTMLElement>) {
@@ -156,7 +131,6 @@ export function HomePage() {
     }
 
     try {
-      setBookMenuState(null);
       setExportBusyPath(book.path);
       setErrorMessage(null);
       const exportedPath = await exportBookZip(book.path);
@@ -190,7 +164,6 @@ export function HomePage() {
       }
 
       setDeleteTarget(null);
-      setBookMenuState(null);
       await refreshBooks();
       setToastState({
         title: `已删除《${currentTarget.name}》`,
@@ -203,7 +176,6 @@ export function HomePage() {
     }
   }
 
-  const menuBook = bookMenuState?.book ?? null;
   const hasPendingBookAction = deleteBusyPath !== null || exportBusyPath !== null;
 
   return (
@@ -277,17 +249,38 @@ export function HomePage() {
                                 {book.name}
                               </h2>
                             </div>
-                            <Button
-                              type="button"
-                              aria-label={`更多操作 ${book.name}`}
-                              disabled={hasPendingBookAction}
-                              onClick={(event) => openBookMenu(book, event)}
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-muted-foreground"
-                            >
-                              <Ellipsis className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  aria-label={`更多操作 ${book.name}`}
+                                  disabled={hasPendingBookAction}
+                                  onClick={(event) => event.stopPropagation()}
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="text-muted-foreground"
+                                >
+                                  <Ellipsis className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                                <DropdownMenuItem
+                                  disabled={hasPendingBookAction}
+                                  onSelect={() => void handleExportBook(book)}
+                                >
+                                  <Download className="h-4 w-4" />
+                                  {exportBusyPath === book.path ? "导出中..." : "导出图书"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  disabled={hasPendingBookAction}
+                                  onSelect={() => setDeleteTarget(book)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  {deleteBusyPath === book.path ? "删除中..." : "删除图书"}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
                       </article>
@@ -330,36 +323,6 @@ export function HomePage() {
           </div>
         </div>
       </PageShell>
-
-      <ActionMenu anchorRect={bookMenuState?.anchorRect ?? null} onClose={() => setBookMenuState(null)} width={188}>
-        {menuBook ? (
-          <div className="space-y-1">
-            <ActionMenuItem
-              ariaLabel="导出图书"
-              disabled={hasPendingBookAction}
-              onClick={() => void handleExportBook(menuBook)}
-            >
-              <span className="flex items-center gap-2">
-                <Download className="h-4 w-4 shrink-0" />
-                <span>{exportBusyPath === menuBook.path ? "导出中..." : "导出图书"}</span>
-              </span>
-            </ActionMenuItem>
-            <ActionMenuItem
-              ariaLabel="删除图书"
-              disabled={hasPendingBookAction}
-              onClick={() => {
-                setBookMenuState(null);
-                setDeleteTarget(menuBook);
-              }}
-            >
-              <span className="flex items-center gap-2">
-                <Trash2 className="h-4 w-4 shrink-0" />
-                <span>{deleteBusyPath === menuBook.path ? "删除中..." : "删除图书"}</span>
-              </span>
-            </ActionMenuItem>
-          </div>
-        ) : null}
-      </ActionMenu>
 
       {createDialogOpen ? (
         <PromptDialog

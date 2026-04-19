@@ -1,6 +1,12 @@
-import { useState } from "react";
 import { ChevronRight, Ellipsis, FileText, FolderClosed, FolderOpen } from "lucide-react";
-import { ActionMenu, ActionMenuItem, type ActionMenuAnchorRect } from "../common/ActionMenu";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { isTextEditableFile } from "../../lib/bookWorkspace/paths";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
 
@@ -17,15 +23,7 @@ type BookTreeItemProps = {
   onToggleDirectory: (path: string) => void;
 };
 
-function toAnchorRect(rect: DOMRect): ActionMenuAnchorRect {
-  return {
-    bottom: rect.bottom,
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-  };
-}
-
+// 文件树节点：操作菜单改用 shadcn DropdownMenu，省去原本的浮层定位逻辑。
 export function BookTreeItem({
   activeFilePath,
   depth,
@@ -42,34 +40,18 @@ export function BookTreeItem({
   const isExpanded = isDirectory && expandedPaths.includes(node.path);
   const isSelected = activeFilePath === node.path;
   const isEditable = !isDirectory && isTextEditableFile(node.name);
-  const [menuAnchorRect, setMenuAnchorRect] = useState<ActionMenuAnchorRect | null>(null);
-
-  const closeMenu = () => {
-    setMenuAnchorRect(null);
-  };
-
-  const openMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    const nextAnchorRect = toAnchorRect(event.currentTarget.getBoundingClientRect());
-    setMenuAnchorRect((current) => (current ? null : nextAnchorRect));
-  };
-
-  const runMenuAction = (action: () => void) => {
-    closeMenu();
-    action();
-  };
 
   return (
     <div>
       <div
         role="treeitem"
         aria-expanded={isDirectory ? isExpanded : undefined}
-        className={[
+        className={cn(
           "group flex items-center gap-1 transition",
           isSelected
             ? "bg-accent text-foreground"
             : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        ].join(" ")}
+        )}
         style={{ paddingLeft: 10 + depth * 14 }}
       >
         <button
@@ -87,10 +69,10 @@ export function BookTreeItem({
         >
           {isDirectory ? (
             <ChevronRight
-              className={[
+              className={cn(
                 "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150",
                 isExpanded ? "rotate-90" : "rotate-0",
-              ].join(" ")}
+              )}
             />
           ) : (
             <span className="w-4 shrink-0" />
@@ -103,50 +85,55 @@ export function BookTreeItem({
             )
           ) : (
             <FileText
-              className={[
+              className={cn(
                 "h-4 w-4 shrink-0",
-                isEditable
-                  ? "text-muted-foreground"
-                  : "text-muted-foreground/45",
-              ].join(" ")}
+                isEditable ? "text-muted-foreground" : "text-muted-foreground/45",
+              )}
             />
           )}
           <span
-            className={[
+            className={cn(
               "truncate text-sm font-medium",
               !isDirectory && !isEditable ? "opacity-50" : "opacity-100",
-            ].join(" ")}
+            )}
           >
             {node.name}
           </span>
         </button>
-        <button
-          type="button"
-          aria-label={`${node.name} 更多操作`}
-          onClick={openMenu}
-          className={[
-            "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition hover:border-border hover:bg-panel-subtle hover:text-foreground",
-            menuAnchorRect || isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-          ].join(" ")}
-        >
-          <Ellipsis className="h-4 w-4" />
-        </button>
-        <ActionMenu anchorRect={menuAnchorRect} onClose={closeMenu} width={180}>
-          <div className="space-y-1">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              aria-label={`${node.name} 更多操作`}
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                "shrink-0 text-muted-foreground hover:bg-panel-subtle hover:text-foreground",
+                isSelected
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 aria-expanded:opacity-100",
+              )}
+            >
+              <Ellipsis className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
             {isDirectory ? (
               <>
-                <ActionMenuItem onClick={() => runMenuAction(() => onCreateFolder(node.path))}>
+                <DropdownMenuItem onSelect={() => onCreateFolder(node.path)}>
                   新建文件夹
-                </ActionMenuItem>
-                <ActionMenuItem onClick={() => runMenuAction(() => onCreateFile(node.path))}>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onCreateFile(node.path)}>
                   新建文件
-                </ActionMenuItem>
+                </DropdownMenuItem>
               </>
             ) : null}
-            <ActionMenuItem onClick={() => runMenuAction(() => onRename(node))}>重命名</ActionMenuItem>
-            <ActionMenuItem onClick={() => runMenuAction(() => onDelete(node))}>删除</ActionMenuItem>
-          </div>
-        </ActionMenu>
+            <DropdownMenuItem onSelect={() => onRename(node)}>重命名</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onSelect={() => onDelete(node)}>
+              删除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {isDirectory && isExpanded ? (
         <div className="space-y-1">

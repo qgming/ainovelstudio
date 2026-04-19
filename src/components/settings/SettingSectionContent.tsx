@@ -9,7 +9,7 @@ import { DefaultAgentSection } from "./DefaultAgentSection";
 import { ModelProviderCard } from "./ModelProviderCard";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";
 import { UsageAnalyticsSection } from "./UsageAnalyticsSection";
-import { Switch } from "../ui/Switch";
+import { Switch } from "../ui/switch";
 import type { SettingSectionKey } from "./settingNavigation";
 import { DataManagementSection } from "./DataManagementSection";
 
