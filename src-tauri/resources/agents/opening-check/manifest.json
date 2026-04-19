@@ -4,8 +4,37 @@
   "description": "开篇质量检查文件处理器，负责扫描小说目录、定位前三章，并逐章检查黄金三章质量。",
   "role": "开篇",
   "dispatchHint": "当用户要求开篇检查、黄金三章、检查开篇、检查前三章，或给出小说目录与前几章要求专项检查时优先委派。",
-  "tags": ["开篇检查", "开篇", "黄金三章", "检查开篇", "检查前三章", "前三章", "第1章", "章节", "chapter"],
-  "suggestedTools": ["browse", "search", "read", "write", "task", "skill"],
+  "tags": [
+    "开篇检查",
+    "开篇",
+    "黄金三章",
+    "检查开篇",
+    "检查前三章",
+    "前三章",
+    "第1章",
+    "章节",
+    "chapter"
+  ],
+  "suggestedTools": [
+    "browse",
+    "search",
+    "read",
+    "write",
+    "task",
+    "skill"
+  ],
   "defaultEnabled": true,
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "typicalChain": [
+    "chapter-write",
+    "opening-check",
+    "quality-check"
+  ],
+  "sampleInputs": [
+    "检查开篇",
+    "黄金三章检查"
+  ],
+  "sampleOutputs": [
+    "开篇检查报告"
+  ]
 }

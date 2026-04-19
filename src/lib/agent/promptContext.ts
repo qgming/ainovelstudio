@@ -51,8 +51,11 @@ type TaskProfile = {
   outputHint: string;
 };
 
-const SKILL_LOADING_NOTE =
-  "system 里只保留技能目录；需要某个 skill 的完整规则时，再用 skill 工具按需读取 SKILL.md 或 references。";
+const SKILL_LOADING_NOTE = [
+  "system 里只保留技能目录。匹配到某个 skill 后，使用 skill 工具按 id 读取完整规则：",
+  '  skill({ action: "read", skillId: "<id>", relativePath: "SKILL.md" })',
+  "再按需读取 references/ 下的文件。不要把目录块当成完整规则使用。",
+].join("\n");
 const MANUAL_CONTEXT_FILE_CHAR_LIMIT = 6_000;
 const MANUAL_CONTEXT_TOTAL_CHAR_LIMIT = 12_000;
 
@@ -112,12 +115,16 @@ function buildSkillCatalogBlock(skill: ResolvedSkill) {
   const suggestedTools = normalizeSuggestedToolIds(skill.suggestedTools);
   return [
     `### 技能：${skill.name}`,
+    `- id：${skill.id}`,
     `- 说明：${skill.description}`,
+    skill.tags.length > 0
+      ? `- 匹配关键词：${skill.tags.join(", ")}`
+      : null,
     suggestedTools.length > 0
       ? `- 常用工具：${suggestedTools.join(", ")}`
       : null,
     skill.references.length > 0
-      ? `- 可读参考：${skill.references.length} 份`
+      ? `- 可读参考：${skill.references.length} 份（目录 references/）`
       : null,
   ]
     .filter(Boolean)
@@ -127,16 +134,35 @@ function buildSkillCatalogBlock(skill: ResolvedSkill) {
 function buildAgentCatalogBlock(agent: ResolvedAgent) {
   return [
     `### 子代理：${agent.name}`,
+    `- id：${agent.id}`,
     `- 来源：${agent.sourceLabel}`,
     agent.role ? `- 角色：${agent.role}` : null,
     `- 说明：${agent.description}`,
     agent.dispatchHint ? `- 适用时机：${agent.dispatchHint}` : null,
     agent.tags.length > 0 ? `- 匹配标签：${agent.tags.join(", ")}` : null,
+    `- 派发方式：task({ agentId: "${agent.id}", prompt: "..." })`,
     "- 工具权限：继承当前主会话已启用的全部工具。",
   ]
     .filter(Boolean)
     .join("\n");
 }
+
+const TOOL_USAGE_HINT: Record<string, string> = {
+  todo: "多步任务（≥3 步）开场写短计划；同一时间只保留一个 in_progress，允许整份重写。",
+  task: "批量独立任务 ≥3 项或需隔离上下文时派发；prompt 写清输入范围与期望输出，可传 agentId 指定目标。",
+  browse: "不知道路径时首选；mode：list（默认）看子项、stat 看路径概况、tree 拿裁剪后的目录树。",
+  search: "找关键词/章节/角色/字段；scope：all / content / names；可用 extensions 过滤扩展名。",
+  web_search: "查平台规则、榜单、外部资料；返回标题+摘要+链接，再用 web_fetch 展开正文。",
+  web_fetch: "拿到外部链接后读正文；maxChars 默认 8000，最大 20000。",
+  read: "已知准确路径时使用；大文件用 mode=head/tail/range 省 context。",
+  word_count: "校对字符数、汉字数、英文词数、段落数、行数。",
+  edit: "小范围改（≤30%）；先 read 再 edit；action：replace/insert_before/insert_after/prepend/append；replaceAll=true 前确认命中范围。",
+  write: "整份覆盖写入；只有已准备好完整新内容时再用，缺失目录会自动创建。",
+  json: "按 JSON Pointer 局部读写字段/对象/数组；action：get/set/merge/append/delete，不要为一个字段整份重写。",
+  path: "只动结构：create_file / create_folder / rename / move / delete；不写入正文。",
+  skill: '读/管理本地 skill。先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；writes 改 skill 内文件。',
+  agent: 'action：list/read/write/create/delete；读写 agent 内文件（manifest.json / AGENTS.md / TOOLS.md / MEMORY.md）；执行子任务请用 task，不是 agent。',
+};
 
 function buildToolPromptBlock(enabledToolIds: string[]) {
   const enabledTools = BUILTIN_TOOLS.filter((tool) =>
@@ -148,21 +174,13 @@ function buildToolPromptBlock(enabledToolIds: string[]) {
   }
 
   return [
-    "工具使用策略：",
-    "- 多步任务先调用 todo 写出当前计划，并在每完成一步后及时更新。",
-    "- todo 只维护当前会话里的短计划，不要把它当长期任务系统。",
-    "- 当任务需要子代理隔离上下文执行时，主动调用 task 工具，而不是在主上下文里展开长链路。",
-    "- 涉及公开网络资料、外部网页、平台规则或最新公开信息时，使用 web_search 获取外部结果。",
-    "- 已经拿到外部链接并需要继续阅读正文时，使用 web_fetch 读取网页主要内容。",
-    "- 未知路径、未知入口或需要先看目录结构时，优先使用 browse 或 search 缩小范围。",
-    "- 涉及工作区路径时，默认优先传相对工作区根目录的路径，不要传绝对路径；例如用 `05-完整大纲.md`，不要用 `C:/.../05-完整大纲.md`。",
-    "- 已知准确路径且需要正文内容时，再使用 read。",
-    "- 需要校验篇幅、字符数、汉字数或段落规模时，使用 word_count 对目标文件做定量核对。",
-    "- 小范围文本修改优先使用 edit；只有整份内容都准备好了才使用 write。",
-    "- JSON 数据优先使用 json 做局部读取和局部更新，不要为了改一个字段整份重写。",
-    "- 结构变更统一使用 path；skill 和 agent 内文件统一分别走 skill / agent 工具。",
-    "当前已启用工具目录：",
-    ...enabledTools.map((tool) => `- ${tool.name}（${tool.id}）`),
+    "工具决策流程已在主代理人设中给出。以下是本轮已启用的工具，供你查找工具 ID、典型场景和关键参数。",
+    "涉及工作区路径时，优先传相对工作区根目录的路径，不要传绝对路径（例如用 `05-完整大纲.md`，不要用 `C:/.../05-完整大纲.md`）。",
+    "",
+    ...enabledTools.map((tool) => {
+      const hint = TOOL_USAGE_HINT[tool.id] ?? tool.description;
+      return `- ${tool.name}（${tool.id}） — ${hint}`;
+    }),
   ].join("\n");
 }
 
@@ -198,7 +216,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
       label: "创作/续写",
       outputHint: "优先给可直接使用的正文内容，再补极简说明。",
       caution:
-        "不要凭空改动既有设定；连续性敏感处优先核对人物、时态与剧情事实。",
+        "开始前必先读上一章正文、对应场景规划与人物资料；不要凭空改动既有设定；连续性敏感处优先核对人物、时态与剧情事实。",
     };
   }
 
@@ -206,7 +224,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "改写/润色",
       outputHint: "优先给修改后文本，必要时再附简短修改说明。",
-      caution: "默认保留原意、信息量与文风，不要无故重置结构或删掉有效细节。",
+      caution: "改前必先 read 目标文件当前原文，不要凭印象改；默认保留原意、信息量与文风，不要无故重置结构或删掉有效细节。",
     };
   }
 
@@ -218,7 +236,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "设定/规划",
       outputHint: "优先给结构化方案，如大纲、设定条目、角色卡或步骤清单。",
-      caution: "保持内部逻辑闭环，避免设定互相冲突或只有概念没有落地细节。",
+      caution: "开始前必先 browse 工作区并 read 已有大纲、人物、设定；保持内部逻辑闭环，避免设定互相冲突或只有概念没有落地细节。",
     };
   }
 
@@ -226,7 +244,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "审稿/评估",
       outputHint: "优先给问题与结论，再给修改建议或风险排序。",
-      caution: "聚焦真实问题，不要用空泛表扬稀释判断。",
+      caution: "开始前必先 read 被审对象的正文与相关设定；聚焦真实问题，不要用空泛表扬稀释判断。",
     };
   }
 
@@ -234,7 +252,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "分析/诊断",
       outputHint: "优先给结论、结构化观察和依据，避免先讲泛泛方法。",
-      caution: "基于已知内容推断；未读取的情节与设定不要当成事实引用。",
+      caution: "开始前必先 read 被分析对象的正文或资料；基于已读内容推断，未读取的情节与设定不要当成事实引用。",
     };
   }
 
@@ -242,14 +260,14 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "翻译/转写",
       outputHint: "优先给译文或转换结果，必要时补充少量术语说明。",
-      caution: "注意语气、叙述视角和专有名词的一致性。",
+      caution: "翻译前必先 read 源文件全文；注意语气、叙述视角和专有名词的一致性。",
     };
   }
 
   return {
     label: "通用协作",
     outputHint: "优先给最接近用户目标的可执行结果或下一步动作。",
-    caution: "如需依赖工作区事实，先最小读取再继续，不要假设未见内容。",
+    caution: "如涉及工作区内容，先用 browse/search/read 读相关文件再继续，不要假设未见内容。",
   };
 }
 
@@ -542,6 +560,7 @@ export function buildUserTurnContent({
           `- 本轮任务类型：${taskProfile.label}`,
           `- 优先输出：${taskProfile.outputHint}`,
           `- 处理提醒：${taskProfile.caution}`,
+          "- 工具调用硬性要求：除纯方法论/闲聊外，本轮必先调用 browse/search/read 读取相关工作区文件；禁止凭对话历史或模型记忆作答。",
           subagentAnalysis?.text
             ? `- 本轮已收到子任务摘要：${subagentAnalysis.agentName}`
             : "- 本轮默认由主代理直接处理。",

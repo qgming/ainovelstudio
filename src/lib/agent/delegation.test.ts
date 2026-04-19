@@ -66,7 +66,7 @@ describe("subagent delegation", () => {
     expect(selectSubAgentForPrompt("生成章节 ./我的小说/ 第3-5章", [writer, chapterWrite])?.id).toBe("chapter-write");
   });
 
-  it("流水账检测类请求优先命中 boring-detect", () => {
+  it("流水账检测类请求优先命中 quality-check", () => {
     const editor = createAgent({
       id: "editor",
       name: "editor",
@@ -74,17 +74,17 @@ describe("subagent delegation", () => {
       role: "编辑",
       tags: ["审稿", "节奏", "钩子"],
     });
-    const boringDetect = createAgent({
-      id: "boring-detect",
-      name: "boring-detect",
-      description: "负责逐章检测流水账问题",
-      role: "流水账检测",
-      tags: ["流水账检测", "流水账", "检测", "检查", "检查流水账", "平淡检测", "章节", "chapter"],
+    const qualityCheckForBoring = createAgent({
+      id: "quality-check",
+      name: "quality-check",
+      description: "负责逐章评估内容质量与流水账问题",
+      role: "质量",
+      tags: ["质量检查", "内容检查", "综合评估", "检查质量", "小说质量", "内容质量", "质量评估", "质量", "流水账检测", "检查流水账", "平淡检测", "流水账", "章节", "chapter", "评估"],
     });
 
-    expect(selectSubAgentForPrompt("流水账检测 ./我的小说/ 第3-5章", [editor, boringDetect])?.id).toBe("boring-detect");
-    expect(selectSubAgentForPrompt("帮我检测 ./我的小说/ 的流水账", [editor, boringDetect])?.id).toBe("boring-detect");
-    expect(selectSubAgentForPrompt("检查一下流水账", [editor, boringDetect])?.id).toBe("boring-detect");
+    expect(selectSubAgentForPrompt("流水账检测 ./我的小说/ 第3-5章", [editor, qualityCheckForBoring])?.id).toBe("quality-check");
+    expect(selectSubAgentForPrompt("帮我检测 ./我的小说/ 的流水账", [editor, qualityCheckForBoring])?.id).toBe("quality-check");
+    expect(selectSubAgentForPrompt("检查一下流水账", [editor, qualityCheckForBoring])?.id).toBe("quality-check");
   });
 
   it("角色检查类请求优先命中 character-check", () => {
@@ -142,7 +142,7 @@ describe("subagent delegation", () => {
       name: "novel-review",
       description: "负责分批执行小说一致性与质量复核",
       role: "复核",
-      tags: ["小说复核", "复核", "章节检查", "一致性检查", "质量检查", "小说质检", "角色", "时间线", "设定", "大纲", "伏笔", "文风", "开篇", "评估准备", "--角色"],
+      tags: ["小说复核", "复核", "章节检查", "一致性检查", "质量检查", "小说质检", "角色", "时间线", "设定", "大纲", "伏笔", "文风", "开篇", "评估准备", "全文"],
     });
     const qualityCheck = createAgent({
       id: "quality-check",
@@ -212,7 +212,7 @@ describe("subagent delegation", () => {
       name: "novel-review",
       description: "负责分批执行小说一致性与质量复核",
       role: "复核",
-      tags: ["小说复核", "复核", "章节检查", "一致性检查", "质量检查", "小说质检", "角色", "时间线", "设定", "大纲", "伏笔", "文风", "开篇", "评估准备", "--角色"],
+      tags: ["小说复核", "复核", "章节检查", "一致性检查", "质量检查", "小说质检", "角色", "时间线", "设定", "大纲", "伏笔", "文风", "开篇", "评估准备", "全文"],
     });
 
     expect(selectSubAgentForPrompt("小说复核 ./我的小说/ --角色", [editor, novelReview])?.id).toBe("novel-review");
@@ -220,7 +220,7 @@ describe("subagent delegation", () => {
     expect(selectSubAgentForPrompt("小说质检", [editor, novelReview])?.id).toBe("novel-review");
   });
 
-  it("大纲构建类请求优先命中 outline-builder", () => {
+  it("大纲构建类请求优先命中 outline", () => {
     const writer = createAgent({
       id: "writer",
       name: "writer",
@@ -228,17 +228,17 @@ describe("subagent delegation", () => {
       role: "写作",
       tags: ["正文", "重写", "润色"],
     });
-    const outlineBuilder = createAgent({
-      id: "outline-builder",
-      name: "outline-builder",
-      description: "负责读取材料并生成一页纸大纲与完整大纲",
-      role: "大纲",
-      tags: ["大纲", "生成大纲", "构建大纲", "写大纲", "大纲重建", "重新生成大纲", "一页纸大纲", "完整大纲", "步骤4", "步骤6"],
+    const outlineAgent = createAgent({
+      id: "outline",
+      name: "outline",
+      description: "负责从构思期推进到完整大纲",
+      role: "大纲规划",
+      tags: ["构思故事", "故事概念", "帮我想一个故事", "生成大纲", "构建大纲", "写大纲", "一页纸大纲", "完整大纲", "outline"],
     });
 
-    expect(selectSubAgentForPrompt("帮我生成大纲", [writer, outlineBuilder])?.id).toBe("outline-builder");
-    expect(selectSubAgentForPrompt("我改了反派的动机，帮我重新生成大纲", [writer, outlineBuilder])?.id).toBe("outline-builder");
-    expect(selectSubAgentForPrompt("写大纲", [writer, outlineBuilder])?.id).toBe("outline-builder");
+    expect(selectSubAgentForPrompt("帮我生成大纲", [writer, outlineAgent])?.id).toBe("outline");
+    expect(selectSubAgentForPrompt("我改了反派的动机，帮我重新生成大纲", [writer, outlineAgent])?.id).toBe("outline");
+    expect(selectSubAgentForPrompt("写大纲", [writer, outlineAgent])?.id).toBe("outline");
   });
 
   it("snowflake-fiction 命令类请求优先命中 snowflake-fiction", () => {

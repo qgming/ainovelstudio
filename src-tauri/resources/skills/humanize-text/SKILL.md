@@ -1,10 +1,16 @@
 ---
 name: humanize-text
 version: 3.0.0
+
+tags:
+  - 人语化
+  - 去AI味
+  - 润色
+  - AI痕迹检测
+  - 像人写的
+whenToUse: 将AI生成的文本进行人语化处理，去除机器味、注入人味
 description: |
   将AI生成的文本进行人语化处理，去除机器味、注入人味。当用户说"人语化"、"去AI味"、"润色"、"让这更像人写的"、"人性化处理"、"AI痕迹检测"时自动激活。基于Wikipedia"Signs of AI writing"指南，检测并修复24种AI写作模式（内容模式、语言模式、风格模式、交流模式、填充模糊），同时注入"灵魂"——观点、节奏、复杂情绪、第一人称。支持小说、文章、文案等多种文本类型。
-allowed-tools:
-  - Read
 ---
 
 # 人语化处理：去除 AI 痕迹，注入人类灵魂
@@ -184,7 +190,7 @@ allowed-tools:
 | 需求 | 使用 |
 |------|------|
 | 综合质量检查 | `/quality-check [文本]` |
-| 流水账检测 | `/boring-detect [文本]` |
+| 流水账检测 | `/quality-check [文本]` |
 | 开篇检查 | `/opening-check [文本]` |
 
 ---

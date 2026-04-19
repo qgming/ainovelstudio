@@ -1,0 +1,38 @@
+{
+  "id": "humanize-text",
+  "name": "人语化处理",
+  "description": "人语化文件处理器，负责读取目标文本文件，识别 AI 痕迹并把润色结果写回工作区或输出为新稿。",
+  "role": "去AI味",
+  "dispatchHint": "当用户要求人语化、去AI味、让这更像人写的、AI痕迹检测、批量润色章节时优先委派。",
+  "tags": [
+    "人语化",
+    "去AI味",
+    "让这更像人写的",
+    "AI痕迹检测",
+    "润色"
+  ],
+  "suggestedTools": [
+    "browse",
+    "search",
+    "read",
+    "write",
+    "edit",
+    "skill",
+    "task"
+  ],
+  "defaultEnabled": true,
+  "version": "1.0.0",
+  "typicalChain": [
+    "chapter-write",
+    "quality-check",
+    "humanize-text"
+  ],
+  "sampleInputs": [
+    "这章去AI味",
+    "批量润色正文"
+  ],
+  "sampleOutputs": [
+    "润色后的正文",
+    "AI程度评分报告"
+  ]
+}

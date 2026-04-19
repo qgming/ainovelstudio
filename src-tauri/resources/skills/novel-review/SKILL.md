@@ -1,10 +1,16 @@
 ---
 name: novel-review
 version: 2.0.0
+
+tags:
+  - 小说复核
+  - 章节检查
+  - 一致性检查
+  - 质量检查
+  - 小说质检
+whenToUse: 小说质量复核核心知识库，定义检查维度、评判标准和报告格式
 description: |
   小说质量复核核心知识库，定义检查维度、评判标准和报告格式。当用户说"小说复核"、"章节检查"、"一致性检查"、"质量检查"、"小说质检"时自动激活。使用子代理架构，支持长篇小说的增量检查。
-allowed-tools:
-  - Read
 ---
 
 # 小说复核：核心知识库
@@ -273,8 +279,7 @@ allowed-tools:
 
 - **snowflake-fiction**：创作完成后调用此 Skill 检查一致性
 - **humanize-text**：复核后可调用人语化修复 AI 痕迹
-- **quality-check**：从内容吸引力维度补充评估
-- **boring-detect**：专项流水账检测
+- **quality-check**：从内容吸引力与流水账专项两个维度补充评估
 
 推荐工作流：
 ```

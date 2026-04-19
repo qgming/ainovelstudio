@@ -4,8 +4,46 @@
   "description": "小说复核文件处理器，负责扫描小说目录、解析章节范围，并分批派发子代理执行一致性与质量复核。",
   "role": "复核",
   "dispatchHint": "当用户要求小说复核、章节检查、一致性检查、质量检查、小说质检，或给出小说目录与检查项要求批量复核时优先委派。",
-  "tags": ["小说复核", "复核", "章节检查", "一致性检查", "质量检查", "小说质检", "角色", "时间线", "设定", "大纲", "伏笔", "文风", "开篇", "评估准备", "--角色", "--时间线", "--设定", "--大纲", "--伏笔", "--文风", "--开篇", "--评估准备", "--全文"],
-  "suggestedTools": ["browse", "search", "read", "write", "edit", "task", "skill"],
+  "tags": [
+    "小说复核",
+    "复核",
+    "章节检查",
+    "一致性检查",
+    "质量检查",
+    "小说质检",
+    "角色",
+    "时间线",
+    "设定",
+    "大纲",
+    "伏笔",
+    "文风",
+    "开篇",
+    "评估准备",
+    "全文"
+  ],
+  "suggestedTools": [
+    "browse",
+    "search",
+    "read",
+    "write",
+    "edit",
+    "task",
+    "skill"
+  ],
   "defaultEnabled": true,
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "typicalChain": [
+    "chapter-write",
+    "quality-check",
+    "novel-review",
+    "humanize-text"
+  ],
+  "sampleInputs": [
+    "小说复核 全文",
+    "检查第5-10章的一致性"
+  ],
+  "sampleOutputs": [
+    "复核报告",
+    "revision_brief"
+  ]
 }

@@ -87,9 +87,9 @@
 
 根据当前进度优先建议对应阶段：
 
-- 构思期：`outline-concept`
+- 构思期：`outline`
 - 设计期：`character-design`
-- 构建期：`outline-builder`
+- 构建期：`outline`
 - 规划期：`scene-plan`
 - 创作期：`chapter-write`
 - 润色期：`humanize-text`

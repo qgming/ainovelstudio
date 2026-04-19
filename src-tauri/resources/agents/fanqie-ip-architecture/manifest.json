@@ -4,8 +4,39 @@
   "description": "阶段二代理，负责把阶段一风格底座转成男女频通用的原创人设、主关系线或主冲突线、金手指和工程化台账。",
   "role": "IP架构",
   "dispatchHint": "当用户要求做番茄短篇原创设定、人设卡、关系线或冲突线模型、工程化台账、故事圣经或换元原创架构时优先委派。",
-  "tags": ["番茄短篇", "IP架构", "人设卡", "关系线", "冲突线", "工程化台账", "故事圣经", "换元法", "女频", "男频"],
-  "suggestedTools": ["browse", "search", "read", "write", "edit", "skill"],
+  "tags": [
+    "番茄短篇",
+    "IP架构",
+    "人设卡",
+    "关系线",
+    "冲突线",
+    "工程化台账",
+    "故事圣经",
+    "换元法",
+    "女频",
+    "男频"
+  ],
+  "suggestedTools": [
+    "browse",
+    "search",
+    "read",
+    "write",
+    "edit",
+    "skill"
+  ],
   "defaultEnabled": true,
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "typicalChain": [
+    "fanqie-style-genome",
+    "fanqie-ip-architecture",
+    "fanqie-opening-three"
+  ],
+  "sampleInputs": [
+    "做番茄IP架构",
+    "给我一套原创人设底座"
+  ],
+  "sampleOutputs": [
+    "IP架构文档",
+    "工程化台账"
+  ]
 }

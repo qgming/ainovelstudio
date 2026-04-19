@@ -2,6 +2,7 @@
 name: snowflake-fiction
 description: 使用雪花写作法(Snowflake Method)创作小说。当用户说"写小说"、"创作故事"、"雪花法"、"帮我构思一个故事"时自动激活。支持短篇小说（1-3万字）、长篇小说（10万字+）和百万级网文（100万字+）的全流程创作。
 version: 1.3.0
+whenToUse: 使用雪花写作法(Snowflake Method)创作小说
 ---
 
 # 雪花写作法小说创作 Skill（编排器）
@@ -29,9 +30,9 @@ version: 1.3.0
 
 | 阶段 | 步骤 | 输出物 | 委托子技能 |
 |------|------|--------|-----------|
-| **构思期** | 1-2 | 一句话概括 + 五句式大纲 + 写作风格配置 | `outline-concept` |
+| **构思期** | 1-2 | 一句话概括 + 五句式大纲 + 写作风格配置 | `outline` |
 | **设计期** | 3,5 | 人物卡片 + 背景故事 | `character-design` |
-| **构建期** | 4,6,7 | 一页大纲 + 四页大纲 + 人物宝典 | `outline-builder` / `character-design` |
+| **构建期** | 4,6,7 | 一页大纲 + 四页大纲 + 人物宝典 | `outline` / `character-design` |
 | **规划期** | 8-9 | 场景清单 + 场景规划 | `scene-plan` |
 | **创作期** | 10 | 正式正文 | `chapter-write` |
 | **润色期** | 11 | 人语化处理 | `humanize-text` |
@@ -41,12 +42,12 @@ version: 1.3.0
 
 | 阶段 | 步骤 | 输出物 | 委托子技能 |
 |------|------|--------|-----------|
-| **构思期** | 1-2 | 一句话概括 + 五句式大纲 + 写作风格配置 | `outline-concept` |
+| **构思期** | 1-2 | 一句话概括 + 五句式大纲 + 写作风格配置 | `outline` |
 | **规模期** | 3 | 卷数规划 + 章节数量 | 内联 |
 | **人物期** | 4-5 | 主角群卡片 + 配角群卡片 | `character-design` |
-| **总纲期** | 6-7 | 一页总纲 + 各卷大纲 | `outline-builder` |
+| **总纲期** | 6-7 | 一页总纲 + 各卷大纲 | `outline` |
 | **深化期** | 8-9 | 主角背景 + 配角背景 | `character-design` |
-| **构建期** | 10-11 | 完整总大纲 + 人物宝典 | `outline-builder` / `character-design` |
+| **构建期** | 10-11 | 完整总大纲 + 人物宝典 | `outline` / `character-design` |
 | **规划期** | 12-14 | 卷级清单 + 章级大纲 + 场景规划 | `scene-plan` |
 | **创作期** | 15 | 逐章生成 + 润色 | `chapter-write` + `humanize-text` |
 
@@ -58,11 +59,11 @@ version: 1.3.0
 
 #### 步骤 1-2：一句话概括 + 五句式大纲
 
-**委托**：调用 `outline-concept` skill 执行此阶段。
+**委托**：调用 `outline` skill 执行此阶段。
 
 **传入上下文**：用户提供的题材偏好、主角类型、核心冲突
 **输出物**：`[小说名]/00-一句话概括.md`、`[小说名]/00-写作风格.md`、`[小说名]/01-五句式大纲.md`
-**参考**：[outline-concept skill](../outline-concept/SKILL.md)
+**参考**：[outline skill](../outline/SKILL.md)
 
 ---
 
@@ -82,11 +83,11 @@ version: 1.3.0
 
 #### 步骤 4：一页纸大纲 / 步骤 6：四页纸完整大纲
 
-**委托**：调用 `outline-builder` agent 执行步骤4和步骤6。
+**委托**：调用 `outline` agent 执行步骤4和步骤6。
 
 **传入上下文**：`01-五句式大纲.md`、`03-人物卡片/`、`04-人物背景/`（agent 自主读取）
 **输出物**：`02-一页纸大纲.md`、`05-完整大纲.md`
-**参考**：[outline-builder agent](../../agents/outline-builder/AGENTS.md)
+**参考**：[outline agent](../../agents/outline/AGENTS.md)
 
 #### 步骤 7：人物宝典
 
@@ -134,7 +135,7 @@ version: 1.3.0
 
 **传入上下文**：`正文/第N章.md`（逐章或批量）
 **输出物**：覆盖原文件或输出到 `正文/第N章-润色.md`
-**参考**：[humanize-text skill](../humanize-text/SKILL.md) | [humanize-text agent](../../agents/humanize-text.md)
+**参考**：[humanize-text skill](../humanize-text/SKILL.md) | [humanize-text agent](../../agents/humanize-text/AGENTS.md)
 
 ---
 
@@ -155,13 +156,13 @@ version: 1.3.0
 ```
 [当前工作目录]/
 └── [小说名]/
-    ├── 00-一句话概括.md        ← 步骤1（outline-concept）
-    ├── 00-写作风格.md          ← 步骤1.5c（outline-concept）
-    ├── 01-五句式大纲.md        ← 步骤2（outline-concept）
-    ├── 02-一页纸大纲.md        ← 步骤4（outline-builder）
+    ├── 00-一句话概括.md        ← 步骤1（outline）
+    ├── 00-写作风格.md          ← 步骤1.5c（outline）
+    ├── 01-五句式大纲.md        ← 步骤2（outline）
+    ├── 02-一页纸大纲.md        ← 步骤4（outline）
     ├── 03-人物卡片/            ← 步骤3（character-design）
     ├── 04-人物背景/            ← 步骤5（character-design）
-    ├── 05-完整大纲.md          ← 步骤6（outline-builder）
+    ├── 05-完整大纲.md          ← 步骤6（outline）
     ├── 06-人物宝典/            ← 步骤7（character-design）
     ├── 07-场景清单.md          ← 步骤8（scene-plan）
     ├── 08-场景规划/            ← 步骤9（scene-plan）
@@ -204,14 +205,14 @@ version: 1.3.0
 ## 相关资源
 
 - [snowflake-fiction agent](../../agents/snowflake-fiction/AGENTS.md)（文件处理器：目录扫描、批量生成）
-- [outline-concept skill](../outline-concept/SKILL.md)
+- [outline skill](../outline/SKILL.md)
 - [character-design skill](../character-design/SKILL.md)
-- [outline-builder agent](../../agents/outline-builder/AGENTS.md)
+- [outline agent](../../agents/outline/AGENTS.md)
 - [scene-plan skill](../scene-plan/SKILL.md)
 - [chapter-write skill](../chapter-write/SKILL.md)
 - [chapter-write agent](../../agents/chapter-write/AGENTS.md)
 - [humanize-text skill](../humanize-text/SKILL.md)
-- [humanize-text agent](../../agents/humanize-text.md)
+- [humanize-text agent](../../agents/humanize-text/AGENTS.md)
 - [novel-export skill](../novel-export/SKILL.md)
 - [每步提示词模板](./references/step-prompts.md)
 - [长篇小说创作指南](./references/long-novel-guide.md)

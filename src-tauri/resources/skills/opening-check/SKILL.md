@@ -2,8 +2,13 @@
 name: opening-check
 description: 开篇质量检查工具，基于"黄金三章"法则检查小说开篇质量。当用户说"开篇检查"、"黄金三章"、"检查开篇"、"检查前三章"时自动激活。
 version: 2.0.0
-allowed-tools:
-  - Read
+
+tags:
+  - 开篇检查
+  - 黄金三章
+  - 检查开篇
+  - 检查前三章
+whenToUse: 开篇质量检查工具，基于"黄金三章"法则检查小说开篇质量
 ---
 
 # 开篇质量检查 Skill
@@ -111,7 +116,7 @@ allowed-tools:
 | 需求 | 使用 |
 |------|------|
 | 综合质量检查 | `/quality-check [文本]` |
-| 流水账检测 | `/boring-detect [文本]` |
+| 流水账检测 | `/quality-check [文本]` |
 | 创意检查 | `/concept-check [文本]` |
 
 ---
