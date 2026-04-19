@@ -48,12 +48,13 @@ function MobileNavLink({ to, label, Icon, end }: NavItem) {
       aria-label={label}
       className={({ isActive }) =>
         cn(
-          "flex min-w-0 items-center justify-center rounded-2xl px-1 transition-colors duration-150",
+          "flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 transition-colors duration-150",
           isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
         )
       }
     >
       <Icon className="h-5 w-5 shrink-0" strokeWidth={2.1} />
+      <span className="text-[11px] font-medium leading-none">{label}</span>
     </NavLink>
   );
 }
@@ -76,7 +77,7 @@ export function Sidebar() {
     return (
       <nav
         aria-label="主导航"
-        className="shrink-0 border-t border-border bg-sidebar/95 px-2 pb-[calc(env(safe-area-inset-bottom)+10px)] backdrop-blur"
+        className="shrink-0 border-t border-border bg-sidebar/95 px-2 backdrop-blur"
       >
         <div
           className="grid h-16 w-full gap-1"

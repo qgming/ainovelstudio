@@ -10,7 +10,7 @@ import {
   SquareSlash,
   X,
 } from "lucide-react";
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { getBaseName } from "../../lib/bookWorkspace/paths";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
@@ -70,6 +70,8 @@ function hasIncompleteItems(items: PlanItem[]) {
   return items.some((item) => item.status !== "completed");
 }
 
+const COMPOSER_MIN_ROWS = 2;
+
 export function AgentComposer({
   input,
   onInputChange,
@@ -89,11 +91,22 @@ export function AgentComposer({
     useState<ActionMenuAnchorRect | null>(null);
   const [fileAnchorRect, setFileAnchorRect] =
     useState<ActionMenuAnchorRect | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [selection, setSelection] = useState<ManualTurnContextSelection>({
     agentIds: [],
     filePaths: [],
     skillIds: [],
   });
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [input]);
 
   const selectedItems = useMemo(() => {
     const resourceItems = resources
@@ -306,11 +319,13 @@ export function AgentComposer({
 
       <div className="overflow-hidden border-t border-border">
         <textarea
+          ref={textareaRef}
           aria-label="Agent 输入框"
-          className="editor-textarea min-h-[104px] px-3 py-3 leading-6"
+          className="editor-textarea px-3 py-3 leading-6"
           onChange={(event) => onInputChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="输入新想法"
+          rows={COMPOSER_MIN_ROWS}
           value={input}
         />
         <div className="flex h-11 items-center gap-2 border-t border-border px-2">

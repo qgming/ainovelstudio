@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Moon, Palette, Sun } from "lucide-react";
+import { ChevronRight, Moon, Palette, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
@@ -11,6 +11,29 @@ import {
 } from "../components/settings/settingNavigation";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useThemeStore } from "../stores/themeStore";
+
+function DetailTitle({
+  currentLabel,
+  parentLabel,
+  parentTo,
+}: {
+  currentLabel: string;
+  parentLabel: string;
+  parentTo: string;
+}) {
+  return (
+    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">
+      <Link
+        to={parentTo}
+        className="transition-colors hover:text-[#475569] dark:hover:text-zinc-300"
+      >
+        {parentLabel}
+      </Link>
+      <span className="px-1.5 text-[#94a3b8] dark:text-zinc-500">/</span>
+      <span>{currentLabel}</span>
+    </div>
+  );
+}
 
 function DesktopSettingNav({
   activeSection,
@@ -87,26 +110,11 @@ function MobileSettingListPage() {
 }
 
 function MobileSettingDetailPage({ sectionKey }: { sectionKey: SettingSectionKey }) {
-  const navigate = useNavigate();
   const currentItem = getSettingNavItem(sectionKey);
 
   return (
     <PageShell
-      title={
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            aria-label="返回设置"
-            onClick={() => navigate("/setting")}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">
-            {currentItem.title}
-          </h1>
-        </div>
-      }
+      title={<DetailTitle currentLabel={currentItem.title} parentLabel="设置" parentTo="/setting" />}
       contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
     >
       <SettingSectionContent sectionKey={sectionKey} />

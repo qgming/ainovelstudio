@@ -1,12 +1,12 @@
 use crate::db::open_database;
 use rusqlite::{params, Connection, OptionalExtension};
 use tauri::AppHandle;
+#[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
 
 use super::{
     package_export::{
-        build_export_archive, build_export_definition, build_export_manifest,
-        build_export_package_id, sanitize_export_file_name,
+        build_export_archive, build_export_definition, build_export_manifest, build_export_package_id,
     },
     repository::{list_steps, list_team_members, read_workflow},
     validate::{error_to_string, now_timestamp},
@@ -69,7 +69,10 @@ pub(crate) async fn export_workflow_zip(
 
     #[cfg(desktop)]
     {
-        let default_file_name = format!("{}.zip", sanitize_export_file_name(&workflow.name));
+        let default_file_name = format!(
+            "{}.zip",
+            super::package_export::sanitize_export_file_name(&workflow.name),
+        );
         let save_path = app
             .dialog()
             .file()

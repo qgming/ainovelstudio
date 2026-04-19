@@ -117,4 +117,21 @@ describe("AgentComposer", () => {
       skillIds: [],
     });
   });
+
+  it("输入区默认显示为两行高度", () => {
+    render(
+      <AgentComposer
+        input=""
+        onInputChange={vi.fn()}
+        onStop={vi.fn()}
+        onSubmit={vi.fn()}
+        planningState={{ items: [], roundsSinceUpdate: 0 }}
+        resources={[]}
+        rootNode={null}
+        runStatus="idle"
+      />,
+    );
+
+    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute("rows", "2");
+  });
 });

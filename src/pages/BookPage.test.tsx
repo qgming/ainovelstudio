@@ -328,6 +328,9 @@ describe("BookPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByRole("navigation", { name: "图书工作区导航" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "返回书架" })).toBeInTheDocument();
+    expect(screen.getByText("书架")).toBeInTheDocument();
+    expect(screen.getByText("北境余烬")).toBeInTheDocument();
     expect(screen.queryByTestId("book-workspace-panels")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "目录" }));

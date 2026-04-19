@@ -101,6 +101,7 @@ pub(crate) fn build_export_package_id(workflow: &Workflow) -> String {
     trim_hyphen_edges(&format!("{compact_prefix}-{short_id}"))
 }
 
+#[cfg(desktop)]
 pub(crate) fn sanitize_export_file_name(name: &str) -> String {
     let sanitized = name
         .chars()

@@ -79,7 +79,9 @@ function AppShell() {
 
   return (
     <div className="editor-shell h-dvh min-h-dvh overflow-hidden transition-colors duration-150">
-      <div className="flex h-full flex-col overflow-hidden">
+      <div
+        className={`flex h-full flex-col overflow-hidden ${mobileRuntime ? "pt-[env(safe-area-inset-top)]" : ""}`}
+      >
         {mobileRuntime ? null : <TitleBar />}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           <Sidebar />

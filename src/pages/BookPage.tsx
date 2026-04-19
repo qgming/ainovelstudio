@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Bot, FolderTree, SquarePen } from "lucide-react";
+import { cn } from "../lib/utils";
 import { BookAgentPanel } from "../components/book/BookAgentPanel";
 import { BookCollapsedPanelToggle } from "../components/book/BookCollapsedPanelToggle";
 import { BookEditorPanel } from "../components/book/BookEditorPanel";
@@ -28,7 +29,6 @@ import {
 } from "../lib/bookWorkspace/layout";
 import { getBaseName } from "../lib/bookWorkspace/paths";
 import type { TreeNode } from "../lib/bookWorkspace/types";
-import { cn } from "../lib/utils";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
@@ -36,16 +36,43 @@ const AUTO_SAVE_DELAY_MS = 800;
 type ResizeHandle = "left" | "right" | null;
 type MobileBookTab = "tree" | "editor" | "agent";
 
+function MobileWorkspaceTitle({
+  currentLabel,
+  onNavigateHome,
+}: {
+  currentLabel: string;
+  onNavigateHome: () => void;
+}) {
+  return (
+    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">
+      <button
+        type="button"
+        aria-label="返回书架"
+        onClick={onNavigateHome}
+        className="transition-colors hover:text-[#475569] dark:hover:text-zinc-300"
+      >
+        书架
+      </button>
+      <span className="px-1.5 text-[#94a3b8] dark:text-zinc-500">/</span>
+      <span>{currentLabel}</span>
+    </div>
+  );
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
 function getLeftFootprint(layout: BookPanelLayout) {
-  return layout.leftCollapsed ? COLLAPSED_PANEL_TOGGLE_WIDTH : layout.leftPanelWidth + RESIZE_HANDLE_WIDTH;
+  return layout.leftCollapsed
+    ? COLLAPSED_PANEL_TOGGLE_WIDTH
+    : layout.leftPanelWidth + RESIZE_HANDLE_WIDTH;
 }
 
 function getRightFootprint(layout: BookPanelLayout) {
-  return layout.rightCollapsed ? COLLAPSED_PANEL_TOGGLE_WIDTH : layout.rightPanelWidth + RESIZE_HANDLE_WIDTH;
+  return layout.rightCollapsed
+    ? COLLAPSED_PANEL_TOGGLE_WIDTH
+    : layout.rightPanelWidth + RESIZE_HANDLE_WIDTH;
 }
 
 function getMaxLeftPanelWidth(layout: BookPanelLayout, containerWidth: number) {
@@ -53,17 +80,26 @@ function getMaxLeftPanelWidth(layout: BookPanelLayout, containerWidth: number) {
     MAX_TREE_PANEL_WIDTH,
     Math.max(
       MIN_TREE_PANEL_WIDTH,
-      containerWidth - getRightFootprint(layout) - MIN_EDITOR_PANEL_WIDTH - RESIZE_HANDLE_WIDTH,
+      containerWidth -
+        getRightFootprint(layout) -
+        MIN_EDITOR_PANEL_WIDTH -
+        RESIZE_HANDLE_WIDTH,
     ),
   );
 }
 
-function getMaxRightPanelWidth(layout: BookPanelLayout, containerWidth: number) {
+function getMaxRightPanelWidth(
+  layout: BookPanelLayout,
+  containerWidth: number,
+) {
   return Math.min(
     MAX_AGENT_PANEL_WIDTH,
     Math.max(
       MIN_AGENT_PANEL_WIDTH,
-      containerWidth - getLeftFootprint(layout) - MIN_EDITOR_PANEL_WIDTH - RESIZE_HANDLE_WIDTH,
+      containerWidth -
+        getLeftFootprint(layout) -
+        MIN_EDITOR_PANEL_WIDTH -
+        RESIZE_HANDLE_WIDTH,
     ),
   );
 }
@@ -86,7 +122,9 @@ export function BookPage({
   const closeBookshelf = useBookWorkspaceStore((state) => state.closeBookshelf);
   const closeConfirm = useBookWorkspaceStore((state) => state.closeConfirm);
   const closePrompt = useBookWorkspaceStore((state) => state.closePrompt);
-  const toggleAllDirectories = useBookWorkspaceStore((state) => state.toggleAllDirectories);
+  const toggleAllDirectories = useBookWorkspaceStore(
+    (state) => state.toggleAllDirectories,
+  );
   const confirmDelete = useBookWorkspaceStore((state) => state.confirmDelete);
   const confirmState = useBookWorkspaceStore((state) => state.confirmState);
   const dismissError = useBookWorkspaceStore((state) => state.dismissError);
@@ -94,18 +132,34 @@ export function BookPage({
   const errorMessage = useBookWorkspaceStore((state) => state.errorMessage);
   const expandedPaths = useBookWorkspaceStore((state) => state.expandedPaths);
   const hasInitialized = useBookWorkspaceStore((state) => state.hasInitialized);
-  const initializeWorkspace = useBookWorkspaceStore((state) => state.initializeWorkspace);
+  const initializeWorkspace = useBookWorkspaceStore(
+    (state) => state.initializeWorkspace,
+  );
   const isBusy = useBookWorkspaceStore((state) => state.isBusy);
-  const isBookshelfOpen = useBookWorkspaceStore((state) => state.isBookshelfOpen);
+  const isBookshelfOpen = useBookWorkspaceStore(
+    (state) => state.isBookshelfOpen,
+  );
   const isDirty = useBookWorkspaceStore((state) => state.isDirty);
-  const openCreateBookDialog = useBookWorkspaceStore((state) => state.openCreateBookDialog);
-  const openCreateFileDialog = useBookWorkspaceStore((state) => state.openCreateFileDialog);
-  const openCreateFolderDialog = useBookWorkspaceStore((state) => state.openCreateFolderDialog);
-  const openRenameDialog = useBookWorkspaceStore((state) => state.openRenameDialog);
+  const openCreateBookDialog = useBookWorkspaceStore(
+    (state) => state.openCreateBookDialog,
+  );
+  const openCreateFileDialog = useBookWorkspaceStore(
+    (state) => state.openCreateFileDialog,
+  );
+  const openCreateFolderDialog = useBookWorkspaceStore(
+    (state) => state.openCreateFolderDialog,
+  );
+  const openRenameDialog = useBookWorkspaceStore(
+    (state) => state.openRenameDialog,
+  );
   const openWorkspace = useBookWorkspaceStore((state) => state.openWorkspace);
   const promptState = useBookWorkspaceStore((state) => state.promptState);
-  const refreshWorkspace = useBookWorkspaceStore((state) => state.refreshWorkspace);
-  const refreshWorkspaceList = useBookWorkspaceStore((state) => state.refreshWorkspaceList);
+  const refreshWorkspace = useBookWorkspaceStore(
+    (state) => state.refreshWorkspace,
+  );
+  const refreshWorkspaceList = useBookWorkspaceStore(
+    (state) => state.refreshWorkspaceList,
+  );
   const requestDelete = useBookWorkspaceStore((state) => state.requestDelete);
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
@@ -114,14 +168,20 @@ export function BookPage({
   const rootBookName = useBookWorkspaceStore((state) => state.rootBookName);
   const setPromptValue = useBookWorkspaceStore((state) => state.setPromptValue);
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
-  const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
+  const toggleDirectory = useBookWorkspaceStore(
+    (state) => state.toggleDirectory,
+  );
   const updateDraft = useBookWorkspaceStore((state) => state.updateDraft);
-  const selectWorkspaceByBookId = useBookWorkspaceStore((state) => state.selectWorkspaceByBookId);
+  const selectWorkspaceByBookId = useBookWorkspaceStore(
+    (state) => state.selectWorkspaceByBookId,
+  );
   const [panelLayout, setPanelLayout] = useState<BookPanelLayout>(
     () => getStoredBookPanelLayout() ?? DEFAULT_BOOK_PANEL_LAYOUT,
   );
-  const [activeResizeHandle, setActiveResizeHandle] = useState<ResizeHandle>(null);
-  const [mobileActiveTab, setMobileActiveTab] = useState<MobileBookTab>("editor");
+  const [activeResizeHandle, setActiveResizeHandle] =
+    useState<ResizeHandle>(null);
+  const [mobileActiveTab, setMobileActiveTab] =
+    useState<MobileBookTab>("editor");
   const panelLayoutRef = useRef(panelLayout);
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const cleanupResizeRef = useRef<(() => void) | null>(null);
@@ -129,11 +189,13 @@ export function BookPage({
   const storedSnapshot = requestedBookId ? null : getStoredWorkspaceSnapshot();
   const shouldShowWorkspaceRestoreState =
     !requestedBookId && !hasInitialized && !rootNode && storedSnapshot !== null;
-  const isSwitchingRequestedWorkspace = Boolean(requestedBookId && rootBookId && rootBookId !== requestedBookId);
+  const isSwitchingRequestedWorkspace = Boolean(
+    requestedBookId && rootBookId && rootBookId !== requestedBookId,
+  );
   const shouldShowWorkspaceOpenState = Boolean(
     requestedBookId &&
-      !errorMessage &&
-      (!rootNode || !rootBookId || isSwitchingRequestedWorkspace),
+    !errorMessage &&
+    (!rootNode || !rootBookId || isSwitchingRequestedWorkspace),
   );
 
   useEffect(() => {
@@ -167,7 +229,11 @@ export function BookPage({
   }, [requestedBookId, rootBookId, selectWorkspaceByBookId]);
 
   useEffect(() => {
-    if (!onWorkspaceBookChange || !rootBookId || rootBookId === requestedBookId) {
+    if (
+      !onWorkspaceBookChange ||
+      !rootBookId ||
+      rootBookId === requestedBookId
+    ) {
       return;
     }
 
@@ -218,9 +284,16 @@ export function BookPage({
     const containerWidth = panels?.getBoundingClientRect().width ?? 0;
     const maxLeftWidth =
       containerWidth > 0
-        ? getMaxLeftPanelWidth({ ...current, leftCollapsed: false }, containerWidth)
+        ? getMaxLeftPanelWidth(
+            { ...current, leftCollapsed: false },
+            containerWidth,
+          )
         : MAX_TREE_PANEL_WIDTH;
-    const nextLeftWidth = clamp(current.lastExpandedLeftPanelWidth, MIN_TREE_PANEL_WIDTH, maxLeftWidth);
+    const nextLeftWidth = clamp(
+      current.lastExpandedLeftPanelWidth,
+      MIN_TREE_PANEL_WIDTH,
+      maxLeftWidth,
+    );
     const nextLayout = {
       ...current,
       leftCollapsed: false,
@@ -237,9 +310,16 @@ export function BookPage({
     const containerWidth = panels?.getBoundingClientRect().width ?? 0;
     const maxRightWidth =
       containerWidth > 0
-        ? getMaxRightPanelWidth({ ...current, rightCollapsed: false }, containerWidth)
+        ? getMaxRightPanelWidth(
+            { ...current, rightCollapsed: false },
+            containerWidth,
+          )
         : MAX_AGENT_PANEL_WIDTH;
-    const nextRightWidth = clamp(current.lastExpandedRightPanelWidth, MIN_AGENT_PANEL_WIDTH, maxRightWidth);
+    const nextRightWidth = clamp(
+      current.lastExpandedRightPanelWidth,
+      MIN_AGENT_PANEL_WIDTH,
+      maxRightWidth,
+    );
     const nextLayout = {
       ...current,
       rightCollapsed: false,
@@ -278,7 +358,11 @@ export function BookPage({
             }
 
             const maxLeftWidth = getMaxLeftPanelWidth(current, rect.width);
-            const nextLeftWidth = clamp(candidateWidth, MIN_TREE_PANEL_WIDTH, maxLeftWidth);
+            const nextLeftWidth = clamp(
+              candidateWidth,
+              MIN_TREE_PANEL_WIDTH,
+              maxLeftWidth,
+            );
             if (
               nextLeftWidth === current.leftPanelWidth &&
               current.leftCollapsed === false &&
@@ -305,7 +389,11 @@ export function BookPage({
           }
 
           const maxRightWidth = getMaxRightPanelWidth(current, rect.width);
-          const nextRightWidth = clamp(candidateWidth, MIN_AGENT_PANEL_WIDTH, maxRightWidth);
+          const nextRightWidth = clamp(
+            candidateWidth,
+            MIN_AGENT_PANEL_WIDTH,
+            maxRightWidth,
+          );
           if (
             nextRightWidth === current.rightPanelWidth &&
             current.rightCollapsed === false &&
@@ -463,6 +551,23 @@ export function BookPage({
 
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <header className="flex min-h-10 shrink-0 items-center gap-3 border-b border-border bg-panel-subtle px-4 py-1.5 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <MobileWorkspaceTitle
+              currentLabel={resolvedRootNode.name}
+              onNavigateHome={() => {
+                if (onNavigateHome) {
+                  onNavigateHome();
+                  return;
+                }
+
+                if (typeof window !== "undefined") {
+                  window.location.hash = "#/";
+                }
+              }}
+            />
+          </div>
+        </header>
         <div className="min-h-0 flex-1 overflow-hidden">
           {mobileActiveTab === "tree" ? (
             <BookTreePanel {...sharedTreeProps} />
@@ -470,7 +575,9 @@ export function BookPage({
             <BookAgentPanel width="100%" />
           ) : (
             <BookEditorPanel
-              activeFileName={activeFilePath ? getBaseName(activeFilePath) : null}
+              activeFileName={
+                activeFilePath ? getBaseName(activeFilePath) : null
+              }
               busy={isBusy}
               content={draftContent}
               isDirty={isDirty}
@@ -482,13 +589,13 @@ export function BookPage({
 
         <nav
           aria-label="图书工作区导航"
-          className="shrink-0 border-t border-border bg-sidebar/95 px-2 pb-[calc(env(safe-area-inset-bottom)+10px)] backdrop-blur"
+          className="shrink-0 border-t border-border bg-sidebar/95 px-2 backdrop-blur"
         >
           <div className="grid h-16 w-full grid-cols-3 gap-1">
             {[
               { tab: "tree" as const, label: "目录", Icon: FolderTree },
               { tab: "editor" as const, label: "写作", Icon: SquarePen },
-              { tab: "agent" as const, label: "机器人", Icon: Bot },
+              { tab: "agent" as const, label: "助手", Icon: Bot },
             ].map(({ tab, label, Icon }) => (
               <button
                 key={tab}
@@ -496,11 +603,16 @@ export function BookPage({
                 aria-label={label}
                 onClick={() => setMobileActiveTab(tab)}
                 className={cn(
-                  "flex min-w-0 items-center justify-center rounded-2xl px-1 transition-colors duration-150",
-                  mobileActiveTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                  "flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 transition-colors duration-150",
+                  mobileActiveTab === tab
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" strokeWidth={2.1} />
+                <span className="text-[11px] font-medium leading-none">
+                  {label}
+                </span>
               </button>
             ))}
           </div>
@@ -536,7 +648,11 @@ export function BookPage({
             title="正在打开书籍工作区..."
           />
         ) : rootNode ? (
-          isMobile ? renderMobileWorkspace() : renderDesktopWorkspace()
+          isMobile ? (
+            renderMobileWorkspace()
+          ) : (
+            renderDesktopWorkspace()
+          )
         ) : (
           <BookWorkspaceEmptyState
             busy={isBusy}
@@ -588,6 +704,3 @@ export function BookPage({
     </section>
   );
 }
-
-
-

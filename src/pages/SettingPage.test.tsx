@@ -73,11 +73,12 @@ describe("SettingPage mobile", () => {
     expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
   });
 
-  it("移动端进入详情页后显示返回按钮和对应设置内容", async () => {
+  it("移动端进入详情页后显示路径式标题和对应设置内容", async () => {
     renderSettingPage("/setting/about");
 
-    expect(screen.getByRole("button", { name: "返回设置" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "关于我们" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "设置" })).toBeInTheDocument();
+    expect(screen.getByText("关于我们")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "返回设置" })).not.toBeInTheDocument();
     expect(await screen.findByTestId("setting-section-content")).toHaveTextContent("section:about");
   });
 });
