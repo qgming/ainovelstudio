@@ -1,7 +1,10 @@
-import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
+import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, RefreshCw, type LucideIcon } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "../hooks/use-mobile";
+import { applyAppClientStateAndReload } from "../lib/dataManagement/clientState";
+import { useDataManagementStore } from "../stores/dataManagementStore";
 import { useThemeStore } from "../stores/themeStore";
 
 type NavItem = {
@@ -62,6 +65,8 @@ function MobileNavLink({ to, label, Icon, end }: NavItem) {
 export function Sidebar() {
   const isMobile = useIsMobile();
   const location = useLocation();
+  const syncNow = useDataManagementStore((state) => state.syncNow);
+  const syncStatus = useDataManagementStore((state) => state.status);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const shouldHideMobileNav =
@@ -103,6 +108,33 @@ export function Sidebar() {
       </nav>
 
       <div className="flex w-full flex-col items-stretch gap-2">
+        <button
+          type="button"
+          aria-label="立即同步"
+          onClick={() => {
+            void syncNow()
+              .then((result) => {
+                if (result.action === "downloaded" && result.clientState) {
+                  toast.success("云端数据已拉取", { description: "应用将刷新为云端最新数据。" });
+                  applyAppClientStateAndReload(result.clientState);
+                  return;
+                }
+                if (result.action === "uploaded") {
+                  toast.success("本地数据已同步到云端");
+                  return;
+                }
+                toast("本地与云端已一致");
+              })
+              .catch((error) => {
+                const description =
+                  error instanceof Error && error.message.trim() ? error.message : "请先在数据管理中配置 WebDAV。";
+                toast.error("同步失败", { description });
+              });
+          }}
+          className="flex h-11 w-full items-center justify-center px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground"
+        >
+          <RefreshCw className={cn("h-[22px] w-[22px]", syncStatus === "syncing" && "animate-spin")} strokeWidth={2.1} />
+        </button>
         <button
           type="button"
           aria-label="主题切换"

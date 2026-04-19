@@ -2,6 +2,7 @@ mod agents;
 mod app_control;
 mod chat;
 mod config;
+mod data_management;
 mod db;
 mod embedded_resources;
 mod provider_proxy;
@@ -108,6 +109,12 @@ pub fn run() {
             config::initialize_default_agent_config,
             config::read_default_agent_config,
             config::write_default_agent_config,
+            data_management::read_data_sync_settings,
+            data_management::write_data_sync_settings,
+            data_management::test_data_sync_connection,
+            data_management::export_app_data_backup,
+            data_management::import_app_data_backup,
+            data_management::sync_app_data_via_webdav,
             usage::read_usage_logs,
             workflows::commands::initialize_builtin_workflows,
             workflows::commands::list_workflows,

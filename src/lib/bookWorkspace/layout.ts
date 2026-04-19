@@ -6,6 +6,7 @@ export type BookPanelLayout = {
   lastExpandedLeftPanelWidth: number;
   lastExpandedRightPanelWidth: number;
 };
+import { touchClientStateUpdatedAt } from "../dataManagement/clientState";
 
 export const BOOK_PANEL_LAYOUT_STORAGE_KEY = "ainovelstudio-book-layout";
 export const DEFAULT_BOOK_PANEL_LAYOUT: BookPanelLayout = {
@@ -74,4 +75,5 @@ export function setStoredBookPanelLayout(layout: BookPanelLayout) {
   }
 
   window.localStorage.setItem(BOOK_PANEL_LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+  touchClientStateUpdatedAt();
 }

@@ -107,11 +107,11 @@ export function WorkflowBuilderColumn({
                     selectedStepId === step.id ? "bg-primary/[0.04]" : "",
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex shrink-0 items-start justify-between gap-2">
                     <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] font-medium tracking-[0.02em] text-muted-foreground">
                       <span className="inline-flex items-center rounded-full border border-border bg-panel px-2 py-1">
                         <StepTypeIcon type={step.type} />
-                        <span className="ml-1.5">节点 {index + 1}</span>
+                        <span className="ml-1.5">{isMobile ? index + 1 : `节点 ${index + 1}`}</span>
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -155,30 +155,31 @@ export function WorkflowBuilderColumn({
                       </Button>
                     </div>
                   </div>
-                  <p className="line-clamp-3 text-[20px] font-semibold leading-[1.18] tracking-[-0.04em] text-foreground">
-                    {step.name}
-                  </p>
-                  <div className="rounded-xl border border-border/80 bg-foreground/[0.03] px-2.5 py-2">
-                    <div className="grid gap-1.5">
+                  <div className="shrink-0">
+                    <p className="line-clamp-3 break-words text-[20px] font-semibold leading-[1.18] tracking-[-0.04em] text-foreground">
+                      {step.name}
+                    </p>
+                  </div>
+                  <div className="min-h-0 flex flex-1 flex-col justify-start border-t border-border/70 pt-3">
+                    <div className="grid gap-2">
                       <div className="grid gap-0.5">
                         <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
                           执行主体
                         </p>
-                        <p className="line-clamp-1 text-sm font-medium text-foreground">
+                        <p className="line-clamp-2 break-words text-sm font-medium leading-5 text-foreground">
                           {getStepAgentLabel(step)}
                         </p>
                       </div>
                       <div className="grid gap-0.5">
                         <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-                          流转路径
+                          消息
                         </p>
-                        <p className="line-clamp-2 text-xs leading-4.5 text-muted-foreground">
+                        <p className="line-clamp-4 break-words text-xs leading-5 text-muted-foreground">
                           {formatStepLinks(step, detail.steps)}
                         </p>
                       </div>
                     </div>
                   </div>
-                  <div className="min-h-0 flex-1" />
                 </div>
               </article>
             ))}

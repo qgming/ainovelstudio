@@ -11,6 +11,7 @@ import { SettingsSectionHeader } from "./SettingsSectionHeader";
 import { UsageAnalyticsSection } from "./UsageAnalyticsSection";
 import { Switch } from "../ui/Switch";
 import type { SettingSectionKey } from "./settingNavigation";
+import { DataManagementSection } from "./DataManagementSection";
 
 const APP_VERSION = packageJson.version;
 const OFFICIAL_WEBSITE = "https://www.qgming.com";
@@ -215,6 +216,10 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
         onSave={handleSaveModel}
       />
     );
+  }
+
+  if (sectionKey === "data") {
+    return <DataManagementSection />;
   }
 
   return (

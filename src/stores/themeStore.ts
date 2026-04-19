@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { touchClientStateUpdatedAt } from "../lib/dataManagement/clientState";
 
 export const THEME_STORAGE_KEY = "ainovelstudio-theme";
 
@@ -55,12 +56,14 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   },
   setTheme: (theme) => {
     applyTheme(theme);
+    touchClientStateUpdatedAt();
     set({ theme, initialized: true });
   },
   toggleTheme: () => {
     const currentTheme = get().initialized ? get().theme : resolveTheme();
     const nextTheme = currentTheme === "dark" ? "light" : "dark";
     applyTheme(nextTheme);
+    touchClientStateUpdatedAt();
     set({ theme: nextTheme, initialized: true });
   },
 }));

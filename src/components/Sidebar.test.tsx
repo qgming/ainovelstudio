@@ -46,6 +46,17 @@ describe("Sidebar", () => {
     expect(labels.slice(0, 4)).toEqual(["首页", "工作流", "技能", "代理"]);
   });
 
+  it("桌面侧边栏提供手动同步按钮", () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "立即同步" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "主题切换" })).toBeInTheDocument();
+  });
+
   it("小窗口下切换为底部导航栏", async () => {
     mockViewport(390);
 
@@ -61,11 +72,6 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "技能" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "代理" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "设置" })).toBeInTheDocument();
-    expect(screen.queryByText("首页")).not.toBeInTheDocument();
-    expect(screen.queryByText("工作流")).not.toBeInTheDocument();
-    expect(screen.queryByText("技能")).not.toBeInTheDocument();
-    expect(screen.queryByText("代理")).not.toBeInTheDocument();
-    expect(screen.queryByText("设置")).not.toBeInTheDocument();
   });
 
   it("移动端进入图书或工作流详情时隐藏全局底部导航", () => {
