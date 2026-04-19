@@ -29,10 +29,10 @@ describe("BookEditorPanel", () => {
 
     const saveButton = screen.getByRole("button", { name: "保存当前文件" });
     expect(saveButton).toHaveTextContent("");
-    expect(saveButton.className).toContain("h-8");
-    expect(saveButton.className).toContain("w-8");
-    expect(saveButton.className).toContain("rounded-[8px]");
-    expect(saveButton.className).toContain("hover:bg-[#edf1f6]");
+    expect(saveButton.getAttribute("data-size")).toBe("icon-sm");
+    expect(saveButton.getAttribute("data-variant")).toBe("ghost");
+    expect(saveButton.className).toContain("size-7");
+    expect(saveButton.className).toContain("rounded-md");
   });
 
   it("复制按钮会将当前内容写入剪切板", () => {

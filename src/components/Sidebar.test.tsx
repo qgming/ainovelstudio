@@ -67,4 +67,24 @@ describe("Sidebar", () => {
     expect(screen.queryByText("代理")).not.toBeInTheDocument();
     expect(screen.queryByText("设置")).not.toBeInTheDocument();
   });
+
+  it("移动端进入图书或工作流详情时隐藏全局底部导航", () => {
+    mockViewport(390);
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/books/book-1"]}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("navigation", { name: "主导航" })).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter initialEntries={["/workflows/workflow-1"]}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("navigation", { name: "主导航" })).not.toBeInTheDocument();
+  });
 });

@@ -12,7 +12,7 @@ import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 
 type BookAgentPanelProps = {
-  width: number;
+  width?: number | string;
 };
 
 type ToolbarButtonProps = {
@@ -148,7 +148,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
 
   return (
     <aside
-      style={{ width }}
+      style={width ? { width } : undefined}
       className="flex h-full shrink-0 flex-col overflow-hidden bg-app"
     >
       <PanelHeader className="bg-transparent px-2">

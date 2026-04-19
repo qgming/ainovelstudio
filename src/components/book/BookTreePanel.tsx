@@ -26,7 +26,7 @@ type BookTreePanelProps = {
   onSelectFile: (path: string) => void;
   onToggleDirectory: (path: string) => void;
   rootNode: TreeNode;
-  width: number;
+  width?: number | string;
 };
 
 function ToolbarButton({
@@ -105,7 +105,7 @@ export function BookTreePanel({
 
   return (
     <aside
-      style={{ width }}
+      style={width ? { width } : undefined}
       className="flex h-full shrink-0 flex-col overflow-hidden bg-app"
     >
       <PanelHeader className="bg-transparent px-0">

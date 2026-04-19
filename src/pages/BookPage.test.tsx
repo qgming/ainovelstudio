@@ -14,6 +14,27 @@ import { BookPage } from "./BookPage";
 import { useAgentStore } from "../stores/agentStore";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
+function mockViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 767px)" ? width < 768 : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 const bookId = "book-1";
 const rootPath = "C:/books/北境余烬";
 const otherBookId = "book-2";
@@ -140,6 +161,7 @@ function setupInvokeMock() {
 
 describe("BookPage", () => {
   beforeEach(() => {
+    mockViewport(1280);
     window.localStorage.clear();
     useBookWorkspaceStore.getState().resetState();
     useAgentStore.getState().reset();
@@ -292,10 +314,27 @@ describe("BookPage", () => {
 
     const saveButton = await screen.findByRole("button", { name: "保存当前文件" });
     expect(saveButton).toHaveTextContent("");
-    expect(saveButton.className).toContain("h-8");
-    expect(saveButton.className).toContain("w-8");
-    expect(saveButton.className).toContain("rounded-[8px]");
-    expect(saveButton.className).toContain("hover:bg-[#edf1f6]");
+    expect(saveButton.getAttribute("data-size")).toBe("icon-sm");
+    expect(saveButton.getAttribute("data-variant")).toBe("ghost");
+    expect(saveButton.className).toContain("size-7");
+    expect(saveButton.className).toContain("rounded-md");
+  });
+
+  it("移动端使用专属底部栏并在打开文件后切回写作区", async () => {
+    mockViewport(390);
+    render(<BookPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
+
+    expect(await screen.findByRole("navigation", { name: "图书工作区导航" })).toBeInTheDocument();
+    expect(screen.queryByTestId("book-workspace-panels")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "目录" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
+
+    expect(await screen.findByRole("textbox", { name: "文件编辑器" })).toHaveValue("这是章节初稿");
   });
 
   it("markdown 文件可切换到预览渲染视图", async () => {

@@ -1,35 +1,20 @@
 import {
-  ArrowDown,
-  ArrowUp,
-  Bot,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  Flag,
   GitBranch,
-  Grid2x2Plus,
-  LoaderCircle,
-  Link as LinkIcon,
   Play,
-  Save,
-  Search,
+  Settings2,
   Square,
-  Trash2,
-  X,
 } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
-import { AgentPartRenderer } from "../components/agent/AgentPartRenderer";
 import { BookshelfDialog } from "../components/dialogs/BookshelfDialog";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Textarea } from "../components/ui/textarea";
+import { WorkflowBuilderColumn } from "../components/workflow/detail/WorkflowBuilderColumn";
+import { WorkflowRunsColumn } from "../components/workflow/detail/WorkflowRunsColumn";
+import { WorkflowSettingsColumn } from "../components/workflow/detail/WorkflowSettingsColumn";
 import { listBookWorkspaces } from "../lib/bookWorkspace/api";
 import { cn } from "../lib/utils";
 import { startWorkflowRun } from "../lib/workflow/engine";
+import { useIsMobile } from "../hooks/use-mobile";
 import type {
   WorkflowLoopConfig,
   WorkflowStepDefinition,
@@ -41,27 +26,12 @@ import type {
 import { getResolvedAgents, useSubAgentStore } from "../stores/subAgentStore";
 import { useWorkflowStore } from "../stores/workflowStore";
 
-const STEP_TYPE_OPTIONS: Array<{ label: string; value: WorkflowStepType }> = [
-  { label: "开始节点", value: "start" },
-  { label: "代理节点", value: "agent_task" },
-  { label: "判断节点", value: "decision" },
-  { label: "结束节点", value: "end" },
-];
-
-const END_REASON_OPTIONS = [
-  { label: "完成", value: "completed" },
-  { label: "审查失败", value: "review_failed" },
-] as const;
-
-const END_LOOP_OPTIONS = [
-  { label: "直接结束", value: "finish" },
-  { label: "有下一轮就继续", value: "continue_if_possible" },
-] as const;
-
 type StepDraftSnapshot = {
   agentId: string;
   step: WorkflowStepDefinition;
 };
+
+type MobileWorkflowTab = "settings" | "workflow" | "runs";
 
 function DetailTitle({ currentLabel }: { currentLabel: string }) {
   return (
@@ -130,32 +100,6 @@ function normalizeLoopValue(mode: "finite" | "infinite", value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
-function StepRunStatusIcon({ status }: { status: WorkflowStepRun["status"] }) {
-  if (status === "running") {
-    return <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-amber-600" />;
-  }
-  if (status === "completed") {
-    return <Check aria-hidden="true" className="h-3.5 w-3.5 text-emerald-600" />;
-  }
-  if (status === "failed") {
-    return <X aria-hidden="true" className="h-3.5 w-3.5 text-destructive" />;
-  }
-  return <Circle aria-hidden="true" className="h-3 w-3 text-muted-foreground" />;
-}
-
-function StepTypeIcon({ type }: { type: WorkflowStepDefinition["type"] }) {
-  if (type === "start") {
-    return <Play aria-hidden="true" className="h-3.5 w-3.5" />;
-  }
-  if (type === "agent_task") {
-    return <Bot aria-hidden="true" className="h-3.5 w-3.5" />;
-  }
-  if (type === "decision") {
-    return <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />;
-  }
-  return <Flag aria-hidden="true" className="h-3.5 w-3.5" />;
-}
-
 function isMemberStep(
   step: WorkflowStepDefinition,
 ): step is Extract<WorkflowStepDefinition, { type: "agent_task" | "decision" }> {
@@ -193,32 +137,9 @@ function formatStepLinks(step: WorkflowStepDefinition, steps: WorkflowStepDefini
   return `结束：${step.stopReason}${loopLabel}`;
 }
 
-function Panel({
-  title,
-  actions,
-  children,
-  className,
-  bodyClassName,
-}: {
-  title: string;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-  bodyClassName?: string;
-}) {
-  return (
-    <section className={cn("flex min-h-0 flex-col bg-app", className)}>
-      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
-        <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">{title}</h2>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-      </header>
-      <div className={cn("min-h-0 px-3 py-3", bodyClassName)}>{children}</div>
-    </section>
-  );
-}
-
 export function WorkflowDetailPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
+  const isMobile = useIsMobile();
   const currentDetail = useWorkflowStore((state) => state.currentDetail);
   const status = useWorkflowStore((state) => state.status);
   const errorMessage = useWorkflowStore((state) => state.errorMessage);
@@ -268,6 +189,7 @@ export function WorkflowDetailPage() {
   const [stepDraftAgentId, setStepDraftAgentId] = useState("");
   const [stepDraftCache, setStepDraftCache] = useState<Record<string, StepDraftSnapshot>>({});
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState<MobileWorkflowTab>("workflow");
   const deferredAgentQuery = useDeferredValue(agentQuery.trim().toLowerCase());
 
   useEffect(() => {
@@ -645,6 +567,9 @@ export function WorkflowDetailPage() {
     try {
       setRunBusy(true);
       setPageNotice(null);
+      if (isMobile) {
+        setMobileActiveTab("runs");
+      }
       await startWorkflowRun(detail.workflow.id);
     } catch (error) {
       setPageNotice(getReadableError(error, "工作流启动失败。"));
@@ -668,6 +593,9 @@ export function WorkflowDetailPage() {
       await addAgentStep(detail.workflow.id, agent.id, agent.name);
       const nextStep = useWorkflowStore.getState().currentDetail?.steps.at(-1) ?? null;
       setSelectedStepId(nextStep?.id ?? null);
+      if (isMobile) {
+        setMobileActiveTab("workflow");
+      }
     } catch (error) {
       setPageNotice(getReadableError(error, "添加代理到工作流失败。"));
     } finally {
@@ -818,6 +746,140 @@ export function WorkflowDetailPage() {
     }
   }
 
+  function renderSettingsColumn() {
+    return (
+      <WorkflowSettingsColumn
+        agentQuery={agentQuery}
+        draftBasePrompt={draftBasePrompt}
+        draftName={draftName}
+        draftWorkspaceBinding={draftWorkspaceBinding}
+        errorMessage={errorMessage}
+        filteredAgents={filteredAgents}
+        hasSettingsDirty={hasSettingsDirty}
+        isMobile={isMobile}
+        loopDraft={loopDraft}
+        memberBusy={memberBusy}
+        onAddAgentStep={(agentId) => void handleAddAgentStep(agentId)}
+        onAgentQueryChange={setAgentQuery}
+        onDraftBasePromptChange={setDraftBasePrompt}
+        onDraftNameChange={setDraftName}
+        onLoopModeChange={(value) => setLoopDraft((current) => ({ ...current, maxLoopsMode: value }))}
+        onLoopValueChange={(value) => setLoopDraft((current) => ({ ...current, maxLoopsValue: value }))}
+        onOpenBindingDialog={() => {
+          setBindingDialogOpen(true);
+          void refreshBooks();
+        }}
+        onSaveBasics={() => void handleSaveBasics()}
+        pageNotice={pageNotice}
+        saveBusy={saveBusy}
+        stepBusy={stepBusy}
+      />
+    );
+  }
+
+  function renderWorkflowColumn() {
+    if (!detail) {
+      return null;
+    }
+
+    return (
+      <WorkflowBuilderColumn
+        agents={agents}
+        detail={detail}
+        formatStepLinks={formatStepLinks}
+        getStepAgentLabel={getStepAgentLabel}
+        isMobile={isMobile}
+        isStepDraftDirty={isStepDraftDirty}
+        onMoveStep={(stepId, direction) => void handleMoveStep(stepId, direction)}
+        onRemoveStep={(stepId) => void handleRemoveStep(stepId)}
+        onSaveStepDraft={() => void handleSaveStepDraft()}
+        onSelectStep={handleSelectStep}
+        onStepTypeChange={handleStepTypeChange}
+        onUpdateStepAgentId={updateCurrentStepAgentId}
+        onUpdateStepDraft={updateCurrentStepDraft}
+        selectedStep={selectedStep}
+        selectedStepId={selectedStepId}
+        stepBusy={stepBusy}
+        stepDraft={stepDraft}
+        stepDraftAgentId={stepDraftAgentId}
+      />
+    );
+  }
+
+  function renderRunsColumn() {
+    if (!detail) {
+      return null;
+    }
+
+    return (
+      <WorkflowRunsColumn
+        detail={detail}
+        formatDateTime={formatDateTime}
+        getAgentName={getAgentName}
+        isPromptExpanded={isPromptExpanded}
+        onSelectStepRun={selectStepRun}
+        onTogglePromptExpanded={() => setIsPromptExpanded((current) => !current)}
+        selectedRun={selectedRun}
+        selectedStepRun={selectedStepRun}
+        timelineStepRuns={timelineStepRuns}
+      />
+    );
+  }
+
+  function renderMobileWorkspace() {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {mobileActiveTab === "settings"
+            ? renderSettingsColumn()
+            : mobileActiveTab === "runs"
+              ? renderRunsColumn()
+              : renderWorkflowColumn()}
+        </div>
+
+        <nav
+          aria-label="工作流详情导航"
+          className="shrink-0 border-t border-border bg-sidebar/95 px-2 pb-[calc(env(safe-area-inset-bottom)+10px)] backdrop-blur"
+        >
+          <div className="grid h-16 w-full grid-cols-3 gap-1">
+            {[
+              { tab: "settings" as const, label: "设置", Icon: Settings2 },
+              { tab: "workflow" as const, label: "工作流", Icon: GitBranch },
+              { tab: "runs" as const, label: "运行", Icon: Play },
+            ].map(({ tab, label, Icon }) => (
+              <button
+                key={tab}
+                type="button"
+                aria-label={label}
+                onClick={() => setMobileActiveTab(tab)}
+                className={cn(
+                  "flex min-w-0 items-center justify-center rounded-2xl px-1 transition-colors duration-150",
+                  mobileActiveTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="h-5 w-5 shrink-0" strokeWidth={2.1} />
+              </button>
+            ))}
+          </div>
+        </nav>
+      </div>
+    );
+  }
+
+  function renderDetailWorkspace() {
+    if (isMobile) {
+      return renderMobileWorkspace();
+    }
+
+    return (
+      <div className="grid h-full min-h-0 overflow-hidden bg-app lg:grid-cols-[320px_minmax(0,1fr)_360px]">
+        {renderSettingsColumn()}
+        {renderWorkflowColumn()}
+        {renderRunsColumn()}
+      </div>
+    );
+  }
+
   if (!workflowId) {
     return null;
   }
@@ -859,644 +921,7 @@ export function WorkflowDetailPage() {
         contentClassName="min-h-0 flex-1 overflow-hidden"
       >
         <div className="h-full">
-          <div className="grid h-full min-h-0 overflow-hidden bg-app lg:grid-cols-[320px_minmax(0,1fr)_360px]">
-            <section className="min-h-0 overflow-y-auto border-b border-border lg:border-r lg:border-b-0">
-              <div className="divide-y divide-border">
-                <Panel
-                  title="基本设置"
-                  bodyClassName="space-y-4"
-                  actions={(
-                    <Button
-                      type="button"
-                      aria-label={saveBusy ? "基本设置保存中" : "保存基本设置"}
-                      size="icon-sm"
-                      variant="ghost"
-                      className={cn(
-                        "border-0 shadow-none hover:text-foreground",
-                        hasSettingsDirty
-                          ? "bg-accent text-foreground hover:bg-accent/85"
-                          : "bg-transparent text-muted-foreground hover:bg-transparent",
-                      )}
-                      onClick={() => void handleSaveBasics()}
-                      disabled={!hasSettingsDirty || saveBusy}
-                    >
-                      <Save className="h-4 w-4" />
-                    </Button>
-                  )}
-                >
-                  {pageNotice ? (
-                    <div className="editor-callout" data-tone="error">
-                      <pre className="whitespace-pre-wrap break-words text-sm leading-6">{pageNotice}</pre>
-                    </div>
-                  ) : null}
-                  {errorMessage ? (
-                    <div className="editor-callout" data-tone="error">
-                      <pre className="whitespace-pre-wrap break-words text-sm leading-6">{errorMessage}</pre>
-                    </div>
-                  ) : null}
-
-                  <label className="block space-y-1.5">
-                    <span className="text-xs font-medium text-muted-foreground">工作流名称</span>
-                    <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
-                  </label>
-                  <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-muted-foreground">绑定书籍</span>
-                    <div className="flex items-center gap-3 rounded-lg border border-border p-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {draftWorkspaceBinding?.bookName ?? "尚未绑定书籍"}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        aria-label={draftWorkspaceBinding ? "更换绑定书籍" : "绑定书籍"}
-                        variant="ghost"
-                        size="icon-sm"
-                        className="shrink-0 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
-                        onClick={() => {
-                          setBindingDialogOpen(true);
-                          void refreshBooks();
-                        }}
-                      >
-                        <LinkIcon className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-muted-foreground">循环配置</span>
-                    <div className="grid gap-3 rounded-lg border border-border p-3 md:grid-cols-[120px_minmax(0,1fr)] md:items-end">
-                      <label className="block space-y-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">最大循环次数</span>
-                        <Select
-                          value={loopDraft.maxLoopsMode}
-                          onValueChange={(value) =>
-                            setLoopDraft((current) => ({ ...current, maxLoopsMode: value as "finite" | "infinite" }))
-                          }
-                        >
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="finite">有限</SelectItem>
-                            <SelectItem value="infinite">无限</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </label>
-                      {loopDraft.maxLoopsMode === "finite" ? (
-                        <label className="block space-y-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">次数</span>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={loopDraft.maxLoopsValue}
-                            onChange={(event) =>
-                              setLoopDraft((current) => ({ ...current, maxLoopsValue: event.target.value }))
-                            }
-                          />
-                        </label>
-                      ) : (
-                        <div className="flex h-10 items-center text-sm text-muted-foreground">无限</div>
-                      )}
-                    </div>
-                  </div>
-                  <label className="block space-y-1.5">
-                    <span className="text-xs font-medium text-muted-foreground">提示词内容</span>
-                    <Textarea
-                      value={draftBasePrompt}
-                      onChange={(event) => setDraftBasePrompt(event.target.value)}
-                      placeholder="补充这条工作流的全局目标、约束、写作风格与上下文。"
-                      className="min-h-32"
-                    />
-                  </label>
-                </Panel>
-
-                <Panel title="代理库" bodyClassName="space-y-3">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={agentQuery} onChange={(event) => setAgentQuery(event.target.value)} placeholder="搜索代理" className="pl-9" />
-                  </div>
-                  <div className="divide-y divide-border border-y border-border">
-                    {filteredAgents.map((agent) => (
-                      <div key={agent.id} className="flex items-start justify-between gap-3 px-0 py-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">{agent.name}</p>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{agent.description}</p>
-                        </div>
-                        {agent.validation.isValid ? (
-                          <Button
-                            type="button"
-                            aria-label={`添加代理 ${agent.name}`}
-                            variant="ghost"
-                            size="icon-sm"
-                            className="shrink-0 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
-                            onClick={() => void handleAddAgentStep(agent.id)}
-                            disabled={stepBusy !== null || memberBusy !== null}
-                          >
-                            <Grid2x2Plus className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <span className="inline-flex shrink-0 items-center px-0 py-1 text-[11px] font-medium text-amber-700">
-                            待完善
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </Panel>
-              </div>
-            </section>
-
-            <section className="min-h-0 overflow-y-auto border-b border-border lg:border-r lg:border-b-0">
-              <div className="divide-y divide-border">
-                <Panel title="工作流" bodyClassName="p-0">
-                  <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-                    {detail.steps.map((step, index) => (
-                      <article
-                        key={step.id}
-                        className={cn(
-                          "editor-block-tile",
-                          selectedStepId === step.id ? "bg-primary/[0.08]" : "",
-                        )}
-                      >
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handleSelectStep(step.id)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              handleSelectStep(step.id);
-                            }
-                          }}
-                          className={cn(
-                            "editor-block-content w-full cursor-pointer overflow-hidden rounded-none px-3 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset",
-                            selectedStepId === step.id ? "bg-primary/[0.04]" : "",
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] font-medium tracking-[0.02em] text-muted-foreground">
-                              <span className="inline-flex items-center rounded-full border border-border bg-panel px-2 py-1">
-                                <StepTypeIcon type={step.type} />
-                                <span className="ml-1.5">
-                                  节点 {index + 1}
-                                </span>
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6.5 w-6.5 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
-                                disabled={index === 0 || stepBusy !== null}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleMoveStep(step.id, "up");
-                                }}
-                              >
-                                <ArrowUp className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6.5 w-6.5 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
-                                disabled={index === detail.steps.length - 1 || stepBusy !== null}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleMoveStep(step.id, "down");
-                                }}
-                              >
-                                <ArrowDown className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6.5 w-6.5 rounded-lg border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-destructive"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleRemoveStep(step.id);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          <p className="line-clamp-3 text-[20px] font-semibold leading-[1.18] tracking-[-0.04em] text-foreground">
-                            {step.name}
-                          </p>
-                          <div className="rounded-xl border border-border/80 bg-foreground/[0.03] px-2.5 py-2">
-                            <div className="grid gap-1.5">
-                              <div className="grid gap-0.5">
-                                <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-                                  执行主体
-                                </p>
-                                <p className="line-clamp-1 text-sm font-medium text-foreground">
-                                  {getStepAgentLabel(step)}
-                                </p>
-                              </div>
-                              <div className="grid gap-0.5">
-                                <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-                                  流转路径
-                                </p>
-                                <p className="line-clamp-2 text-xs leading-4.5 text-muted-foreground">
-                                  {formatStepLinks(step, detail.steps)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="min-h-0 flex-1" />
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </Panel>
-
-                <Panel
-                  title="节点编辑"
-                  bodyClassName="space-y-4"
-                  actions={
-                    selectedStep && stepDraft ? (
-                      <Button
-                        type="button"
-                        aria-label={stepBusy === selectedStep.id ? "节点保存中" : "保存当前节点"}
-                        size="icon-sm"
-                        variant="ghost"
-                        className={cn(
-                          "border-0 shadow-none hover:text-foreground",
-                          isStepDraftDirty
-                            ? "bg-accent text-foreground hover:bg-accent/85"
-                            : "bg-transparent text-muted-foreground hover:bg-transparent",
-                        )}
-                        onClick={() => void handleSaveStepDraft()}
-                        disabled={!isStepDraftDirty || stepBusy === selectedStep.id}
-                      >
-                        <Save className="h-4 w-4" />
-                      </Button>
-                    ) : null
-                  }
-                >
-                  {selectedStep && stepDraft ? (
-                    <div className="space-y-4">
-                      <p className="text-xs leading-5 text-muted-foreground">
-                        {isStepDraftDirty ? "当前有未保存的节点改动。点击右上角保存后才会写回工作流。" : "当前节点内容已保存。"}
-                      </p>
-                      <label className="block space-y-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">节点类型</span>
-                        <Select value={stepDraft.type} onValueChange={(value) => handleStepTypeChange(value as WorkflowStepType)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {STEP_TYPE_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </label>
-                      <label className="block space-y-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">节点名称</span>
-                        <Input
-                          value={stepDraft.name}
-                          onChange={(event) => updateCurrentStepDraft({ ...stepDraft, name: event.target.value })}
-                          disabled={stepBusy === selectedStep.id}
-                        />
-                      </label>
-
-                      {stepDraft.type === "start" ? (
-                        <label className="block space-y-1.5">
-                          <span className="text-xs font-medium text-muted-foreground">下一步</span>
-                          <Select
-                            value={stepDraft.nextStepId ?? "__none__"}
-                            onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, nextStepId: value === "__none__" ? null : value })}
-                          >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">结束</SelectItem>
-                              {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </label>
-                      ) : null}
-
-                      {stepDraft.type === "agent_task" ? (
-                        <>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">代理</span>
-                            <Select value={stepDraftAgentId} onValueChange={updateCurrentStepAgentId}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {agents.map((agent) => (
-                                  <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">输出模式</span>
-                            <Select
-                              value={stepDraft.outputMode}
-                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, outputMode: value as typeof stepDraft.outputMode })}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="text">文本</SelectItem>
-                                <SelectItem value="review_json">审查 JSON</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">下一步</span>
-                            <Select
-                              value={stepDraft.nextStepId ?? "__none__"}
-                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, nextStepId: value === "__none__" ? null : value })}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">结束</SelectItem>
-                                {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                  <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">节点提示词</span>
-                            <Textarea
-                              value={stepDraft.promptTemplate}
-                              onChange={(event) => updateCurrentStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
-                              className="min-h-40"
-                              disabled={stepBusy === selectedStep.id}
-                            />
-                          </label>
-                        </>
-                      ) : null}
-
-                      {stepDraft.type === "decision" ? (
-                        <>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">判断代理</span>
-                            <Select value={stepDraftAgentId} onValueChange={updateCurrentStepAgentId}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {agents.map((agent) => (
-                                  <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">判断来源</span>
-                            <Select
-                              value={stepDraft.sourceStepId || "__none__"}
-                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, sourceStepId: value === "__none__" ? "" : value })}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">未选择</SelectItem>
-                                {detail.steps.filter((item) => item.id !== stepDraft.id && item.type === "agent_task").map((item) => (
-                                  <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <label className="block space-y-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">通过/是 时</span>
-                              <Select
-                                value={stepDraft.trueNextStepId ?? "__none__"}
-                                onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, trueNextStepId: value === "__none__" ? null : value })}
-                              >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">结束</SelectItem>
-                                  {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </label>
-                            <label className="block space-y-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">不通过/否 时</span>
-                              <Select
-                                value={stepDraft.falseNextStepId ?? "__none__"}
-                                onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, falseNextStepId: value === "__none__" ? null : value })}
-                              >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">结束</SelectItem>
-                                  {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </label>
-                          </div>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">节点提示词</span>
-                            <Textarea
-                              value={stepDraft.promptTemplate}
-                              onChange={(event) => updateCurrentStepDraft({ ...stepDraft, promptTemplate: event.target.value })}
-                              className="min-h-40"
-                              disabled={stepBusy === selectedStep.id}
-                            />
-                          </label>
-                        </>
-                      ) : null}
-
-                      {stepDraft.type === "end" ? (
-                        <>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">结束原因</span>
-                            <Select
-                              value={stepDraft.stopReason}
-                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, stopReason: value as typeof stepDraft.stopReason })}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {END_REASON_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">结束后动作</span>
-                            <Select
-                              value={stepDraft.loopBehavior}
-                              onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, loopBehavior: value as typeof stepDraft.loopBehavior })}
-                            >
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {END_LOOP_OPTIONS.map((option) => (
-                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </label>
-                          {stepDraft.loopBehavior === "continue_if_possible" ? (
-                            <label className="block space-y-1.5">
-                              <span className="text-xs font-medium text-muted-foreground">下一轮从哪个节点开始</span>
-                              <Select
-                                value={stepDraft.loopTargetStepId ?? "__none__"}
-                                onValueChange={(value) => updateCurrentStepDraft({ ...stepDraft, loopTargetStepId: value === "__none__" ? null : value })}
-                              >
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">未选择</SelectItem>
-                                  {detail.steps.filter((item) => item.id !== stepDraft.id).map((item) => (
-                                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </label>
-                          ) : null}
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-medium text-muted-foreground">结束摘要模板</span>
-                            <Textarea
-                              value={stepDraft.summaryTemplate}
-                              onChange={(event) => updateCurrentStepDraft({ ...stepDraft, summaryTemplate: event.target.value })}
-                              className="min-h-32"
-                              disabled={stepBusy === selectedStep.id}
-                            />
-                          </label>
-                        </>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="py-8 text-sm text-muted-foreground">
-                      先在上面选择一个节点，再补充它的连接方式和提示词。
-                    </div>
-                  )}
-                </Panel>
-              </div>
-            </section>
-            <section className="min-h-0 overflow-y-auto">
-              <div className="divide-y divide-border">
-                <Panel title="步骤时间线" bodyClassName="p-0">
-                  {timelineStepRuns.length > 0 ? (
-                    <div className="divide-y divide-border border-y border-border">
-                      {timelineStepRuns.map((stepRun) => {
-                        const stepName = detail.steps.find((item) => item.id === stepRun.stepId)?.name ?? stepRun.stepId;
-                        return (
-                          <button
-                            key={stepRun.id}
-                            type="button"
-                            onClick={() => selectStepRun(stepRun.id)}
-                            className={cn(
-                              "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                              selectedStepRun?.id === stepRun.id ? "bg-primary/6" : "hover:bg-foreground/[0.03]",
-                            )}
-                          >
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{stepName}</span>
-                            <span className="shrink-0 text-[11px] text-muted-foreground">
-                              {getAgentName(getMemberById(detail.teamMembers, stepRun.memberId)?.agentId ?? null)}
-                            </span>
-                            <span className="shrink-0 text-[11px] text-muted-foreground">
-                              L{stepRun.loopIndex} / T{stepRun.attemptIndex}
-                            </span>
-                            <span className="shrink-0 text-[11px] text-muted-foreground">
-                              {stepRun.decision?.outcome ?? "—"}
-                            </span>
-                            <span className="shrink-0 text-muted-foreground" title={stepRun.status} aria-label={stepRun.status}>
-                              <StepRunStatusIcon status={stepRun.status} />
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="py-8 text-sm text-muted-foreground">
-                      {detail.runs.length > 0 ? "当前运行还没有步骤日志。" : "运行后，这里会显示执行时间线。"}
-                    </div>
-                  )}
-                </Panel>
-
-                <Panel title="步骤详情" bodyClassName="p-0">
-                  {selectedStepRun ? (
-                    <div className="divide-y divide-border border-y border-border">
-                      <div className="px-3 py-3 text-xs leading-5 text-muted-foreground">
-                        状态：{selectedStepRun.status} · 开始：{formatDateTime(selectedStepRun.startedAt)} · 结束：{formatDateTime(selectedStepRun.finishedAt)}
-                      </div>
-                      <div className="px-3 py-3 text-xs leading-5 text-muted-foreground">
-                        轮次：L{selectedStepRun.loopIndex} / T{selectedStepRun.attemptIndex}
-                        {selectedRun ? ` · 当前运行结束原因：${selectedRun.stopReason ?? "—"}` : ""}
-                      </div>
-                      <div className="px-3 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs text-muted-foreground">输入提示词</p>
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-foreground"
-                            aria-label={isPromptExpanded ? "收起输入提示词" : "展开输入提示词"}
-                            onClick={() => setIsPromptExpanded((current) => !current)}
-                          >
-                            {isPromptExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                          </Button>
-                        </div>
-                        <div className={cn("mt-2 overflow-hidden", isPromptExpanded ? "" : "max-h-[7.5rem]")}>
-                          <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
-                            {selectedStepRun.inputPrompt || "—"}
-                          </pre>
-                        </div>
-                      </div>
-                      {selectedStepRun.resultText ? (
-                        <div className="px-3 py-3">
-                          <p className="text-xs text-muted-foreground">输出文本</p>
-                          <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selectedStepRun.resultText}</pre>
-                        </div>
-                      ) : null}
-                      {selectedStepRun.decision ? (
-                        <div className="px-3 py-3">
-                          <p className="text-xs text-muted-foreground">分支决策</p>
-                          <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
-                            {JSON.stringify(selectedStepRun.decision, null, 2)}
-                          </pre>
-                        </div>
-                      ) : null}
-                      {selectedStepRun.resultJson ? (
-                        <div className="px-3 py-3">
-                          <p className="text-xs text-muted-foreground">审查结果</p>
-                          <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
-                            {JSON.stringify(selectedStepRun.resultJson, null, 2)}
-                          </pre>
-                        </div>
-                      ) : null}
-                      {selectedStepRun.messageType ? (
-                        <div className="px-3 py-3">
-                          <p className="text-xs text-muted-foreground">消息类型</p>
-                          <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selectedStepRun.messageType}</pre>
-                        </div>
-                      ) : null}
-                      {selectedStepRun.messageJson ? (
-                        <div className="px-3 py-3">
-                          <p className="text-xs text-muted-foreground">结构化消息</p>
-                          <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
-                            {JSON.stringify(selectedStepRun.messageJson, null, 2)}
-                          </pre>
-                        </div>
-                      ) : null}
-                      {selectedStepRun.parts.map((part, index) => (
-                        <div key={`${selectedStepRun.id}-part-${index}`} className="px-3 py-3">
-                          <AgentPartRenderer part={part} />
-                        </div>
-                      ))}
-                      {selectedStepRun.errorMessage ? (
-                        <div className="px-3 py-3 text-sm text-destructive">
-                          {selectedStepRun.errorMessage}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="py-8 text-sm text-muted-foreground">
-                      选择一条步骤日志后，这里会显示输入、输出和错误信息。
-                    </div>
-                  )}
-                </Panel>
-              </div>
-            </section>
-          </div>
+          {renderDetailWorkspace()}
         </div>
       </PageShell>
       {bindingDialogOpen ? (

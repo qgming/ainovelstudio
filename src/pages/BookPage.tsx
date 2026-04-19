@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Bot, FolderTree, SquarePen } from "lucide-react";
 import { BookAgentPanel } from "../components/book/BookAgentPanel";
 import { BookCollapsedPanelToggle } from "../components/book/BookCollapsedPanelToggle";
 import { BookEditorPanel } from "../components/book/BookEditorPanel";
@@ -27,10 +27,14 @@ import {
   type BookPanelLayout,
 } from "../lib/bookWorkspace/layout";
 import { getBaseName } from "../lib/bookWorkspace/paths";
+import type { TreeNode } from "../lib/bookWorkspace/types";
+import { cn } from "../lib/utils";
+import { useIsMobile } from "../hooks/use-mobile";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const AUTO_SAVE_DELAY_MS = 800;
 type ResizeHandle = "left" | "right" | null;
+type MobileBookTab = "tree" | "editor" | "agent";
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -75,6 +79,7 @@ export function BookPage({
   onNavigateHome,
   requestedBookId = null,
 }: BookPageProps = {}) {
+  const isMobile = useIsMobile();
   const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
   const availableBooks = useBookWorkspaceStore((state) => state.availableBooks);
   const bookshelfError = useBookWorkspaceStore((state) => state.bookshelfError);
@@ -116,6 +121,7 @@ export function BookPage({
     () => getStoredBookPanelLayout() ?? DEFAULT_BOOK_PANEL_LAYOUT,
   );
   const [activeResizeHandle, setActiveResizeHandle] = useState<ResizeHandle>(null);
+  const [mobileActiveTab, setMobileActiveTab] = useState<MobileBookTab>("editor");
   const panelLayoutRef = useRef(panelLayout);
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const cleanupResizeRef = useRef<(() => void) | null>(null);
@@ -183,6 +189,23 @@ export function BookPage({
 
     return () => window.clearTimeout(timer);
   }, [activeFilePath, draftContent, isBusy, isDirty, saveActiveFile]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      return;
+    }
+
+    if (activeFilePath) {
+      setMobileActiveTab("editor");
+    }
+  }, [activeFilePath, isMobile]);
+
+  const resolvedRootNode: TreeNode | null = rootNode
+    ? {
+        ...rootNode,
+        name: rootBookName || rootNode.name,
+      }
+    : null;
 
   function persistPanelLayout(nextLayout: BookPanelLayout) {
     panelLayoutRef.current = nextLayout;
@@ -328,6 +351,164 @@ export function BookPage({
     };
   }
 
+  function renderDesktopWorkspace() {
+    if (!resolvedRootNode) {
+      return null;
+    }
+
+    return (
+      <div
+        ref={panelsRef}
+        data-testid="book-workspace-panels"
+        className="flex h-full min-h-0 overflow-hidden"
+      >
+        {panelLayout.leftCollapsed ? (
+          <BookCollapsedPanelToggle
+            ariaLabel="展开目录栏"
+            onClick={expandLeftPanel}
+            side="left"
+          />
+        ) : (
+          <>
+            <BookTreePanel
+              activeFilePath={activeFilePath}
+              busy={isBusy}
+              expandedPaths={expandedPaths}
+              onToggleAll={toggleAllDirectories}
+              onCreateFile={openCreateFileDialog}
+              onCreateFolder={openCreateFolderDialog}
+              onDelete={requestDelete}
+              onNavigateHome={() => {
+                if (onNavigateHome) {
+                  onNavigateHome();
+                  return;
+                }
+
+                if (typeof window !== "undefined") {
+                  window.location.hash = "#/";
+                }
+              }}
+              onRefresh={() => void refreshWorkspace()}
+              onRename={openRenameDialog}
+              onSelectFile={(path) => void selectFile(path)}
+              onToggleDirectory={toggleDirectory}
+              rootNode={resolvedRootNode}
+              width={panelLayout.leftPanelWidth}
+            />
+            <BookPanelResizeHandle
+              active={activeResizeHandle === "left"}
+              ariaLabel="调整目录栏宽度"
+              onPointerDown={startResize("left")}
+            />
+          </>
+        )}
+        <BookEditorPanel
+          activeFileName={activeFilePath ? getBaseName(activeFilePath) : null}
+          busy={isBusy}
+          content={draftContent}
+          isDirty={isDirty}
+          onChange={updateDraft}
+          onSave={() => void saveActiveFile()}
+        />
+        {panelLayout.rightCollapsed ? (
+          <BookCollapsedPanelToggle
+            ariaLabel="展开 Agent 栏"
+            onClick={expandRightPanel}
+            side="right"
+          />
+        ) : (
+          <>
+            <BookPanelResizeHandle
+              active={activeResizeHandle === "right"}
+              ariaLabel="调整 Agent 栏宽度"
+              onPointerDown={startResize("right")}
+            />
+            <BookAgentPanel width={panelLayout.rightPanelWidth} />
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function renderMobileWorkspace() {
+    if (!resolvedRootNode) {
+      return null;
+    }
+
+    const sharedTreeProps = {
+      activeFilePath,
+      busy: isBusy,
+      expandedPaths,
+      onToggleAll: toggleAllDirectories,
+      onCreateFile: openCreateFileDialog,
+      onCreateFolder: openCreateFolderDialog,
+      onDelete: requestDelete,
+      onNavigateHome: () => {
+        if (onNavigateHome) {
+          onNavigateHome();
+          return;
+        }
+
+        if (typeof window !== "undefined") {
+          window.location.hash = "#/";
+        }
+      },
+      onRefresh: () => void refreshWorkspace(),
+      onRename: openRenameDialog,
+      onSelectFile: (path: string) => void selectFile(path),
+      onToggleDirectory: toggleDirectory,
+      rootNode: resolvedRootNode,
+      width: "100%" as const,
+    };
+
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {mobileActiveTab === "tree" ? (
+            <BookTreePanel {...sharedTreeProps} />
+          ) : mobileActiveTab === "agent" ? (
+            <BookAgentPanel width="100%" />
+          ) : (
+            <BookEditorPanel
+              activeFileName={activeFilePath ? getBaseName(activeFilePath) : null}
+              busy={isBusy}
+              content={draftContent}
+              isDirty={isDirty}
+              onChange={updateDraft}
+              onSave={() => void saveActiveFile()}
+            />
+          )}
+        </div>
+
+        <nav
+          aria-label="图书工作区导航"
+          className="shrink-0 border-t border-border bg-sidebar/95 px-2 pb-[calc(env(safe-area-inset-bottom)+10px)] backdrop-blur"
+        >
+          <div className="grid h-16 w-full grid-cols-3 gap-1">
+            {[
+              { tab: "tree" as const, label: "目录", Icon: FolderTree },
+              { tab: "editor" as const, label: "写作", Icon: SquarePen },
+              { tab: "agent" as const, label: "机器人", Icon: Bot },
+            ].map(({ tab, label, Icon }) => (
+              <button
+                key={tab}
+                type="button"
+                aria-label={label}
+                onClick={() => setMobileActiveTab(tab)}
+                className={cn(
+                  "flex min-w-0 items-center justify-center rounded-2xl px-1 transition-colors duration-150",
+                  mobileActiveTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="h-5 w-5 shrink-0" strokeWidth={2.1} />
+              </button>
+            ))}
+          </div>
+        </nav>
+      </div>
+    );
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f7f7f8] dark:bg-[#111214]">
       {errorMessage ? (
@@ -355,79 +536,7 @@ export function BookPage({
             title="正在打开书籍工作区..."
           />
         ) : rootNode ? (
-          <div
-            ref={panelsRef}
-            data-testid="book-workspace-panels"
-            className="flex h-full min-h-0 overflow-hidden"
-          >
-            {panelLayout.leftCollapsed ? (
-              <BookCollapsedPanelToggle
-                ariaLabel="展开目录栏"
-                onClick={expandLeftPanel}
-                side="left"
-              />
-            ) : (
-              <>
-                <BookTreePanel
-                  activeFilePath={activeFilePath}
-                  busy={isBusy}
-                  expandedPaths={expandedPaths}
-                  onToggleAll={toggleAllDirectories}
-                  onCreateFile={openCreateFileDialog}
-                  onCreateFolder={openCreateFolderDialog}
-                  onDelete={requestDelete}
-                  onNavigateHome={() => {
-                    if (onNavigateHome) {
-                      onNavigateHome();
-                      return;
-                    }
-
-                    if (typeof window !== "undefined") {
-                      window.location.hash = "#/";
-                    }
-                  }}
-                  onRefresh={() => void refreshWorkspace()}
-                  onRename={openRenameDialog}
-                  onSelectFile={(path) => void selectFile(path)}
-                  onToggleDirectory={toggleDirectory}
-                  rootNode={{
-                    ...rootNode,
-                    name: rootBookName || rootNode.name,
-                  }}
-                  width={panelLayout.leftPanelWidth}
-                />
-                <BookPanelResizeHandle
-                  active={activeResizeHandle === "left"}
-                  ariaLabel="调整目录栏宽度"
-                  onPointerDown={startResize("left")}
-                />
-              </>
-            )}
-            <BookEditorPanel
-              activeFileName={activeFilePath ? getBaseName(activeFilePath) : null}
-              busy={isBusy}
-              content={draftContent}
-              isDirty={isDirty}
-              onChange={updateDraft}
-              onSave={() => void saveActiveFile()}
-            />
-            {panelLayout.rightCollapsed ? (
-              <BookCollapsedPanelToggle
-                ariaLabel="展开 Agent 栏"
-                onClick={expandRightPanel}
-                side="right"
-              />
-            ) : (
-              <>
-                <BookPanelResizeHandle
-                  active={activeResizeHandle === "right"}
-                  ariaLabel="调整 Agent 栏宽度"
-                  onPointerDown={startResize("right")}
-                />
-                <BookAgentPanel width={panelLayout.rightPanelWidth} />
-              </>
-            )}
-          </div>
+          isMobile ? renderMobileWorkspace() : renderDesktopWorkspace()
         ) : (
           <BookWorkspaceEmptyState
             busy={isBusy}

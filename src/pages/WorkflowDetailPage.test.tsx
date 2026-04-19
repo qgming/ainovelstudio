@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowBasicsInput } from "../lib/workflow/api";
@@ -32,6 +32,27 @@ const initialBinding = {
   bookName: "北境余烬",
   boundAt: 1710000000000,
 } as const;
+
+function mockViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 767px)" ? width < 768 : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
 
 function createWorkflowDetail(steps: WorkflowDetail["steps"] = [
   {
@@ -85,6 +106,7 @@ type RenderPageOverrides = {
 
 describe("WorkflowDetailPage", () => {
   beforeEach(() => {
+    mockViewport(1280);
     mockInvoke.mockReset();
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "list_book_workspaces") {
@@ -214,5 +236,23 @@ describe("WorkflowDetailPage", () => {
 
     expect(await screen.findByDisplayValue("开始节点草稿")).toBeInTheDocument();
     expect(updateStep).not.toHaveBeenCalled();
+  });
+
+  it("移动端使用专属底部栏切换设置、工作流和运行面板", async () => {
+    mockViewport(390);
+    const detail = createWorkflowDetail();
+
+    renderPage(detail);
+
+    expect(await screen.findByRole("navigation", { name: "工作流详情导航" })).toBeInTheDocument();
+    expect(screen.getByText("工作流")).toBeInTheDocument();
+
+    const mobileNav = screen.getByRole("navigation", { name: "工作流详情导航" });
+
+    fireEvent.click(within(mobileNav).getByRole("button", { name: "设置" }));
+    expect(screen.getByText("基本设置")).toBeInTheDocument();
+
+    fireEvent.click(within(mobileNav).getByRole("button", { name: "运行" }));
+    expect(screen.getByText("运行后，这里会显示执行时间线。")).toBeInTheDocument();
   });
 });

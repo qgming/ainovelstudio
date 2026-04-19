@@ -1,5 +1,5 @@
 import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useThemeStore } from "../stores/themeStore";
@@ -60,8 +60,15 @@ function MobileNavLink({ to, label, Icon, end }: NavItem) {
 
 export function Sidebar() {
   const isMobile = useIsMobile();
+  const location = useLocation();
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
+  const shouldHideMobileNav =
+    location.pathname.startsWith("/books/") || location.pathname.startsWith("/workflows/");
+
+  if (isMobile && shouldHideMobileNav) {
+    return null;
+  }
 
   if (isMobile) {
     const mobileItemCount = primaryItems.length + secondaryItems.length;
