@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "神笔写作",
-        "width": 1200,
-        "height": 780,
-        "minWidth": 1000,
-        "minHeight": 680,
+        "width": 390,
+        "height": 844,
+        "minWidth": 390,
+        "minHeight": 844,
         "center": true,
         "decorations": false,
         "shadow": true

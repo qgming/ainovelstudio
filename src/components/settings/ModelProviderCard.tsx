@@ -1,7 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { Claude, Gemini, ProviderIcon, Qwen, SiliconCloud, XiaomiMiMo, Zhipu } from "@lobehub/icons";
-import { Cable, ExternalLink, Eye, EyeOff, KeyRound, LoaderCircle, PlugZap } from "lucide-react";
+import { Cable, ExternalLink, Eye, EyeOff, KeyRound, LoaderCircle, PlugZap, RotateCcw, Save } from "lucide-react";
 import { ModelCatalogButton } from "./ModelCatalogButton";
 import { Toast, type ToastTone } from "../common/Toast";
 import { testAgentProviderConnection } from "../../lib/agent/modelGateway";
@@ -9,7 +9,9 @@ import type { ProviderConnectionTestResult } from "../../lib/agent/modelGateway"
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import { Switch } from "../ui/Switch";
 import { MODEL_PROVIDER_RECOMMENDATIONS } from "./modelProviderRecommendations";
-import { SettingsHeaderButton, SettingsSectionHeader } from "./SettingsSectionHeader";
+import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
+import { cn } from "../../lib/utils";
+import { useIsMobile } from "../../hooks/use-mobile";
 
 type ModelProviderCardProps = {
   config: AgentProviderConfig;
@@ -102,6 +104,7 @@ function renderProviderLogo(provider: string) {
 }
 
 export function ModelProviderCard({ config, isDirty, isSaving = false, onChange, onReset, onSave }: ModelProviderCardProps) {
+  const isMobile = useIsMobile();
   const baseUrl = config.baseURL.trim();
   const apiKey = config.apiKey.trim();
   const model = config.model.trim();
@@ -165,27 +168,36 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
           <>
             <ModelCatalogButton
               config={config}
+              iconOnly={isMobile}
               onSelectModel={(nextModel) => onChange({ model: nextModel })}
               onError={handleCatalogError}
             />
-            <SettingsHeaderButton
+            <SettingsHeaderResponsiveButton
               type="button"
+              label={isSaving ? "保存中..." : "保存"}
               disabled={!canSave}
+              size={isMobile ? "icon-sm" : "sm"}
+              text="保存"
+              icon={isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               onClick={() => void onSave()}
-            >
-              {isSaving ? "保存中..." : "保存"}
-            </SettingsHeaderButton>
-            <SettingsHeaderButton
+            />
+            <SettingsHeaderResponsiveButton
               type="button"
+              label={isTesting ? "测试中..." : "测试连接"}
               disabled={!canTestConnection}
+              size={isMobile ? "icon-sm" : "sm"}
+              text="测试连接"
+              icon={isTesting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Cable className="h-3.5 w-3.5" />}
               onClick={() => void handleTestConnection()}
-            >
-              {isTesting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Cable className="h-3.5 w-3.5" />}
-              {isTesting ? "测试中..." : "测试连接"}
-            </SettingsHeaderButton>
-            <SettingsHeaderButton type="button" onClick={onReset}>
-              重置
-            </SettingsHeaderButton>
+            />
+            <SettingsHeaderResponsiveButton
+              type="button"
+              label="重置"
+              size={isMobile ? "icon-sm" : "sm"}
+              text="重置"
+              icon={<RotateCcw className="h-3.5 w-3.5" />}
+              onClick={onReset}
+            />
           </>
         }
       />
@@ -237,8 +249,8 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
           />
         </label>
 
-        <div className="lg:col-span-2">
-          <div className="flex items-start justify-between gap-4 border-t border-[#e2e8f0] pt-3 dark:border-[#20242b]">
+        <div className="lg:col-span-2 -mx-3">
+          <div className="flex items-start justify-between gap-4 border-t border-[#e2e8f0] px-3 pt-3 dark:border-[#20242b]">
             <div className="min-w-0 pr-4">
               <p className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">模拟 OpenCode（beta）</p>
             </div>
@@ -250,61 +262,78 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
           </div>
         </div>
 
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 -mx-3">
             <div className="border-t border-[#e2e8f0] pt-3 dark:border-[#20242b]">
-              <div className="grid grid-cols-5 border-t border-l border-[#e2e8f0] 2xl:grid-cols-7 dark:border-[#20242b]">
-              {MODEL_PROVIDER_RECOMMENDATIONS.map((recommendation) => {
-                const isSelected = normalizeUrlForCompare(recommendation.baseURL) === normalizedBaseUrl;
+              <div className="mb-3 border-b border-[#e2e8f0] px-3 pb-3 dark:border-[#20242b]">
+                <div>
+                  <p className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">推荐供应商</p>
+                </div>
+              </div>
+              <div
+                data-testid="model-provider-recommendations"
+                className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
+              >
+                {MODEL_PROVIDER_RECOMMENDATIONS.map((recommendation) => {
+                  const isSelected = normalizeUrlForCompare(recommendation.baseURL) === normalizedBaseUrl;
 
-                return (
-                  <div
-                    key={recommendation.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`使用 ${recommendation.name} 地址`}
-                    onClick={() => onChange({ baseURL: recommendation.baseURL })}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onChange({ baseURL: recommendation.baseURL });
-                      }
-                    }}
-                    className={[
-                      "relative aspect-square flex flex-col items-start border-r border-b px-3 py-4 text-left transition-colors cursor-pointer dark:border-[#20242b]",
-                      isSelected
-                        ? "border-[#cbd5e1] dark:border-[#3a4352]"
-                        : "border-[#e2e8f0] hover:bg-[#f8fafc] dark:hover:bg-[#171b21]",
-                    ].join(" ")}
-                  >
-                    <button
-                      type="button"
-                      aria-label={`查看 ${recommendation.name} 详情`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void openUrl(recommendation.websiteUrl);
-                      }}
-                      className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d7dde8] text-[#475569] transition-colors hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-200 dark:hover:bg-[#1b1f26]"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </button>
-                    <div className="flex h-10 items-center justify-start">
-                      {renderProviderLogo(recommendation.provider)}
-                    </div>
-                    <span className="mt-3 text-sm font-medium text-[#111827] dark:text-zinc-100">{recommendation.name}</span>
-                    <p
-                      title={recommendation.baseURL}
-                      className="mt-2 w-full overflow-hidden break-all pr-8 text-xs leading-5 text-[#64748b] dark:text-zinc-400"
-                      style={{
-                        display: "-webkit-box",
-                        WebkitBoxOrient: "vertical",
-                        WebkitLineClamp: 3,
-                      }}
-                    >
-                      {recommendation.baseURL}
-                    </p>
-                  </div>
-                );
-              })}
+                  return (
+                    <article key={recommendation.id} className="editor-block-tile aspect-square">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`使用 ${recommendation.name} 地址`}
+                        onClick={() => onChange({ baseURL: recommendation.baseURL })}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onChange({ baseURL: recommendation.baseURL });
+                          }
+                        }}
+                        className={cn(
+                          "editor-block-content relative h-full cursor-pointer overflow-hidden rounded-none border border-transparent transition-colors",
+                          isSelected
+                            ? "bg-accent/35 text-foreground ring-1 ring-border"
+                            : "hover:bg-[#f8fafc] dark:hover:bg-[#171b21]",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          aria-label={`查看 ${recommendation.name} 详情`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void openUrl(recommendation.websiteUrl);
+                          }}
+                          className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d7dde8] text-[#475569] transition-colors hover:bg-[#edf1f6] dark:border-[#2a3038] dark:text-zinc-200 dark:hover:bg-[#1b1f26]"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </button>
+
+                        <div className="flex h-full flex-col">
+                          <div className="flex min-h-[40px] items-center">
+                            {renderProviderLogo(recommendation.provider)}
+                          </div>
+
+                          <div className="mt-3 min-w-0">
+                            <h3 className="pr-8 text-base font-semibold tracking-[-0.03em] text-[#111827] dark:text-zinc-100">
+                              {recommendation.name}
+                            </h3>
+                            <p
+                              title={recommendation.baseURL}
+                              className="mt-2 overflow-hidden break-all pr-8 text-xs leading-5 text-[#64748b] dark:text-zinc-400"
+                              style={{
+                                display: "-webkit-box",
+                                WebkitBoxOrient: "vertical",
+                                WebkitLineClamp: 4,
+                              }}
+                            >
+                              {recommendation.baseURL}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           </div>

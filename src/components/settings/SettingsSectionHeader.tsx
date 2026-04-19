@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "../../hooks/use-mobile";
 
 type SettingsSectionHeaderProps = {
   actions?: ReactNode;
@@ -55,5 +56,38 @@ export function SettingsHeaderIconButton({
       className={cn("text-foreground", className)}
       {...props}
     />
+  );
+}
+
+type SettingsHeaderResponsiveButtonProps = React.ComponentProps<typeof Button> & {
+  icon: ReactNode;
+  label: string;
+  text?: string;
+};
+
+export function SettingsHeaderResponsiveButton({
+  className,
+  icon,
+  label,
+  text,
+  size,
+  variant = "outline",
+  children,
+  ...props
+}: SettingsHeaderResponsiveButtonProps) {
+  const isMobile = useIsMobile();
+  const desktopText = text ?? label;
+
+  return (
+    <Button
+      size={size ?? (isMobile ? "icon-sm" : "sm")}
+      variant={variant}
+      aria-label={label}
+      className={cn("bg-transparent text-foreground", className)}
+      {...props}
+    >
+      {icon}
+      {isMobile ? null : (children ?? <span>{desktopText}</span>)}
+    </Button>
   );
 }

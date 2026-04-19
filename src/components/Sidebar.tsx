@@ -1,18 +1,26 @@
-import { FileText, Settings, Sparkles, Sun, Moon, Users, GitBranch } from "lucide-react";
+import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "../hooks/use-mobile";
 import { useThemeStore } from "../stores/themeStore";
 
-const topItems = [
+type NavItem = {
+  to: string;
+  label: string;
+  Icon: LucideIcon;
+  end?: boolean;
+};
+
+const primaryItems: NavItem[] = [
   { to: "/", label: "首页", Icon: FileText, end: true },
   { to: "/workflows", label: "工作流", Icon: GitBranch },
   { to: "/skills", label: "技能", Icon: Sparkles },
   { to: "/agents", label: "代理", Icon: Users },
 ];
 
-const bottomItems = [{ to: "/setting", label: "设置", Icon: Settings }];
+const secondaryItems: NavItem[] = [{ to: "/setting", label: "设置", Icon: Settings }];
 
-function SidebarLink({ to, label, Icon, end }: (typeof topItems)[number]) {
+function DesktopSidebarLink({ to, label, Icon, end }: NavItem) {
   return (
     <NavLink
       to={to}
@@ -32,15 +40,57 @@ function SidebarLink({ to, label, Icon, end }: (typeof topItems)[number]) {
   );
 }
 
+function MobileNavLink({ to, label, Icon, end }: NavItem) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      aria-label={label}
+      className={({ isActive }) =>
+        cn(
+          "flex min-w-0 items-center justify-center rounded-2xl px-1 transition-colors duration-150",
+          isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )
+      }
+    >
+      <Icon className="h-5 w-5 shrink-0" strokeWidth={2.1} />
+    </NavLink>
+  );
+}
+
 export function Sidebar() {
+  const isMobile = useIsMobile();
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
 
+  if (isMobile) {
+    const mobileItemCount = primaryItems.length + secondaryItems.length;
+
+    return (
+      <nav
+        aria-label="主导航"
+        className="shrink-0 border-t border-border bg-sidebar/95 px-2 pb-[calc(env(safe-area-inset-bottom)+10px)] backdrop-blur"
+      >
+        <div
+          className="grid h-16 w-full gap-1"
+          style={{ gridTemplateColumns: `repeat(${mobileItemCount}, minmax(0, 1fr))` }}
+        >
+          {primaryItems.map((item) => (
+            <MobileNavLink key={item.to} {...item} />
+          ))}
+          {secondaryItems.map((item) => (
+            <MobileNavLink key={item.to} {...item} />
+          ))}
+        </div>
+      </nav>
+    );
+  }
+
   return (
     <aside className="flex h-full w-11 shrink-0 flex-col items-center justify-between overflow-hidden border-r border-border bg-sidebar py-2">
-      <nav className="flex w-full flex-col gap-1.5">
-        {topItems.map((item) => (
-          <SidebarLink key={item.to} {...item} />
+      <nav aria-label="主导航" className="flex w-full flex-col gap-1.5">
+        {primaryItems.map((item) => (
+          <DesktopSidebarLink key={item.to} {...item} />
         ))}
       </nav>
 
@@ -57,9 +107,9 @@ export function Sidebar() {
             <Moon className="h-[22px] w-[22px]" strokeWidth={2.1} />
           )}
         </button>
-        <nav className="flex w-full flex-col gap-1.5">
-          {bottomItems.map((item) => (
-            <SidebarLink key={item.to} {...item} />
+        <nav aria-label="辅助导航" className="flex w-full flex-col gap-1.5">
+          {secondaryItems.map((item) => (
+            <DesktopSidebarLink key={item.to} {...item} />
           ))}
         </nav>
       </div>

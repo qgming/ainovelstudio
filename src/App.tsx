@@ -81,9 +81,9 @@ function AppShell() {
     <div className="editor-shell h-dvh min-h-dvh overflow-hidden transition-colors duration-150">
       <div className="flex h-full flex-col overflow-hidden">
         {mobileRuntime ? null : <TitleBar />}
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
           <Sidebar />
-          <main className="min-h-0 flex-1 overflow-hidden bg-app">
+          <main className="order-first min-h-0 flex-1 overflow-hidden bg-app md:order-none">
             <Suspense fallback={<AppRouteLoadingState />}>
               <Routes>
                 <Route path="/" element={<HomePage />} />
@@ -97,6 +97,7 @@ function AppShell() {
                 <Route path="/workflows" element={<WorkflowsPage />} />
                 <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
                 <Route path="/setting" element={<SettingPage />} />
+                <Route path="/setting/:sectionKey" element={<SettingPage />} />
               </Routes>
             </Suspense>
           </main>

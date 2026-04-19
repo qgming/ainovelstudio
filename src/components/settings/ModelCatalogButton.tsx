@@ -11,10 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { SettingsHeaderButton } from "./SettingsSectionHeader";
+import { SettingsHeaderResponsiveButton } from "./SettingsSectionHeader";
 
 type ModelCatalogButtonProps = {
   config: AgentProviderConfig;
+  iconOnly?: boolean;
   onSelectModel: (model: string) => void;
   onError: (message: string) => void;
 };
@@ -23,7 +24,7 @@ function formatModelCount(count: number) {
   return `已获取 ${count} 个模型`;
 }
 
-export function ModelCatalogButton({ config, onSelectModel, onError }: ModelCatalogButtonProps) {
+export function ModelCatalogButton({ config, iconOnly = false, onSelectModel, onError }: ModelCatalogButtonProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [models, setModels] = useState<string[]>([]);
@@ -72,14 +73,15 @@ export function ModelCatalogButton({ config, onSelectModel, onError }: ModelCata
 
   return (
     <>
-      <SettingsHeaderButton
+      <SettingsHeaderResponsiveButton
         type="button"
+        label={isLoading ? "获取中..." : "获取模型"}
         disabled={!canFetchModels}
+        size={iconOnly ? "icon-sm" : "sm"}
+        text="获取模型"
+        icon={isLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
         onClick={() => void handleOpenCatalog()}
-      >
-        {isLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-        {isLoading ? "获取中..." : "获取模型"}
-      </SettingsHeaderButton>
+      />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md">

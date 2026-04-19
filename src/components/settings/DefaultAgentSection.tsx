@@ -1,5 +1,5 @@
 import { Save } from "lucide-react";
-import { SettingsHeaderIconButton, SettingsSectionHeader } from "./SettingsSectionHeader";
+import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 
 type DefaultAgentSectionProps = {
   draftContent: string;
@@ -23,14 +23,14 @@ export function DefaultAgentSection({
       <SettingsSectionHeader
         title="AGENTS.md"
         actions={
-          <SettingsHeaderIconButton
+          <SettingsHeaderResponsiveButton
             type="button"
-            aria-label="保存 AGENTS"
+            text="保存"
+            label="保存 AGENTS"
+            icon={<Save className="h-4 w-4" />}
             onClick={onSave}
             disabled={!isDirty || status === "loading"}
-          >
-            <Save className="h-4 w-4" />
-          </SettingsHeaderIconButton>
+          />
         }
       />
       {errorMessage ? (

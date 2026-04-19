@@ -31,9 +31,31 @@ vi.mock("@lobehub/icons", () => ({
 
 import { ModelProviderCard } from "./ModelProviderCard";
 
+function mockViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: query === "(max-width: 767px)" ? width < 768 : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 describe("ModelProviderCard", () => {
   beforeEach(() => {
     mockTestAgentProviderConnection.mockReset();
+    mockViewport(1280);
   });
 
   it("隐藏温度和最大 token 配置，仅保留核心字段", () => {
@@ -242,6 +264,7 @@ describe("ModelProviderCard", () => {
       />,
     );
 
+    expect(screen.getByTestId("model-provider-recommendations")).toHaveClass("grid-cols-[repeat(auto-fill,minmax(180px,1fr))]");
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Claude")).toBeInTheDocument();
     expect(screen.getByText("Gemini")).toBeInTheDocument();
@@ -307,6 +330,29 @@ describe("ModelProviderCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     expect(handleSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("移动端顶部按钮切换为纯图标但保留可访问名称", () => {
+    mockViewport(390);
+
+    render(
+      <ModelProviderCard
+        config={{
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+        }}
+        isDirty={true}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "获取模型" })).not.toHaveTextContent("获取模型");
+    expect(screen.getByRole("button", { name: "保存" })).not.toHaveTextContent("保存");
+    expect(screen.getByRole("button", { name: "测试连接" })).not.toHaveTextContent("测试连接");
+    expect(screen.getByRole("button", { name: "重置" })).not.toHaveTextContent("重置");
   });
 
   it("支持切换 API Key 明文显示", () => {

@@ -3,7 +3,7 @@ import { Activity, DatabaseZap, Filter, History, RefreshCw } from "lucide-react"
 import { readUsageLogs } from "../../lib/usage/api";
 import type { UsageLogEntry } from "../../lib/usage/types";
 import { UsageHeatmap } from "./UsageHeatmap";
-import { SettingsHeaderIconButton, SettingsSectionHeader } from "./SettingsSectionHeader";
+import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 import { UsageLogTable } from "./UsageLogTable";
 
 type TimeRangeKey = "7d" | "30d" | "90d" | "all";
@@ -219,14 +219,14 @@ export function UsageAnalyticsSection() {
         title="用量统计"
         icon={<Activity className="h-4 w-4" />}
         actions={
-          <SettingsHeaderIconButton
+          <SettingsHeaderResponsiveButton
             type="button"
-            aria-label="刷新用量统计"
+            label="刷新用量统计"
+            text="刷新"
+            icon={<RefreshCw className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`} />}
             onClick={() => void loadUsageLogs()}
             disabled={status === "loading"}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`} />
-          </SettingsHeaderIconButton>
+          />
         }
       />
 

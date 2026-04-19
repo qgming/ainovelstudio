@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "../hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 type PageAction = {
@@ -31,6 +32,7 @@ export function PageShell({
   headerRight,
   title,
 }: PageShellProps) {
+  const isMobile = useIsMobile();
   const hasHeaderContent = Boolean(title) || Boolean(headerRight) || actions.length > 0;
 
   return (
@@ -48,16 +50,17 @@ export function PageShell({
             {actions.map(({ icon: Icon, label, onClick, tone = "default" }) => (
               <Button
                 key={label}
+                aria-label={label}
                 onClick={onClick}
-                size="sm"
+                size={isMobile ? "icon-sm" : "sm"}
                 variant={actionVariants[tone]}
                 className={cn(
-                  "gap-1.5",
+                  isMobile ? "px-0" : "gap-1.5",
                   tone === "dark" && "border-border bg-secondary text-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" strokeWidth={2.1} />
-                <span>{label}</span>
+                {isMobile ? null : <span>{label}</span>}
               </Button>
             ))}
           </div>
