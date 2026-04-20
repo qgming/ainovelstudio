@@ -21,15 +21,11 @@ export type AgentManifest = {
   installPath?: string;
   isBuiltin: boolean;
   manifestFilePath?: string;
-  memoryFilePath?: string;
-  memoryPreview?: string;
   name: string;
   role?: string;
   sourceKind: AgentSourceKind;
   suggestedTools: string[];
   tags: string[];
-  toolsFilePath?: string;
-  toolsPreview?: string;
   validation: AgentValidation;
   version?: string;
 };
@@ -61,6 +57,10 @@ export function scanInstalledAgents(options?: InvokeCancellationOptions) {
 
 export function initializeBuiltinAgents() {
   return invoke<BuiltinAgentsInitializationResult>("initialize_builtin_agents");
+}
+
+export function resetBuiltinAgents() {
+  return invoke<BuiltinAgentsInitializationResult>("reset_builtin_agents");
 }
 
 export function readAgentDetail(agentId: string) {

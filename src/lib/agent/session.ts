@@ -742,7 +742,7 @@ function buildAiSdkTools(
             .string()
             .optional()
             .describe(
-              "read / write 时 agent 内的相对路径，如 manifest.json、AGENTS.md、TOOLS.md 或 MEMORY.md。",
+              "read / write 时 agent 内的相对路径，如 manifest.json 或 AGENTS.md。",
             ),
         }),
         execute: async (input) => {

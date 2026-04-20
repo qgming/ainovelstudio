@@ -57,8 +57,6 @@ function FileTreeButton({
   );
 }
 
-const PRIMARY_FILES = ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"] as const;
-
 export function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
@@ -70,6 +68,7 @@ export function AgentDetailPage() {
   const agents = getResolvedAgents({ manifests, preferences });
   const agent = agents.find((item) => item.id === agentId);
   const isInstalledAgent = agent?.sourceKind === "installed-package";
+  const availableFiles = agent?.files ?? ["manifest.json", "AGENTS.md"];
   const [selectedPath, setSelectedPath] = useState<string>("manifest.json");
   const [draftContent, setDraftContent] = useState<string>("");
   const [referenceError, setReferenceError] = useState<string | null>(null);
@@ -81,7 +80,7 @@ export function AgentDetailPage() {
   const [pendingPath, setPendingPath] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedPath("manifest.json");
+    setSelectedPath(agent?.files[0] ?? "manifest.json");
     setIsDirty(false);
   }, [agent?.id]);
 
@@ -205,7 +204,7 @@ export function AgentDetailPage() {
         <div className="flex h-full min-h-0 flex-col gap-0 lg:flex-row">
           <aside className="w-full shrink-0 overflow-y-auto border-b border-border bg-app lg:w-[240px] lg:border-r lg:border-b-0">
             <div>
-              {PRIMARY_FILES.map((path) => (
+              {availableFiles.map((path) => (
                 <FileTreeButton key={path} active={selectedPath === path} label={path} onClick={() => handleSelectPath(path)} />
               ))}
             </div>

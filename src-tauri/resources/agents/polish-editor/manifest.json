@@ -1,0 +1,11 @@
+{
+  "id": "polish-editor",
+  "name": "润稿编辑",
+  "description": "润稿编辑，负责文风统一、语言打磨、去 AI 味和成稿整理，让文本更自然、更顺、更像作者本人。",
+  "role": "润稿",
+  "dispatchHint": "当用户要求润色正文、去 AI 味、统一文风、校准语气、精修对白、整理终稿，或项目进入最终成稿阶段时优先委派。",
+  "tags": ["润稿编辑", "润色正文", "去AI味", "统一文风", "校准语气", "精修对白", "成稿整理", "终稿", "语言打磨", "文风"],
+  "suggestedTools": ["browse", "search", "read", "write"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

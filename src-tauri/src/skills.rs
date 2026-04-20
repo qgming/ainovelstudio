@@ -27,6 +27,10 @@ const BLOCKED_REFERENCE_EXTENSIONS: [&str; 10] = [
 const SKILL_SOURCE_BUILTIN: &str = "builtin-package";
 const SKILL_SOURCE_INSTALLED: &str = "installed-package";
 const SKILL_PRIMARY_FILE: &str = "SKILL.md";
+const SKILL_REFERENCES_DIR: &str = "references";
+const SKILL_REFERENCES_PREFIX: &str = "references/";
+const SKILL_TEMPLATES_DIR: &str = "templates";
+const SKILL_TEMPLATES_PREFIX: &str = "templates/";
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +72,10 @@ pub struct SkillManifest {
     references: Vec<SkillReferenceEntry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     references_path: Option<String>,
+    #[serde(default)]
+    templates: Vec<SkillReferenceEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    templates_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     skill_file_path: Option<String>,
     source_kind: String,
@@ -256,10 +264,14 @@ fn detect_extension(path: &Path) -> Option<String> {
         .filter(|extension| !extension.is_empty())
 }
 
-fn is_reference_file_allowed(path: &Path) -> bool {
+fn is_skill_supporting_file_allowed(path: &Path) -> bool {
     !detect_extension(path)
         .map(|extension| BLOCKED_REFERENCE_EXTENSIONS.contains(&extension.as_str()))
         .unwrap_or(false)
+}
+
+fn is_supported_skill_file_path(path: &str) -> bool {
+    path.starts_with(SKILL_REFERENCES_PREFIX) || path.starts_with(SKILL_TEMPLATES_PREFIX)
 }
 
 fn validate_skill_name(name: &str) -> bool {
@@ -366,11 +378,11 @@ fn validate_skill_file_path(relative_path: &str) -> CommandResult<String> {
     if normalized == SKILL_PRIMARY_FILE {
         return Ok(normalized);
     }
-    if !normalized.starts_with("references/") {
-        return Err("仅支持访问 SKILL.md 和 references 目录下的文件。".into());
+    if !is_supported_skill_file_path(&normalized) {
+        return Err("仅支持访问 SKILL.md、references 和 templates 目录下的文件。".into());
     }
-    if !is_reference_file_allowed(Path::new(&normalized)) {
-        return Err("当前 reference 文件类型不允许访问。".into());
+    if !is_skill_supporting_file_allowed(Path::new(&normalized)) {
+        return Err("当前技能文件类型不允许访问。".into());
     }
     Ok(normalized)
 }
@@ -389,10 +401,13 @@ fn build_skill_virtual_path(skill_id: &str, relative_path: &str) -> String {
     format!("sqlite://skills/{skill_id}/{relative_path}")
 }
 
-fn collect_reference_entries_from_files(files: &SkillFiles) -> Vec<SkillReferenceEntry> {
+fn collect_skill_entries_from_files(
+    files: &SkillFiles,
+    prefix: &str,
+) -> Vec<SkillReferenceEntry> {
     let mut entries = files
         .iter()
-        .filter(|(path, _)| path.starts_with("references/"))
+        .filter(|(path, _)| path.starts_with(prefix))
         .map(|(path, content)| SkillReferenceEntry {
             extension: detect_extension(Path::new(path)),
             name: Path::new(path)
@@ -440,12 +455,14 @@ fn build_skill_manifest_from_files(
     errors.extend(frontmatter_errors);
     warnings.extend(frontmatter_warnings);
 
-    let references = collect_reference_entries_from_files(files);
+    let references = collect_skill_entries_from_files(files, SKILL_REFERENCES_PREFIX);
+    let templates = collect_skill_entries_from_files(files, SKILL_TEMPLATES_PREFIX);
     if references
         .iter()
-        .any(|entry| !is_reference_file_allowed(Path::new(&entry.path)))
+        .chain(templates.iter())
+        .any(|entry| !is_skill_supporting_file_allowed(Path::new(&entry.path)))
     {
-        errors.push("references 目录包含不允许导入的可执行文件。".into());
+        errors.push("references 与 templates 目录包含不允许导入的可执行文件。".into());
     }
     if parsed_markdown.body.trim().is_empty() {
         warnings.push("SKILL.md 正文为空，运行时可能无法提供有效技能说明。".into());
@@ -485,8 +502,13 @@ fn build_skill_manifest_from_files(
         references,
         references_path: files
             .keys()
-            .any(|path| path.starts_with("references/"))
-            .then(|| build_skill_virtual_path(skill_id, "references")),
+            .any(|path| path.starts_with(SKILL_REFERENCES_PREFIX))
+            .then(|| build_skill_virtual_path(skill_id, SKILL_REFERENCES_DIR)),
+        templates,
+        templates_path: files
+            .keys()
+            .any(|path| path.starts_with(SKILL_TEMPLATES_PREFIX))
+            .then(|| build_skill_virtual_path(skill_id, SKILL_TEMPLATES_DIR)),
         skill_file_path: Some(build_skill_virtual_path(skill_id, SKILL_PRIMARY_FILE)),
         source_kind: source_kind.into(),
         suggested_tools,
@@ -790,13 +812,16 @@ fn path_depth(path: &Path) -> usize {
         .count()
 }
 
-fn validate_reference_archive_path(path: &Path) -> CommandResult<()> {
+fn validate_skill_archive_path(path: &Path) -> CommandResult<()> {
     let Some(first_component) = path.components().next() else {
         return Ok(());
     };
     if let Component::Normal(name) = first_component {
-        if name.to_string_lossy() == "references" && !is_reference_file_allowed(path) {
-            return Err("references 目录中存在不允许导入的文件类型。".into());
+        let directory = name.to_string_lossy();
+        if (directory == SKILL_REFERENCES_DIR || directory == SKILL_TEMPLATES_DIR)
+            && !is_skill_supporting_file_allowed(path)
+        {
+            return Err("references 与 templates 目录中存在不允许导入的文件类型。".into());
         }
     }
     Ok(())
@@ -904,7 +929,7 @@ fn read_skill_files_from_archive<R: Read + std::io::Seek>(
             continue;
         }
 
-        validate_reference_archive_path(&relative_path)?;
+        validate_skill_archive_path(&relative_path)?;
         let normalized_path = normalize_relative_path(&normalize_path(&relative_path))?;
         let mut content = String::new();
         entry
@@ -988,6 +1013,25 @@ pub fn initialize_builtin_skills(
     app: AppHandle,
 ) -> CommandResult<BuiltinSkillsInitializationResult> {
     sync_builtin_skills_to_database(&app)
+}
+
+fn reset_builtin_skills_in_database(
+    app: &AppHandle,
+) -> CommandResult<BuiltinSkillsInitializationResult> {
+    let connection = open_database(app)?;
+    connection
+        .execute("DELETE FROM skill_packages", [])
+        .map_err(error_to_string)?;
+    drop(connection);
+    crate::chat::clear_skill_preferences(app.clone())?;
+    sync_builtin_skills_to_database(app)
+}
+
+#[tauri::command]
+pub fn reset_builtin_skills(
+    app: AppHandle,
+) -> CommandResult<BuiltinSkillsInitializationResult> {
+    reset_builtin_skills_in_database(&app)
 }
 
 #[tauri::command]

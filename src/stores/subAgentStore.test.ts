@@ -106,6 +106,7 @@ describe("subAgentStore", () => {
     const resolved = getResolvedAgents(useSubAgentStore.getState());
     expect(resolved.find((a) => a.id === "editor")?.enabled).toBe(true);
     expect(resolved.find((a) => a.id === "writer")?.enabled).toBe(true);
+    expect(resolved.find((a) => a.id === "editor")?.files).toEqual(["manifest.json", "AGENTS.md"]);
   });
 
   it("toggleAgent 切换启用状态并写入 SQLite", async () => {

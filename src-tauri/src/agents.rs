@@ -20,7 +20,7 @@ const MAX_ARCHIVE_FILE_SIZE: u64 = 5 * 1024 * 1024;
 const MAX_ARCHIVE_TOTAL_SIZE: u64 = 20 * 1024 * 1024;
 const MAX_ARCHIVE_DEPTH: usize = 8;
 const MAX_COMPRESSION_RATIO: u64 = 200;
-const PRIMARY_AGENT_FILES: [&str; 4] = ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"];
+const PRIMARY_AGENT_FILES: [&str; 2] = ["manifest.json", "AGENTS.md"];
 const AGENT_SOURCE_BUILTIN: &str = "builtin-package";
 const AGENT_SOURCE_INSTALLED: &str = "installed-package";
 
@@ -49,20 +49,12 @@ pub struct AgentManifest {
     is_builtin: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     manifest_file_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    memory_file_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    memory_preview: Option<String>,
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     role: Option<String>,
     source_kind: String,
     suggested_tools: Vec<String>,
     tags: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tools_file_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tools_preview: Option<String>,
     validation: AgentValidation,
     #[serde(skip_serializing_if = "Option::is_none")]
     version: Option<String>,
@@ -143,21 +135,6 @@ fn sanitize_agent_id_fallback(value: &str) -> String {
         "agent".into()
     } else {
         trimmed.chars().take(64).collect()
-    }
-}
-
-fn preview_text(content: &str) -> Option<String> {
-    let preview = content
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .take(4)
-        .collect::<Vec<_>>()
-        .join("\n");
-    if preview.is_empty() {
-        None
-    } else {
-        Some(preview)
     }
 }
 
@@ -266,7 +243,7 @@ fn normalize_relative_path(relative_path: &str) -> CommandResult<String> {
 fn validate_agent_file_path(relative_path: &str) -> CommandResult<String> {
     let normalized = normalize_relative_path(relative_path)?;
     if !PRIMARY_AGENT_FILES.contains(&normalized.as_str()) {
-        return Err("仅允许访问 manifest.json、AGENTS.md、TOOLS.md、MEMORY.md。".into());
+        return Err("仅允许访问 manifest.json 和 AGENTS.md。".into());
     }
     Ok(normalized)
 }
@@ -298,21 +275,6 @@ fn build_agent_manifest_from_files(
     errors.extend(manifest_errors);
     warnings.extend(manifest_warnings);
 
-    let tools_preview = files
-        .get("TOOLS.md")
-        .and_then(|content| preview_text(content))
-        .or_else(|| {
-            warnings.push("建议提供 TOOLS.md，用于描述该代理的常用工具与工作方式。".into());
-            None
-        });
-    let memory_preview = files
-        .get("MEMORY.md")
-        .and_then(|content| preview_text(content))
-        .or_else(|| {
-            warnings.push("建议提供 MEMORY.md，用于记录该代理的长期偏好。".into());
-            None
-        });
-
     if body.trim().is_empty() {
         warnings.push("AGENTS.md 正文为空，运行时可能无法提供有效代理说明。".into());
     }
@@ -328,19 +290,11 @@ fn build_agent_manifest_from_files(
         install_path: Some(format!("sqlite://agents/{agent_id}")),
         is_builtin,
         manifest_file_path: Some(build_agent_virtual_path(agent_id, "manifest.json")),
-        memory_file_path: files
-            .contains_key("MEMORY.md")
-            .then(|| build_agent_virtual_path(agent_id, "MEMORY.md")),
-        memory_preview,
         name: package_manifest.name,
         role: package_manifest.role,
         source_kind: source_kind.into(),
         suggested_tools: package_manifest.suggested_tools,
         tags: package_manifest.tags,
-        tools_file_path: files
-            .contains_key("TOOLS.md")
-            .then(|| build_agent_virtual_path(agent_id, "TOOLS.md")),
-        tools_preview,
         validation: AgentValidation {
             errors: errors.clone(),
             is_valid: errors.is_empty(),
@@ -355,11 +309,19 @@ fn serialize_json<T: Serialize>(value: &T) -> CommandResult<String> {
     serde_json::to_string(value).map_err(error_to_string)
 }
 
+fn canonicalize_agent_files(files: &AgentFiles) -> AgentFiles {
+    files.iter()
+        .filter(|(path, _)| PRIMARY_AGENT_FILES.contains(&path.as_str()))
+        .map(|(path, content)| (path.clone(), content.clone()))
+        .collect()
+}
+
 fn save_agent_record(
     connection: &Connection,
     manifest: &AgentManifest,
     files: &AgentFiles,
 ) -> CommandResult<()> {
+    let normalized_files = canonicalize_agent_files(files);
     connection
         .execute(
             r#"
@@ -377,7 +339,7 @@ fn save_agent_record(
                 manifest.source_kind,
                 if manifest.is_builtin { 1 } else { 0 },
                 serialize_json(manifest)?,
-                serialize_json(files)?,
+                serialize_json(&normalized_files)?,
                 current_timestamp() as i64,
             ],
         )
@@ -595,14 +557,6 @@ fn create_agent_record(app: &AppHandle, name: &str, description: &str) -> Comman
         (
             "AGENTS.md".to_string(),
             build_agent_markdown_template(safe_name),
-        ),
-        (
-            "TOOLS.md".to_string(),
-            "# TOOLS\n\n- 当前代理继承主会话全部已启用工具。\n- 在这里记录常用工具组合、偏好顺序与工作方式。\n".into(),
-        ),
-        (
-            "MEMORY.md".to_string(),
-            "# MEMORY\n\n- 记录用户对该代理的长期偏好。\n".into(),
         ),
     ]);
     let manifest =
@@ -822,6 +776,25 @@ pub fn initialize_builtin_agents(
     app: AppHandle,
 ) -> CommandResult<BuiltinAgentsInitializationResult> {
     sync_builtin_agents_to_database(&app)
+}
+
+fn reset_builtin_agents_in_database(
+    app: &AppHandle,
+) -> CommandResult<BuiltinAgentsInitializationResult> {
+    let connection = open_database(app)?;
+    connection
+        .execute("DELETE FROM agent_packages", [])
+        .map_err(error_to_string)?;
+    drop(connection);
+    crate::chat::clear_agent_preferences(app.clone())?;
+    sync_builtin_agents_to_database(app)
+}
+
+#[tauri::command]
+pub fn reset_builtin_agents(
+    app: AppHandle,
+) -> CommandResult<BuiltinAgentsInitializationResult> {
+    reset_builtin_agents_in_database(&app)
 }
 
 #[tauri::command]

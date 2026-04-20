@@ -34,7 +34,7 @@ function createAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
     body: "# writer",
     discoveredAt: 1,
     enabled: true,
-    files: ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"],
+    files: ["manifest.json", "AGENTS.md"],
     isBuiltin: true,
     manifestFilePath: "agents/writer/manifest.json",
     role: "续写与润色",
@@ -65,6 +65,8 @@ describe("prompt context", () => {
     expect(system).toContain("### 技能：代码审查");
     expect(system).toContain("用于审查代码改动的检查清单");
     expect(system).not.toContain("这里是很长的完整 skill 正文");
+    expect(system).not.toContain("TOOLS.md");
+    expect(system).not.toContain("MEMORY.md");
   });
 
   it("工作流模式下不注入可委派子代理目录", () => {

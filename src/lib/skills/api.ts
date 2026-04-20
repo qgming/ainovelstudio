@@ -31,6 +31,8 @@ export type SkillManifest = {
   rawMarkdown: string;
   references: SkillReferenceEntry[];
   referencesPath?: string;
+  templates?: SkillReferenceEntry[];
+  templatesPath?: string;
   skillFilePath?: string;
   sourceKind: SkillSourceKind;
   suggestedTools: string[];
@@ -66,6 +68,10 @@ export function scanInstalledSkills(options?: InvokeCancellationOptions) {
 
 export function initializeBuiltinSkills() {
   return invoke<BuiltinSkillsInitializationResult>("initialize_builtin_skills");
+}
+
+export function resetBuiltinSkills() {
+  return invoke<BuiltinSkillsInitializationResult>("reset_builtin_skills");
 }
 
 export function readSkillDetail(skillId: string) {

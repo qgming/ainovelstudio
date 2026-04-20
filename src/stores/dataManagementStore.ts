@@ -11,6 +11,18 @@ import {
   type DataSyncSettingsDocument,
 } from "../lib/dataManagement/api";
 import { collectAppClientState } from "../lib/dataManagement/clientState";
+import {
+  resetBuiltinAgents,
+  type BuiltinAgentsInitializationResult,
+} from "../lib/agents/api";
+import {
+  resetBuiltinSkills,
+  type BuiltinSkillsInitializationResult,
+} from "../lib/skills/api";
+import {
+  resetBuiltinWorkflows,
+} from "../lib/workflow/api";
+import type { BuiltinWorkflowsInitializationResult } from "../lib/workflow/types";
 
 type DataManagementState = {
   config: DataSyncSettingsDocument;
@@ -22,6 +34,9 @@ type DataManagementActions = {
   exportBackup: () => Promise<string | null>;
   importBackup: (fileName: string, archiveBytes: number[]) => Promise<BackupRestoreResult>;
   initialize: () => Promise<void>;
+  reinitializeAgents: () => Promise<BuiltinAgentsInitializationResult>;
+  reinitializeSkills: () => Promise<BuiltinSkillsInitializationResult>;
+  reinitializeWorkflows: () => Promise<BuiltinWorkflowsInitializationResult>;
   saveConfig: (config: DataSyncSettingsDocument) => Promise<DataSyncSettingsDocument>;
   syncNow: () => Promise<DataSyncResult>;
 };
@@ -95,6 +110,39 @@ export const useDataManagementStore = create<DataManagementStore>((set, get) => 
       return saved;
     } catch (error) {
       const message = formatError(error, "保存云同步配置失败。");
+      set((state) => ({ ...state, errorMessage: message, status: "error" }));
+      throw error;
+    }
+  },
+  reinitializeAgents: async () => {
+    try {
+      const result = await resetBuiltinAgents();
+      set((state) => ({ ...state, errorMessage: null }));
+      return result;
+    } catch (error) {
+      const message = formatError(error, "重写代理内置数据失败。");
+      set((state) => ({ ...state, errorMessage: message, status: "error" }));
+      throw error;
+    }
+  },
+  reinitializeSkills: async () => {
+    try {
+      const result = await resetBuiltinSkills();
+      set((state) => ({ ...state, errorMessage: null }));
+      return result;
+    } catch (error) {
+      const message = formatError(error, "重写技能内置数据失败。");
+      set((state) => ({ ...state, errorMessage: message, status: "error" }));
+      throw error;
+    }
+  },
+  reinitializeWorkflows: async () => {
+    try {
+      const result = await resetBuiltinWorkflows();
+      set((state) => ({ ...state, errorMessage: null }));
+      return result;
+    } catch (error) {
+      const message = formatError(error, "重写工作流内置数据失败。");
       set((state) => ({ ...state, errorMessage: message, status: "error" }));
       throw error;
     }

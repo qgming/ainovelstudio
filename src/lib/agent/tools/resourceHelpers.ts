@@ -108,8 +108,6 @@ export function mapAgentForTool(agent: {
     files: agent.files ?? [
       "manifest.json",
       "AGENTS.md",
-      "TOOLS.md",
-      "MEMORY.md",
     ],
     id: agent.id,
     name: agent.name,

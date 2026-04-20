@@ -104,7 +104,7 @@ function sortManifests(manifests: AgentManifest[]) {
 }
 
 function resolveFiles() {
-  return ["manifest.json", "AGENTS.md", "TOOLS.md", "MEMORY.md"];
+  return ["manifest.json", "AGENTS.md"];
 }
 
 function resolveAgents(manifests: AgentManifest[], preferences: AgentPreferences): ResolvedAgent[] {

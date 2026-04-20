@@ -161,7 +161,7 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   json: "按 JSON Pointer 局部读写字段/对象/数组；action：get/set/merge/append/delete，不要为一个字段整份重写。",
   path: "只动结构：create_file / create_folder / rename / move / delete；不写入正文。",
   skill: '读/管理本地 skill。先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；writes 改 skill 内文件。',
-  agent: 'action：list/read/write/create/delete；读写 agent 内文件（manifest.json / AGENTS.md / TOOLS.md / MEMORY.md）；执行子任务请用 task，不是 agent。',
+  agent: 'action：list/read/write/create/delete；读写 agent 内文件（manifest.json / AGENTS.md）；执行子任务请用 task，不是 agent。',
 };
 
 function buildToolPromptBlock(enabledToolIds: string[]) {
@@ -376,6 +376,21 @@ function buildManualContextBlock(
   ].join("\n\n");
 }
 
+function buildSubAgentManifestSummary(agent: ResolvedAgent) {
+  const suggestedTools = normalizeSuggestedToolIds(agent.suggestedTools);
+
+  return [
+    `- role：${agent.role || "未填写"}`,
+    agent.dispatchHint ? `- dispatchHint：${agent.dispatchHint}` : null,
+    suggestedTools.length > 0
+      ? `- suggestedTools：${suggestedTools.join(", ")}`
+      : "- suggestedTools：无",
+    agent.tags.length > 0 ? `- tags：${agent.tags.join(", ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function buildSystemPrompt({
   defaultAgentMarkdown,
   enabledAgents,
@@ -493,7 +508,7 @@ export function buildSubAgentSystem(
         body: [
           "- 只处理当前被拆出的局部任务，不要扩展成主任务总控。",
           "- 只使用当前提供的工具与资料，不要继续派生新的子任务。",
-          "- 继承父代理当前已启用的全部工具；agent 文件里的 suggestedTools 或 TOOLS.md 只描述常用工作方式。",
+          "- 继承父代理当前已启用的全部工具；agent manifest 里的 suggestedTools 只描述常用工作方式。",
           "- 如果信息不足，基于现有工具做最小读取与最小验证。",
         ].join("\n"),
       },
@@ -503,12 +518,8 @@ export function buildSubAgentSystem(
         body: [
           "AGENTS.md：",
           agent.body,
-          agent.toolsPreview
-            ? `TOOLS.md 摘要：\n${agent.toolsPreview}`
-            : "TOOLS.md 摘要：\n- 当前没有额外 TOOLS 摘要。",
-          agent.memoryPreview
-            ? `MEMORY.md 摘要：\n${agent.memoryPreview}`
-            : "MEMORY.md 摘要：\n- 当前没有额外 MEMORY 摘要。",
+          "manifest 摘要：",
+          buildSubAgentManifestSummary(agent),
         ].join("\n\n"),
       },
       {

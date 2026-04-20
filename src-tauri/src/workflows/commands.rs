@@ -38,6 +38,26 @@ pub fn initialize_builtin_workflows(
 }
 
 #[tauri::command]
+pub fn reset_builtin_workflows(
+    app: AppHandle,
+) -> CommandResult<BuiltinWorkflowsInitializationResult> {
+    let connection = open_database(&app)?;
+    connection
+        .execute_batch(
+            r#"
+            DELETE FROM workflow_step_runs;
+            DELETE FROM workflow_runs;
+            DELETE FROM workflow_steps;
+            DELETE FROM workflow_team_members;
+            DELETE FROM workflows;
+            DELETE FROM workflow_packages;
+            "#,
+        )
+        .map_err(error_to_string)?;
+    sync_builtin_workflows_to_database(&connection)
+}
+
+#[tauri::command]
 pub fn list_workflows(app: AppHandle) -> CommandResult<Vec<Workflow>> {
     let connection = open_database(&app)?;
     list_all_workflows(&connection)

@@ -27,6 +27,10 @@ export function initializeBuiltinWorkflows() {
   return invoke<BuiltinWorkflowsInitializationResult>("initialize_builtin_workflows");
 }
 
+export function resetBuiltinWorkflows() {
+  return invoke<BuiltinWorkflowsInitializationResult>("reset_builtin_workflows");
+}
+
 export function createWorkflow(name: string) {
   return invoke<Workflow>("create_workflow", { name });
 }

@@ -70,6 +70,22 @@ export function SkillDetailPage() {
   const skills = getResolvedSkills({ manifests, preferences });
   const skill = skills.find((item) => item.id === skillId);
   const isInstalledSkill = skill?.sourceKind === "installed-package";
+  const fileSections = skill
+    ? [
+        {
+          canCreate: isInstalledSkill,
+          entries: skill.references,
+          id: "references",
+          label: "参考文献",
+        },
+        {
+          canCreate: false,
+          entries: skill.templates ?? [],
+          id: "templates",
+          label: "模板",
+        },
+      ].filter((section) => section.id === "references" || section.entries.length > 0)
+    : [];
   const [selectedPath, setSelectedPath] = useState<string>("SKILL.md");
   const [draftContent, setDraftContent] = useState<string>("");
   const [referenceError, setReferenceError] = useState<string | null>(null);
@@ -232,37 +248,41 @@ export function SkillDetailPage() {
               <FileTreeButton active={selectedPath === "SKILL.md"} label="SKILL.md" onClick={() => handleSelectPath("SKILL.md")} />
             </div>
 
-            <div className="flex h-10 items-center justify-between gap-2 border-b border-border px-3">
-              <span className="text-xs font-medium text-muted-foreground">参考文献</span>
-              {isInstalledSkill ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      aria-label="添加参考文献"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setCreateReferenceOpen(true)}
-                      className="text-muted-foreground"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>添加参考文献</TooltipContent>
-                </Tooltip>
-              ) : null}
-            </div>
+            {fileSections.map((section) => (
+              <div key={section.id}>
+                <div className="flex h-10 items-center justify-between gap-2 border-b border-border px-3">
+                  <span className="text-xs font-medium text-muted-foreground">{section.label}</span>
+                  {section.canCreate ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          aria-label={`添加${section.label}`}
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setCreateReferenceOpen(true)}
+                          className="text-muted-foreground"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{`添加${section.label}`}</TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                </div>
 
-            <div>
-              {skill.references.map((entry) => (
-                <FileTreeButton
-                  key={entry.path}
-                  active={selectedPath === entry.path}
-                  label={entry.name}
-                  onClick={() => handleSelectPath(entry.path)}
-                />
-              ))}
-            </div>
+                <div>
+                  {section.entries.map((entry) => (
+                    <FileTreeButton
+                      key={entry.path}
+                      active={selectedPath === entry.path}
+                      label={entry.name}
+                      onClick={() => handleSelectPath(entry.path)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
           </aside>
 
           <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-panel-subtle">

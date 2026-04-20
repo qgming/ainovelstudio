@@ -1,0 +1,33 @@
+{
+  "project_title": "项目名",
+  "system_name": "系统名",
+  "rules_summary": [
+    "系统核心规则"
+  ],
+  "currencies": {
+    "金币": 0
+  },
+  "stats": {
+    "力量": 0
+  },
+  "skills": [
+    "当前已获得技能"
+  ],
+  "quests": [
+    {
+      "name": "任务名",
+      "status": "进行中",
+      "objective": "任务目标",
+      "reward": "任务奖励"
+    }
+  ],
+  "cooldowns": {
+    "技能名": "0"
+  },
+  "inventory": [
+    "关键道具"
+  ],
+  "faction_reputation": {
+    "阵营名": 0
+  }
+}
