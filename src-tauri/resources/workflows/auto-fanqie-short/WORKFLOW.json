@@ -1,46 +1,60 @@
 {
   "templateKey": "builtin:auto-fanqie-short",
   "name": "全自动番茄短篇",
-  "description": "围绕番茄平台1-3万字短篇的五阶段流水线，自动随机立项、自动写作、自动终审，并在每轮循环中产出一个全新的短篇项目。",
-  "basePrompt": "直接使用内置代理完成番茄短篇全自动批量生产流水线。把当前绑定工作区视为“短篇工厂根目录”，不是单本书工作区。禁止等待用户提供范文、创作方向、题材、人设、书名或任何补充输入。每次循环都必须自动创建一个新的短篇项目目录，随机生成主赛道、题材类型、时代背景、核心关系、核心卖点、目标字数与章节数，并完成从立项到终审的整套产出。随机生成采用带约束的批量生产逻辑：优先番茄平台适配的1-3万字短篇，优先强冲突、强反转、强钩子题材，并尽量避开最近几轮重复的主题、背景和关系组合。所有节点都以本轮最新创建且状态为“进行中”的项目目录为长期事实源：先读文件，再决定创建、更新、覆盖哪些文件。当前轮完成后，把该项目标记为“已完结可发布”，若还有剩余循环次数，则自动开始下一本新短篇。",
+  "description": "基于主编、设定编辑、大纲编辑、章节编辑、连载作者、审稿编辑和润稿编辑的新番茄短篇流水线，自动完成随机立项、成稿、终审和项目收口。",
+  "basePrompt": "直接使用当前内置编辑链完成番茄短篇全自动批量生产流水线。把当前绑定工作区视为“短篇工厂根目录”，不是单本书工作区。每次循环都必须自动创建一个新的短篇项目目录，并围绕番茄平台 1-3 万字短篇的要求完成立项、建档、搭纲、开篇规划、成稿、终审和收口。优先强冲突、强反转、强钩子、强情绪回报的题材组合，并尽量避开最近几轮重复的主题、背景和关系结构。所有节点都先读文件，再决定创建、更新、覆盖哪些文件。当前轮通过终审并完成收口后，把该项目标记为“已完结可发布”，若还有剩余循环次数，则自动开始下一本新短篇。",
   "loopConfig": {
     "maxLoops": 5
   },
   "teamMembers": [
     {
-      "key": "style",
-      "agentId": "fanqie-style-genome",
-      "name": "文风测序代理",
-      "roleLabel": "阶段一",
-      "responsibilityPrompt": "把绑定工作区当作短篇工厂根目录使用。你的职责不是读取用户输入，而是自动开启新项目：扫描已有短篇目录和索引文件，避开最近几轮重复题材，创建新的项目目录与自动输入文件，再为本轮短篇随机锁定主赛道、题材、背景、核心关系、核心卖点和篇幅策略。随后生成阶段一报告，并把项目状态写成“阶段一完成，项目进行中”。"
+      "key": "director",
+      "agentId": "chief-editor",
+      "name": "主编",
+      "roleLabel": "项目立项",
+      "responsibilityPrompt": "把绑定工作区视为短篇工厂根目录。你的职责是自动开启新项目：扫描已有项目与索引文件，避开最近几轮重复题材，创建新的项目目录，并为本轮番茄短篇锁定主赛道、题材类型、时代背景、核心关系、核心卖点、目标字数、目标章节数和书名候选。随后把项目状态写成“立项完成，待建档”，并给出本轮生产重点。"
     },
     {
-      "key": "ip",
-      "agentId": "fanqie-ip-architecture",
-      "name": "IP架构代理",
-      "roleLabel": "阶段二",
-      "responsibilityPrompt": "定位本轮最新创建且状态为“阶段一完成，项目进行中”的短篇项目目录。读取该目录中的自动立项文件与阶段一报告，自动生成原创人设、主关系线或主冲突线、金手指和6张工程化台账，写入阶段二文件，并把项目状态更新为“阶段二完成，项目进行中”。"
+      "key": "lore",
+      "agentId": "lore-editor",
+      "name": "设定编辑",
+      "roleLabel": "基础建档",
+      "responsibilityPrompt": "定位本轮最新创建且状态为“立项完成，待建档”的短篇项目目录。读取立项文件后，为该项目创建最小可用但足够稳定的设定底盘：主角、关键配角、核心关系、地点、世界规则、时间线和必要状态文件。你的目标是让后续搭纲与写作不再依赖临时猜测，并把项目状态更新为“建档完成，待搭纲”。"
     },
     {
-      "key": "opening",
-      "agentId": "fanqie-opening-three",
-      "name": "黄金开篇代理",
-      "roleLabel": "阶段三",
-      "responsibilityPrompt": "定位本轮状态为“阶段二完成，项目进行中”的短篇项目目录。读取阶段一与阶段二文件，按已锁定的随机赛道和题材生成前3章正文、逐章AI自检和台账更新，写入正文目录与阶段三文件，并把项目状态更新为“阶段三完成，项目进行中”。"
+      "key": "outline",
+      "agentId": "outline-editor",
+      "name": "大纲编辑",
+      "roleLabel": "短篇大纲",
+      "responsibilityPrompt": "定位本轮状态为“建档完成，待搭纲”的短篇项目目录。读取立项与设定文件，生成适配番茄短篇的全本大纲：开局钩子、第一幕推进、中段反转、高潮回收、结局情绪点、章节拆分和 payoff 安排。写入项目的大纲文件，并把项目状态更新为“搭纲完成，待拆章”。"
     },
     {
-      "key": "batch",
-      "agentId": "fanqie-short-batch",
-      "name": "批量生成代理",
-      "roleLabel": "阶段四",
-      "responsibilityPrompt": "定位本轮状态为“阶段三完成，项目进行中”的短篇项目目录。读取阶段一到阶段三文件与已有正文，从第4章开始自动写到完结。你必须严格沿用已锁定的随机赛道、题材和篇幅策略。若收到 revision_brief，则优先返工当前项目中受影响的章节和终稿文件。所有章节都要带自检与台账更新，完成后把项目状态改为“阶段四完成，待终审”。"
+      "key": "chapter",
+      "agentId": "chapter-editor",
+      "name": "章节编辑",
+      "roleLabel": "开篇拆章",
+      "responsibilityPrompt": "定位本轮状态为“搭纲完成，待拆章”的短篇项目目录。读取大纲、设定和项目目标，为前 3 章和后续批量写作准备章节规划。你的职责是把开篇钩子、章节节拍、信息释放、转折点和章末驱动力拆清楚，并把项目状态更新为“拆章完成，待成稿”。"
     },
     {
-      "key": "audit",
-      "agentId": "fanqie-final-audit",
-      "name": "终审发布代理",
-      "roleLabel": "阶段五",
-      "responsibilityPrompt": "定位本轮状态为“阶段四完成，待终审”的短篇项目目录。读取该项目的全本终稿与阶段资料，按已锁定的随机赛道审查并输出可直接发布的终稿、终审摘要与运营建议。终审通过时，把项目状态改成“已完结可发布”，并更新工厂索引；终审未通过时，把 revision_brief 写成只针对当前项目的可执行返工单。最后必须使用 workflow_decision 提交是否通过。"
+      "key": "writer",
+      "agentId": "serial-writer",
+      "name": "连载作者",
+      "roleLabel": "全本成稿",
+      "responsibilityPrompt": "定位本轮状态为“拆章完成，待成稿”的短篇项目目录。读取立项、设定、大纲、章节规划和已有正文，按本轮已锁定的方向完成整本短篇成稿。若收到 revision_brief，请只返工当前项目中被指出的章节和终稿文件，不要新开项目，也不要改动其他已完成项目。完成后把项目状态更新为“成稿完成，待终审”。"
+    },
+    {
+      "key": "review",
+      "agentId": "review-editor",
+      "name": "审稿编辑",
+      "roleLabel": "发布前终审",
+      "responsibilityPrompt": "定位本轮状态为“成稿完成，待终审”的短篇项目目录。读取该项目的全本终稿、阶段文件和关键设定，按番茄短篇标准检查钩子强度、冲突密度、节奏、完结质量、一致性和可发布性。最终必须使用 workflow_decision 提交 pass、issues、revision_brief。若不通过，请把 revision_brief 写成只针对当前项目的可执行返工单。"
+    },
+    {
+      "key": "polish",
+      "agentId": "polish-editor",
+      "name": "润稿编辑",
+      "roleLabel": "发布整理",
+      "responsibilityPrompt": "在项目已经通过终审后，读取全本终稿、必要上下文和番茄短篇风格要求，对最终发布稿做语言整理。你的职责是统一文风、清理 AI 痕迹、提升顺滑度、整理发布文案和终稿版本，但不改变核心剧情事实。"
     }
   ],
   "steps": [
@@ -48,61 +62,79 @@
       "key": "start",
       "type": "start",
       "name": "开始",
-      "nextStepKey": "style-genome"
+      "nextStepKey": "project-setup"
     },
     {
-      "key": "style-genome",
+      "key": "project-setup",
       "type": "agent_task",
-      "name": "文风测序",
-      "memberKey": "style",
-      "promptTemplate": "请把当前绑定工作区当作短篇工厂根目录。不要索要任何输入材料，不要等待范文或创作方向。先扫描已有项目与索引，创建本轮新的短篇项目目录和自动输入文件，再随机生成一套番茄平台1-3万字短篇的立项结果：主赛道、题材类型、时代背景、核心关系、核心卖点、目标字数、目标章节数、书名候选。随后产出阶段一文风锁定报告，并写入本轮项目目录，确保后续阶段能直接读取复用。",
+      "name": "自动立项",
+      "memberKey": "director",
+      "promptTemplate": "请把当前绑定工作区当作短篇工厂根目录。不要等待用户提供范文、题材、人设或书名。先扫描已有项目和工厂索引，创建本轮新的短篇项目目录，再为本轮番茄短篇随机锁定主赛道、题材类型、时代背景、核心关系、核心卖点、目标字数、目标章节数和书名候选，并把这些信息写入项目立项文件和工厂索引。正文只需简短汇报本轮立项结果，不要严格输出 JSON。",
       "outputMode": "text",
-      "nextStepKey": "ip-architecture"
+      "nextStepKey": "build-canon"
     },
     {
-      "key": "ip-architecture",
+      "key": "build-canon",
       "type": "agent_task",
-      "name": "IP架构",
-      "memberKey": "ip",
-      "promptTemplate": "请定位本轮最新创建且状态为“阶段一完成，项目进行中”的短篇项目目录。读取其中的自动输入文件与阶段一报告，按该轮随机题材生成原创IP架构、工程化台账和候选书名，写入阶段二固定文件。不要重新开新项目，也不要改动上一轮已完成项目。",
+      "name": "基础建档",
+      "memberKey": "lore",
+      "promptTemplate": "请定位本轮最新创建且状态为“立项完成，待建档”的短篇项目目录。读取立项文件后，为该项目创建最小可用但稳定的设定底盘：人物、关系、地点、世界规则、时间线和必要状态文件。重点是让后续搭纲和正文都能直接复用，不必每一步重新猜设定。正文只需简短说明本轮创建了哪些设定文件，不要严格输出 JSON。",
       "outputMode": "text",
-      "nextStepKey": "opening-three"
+      "nextStepKey": "build-outline"
     },
     {
-      "key": "opening-three",
+      "key": "build-outline",
       "type": "agent_task",
-      "name": "黄金开篇",
-      "memberKey": "opening",
-      "promptTemplate": "请定位本轮状态为“阶段二完成，项目进行中”的短篇项目目录。读取阶段一和阶段二文件，按该轮已锁定的随机赛道、题材和关系结构生成前3章正文与自检结果，写入正文目录与阶段三固定文件。不要等待用户确认，也不要重置书名和设定。",
+      "name": "短篇大纲",
+      "memberKey": "outline",
+      "promptTemplate": "请定位本轮状态为“建档完成，待搭纲”的短篇项目目录。读取立项与设定文件，生成适配番茄短篇的全本大纲：开局钩子、关键反转、中段推进、高潮回收、结局情绪点和章节拆分。把结果写入项目大纲文件，确保后续写作可直接执行。正文只需简短说明本轮确定了哪些结构点，不要严格输出 JSON。",
       "outputMode": "text",
-      "nextStepKey": "batch-generate"
+      "nextStepKey": "opening-plan"
     },
     {
-      "key": "batch-generate",
+      "key": "opening-plan",
       "type": "agent_task",
-      "name": "全本批量生成",
-      "memberKey": "batch",
-      "promptTemplate": "请定位本轮状态为“阶段三完成，项目进行中”的短篇项目目录。读取前三阶段文件与当前正文，按本轮已锁定的随机题材完成剩余章节批量生成、自检、台账更新和全本终稿整合。若收到 revision_brief，请只返工当前项目中被指出的章节和终稿，不要新开项目，不要改写其他已完成项目。",
+      "name": "开篇拆章",
+      "memberKey": "chapter",
+      "promptTemplate": "请定位本轮状态为“搭纲完成，待拆章”的短篇项目目录。读取大纲、设定和项目目标，为前 3 章和后续批量写作准备章节规划。重点拆清开篇钩子、章节节拍、信息释放、反转节奏和章末驱动力，并把规划写入项目目录。正文只需简短汇报开篇规划结果，不要严格输出 JSON。",
       "outputMode": "text",
-      "nextStepKey": "final-audit"
+      "nextStepKey": "draft-short"
     },
     {
-      "key": "final-audit",
+      "key": "draft-short",
+      "type": "agent_task",
+      "name": "全本成稿",
+      "memberKey": "writer",
+      "promptTemplate": "请定位本轮状态为“拆章完成，待成稿”的短篇项目目录。读取立项、设定、大纲、章节规划和已有正文，按本轮已锁定方向完成整本番茄短篇成稿。若收到 revision_brief，请只返工当前项目中被指出的章节和终稿文件，不要新开项目，不要改动其他项目。完成后请把终稿和必要章节文件写回项目目录。正文只需简短说明本轮写了哪些文件、是否留有风险点，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "final-review"
+    },
+    {
+      "key": "final-review",
       "type": "decision",
       "name": "发布前终审",
-      "memberKey": "audit",
-      "promptTemplate": "请定位本轮状态为“阶段四完成，待终审”的短篇项目目录。读取该项目的全本终稿与所有阶段文件，输出发布终稿和终审摘要，并使用 workflow_decision 提交 pass、issues、revision_brief。若未通过，请把 revision_brief 写成只针对当前项目的返工动作；若通过，请把该项目标记为“已完结可发布”，让工作流进入下一轮自动新建下一本短篇。",
-      "sourceStepKey": "batch-generate",
-      "trueNextStepKey": "success-end",
-      "falseNextStepKey": "batch-generate",
+      "memberKey": "review",
+      "promptTemplate": "请定位本轮状态为“成稿完成，待终审”的短篇项目目录。读取该项目的全本终稿、阶段文件和关键设定，按番茄短篇标准检查钩子强度、冲突密度、节奏、完结质量、一致性和可发布性。最终使用 workflow_decision 提交 pass、issues、revision_brief。若未通过，请把 revision_brief 写成只针对当前项目的返工动作；若通过，进入发布整理。正文只需简短说明终审结论，不要严格输出 JSON。",
+      "sourceStepKey": "draft-short",
+      "trueNextStepKey": "polish-release",
+      "falseNextStepKey": "draft-short",
       "passRule": "workflow_decision.pass == true"
+    },
+    {
+      "key": "polish-release",
+      "type": "agent_task",
+      "name": "发布整理",
+      "memberKey": "polish",
+      "promptTemplate": "请在项目已经通过终审后，读取全本终稿、必要上下文和番茄短篇风格要求，对最终发布稿做最后一轮语言整理，并整理发布版文案或摘要。完成后请把项目状态更新为“已完结可发布”，同步工厂索引，补充本轮题材标签与下一轮避重提示。正文只需简短说明本轮整理了哪些发布文件，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "success-end"
     },
     {
       "key": "success-end",
       "type": "end",
       "name": "成功结束",
       "stopReason": "completed",
-      "summaryTemplate": "本轮已完成一本新的番茄短篇，发布终稿与终审建议已写入对应项目目录。若还有剩余循环次数，工作流将自动开始下一本。",
+      "summaryTemplate": "本轮已完成一本新的番茄短篇，立项、建档、搭纲、成稿、终审与发布整理均已写入对应项目目录。若还有剩余循环次数，工作流将自动开始下一本。",
       "loopBehavior": "continue_if_possible",
       "loopTargetStepKey": "start"
     }

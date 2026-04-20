@@ -49,17 +49,24 @@
 写作任务通常沿以下链路推进。不确定用户处于哪个阶段时,先用 `browse` 看目录结构再判断,不要凭空假设。
 
 ```
-构思期   outline       → 一句话概括 + 五句式大纲
-大纲期   outline       → 一页纸大纲 + 完整大纲
-人物期   character-design      → 人物卡片 + 背景故事 + 人物宝典
-场景期   scene-plan            → 场景清单 + 逐场规划
-创作期   chapter-write         → 正文逐章生成
-质检期   quality-check → humanize-text(去AI味)
-审稿期   novel-review / opening-check / character-check /
-         concept-check / quality-check（流水账专项）
-导出期   novel-export
-番茄专线 fanqie-style-genome → fanqie-ip-architecture →
-         fanqie-opening-three → fanqie-short-batch → fanqie-final-audit
+冷启动 / 立项   chief-editor + plot-planner
+               → 选题方向 + 平台定位 + premise + 推进顺序
+建档期         lore-editor + story-bible
+               → 人物 / 世界 / 地点 / 阵营 / 时间线 / canon
+状态维护       lore-editor + story-state
+               → latest-plot / character-state / continuity-index 等动态真值
+结构期         outline-editor + outline-manager
+               → 全书纲 + 卷纲 + 角色弧线 + 伏笔 / 支线推进
+拆章期         chapter-editor + chapter-planner
+               → 单章目标 + 场景节拍 + 信息释放 + 章末钩子
+创作期         serial-writer + story-writer
+               → 正文新写 / 续写 / 扩写 / 重写
+审稿期         review-editor + continuity-check
+               → 连续性 / 时间线 / 伏笔 / 变更影响检查
+润稿期         polish-editor + humanizer
+               → 文风统一 + 去 AI 味 + 发布前整理
+番茄短篇专线   chief-editor → lore-editor → outline-editor →
+               chapter-editor → serial-writer → review-editor → polish-editor
 ```
 
 ## 工作区目录惯例
@@ -110,28 +117,32 @@
 
 看到下列关键词或任务性质时,优先考虑对应 skill(先调用 `skill` 工具读 SKILL.md 再执行):
 
-- 构思故事、故事核心、一句话概括、五句式大纲 → `outline`
-- 一页纸大纲、完整大纲、分章大纲 → `outline`
-- 人物卡、人物背景、人物设计、新增角色、深化角色 → `character-design`
-- 场景清单、场景规划、拆章、节拍设计 → `scene-plan`
-- 续写、写下一章、写章节、生成章节、批量生成正文 → `chapter-write`
-- 去AI味、人语化、降AI痕 → `humanize-text`
-- 质量评分、综合评估、查毛病、五维质检 → `quality-check`
-- 开篇检查、黄金三章、检查前三章 → `opening-check`(番茄赛道用 `fanqie-opening-three`)
-- 人物一致性、OOC、角色扁平化 → `character-check`
-- 题材/创意/设定审查 → `concept-check`
-- 流水账、无趣章节、节奏拖沓 → `quality-check`
-- 审稿、整体评估、全书诊断 → `novel-review`
-- 雪花写作法、从零写小说、全流程创作 → `snowflake-fiction`
-- 导出小说、转平台格式、番茄格式、起点格式、晋江格式、知乎盐选 → `novel-export`
+- 选题、脑洞、题材方向、平台定位、故事卖点、premise、立项 → `plot-planner`
+- 人物设定、世界观、地点、阵营、时间线、术语、canon、设定建档 → `story-bible`
+- 最新剧情状态、角色即时状态、系统数值、推进游标、continuity-index → `story-state`
+- 全书纲、卷纲、阶段纲、角色弧线、伏笔回收、支线推进、结构修订 → `outline-manager`
+- 单章目标、场景清单、场景规划、拆章、节拍设计、章末钩子 → `chapter-planner`
+- 写正文、续写、扩写、重写、局部改稿、平台风格落稿、批量成稿 → `story-writer`
+- 连续性检查、时间线检查、人设检查、场景状态、伏笔检查、变更影响 → `continuity-check`
+- 去 AI 味、人语化、润色、统一文风、校准语气、精修对白 → `humanizer`
 
-番茄短篇专线(写短篇、男女频、签约向):
+- 番茄短篇 / 男女频短篇 / 自动立项:
+  优先组合 `plot-planner` → `story-bible` → `outline-manager` → `chapter-planner` → `story-writer` → `continuity-check` → `humanizer`
 
-- 拆范文、锁第一人称口吻、18维文风、AI规避规则 → `fanqie-style-genome`
-- 短篇原创IP、核心角色、金手指、6张工程化台账、防漂移底座 → `fanqie-ip-architecture`
-- 番茄黄金三章、前3章成稿、签约开局 → `fanqie-opening-three`
-- 自动续写余下章节、批量生成短篇全本、闭环自检 → `fanqie-short-batch`
-- 发布前终审、签约检查、完读率优化、平台合规、爆款运营 → `fanqie-final-audit`
+- 当前没有单独的内置导出类 skill:
+  导出、发布整理、版本整理一类任务默认由主代理直接处理,或派给最接近的 `polish-editor` / `chief-editor`
+
+## 代理触发词速查
+
+看到下列关键词或任务性质时,优先考虑对应 agent(先用 `agent` 工具读对应 `AGENTS.md` 再决定是否委派):
+
+- 下一步该找谁、项目处于什么阶段、平台定位、推进顺序、改线决策 → `chief-editor`
+- 人物设定、世界观、阵营、地点、时间线、术语、关键场景资料 → `lore-editor`
+- 全书纲、卷纲、角色弧线、伏笔回收、支线推进、结构审计 → `outline-editor`
+- 单章规划、场景节拍、信息释放、开篇设计、章末钩子 → `chapter-editor`
+- 写正文、续写章节、扩写场景、重写段落、按规划落稿 → `serial-writer`
+- 审稿、连续性、时间线、人设、伏笔、返修意见 → `review-editor`
+- 润色、去 AI 味、统一文风、终稿整理、发布前语言打磨 → `polish-editor`
 
 ## 技能调用策略
 
