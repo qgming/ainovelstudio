@@ -106,7 +106,7 @@ describe("workflowStore", () => {
     });
   });
 
-  it("requestStopRun 会中止当前运行、取消工具请求并清空当前 run 日志", async () => {
+  it("requestStopRun 会中止当前运行、取消工具请求并保留暂停进度", async () => {
     const abortController = new AbortController();
 
     useWorkflowStore.setState({
@@ -124,10 +124,29 @@ describe("workflowStore", () => {
     expect(mockInvoke).toHaveBeenCalledWith("cancel_tool_requests", {
       requestIds: ["tool-read-1", "tool-write-2"],
     });
-    expect(mockInvoke).toHaveBeenCalledWith("delete_workflow_run", {
-      workflowId,
-      runId,
-    });
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "save_workflow_run",
+      expect.objectContaining({
+        run: expect.objectContaining({
+          id: runId,
+          status: "paused",
+          stopReason: "paused",
+        }),
+      }),
+    );
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "save_workflow_step_run",
+      expect.objectContaining({
+        stepRun: expect.objectContaining({
+          id: stepRunId,
+          status: "failed",
+        }),
+      }),
+    );
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "delete_workflow_run",
+      expect.anything(),
+    );
 
     const state = useWorkflowStore.getState();
     expect(state.activeRunId).toBeNull();
@@ -135,10 +154,17 @@ describe("workflowStore", () => {
     expect(state.abortController).toBeNull();
     expect(state.inflightToolRequestIds).toEqual([]);
     expect(state.stopRequested).toBe(true);
-    expect(state.currentDetail?.runs).toEqual([]);
-    expect(state.currentDetail?.stepRuns).toEqual([]);
-    expect(state.selectedStepRunId).toBeNull();
-    expect(state.currentDetail?.workflow.lastRunId).toBeNull();
-    expect(state.currentDetail?.workflow.lastRunStatus).toBe("idle");
+    expect(state.currentDetail?.runs[0]).toMatchObject({
+      id: runId,
+      status: "paused",
+      stopReason: "paused",
+    });
+    expect(state.currentDetail?.stepRuns[0]).toMatchObject({
+      id: stepRunId,
+      status: "failed",
+    });
+    expect(state.selectedStepRunId).toBe(stepRunId);
+    expect(state.currentDetail?.workflow.lastRunId).toBe(runId);
+    expect(state.currentDetail?.workflow.lastRunStatus).toBe("paused");
   });
 });

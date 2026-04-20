@@ -1,8 +1,9 @@
 import {
   GitBranch,
+  Pause,
   Play,
+  RotateCcw,
   Settings2,
-  Square,
 } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -13,7 +14,7 @@ import { WorkflowRunsColumn } from "../components/workflow/detail/WorkflowRunsCo
 import { WorkflowSettingsColumn } from "../components/workflow/detail/WorkflowSettingsColumn";
 import { listBookWorkspaces } from "../lib/bookWorkspace/api";
 import { cn } from "../lib/utils";
-import { startWorkflowRun } from "../lib/workflow/engine";
+import { resumeWorkflowRun, startWorkflowRun } from "../lib/workflow/engine";
 import { useIsMobile } from "../hooks/use-mobile";
 import type {
   WorkflowLoopConfig,
@@ -234,6 +235,16 @@ export function WorkflowDetailPage() {
     const preferredRunId = activeRunId ?? selectedRunId;
     return detail.runs.find((item) => item.id === preferredRunId) ?? detail.runs[0] ?? null;
   }, [activeRunId, detail, selectedRunId]);
+  const resumableRun = useMemo(() => {
+    if (!detail) {
+      return null;
+    }
+    return (
+      detail.runs.find((run) => run.id === selectedRunId && (run.status === "paused" || run.status === "failed"))
+      ?? detail.runs.find((run) => run.status === "paused" || run.status === "failed")
+      ?? null
+    );
+  }, [detail, selectedRunId]);
   const selectedRunStepRuns = useMemo(() => {
     if (!detail || !selectedRun) {
       return [] as WorkflowStepRun[];
@@ -578,6 +589,37 @@ export function WorkflowDetailPage() {
     }
   }
 
+  async function handleResumeRun() {
+    if (!detail || runBusy || isRunning || !resumableRun) {
+      return;
+    }
+    try {
+      setRunBusy(true);
+      setPageNotice(null);
+      if (isMobile) {
+        setMobileActiveTab("runs");
+      }
+      await resumeWorkflowRun(detail.workflow.id, resumableRun.id);
+    } catch (error) {
+      setPageNotice(getReadableError(error, "工作流继续失败。"));
+    } finally {
+      setRunBusy(false);
+    }
+  }
+
+  const runActions = isRunning
+    ? [
+        { icon: Pause, label: "暂停", tone: "default" as const, onClick: () => void requestStopRun() },
+      ]
+    : resumableRun
+      ? [
+          { icon: Play, label: runBusy ? "继续中" : "继续", tone: "primary" as const, onClick: () => void handleResumeRun() },
+          { icon: RotateCcw, label: "重新运行", tone: "default" as const, onClick: () => void handleStartRun() },
+        ]
+      : [
+          { icon: Play, label: runBusy ? "运行中" : "运行", tone: "primary" as const, onClick: () => void handleStartRun() },
+        ];
+
   async function handleAddAgentStep(agentId: string) {
     if (!detail || stepBusy) {
       return;
@@ -915,10 +957,7 @@ export function WorkflowDetailPage() {
     <>
       <PageShell
         title={<DetailTitle currentLabel={detail.workflow.name} />}
-        actions={[
-          { icon: Play, label: runBusy || isRunning ? "运行中" : "运行", tone: "primary", onClick: () => void handleStartRun() },
-          { icon: Square, label: "停止", tone: "default", onClick: () => void requestStopRun() },
-        ]}
+        actions={runActions}
         contentClassName="min-h-0 flex-1 overflow-hidden"
       >
         <div className="h-full">

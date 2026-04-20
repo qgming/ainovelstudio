@@ -4,6 +4,7 @@ import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
 import { mergePart } from "../chat/sessionRuntime";
+import { normalizeRecoveredMessageParts } from "../chat/sessionRuntime";
 import { derivePlanningState } from "../agent/planning";
 import { runAgentTurn } from "../agent/session";
 import type { AgentPart } from "../agent/types";
@@ -53,6 +54,13 @@ type WorkflowRuntimeState = {
   latestMessageByType: Map<string, WorkflowMessagePayload>;
   lastReviewResult: WorkflowReviewResult | null;
   lastDecision: WorkflowStepRun["decision"];
+};
+
+type WorkflowRunMode = "resume" | "start";
+
+type WorkflowCursor = {
+  currentStep: WorkflowStepDefinition | null;
+  previousAgentStepRun: WorkflowStepRun | null;
 };
 
 type ChapterWriteMode = "new_chapter" | "rework_current_chapter";
@@ -370,6 +378,90 @@ function updateRuntimeFromStepRun(runtime: WorkflowRuntimeState, stepRun: Workfl
   }
 }
 
+function isCompletedStepRun(stepRun: WorkflowStepRun) {
+  return stepRun.status === "completed";
+}
+
+function sortStepRunsForReplay(stepRuns: WorkflowStepRun[]) {
+  return [...stepRuns].sort((left, right) =>
+    left.loopIndex - right.loopIndex
+    || left.attemptIndex - right.attemptIndex
+    || (left.startedAt ?? 0) - (right.startedAt ?? 0)
+    || left.id.localeCompare(right.id),
+  );
+}
+
+function normalizeInterruptedStepRun(stepRun: WorkflowStepRun): WorkflowStepRun {
+  if (stepRun.status !== "running") {
+    return stepRun;
+  }
+
+  return {
+    ...stepRun,
+    errorMessage: stepRun.errorMessage ?? "执行被中断，继续时会重新执行该步骤。",
+    finishedAt: stepRun.finishedAt ?? getNow(),
+    parts: normalizeRecoveredMessageParts(stepRun.parts),
+    status: "failed",
+  };
+}
+
+function inferNextStepFromCompletedRun(
+  detail: WorkflowDetail,
+  run: WorkflowRun,
+  runtime: WorkflowRuntimeState,
+) {
+  let currentStep: WorkflowStepDefinition | null = resolveInitialStep(detail);
+  let previousAgentStepRun: WorkflowStepRun | null = null;
+  const completedStepRuns = sortStepRunsForReplay(
+    detail.stepRuns.filter((stepRun) => stepRun.runId === run.id && isCompletedStepRun(stepRun)),
+  );
+
+  for (const stepRun of completedStepRuns) {
+    const step = getStepById(detail, stepRun.stepId);
+    if (!step || !currentStep || step.id !== currentStep.id) {
+      continue;
+    }
+
+    runtime.loopIndex = stepRun.loopIndex;
+    runtime.attemptIndex = stepRun.attemptIndex;
+    updateRuntimeFromStepRun(runtime, stepRun);
+    if (step.type === "agent_task" || step.type === "decision") {
+      previousAgentStepRun = stepRun;
+    }
+
+    if (step.type === "start") {
+      currentStep = getStepById(detail, step.nextStepId);
+    } else if (step.type === "agent_task") {
+      currentStep = getStepById(detail, step.nextStepId);
+    } else if (step.type === "decision") {
+      const evaluation = evaluateDecisionNode({
+        attemptIndex: stepRun.attemptIndex,
+        decisionStepRun: stepRun,
+        step,
+      });
+      runtime.attemptIndex = evaluation.nextAttemptIndex;
+      currentStep = getStepById(detail, evaluation.nextStepId);
+    } else if (step.type === "end") {
+      const nextLoopIndex = stepRun.loopIndex + 1;
+      const shouldContinue =
+        step.loopBehavior === "continue_if_possible"
+        && step.loopTargetStepId
+        && hasRemainingLoops(run.maxLoops, nextLoopIndex)
+        && stepRun.decision?.outcome === "retry";
+      if (!shouldContinue) {
+        currentStep = null;
+        break;
+      }
+      runtime.loopIndex = nextLoopIndex;
+      runtime.attemptIndex = 1;
+      runtime.lastReviewResult = null;
+      currentStep = getStepById(detail, step.loopTargetStepId);
+    }
+  }
+
+  return { currentStep, previousAgentStepRun } satisfies WorkflowCursor;
+}
+
 function createSystemStepRun(params: {
   detail: WorkflowDetail;
   run: WorkflowRun;
@@ -552,8 +644,30 @@ async function executeConfiguredStep(params: {
       );
     },
   });
-  for await (const part of stream) {
-    parts = mergePart(parts, part);
+
+  try {
+    for await (const part of stream) {
+      parts = mergePart(parts, part);
+      await useWorkflowStore.getState().saveStepRun({
+        ...stepRunBase,
+        parts,
+      });
+    }
+  } catch (error) {
+    await useWorkflowStore.getState().saveStepRun({
+      ...stepRunBase,
+      errorMessage: error instanceof Error ? error.message : "步骤执行失败。",
+      finishedAt: getNow(),
+      parts: normalizeRecoveredMessageParts(parts),
+      status: "failed",
+      usage,
+    });
+    throw error;
+  }
+
+  const recoveredParts = normalizeRecoveredMessageParts(parts);
+  if (recoveredParts !== parts) {
+    parts = recoveredParts;
     await useWorkflowStore.getState().saveStepRun({
       ...stepRunBase,
       parts,
@@ -636,6 +750,8 @@ function buildCompletionSummary(stopReason: Exclude<WorkflowRunStopReason, null>
       return `工作流已顺利完成，共执行 ${runtime.loopIndex} 轮。`;
     case "manual_stop":
       return "用户手动停止了工作流运行。";
+    case "paused":
+      return "工作流已暂停，可稍后从当前进度继续。";
     case "review_failed":
       return "审查失败，且当前工作流未提供失败分支，运行结束。";
     case "end_node_reached":
@@ -651,9 +767,20 @@ function resolveInitialStep(detail: WorkflowDetail) {
   return detail.steps.find((step): step is WorkflowStartStepDefinition => step.type === "start") ?? detail.steps[0] ?? null;
 }
 
-export async function startWorkflowRun(workflowId: string) {
+function findResumableRun(detail: WorkflowDetail, runId?: string | null) {
+  if (runId) {
+    const run = detail.runs.find((item) => item.id === runId);
+    if (run?.status === "paused" || run?.status === "failed") {
+      return run;
+    }
+  }
+
+  return detail.runs.find((run) => run.status === "paused" || run.status === "failed") ?? null;
+}
+
+async function loadWorkflowDetailForRun(workflowId: string) {
   const store = useWorkflowStore.getState();
-  const detail = store.currentDetail?.workflow.id === workflowId
+  return store.currentDetail?.workflow.id === workflowId
     ? store.currentDetail
     : await (async () => {
         await store.loadWorkflowDetail(workflowId);
@@ -663,20 +790,25 @@ export async function startWorkflowRun(workflowId: string) {
         }
         return nextDetail;
       })();
+}
 
-  if (!detail.workflow.workspaceBinding) {
-    throw new Error("请先为工作流绑定一本书。");
-  }
-
+async function runWorkflowFromCursor(params: {
+  detail: WorkflowDetail;
+  initialCursor: WorkflowCursor;
+  mode: WorkflowRunMode;
+  run: WorkflowRun;
+  runtime: WorkflowRuntimeState;
+}) {
+  const { detail, initialCursor, mode, runtime } = params;
+  const store = useWorkflowStore.getState();
   const abortController = new AbortController();
-  let run = buildInitialRun(detail);
-  const runtime: WorkflowRuntimeState = {
-    loopIndex: 1,
-    attemptIndex: 1,
-    latestStepRunsByStepId: new Map(),
-    latestMessageByType: new Map(),
-    lastReviewResult: null,
-    lastDecision: null,
+  let run: WorkflowRun = {
+    ...params.run,
+    errorMessage: null,
+    finishedAt: null,
+    status: "running" as const,
+    stopReason: null,
+    summary: mode === "resume" ? "继续执行中。" : null,
   };
   await store.saveRun(run);
   store.setRunningState({
@@ -688,8 +820,8 @@ export async function startWorkflowRun(workflowId: string) {
   });
 
   try {
-    let currentStep: WorkflowStepDefinition | null = resolveInitialStep(detail);
-    let previousAgentStepRun: WorkflowStepRun | null = null;
+    let currentStep = initialCursor.currentStep;
+    let previousAgentStepRun = initialCursor.previousAgentStepRun;
 
     while (currentStep) {
       if (useWorkflowStore.getState().stopRequested) {
@@ -715,8 +847,8 @@ export async function startWorkflowRun(workflowId: string) {
         updateRuntimeFromStepRun(runtime, stepRun);
         run = {
           ...run,
-          currentStepRunId: stepRun.id,
           currentLoopIndex: runtime.loopIndex,
+          currentStepRunId: stepRun.id,
         };
         await store.saveRun(run);
         currentStep = getStepById(detail, currentStep.nextStepId);
@@ -725,27 +857,27 @@ export async function startWorkflowRun(workflowId: string) {
 
       if (currentStep.type === "agent_task") {
         const chapterWriteMode: ChapterWriteMode | undefined =
-          currentStep.type === "agent_task" && currentStep.name.includes("章节写作")
+          currentStep.name.includes("章节写作")
             ? runtime.attemptIndex > 1
               ? "rework_current_chapter"
               : "new_chapter"
             : undefined;
         previousAgentStepRun = await executeConfiguredStep({
+          abortSignal: abortController.signal,
+          chapterWriteMode,
           detail,
           outputMode: currentStep.outputMode,
-          run,
-          step: currentStep,
-          runtime,
           previousResult: previousAgentStepRun?.resultText ?? null,
           reviewResult: runtime.lastReviewResult,
-          chapterWriteMode,
-          abortSignal: abortController.signal,
+          run,
+          runtime,
+          step: currentStep,
         });
         updateRuntimeFromStepRun(runtime, previousAgentStepRun);
         run = {
           ...run,
-          currentStepRunId: previousAgentStepRun.id,
           currentLoopIndex: runtime.loopIndex,
+          currentStepRunId: previousAgentStepRun.id,
         };
         await store.saveRun(run);
         currentStep = getStepById(detail, currentStep.nextStepId);
@@ -759,35 +891,36 @@ export async function startWorkflowRun(workflowId: string) {
         }
         const decisionStepRun = await executeConfiguredStep({
           abortSignal: abortController.signal,
-          step: currentStep,
           detail,
           outputMode: "review_json",
           previousResult: sourceStepRun.resultText ?? null,
           reviewResult: runtime.lastReviewResult,
           run,
           runtime,
+          step: currentStep,
         });
         const evaluation = evaluateDecisionNode({
-          step: currentStep,
-          decisionStepRun,
           attemptIndex: runtime.attemptIndex,
+          decisionStepRun,
+          step: currentStep,
         });
         await store.saveStepRun(evaluation.stepRun);
         updateRuntimeFromStepRun(runtime, evaluation.stepRun);
         run = {
           ...run,
-          currentStepRunId: evaluation.stepRun.id,
           currentLoopIndex: runtime.loopIndex,
+          currentStepRunId: evaluation.stepRun.id,
         };
         await store.saveRun(run);
 
         runtime.attemptIndex = evaluation.nextAttemptIndex;
-        run = {
-          ...run,
-          currentLoopIndex: runtime.loopIndex,
-        };
+        run = { ...run, currentLoopIndex: runtime.loopIndex };
         if (evaluation.endReason) {
-          run = applyRunCompletion(run, evaluation.endReason, buildCompletionSummary(evaluation.endReason, runtime));
+          run = applyRunCompletion(
+            run,
+            evaluation.endReason,
+            buildCompletionSummary(evaluation.endReason, runtime),
+          );
           await store.saveRun(run);
           break;
         }
@@ -821,8 +954,8 @@ export async function startWorkflowRun(workflowId: string) {
         updateRuntimeFromStepRun(runtime, stepRun);
         run = {
           ...run,
-          currentStepRunId: stepRun.id,
           currentLoopIndex: runtime.loopIndex,
+          currentStepRunId: stepRun.id,
         };
         await store.saveRun(run);
 
@@ -834,14 +967,12 @@ export async function startWorkflowRun(workflowId: string) {
           continue;
         }
 
+        const stopReason =
+          currentStep.stopReason === "completed" ? "end_node_reached" : currentStep.stopReason;
         run = applyRunCompletion(
           run,
-          currentStep.stopReason === "completed" ? "end_node_reached" : currentStep.stopReason,
-          buildCompletionSummary(
-            currentStep.stopReason === "completed" ? "end_node_reached" : currentStep.stopReason,
-            runtime,
-            currentStep,
-          ),
+          stopReason,
+          buildCompletionSummary(stopReason, runtime, currentStep),
         );
         await store.saveRun(run);
         break;
@@ -854,15 +985,24 @@ export async function startWorkflowRun(workflowId: string) {
     }
   } catch (error) {
     if (useWorkflowStore.getState().stopRequested || isAbortError(error)) {
+      run = {
+        ...run,
+        finishedAt: getNow(),
+        status: "paused",
+        stopReason: "paused",
+        summary: buildCompletionSummary("paused", runtime),
+      };
+      await store.saveRun(run);
       return;
     }
+
     const message = error instanceof Error ? error.message : "工作流运行失败。";
     run = {
       ...run,
-      status: "failed",
-      finishedAt: getNow(),
-      stopReason: "error",
       errorMessage: message,
+      finishedAt: getNow(),
+      status: "failed",
+      stopReason: "error",
       summary: buildCompletionSummary("error", runtime),
     };
     await store.saveRun(run);
@@ -870,10 +1010,72 @@ export async function startWorkflowRun(workflowId: string) {
   } finally {
     store.setRunningState({
       activeRunId: null,
-      isRunning: false,
-      stopRequested: false,
       abortController: null,
       inflightToolRequestIds: [],
+      isRunning: false,
+      stopRequested: false,
     });
   }
+}
+
+export async function startWorkflowRun(workflowId: string) {
+  const detail = await loadWorkflowDetailForRun(workflowId);
+  if (!detail.workflow.workspaceBinding) {
+    throw new Error("请先为工作流绑定一本书。");
+  }
+
+  const run = buildInitialRun(detail);
+  const runtime: WorkflowRuntimeState = {
+    loopIndex: 1,
+    attemptIndex: 1,
+    latestStepRunsByStepId: new Map(),
+    latestMessageByType: new Map(),
+    lastReviewResult: null,
+    lastDecision: null,
+  };
+  await runWorkflowFromCursor({
+    detail,
+    initialCursor: {
+      currentStep: resolveInitialStep(detail),
+      previousAgentStepRun: null,
+    },
+    mode: "start",
+    run,
+    runtime,
+  });
+}
+
+export async function resumeWorkflowRun(workflowId: string, runId?: string | null) {
+  const detail = await loadWorkflowDetailForRun(workflowId);
+  const run = findResumableRun(detail, runId);
+  if (!run) {
+    throw new Error("没有可继续的工作流运行。");
+  }
+
+  const normalizedStepRuns = detail.stepRuns
+    .filter((stepRun) => stepRun.runId === run.id)
+    .map(normalizeInterruptedStepRun);
+  for (const stepRun of normalizedStepRuns) {
+    if (stepRun.status === "failed") {
+      await useWorkflowStore.getState().saveStepRun(stepRun);
+    }
+  }
+
+  const refreshedDetail = await loadWorkflowDetailForRun(workflowId);
+  const runtime: WorkflowRuntimeState = {
+    loopIndex: run.currentLoopIndex || 1,
+    attemptIndex: 1,
+    latestStepRunsByStepId: new Map(),
+    latestMessageByType: new Map(),
+    lastReviewResult: null,
+    lastDecision: null,
+  };
+  const cursor = inferNextStepFromCompletedRun(refreshedDetail, run, runtime);
+  await runWorkflowFromCursor({
+    detail: refreshedDetail,
+    initialCursor: cursor,
+    mode: "resume",
+    run,
+    runtime,
+  });
 }

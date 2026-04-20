@@ -35,6 +35,8 @@ function formatRunStatus(status: string) {
       return "排队中";
     case "running":
       return "运行中";
+    case "paused":
+      return "已暂停";
     case "completed":
       return "已完成";
     case "failed":

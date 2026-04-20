@@ -17,10 +17,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 vi.mock("../lib/workflow/engine", () => ({
+  resumeWorkflowRun: vi.fn(),
   startWorkflowRun: vi.fn(),
 }));
 
 import { WorkflowDetailPage } from "./WorkflowDetailPage";
+import { resumeWorkflowRun, startWorkflowRun } from "../lib/workflow/engine";
 import { useSubAgentStore } from "../stores/subAgentStore";
 import { useWorkflowStore } from "../stores/workflowStore";
 
@@ -88,6 +90,35 @@ function createWorkflowDetail(steps: WorkflowDetail["steps"] = [
   };
 }
 
+function createPausedWorkflowDetail() {
+  const detail = createWorkflowDetail();
+  return {
+    ...detail,
+    workflow: {
+      ...detail.workflow,
+      lastRunId: "run-paused",
+      lastRunStatus: "paused" as const,
+    },
+    runs: [
+      {
+        id: "run-paused",
+        workflowId,
+        status: "paused" as const,
+        startedAt: 1710000000000,
+        finishedAt: 1710000001000,
+        workspaceBinding: initialBinding,
+        loopConfigSnapshot: { maxLoops: 1 },
+        currentLoopIndex: 1,
+        maxLoops: 1,
+        currentStepRunId: null,
+        stopReason: "paused" as const,
+        summary: "工作流已暂停，可稍后从当前进度继续。",
+        errorMessage: null,
+      },
+    ],
+  } satisfies WorkflowDetail;
+}
+
 type RenderPageOverrides = {
   bindWorkspace?: (
     workflowId: string,
@@ -108,6 +139,8 @@ describe("WorkflowDetailPage", () => {
   beforeEach(() => {
     mockViewport(1280);
     mockInvoke.mockReset();
+    vi.mocked(resumeWorkflowRun).mockReset();
+    vi.mocked(startWorkflowRun).mockReset();
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "list_book_workspaces") {
         return [
@@ -244,15 +277,27 @@ describe("WorkflowDetailPage", () => {
 
     renderPage(detail);
 
-    expect(await screen.findByRole("navigation", { name: "工作流详情导航" })).toBeInTheDocument();
-    expect(screen.getByText("工作流")).toBeInTheDocument();
-
-    const mobileNav = screen.getByRole("navigation", { name: "工作流详情导航" });
+    const mobileNav = await screen.findByRole("navigation", { name: "工作流详情导航" });
+    expect(mobileNav).toBeInTheDocument();
+    expect(within(mobileNav).getByText("工作流")).toBeInTheDocument();
 
     fireEvent.click(within(mobileNav).getByRole("button", { name: "设置" }));
     expect(screen.getByText("基本设置")).toBeInTheDocument();
 
     fireEvent.click(within(mobileNav).getByRole("button", { name: "运行" }));
     expect(screen.getByText("运行后，这里会显示执行时间线。")).toBeInTheDocument();
+  });
+
+  it("存在暂停运行时显示继续与重新运行操作", async () => {
+    const detail = createPausedWorkflowDetail();
+    renderPage(detail);
+
+    fireEvent.click(await screen.findByRole("button", { name: "继续" }));
+
+    await waitFor(() => {
+      expect(resumeWorkflowRun).toHaveBeenCalledWith(workflowId, "run-paused");
+    });
+    expect(screen.getByRole("button", { name: "重新运行" })).toBeInTheDocument();
+    expect(startWorkflowRun).not.toHaveBeenCalled();
   });
 });

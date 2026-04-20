@@ -1,6 +1,13 @@
 import type { AgentPart, AgentUsage, AgentRunStatus } from "../agent/types";
 
-export type WorkflowRunStatus = "idle" | "queued" | "running" | "completed" | "failed" | "stopped";
+export type WorkflowRunStatus =
+  | "idle"
+  | "queued"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "stopped";
 
 export type WorkflowStepType = "start" | "agent_task" | "decision" | "end";
 
@@ -38,6 +45,7 @@ export type WorkflowTeamMember = {
 export type WorkflowRunStopReason =
   | "completed"
   | "manual_stop"
+  | "paused"
   | "end_node_reached"
   | "error"
   | "review_failed"

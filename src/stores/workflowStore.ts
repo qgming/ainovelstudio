@@ -6,7 +6,6 @@ import {
   addWorkflowTeamMember,
   bindWorkflowWorkspace,
   createWorkflow,
-  deleteWorkflowRun,
   deleteWorkflow as deleteWorkflowApi,
   exportWorkflowZip as exportWorkflowZipApi,
   getWorkflowDetail,
@@ -120,7 +119,7 @@ function buildInitialState(): WorkflowStoreState {
   };
 }
 
-function removeRunFromDetail(
+function updatePausedRunInDetail(
   detail: WorkflowDetail | null,
   runId: string,
   selectedStepRunId: string | null,
@@ -132,25 +131,41 @@ function removeRunFromDetail(
     };
   }
 
-  const removedStepRunIds = new Set(
-    detail.stepRuns.filter((stepRun) => stepRun.runId === runId).map((stepRun) => stepRun.id),
-  );
+  const now = Date.now();
   const nextDetail: WorkflowDetail = {
     ...detail,
     workflow: {
       ...detail.workflow,
-      lastRunId: detail.workflow.lastRunId === runId ? null : detail.workflow.lastRunId,
-      lastRunStatus:
-        detail.workflow.lastRunId === runId ? "idle" : detail.workflow.lastRunStatus,
+      lastRunId: runId,
+      lastRunStatus: "paused",
     },
-    runs: detail.runs.filter((run) => run.id !== runId),
-    stepRuns: detail.stepRuns.filter((stepRun) => stepRun.runId !== runId),
+    runs: detail.runs.map((run) =>
+      run.id === runId
+        ? {
+            ...run,
+            errorMessage: null,
+            finishedAt: now,
+            status: "paused",
+            stopReason: "paused",
+            summary: "工作流已暂停，可稍后从当前进度继续。",
+          }
+        : run,
+    ),
+    stepRuns: detail.stepRuns.map((stepRun) =>
+      stepRun.runId === runId && stepRun.status === "running"
+        ? {
+            ...stepRun,
+            errorMessage: "工作流已暂停，继续时会重新执行该步骤。",
+            finishedAt: now,
+            status: "failed",
+          }
+        : stepRun,
+    ),
   };
 
   return {
     currentDetail: nextDetail,
-    selectedStepRunId:
-      selectedStepRunId && removedStepRunIds.has(selectedStepRunId) ? null : selectedStepRunId,
+    selectedStepRunId,
   };
 }
 
@@ -374,7 +389,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     state.abortController?.abort();
     const requestIds = [...state.inflightToolRequestIds];
     set((current) => ({
-      ...removeRunFromDetail(current.currentDetail, runId, current.selectedStepRunId),
+      ...updatePausedRunInDetail(current.currentDetail, runId, current.selectedStepRunId),
       activeRunId: null,
       isRunning: false,
       abortController: null,
@@ -382,9 +397,15 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       stopRequested: true,
     }));
 
+    const pausedRun = get().currentDetail?.runs.find((run) => run.id === runId);
+    const failedStepRuns =
+      get().currentDetail?.stepRuns.filter(
+        (stepRun) => stepRun.runId === runId && stepRun.status === "failed",
+      ) ?? [];
     await Promise.allSettled([
       cancelToolRequests(requestIds),
-      state.currentDetail ? deleteWorkflowRun(state.currentDetail.workflow.id, runId) : Promise.resolve(),
+      pausedRun ? saveWorkflowRun(pausedRun) : Promise.resolve(),
+      ...failedStepRuns.map((stepRun) => saveWorkflowStepRun(stepRun)),
     ]);
   },
   clearStopRequest: () => set({ stopRequested: false }),

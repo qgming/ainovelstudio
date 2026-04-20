@@ -109,7 +109,7 @@ pub(crate) fn build_workflow(
 pub(crate) fn validate_run_status(status: &str) -> CommandResult<()> {
     if matches!(
         status,
-        "idle" | "queued" | "running" | "completed" | "failed" | "stopped"
+        "idle" | "queued" | "running" | "paused" | "completed" | "failed" | "stopped"
     ) {
         Ok(())
     } else {
