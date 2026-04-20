@@ -181,6 +181,61 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
+  it("browse 支持按类型、扩展名和数量筛选子项", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTree.mockResolvedValue({
+      children: [
+        {
+          extension: "md",
+          kind: "file",
+          name: "章节A.md",
+          path: "C:/books/北境余烬/章节A.md",
+        },
+        {
+          extension: "txt",
+          kind: "file",
+          name: "灵感.txt",
+          path: "C:/books/北境余烬/灵感.txt",
+        },
+        { kind: "directory", name: "资料", path: "C:/books/北境余烬/资料" },
+      ],
+      kind: "directory",
+      name: "北境余烬",
+      path: "C:/books/北境余烬",
+    });
+
+    const result = await toolset.browse.execute({
+      extensions: ["md"],
+      kind: "file",
+      limit: 1,
+      mode: "list",
+      sortBy: "type",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      summary: [
+        "." + " 下共有 1 项：",
+        "- [文件] 章节A.md",
+      ].join("\n"),
+      data: {
+        children: [
+          {
+            childCount: 0,
+            extension: "md",
+            kind: "file",
+            name: "章节A.md",
+            path: "章节A.md",
+          },
+        ],
+        kind: "directory",
+        name: "北境余烬",
+        path: ".",
+      },
+    });
+  });
+
   it("search 会返回过滤后的结构化命中结果", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
@@ -214,8 +269,11 @@ describe("createWorkspaceToolset", () => {
         {
           lineNumber: 12,
           lineText: "主角在雪夜第一次听见钟声。",
+          matchEnd: 12,
+          matchStart: 10,
           matchType: "content",
           path: "章节/第一卷/第1章.md",
+          score: expect.any(Number),
         },
       ],
     });
@@ -241,6 +299,210 @@ describe("createWorkspaceToolset", () => {
         "[章节/第一卷/第1章.md | lines 2-3]",
         "2 | 第二行",
         "3 | 第三行",
+      ].join("\n"),
+    });
+  });
+
+  it("search 支持大小写、整词、上下文和每文件限额", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockSearchWorkspaceContent.mockResolvedValue([
+      {
+        matchType: "content",
+        path: "章节/第一卷/第1章.md",
+        lineNumber: 2,
+        lineText: "hero HERO hero",
+      },
+      {
+        matchType: "content",
+        path: "章节/第一卷/第1章.md",
+        lineNumber: 4,
+        lineText: "hero again",
+      },
+      {
+        matchType: "content",
+        path: "章节/第一卷/第2章.md",
+        lineNumber: 3,
+        lineText: "heroic ending",
+      },
+    ]);
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一行\nhero HERO hero\n第三行\nhero again\n尾声",
+    );
+
+    const result = await toolset.search.execute({
+      afterLines: 1,
+      beforeLines: 1,
+      caseSensitive: true,
+      maxPerFile: 1,
+      query: "hero",
+      scope: "content",
+      wholeWord: true,
+    });
+
+    expect(mockReadWorkspaceTextFile).toHaveBeenCalledTimes(1);
+    expect(mockReadWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第一卷/第1章.md",
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary: [
+        "共找到 1 条与“hero”相关的结果：",
+        "- [内容] 章节/第一卷/第1章.md:2 hero HERO hero (上下文 1-3)",
+      ].join("\n"),
+      data: [
+        {
+          contextEndLine: 3,
+          contextStartLine: 1,
+          contextText: [
+            "[章节/第一卷/第1章.md | lines 1-3]",
+            "1 | 第一行",
+            "2 | hero HERO hero",
+            "3 | 第三行",
+          ].join("\n"),
+          lineNumber: 2,
+          lineText: "hero HERO hero",
+          matchEnd: 4,
+          matchStart: 0,
+          matchType: "content",
+          path: "章节/第一卷/第1章.md",
+          score: expect.any(Number),
+        },
+      ],
+    });
+  });
+
+  it("search 支持 all_terms 模式的多词匹配", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockSearchWorkspaceContent
+      .mockResolvedValueOnce([
+        {
+          matchType: "content",
+          path: "章节/第一卷/第1章.md",
+          lineNumber: 8,
+          lineText: "hero 与 bell 同时出现",
+        },
+        {
+          matchType: "content",
+          path: "章节/第一卷/第1章.md",
+          lineNumber: 10,
+          lineText: "只有 hero",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          matchType: "content",
+          path: "章节/第一卷/第1章.md",
+          lineNumber: 8,
+          lineText: "hero 与 bell 同时出现",
+        },
+        {
+          matchType: "content",
+          path: "章节/第一卷/第2章.md",
+          lineNumber: 2,
+          lineText: "只有 bell",
+        },
+      ]);
+
+    const result = await toolset.search.execute({
+      matchMode: "all_terms",
+      query: "hero bell",
+      scope: "content",
+    });
+
+    expect(mockSearchWorkspaceContent).toHaveBeenNthCalledWith(
+      1,
+      rootPath,
+      "hero",
+      expect.any(Number),
+      undefined,
+    );
+    expect(mockSearchWorkspaceContent).toHaveBeenNthCalledWith(
+      2,
+      rootPath,
+      "bell",
+      expect.any(Number),
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary: [
+        "共找到 1 条与“hero bell”相关的结果：",
+        "- [内容] 章节/第一卷/第1章.md:8 hero 与 bell 同时出现",
+      ].join("\n"),
+      data: [
+        {
+          lineNumber: 8,
+          lineText: "hero 与 bell 同时出现",
+          matchEnd: 4,
+          matchStart: 0,
+          matchType: "content",
+          path: "章节/第一卷/第1章.md",
+          score: expect.any(Number),
+        },
+      ],
+    });
+  });
+
+  it("read 支持按锚点读取附近行段", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一行\n铺垫句\n主角抬头看向夜空\n情绪落点\n尾声",
+    );
+
+    const result = await toolset.read.execute({
+      afterLines: 1,
+      anchor: "主角抬头",
+      beforeLines: 1,
+      mode: "anchor_range",
+      path: "章节/第一卷/第1章.md",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      summary: [
+        "[章节/第一卷/第1章.md | lines 2-4]",
+        "2 | 铺垫句",
+        "3 | 主角抬头看向夜空",
+        "4 | 情绪落点",
+      ].join("\n"),
+    });
+  });
+
+  it("read 支持按 Markdown 标题读取整段内容", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      [
+        "# 卷一",
+        "卷首说明",
+        "## 第二幕",
+        "第二幕正文",
+        "### 小节",
+        "小节正文",
+        "## 第三幕",
+        "第三幕正文",
+      ].join("\n"),
+    );
+
+    const result = await toolset.read.execute({
+      heading: "第二幕",
+      mode: "heading_range",
+      path: "05-完整大纲.md",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      summary: [
+        "[05-完整大纲.md | lines 3-6]",
+        "3 | ## 第二幕",
+        "4 | 第二幕正文",
+        "5 | ### 小节",
+        "6 | 小节正文",
       ].join("\n"),
     });
   });
@@ -312,6 +574,109 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
+  it("edit 支持按行段整体替换文本", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一行\n第二行\n第三行\n第四行\n",
+    );
+
+    const result = await toolset.edit.execute({
+      action: "replace_lines",
+      content: "替换后的第二行\n替换后的第三行",
+      endLine: 3,
+      path: "章节/第一卷/第1章.md",
+      startLine: 2,
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第一卷/第1章.md",
+      "第一行\n替换后的第二行\n替换后的第三行\n第四行\n",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已更新 章节/第一卷/第1章.md（replace_lines，行 2-3）。",
+    });
+  });
+
+  it("edit 支持按锚点范围整体替换文本", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一行\n铺垫句\n主角抬头看向夜空\n情绪落点\n尾声",
+    );
+
+    const result = await toolset.edit.execute({
+      action: "replace_anchor_range",
+      afterLines: 1,
+      anchor: "主角抬头",
+      beforeLines: 1,
+      content: "新的场景段落\n新的情绪落点",
+      path: "章节/第一卷/第1章.md",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第一卷/第1章.md",
+      "第一行\n新的场景段落\n新的情绪落点\n尾声",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已更新 章节/第一卷/第1章.md（replace_anchor_range，行 2-4）。",
+    });
+  });
+
+  it("edit 支持按 Markdown 标题块整体替换文本", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      [
+        "# 卷一",
+        "卷首说明",
+        "## 第二幕",
+        "第二幕正文",
+        "### 小节",
+        "小节正文",
+        "## 第三幕",
+        "第三幕正文",
+      ].join("\n"),
+    );
+
+    const result = await toolset.edit.execute({
+      action: "replace_heading_range",
+      content: "## 第二幕\n重写后的第二幕正文",
+      heading: "第二幕",
+      path: "05-完整大纲.md",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "05-完整大纲.md",
+      [
+        "# 卷一",
+        "卷首说明",
+        "## 第二幕",
+        "重写后的第二幕正文",
+        "## 第三幕",
+        "第三幕正文",
+      ].join("\n"),
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已更新 05-完整大纲.md（replace_heading_range，行 3-6）。",
+    });
+  });
+
   it("json 支持按指针局部更新数据", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
@@ -343,6 +708,78 @@ describe("createWorkspaceToolset", () => {
         path: "正文/创作状态追踪器.json",
         pointer: "/currentChapter",
         value: "第002章",
+      },
+    });
+  });
+
+  it("json 支持批量执行多个局部操作并只写回一次", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      [
+        "{",
+        '  "stage": "构思期",',
+        '  "tags": ["悬疑"],',
+        '  "meta": {',
+        '    "draft": true,',
+        '    "owner": "A"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await toolset.json.execute({
+      action: "batch",
+      operations: [
+        { action: "set", pointer: "/stage", value: "写作期" },
+        { action: "append", pointer: "/tags", value: "反转" },
+        { action: "merge", pointer: "/meta", value: { updated: true } },
+        { action: "delete", pointer: "/meta/draft" },
+      ],
+      path: "正文/创作状态追踪器.json",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledTimes(1);
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "正文/创作状态追踪器.json",
+      [
+        "{",
+        '  "stage": "写作期",',
+        '  "tags": [',
+        '    "悬疑",',
+        '    "反转"',
+        "  ],",
+        '  "meta": {',
+        '    "owner": "A",',
+        '    "updated": true',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary:
+        "已批量更新 正文/创作状态追踪器.json 中 4 个 JSON 操作。",
+      data: {
+        action: "batch",
+        operations: [
+          { action: "set", pointer: "/stage", value: "写作期" },
+          { action: "append", pointer: "/tags", value: ["悬疑", "反转"] },
+          {
+            action: "merge",
+            pointer: "/meta",
+            value: { draft: true, owner: "A", updated: true },
+          },
+          { action: "delete", deleted: true, pointer: "/meta/draft" },
+        ],
+        operationsApplied: 4,
+        path: "正文/创作状态追踪器.json",
       },
     });
   });
@@ -472,6 +909,102 @@ describe("createGlobalToolset", () => {
     );
   });
 
+  it("web_fetch 支持按标题块提取网页内容", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: [
+        "<html><head><title>教程</title></head><body>",
+        "<main>",
+        "<h2>概览</h2>",
+        "<p>概览部分的正文内容足够长，方便被正文提取器识别并保留下来。</p>",
+        "<h2>安装</h2>",
+        "<p>安装步骤第一段内容足够长，适合被 heading_range 选中。</p>",
+        "<p>安装步骤第二段内容同样足够长，用于验证同一标题块会连续提取。</p>",
+        "<h2>配置</h2>",
+        "<p>配置部分正文。</p>",
+        "</main>",
+        "</body></html>",
+      ].join(""),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.web_fetch.execute({
+      heading: "安装",
+      mode: "heading_range",
+      url: "https://example.com/docs/install",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        success: true,
+        mode: "heading_range",
+        selectedBlockCount: 3,
+        selectedBlockStart: 3,
+        title: "教程",
+        url: "https://example.com/docs/install",
+      },
+    });
+    expect((result.data as { content: string }).content).toContain("安装");
+    expect((result.data as { content: string }).content).toContain("安装步骤第一段");
+    expect((result.data as { content: string }).content).not.toContain("概览部分");
+    expect((result.data as { content: string }).content).not.toContain("配置部分");
+  });
+
+  it("web_fetch 可提取结构化链接和表格", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: [
+        "<html><head><title>资料页</title></head><body>",
+        "<main>",
+        "<p>这是一段足够长的资料页正文，用于保证正文抽取结果不为空。</p>",
+        '<a href="/guide">指南</a>',
+        '<a href="https://example.com/guide">指南重复</a>',
+        '<a href="mailto:team@example.com">邮件</a>',
+        "<table>",
+        "<caption>平台对比</caption>",
+        "<thead><tr><th>平台</th><th>特征</th></tr></thead>",
+        "<tbody>",
+        "<tr><td>A站</td><td>强钩子</td></tr>",
+        "<tr><td>B站</td><td>快节奏</td></tr>",
+        "</tbody>",
+        "</table>",
+        "</main>",
+        "</body></html>",
+      ].join(""),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.web_fetch.execute({
+      includeLinks: true,
+      includeTables: true,
+      url: "https://example.com/articles/report",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      summary:
+        "已读取网页《资料页》。 正文长度：28 字符。 结构化链接：1 条。 结构化表格：1 个。 当前结果为完整抽取正文。",
+      data: {
+        links: [{ text: "指南", url: "https://example.com/guide" }],
+        tables: [
+          {
+            caption: "平台对比",
+            headers: ["平台", "特征"],
+            rows: [
+              ["A站", "强钩子"],
+              ["B站", "快节奏"],
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it("web_search 会在前一个实例失败后自动切换到下一个实例", async () => {
     mockForwardProviderRequestViaTauri
       .mockResolvedValueOnce({
@@ -515,6 +1048,65 @@ describe("createGlobalToolset", () => {
         success: true,
         instance: "https://search-b.example",
         totalCount: 1,
+      },
+    });
+  });
+
+  it("web_search 支持按站点过滤并去重结果", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: [
+        '<article class="result">',
+        '<h3><a href="https://docs.example.com/post-1">官方文档结果</a></h3>',
+        '<p class="content">来自官方站点。</p>',
+        "</article>",
+        '<article class="result">',
+        '<h3><a href="https://other.example.com/post-2">第三方结果</a></h3>',
+        '<p class="content">来自第三方站点。</p>',
+        "</article>",
+        '<article class="result">',
+        '<h3><a href="https://docs.example.com/post-1">官方文档结果重复</a></h3>',
+        '<p class="content">重复链接。</p>',
+        "</article>",
+      ].join(""),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.web_search.execute({
+      domains: ["docs.example.com"],
+      limit: 5,
+      query: "工具文档",
+    });
+
+    expect(mockForwardProviderRequestViaTauri).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
+        Accept: "text/html,application/xhtml+xml",
+      }),
+      method: "GET",
+      url: expect.stringContaining(
+        "q=%E5%B7%A5%E5%85%B7%E6%96%87%E6%A1%A3+site%3Adocs.example.com",
+      ),
+    });
+    expect(result).toEqual({
+      ok: true,
+      summary:
+        "已搜索“工具文档 site:docs.example.com”，通过 https://search-a.example 返回 1 条结果。",
+      data: {
+        success: true,
+        query: "工具文档 site:docs.example.com",
+        provider: "searxng",
+        instance: "https://search-a.example",
+        totalCount: 1,
+        results: [
+          {
+            url: "https://docs.example.com/post-1",
+            title: "官方文档结果",
+            snippet: "来自官方站点。",
+            source: "https://docs.example.com/post-1",
+          },
+        ],
       },
     });
   });

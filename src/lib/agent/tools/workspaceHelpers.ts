@@ -7,12 +7,21 @@ import {
 
 export type BrowseMode = "list" | "stat" | "tree";
 export type SearchScope = "all" | "content" | "names";
-export type ReadMode = "full" | "head" | "range" | "tail";
+export type ReadMode =
+  | "anchor_range"
+  | "full"
+  | "head"
+  | "heading_range"
+  | "range"
+  | "tail";
 export type EditAction =
   | "append"
   | "insert_after"
   | "insert_before"
   | "prepend"
+  | "replace_anchor_range"
+  | "replace_heading_range"
+  | "replace_lines"
   | "replace";
 export type PathAction =
   | "create_file"
@@ -54,7 +63,14 @@ export function formatSearchSummary(
     `共找到 ${matches.length} 条与“${query}”相关的结果：`,
     ...matches.map((match) => {
       if (match.matchType === "content") {
-        return `- [内容] ${match.path}:${match.lineNumber} ${match.lineText ?? ""}`.trimEnd();
+        const contextLabel =
+          match.contextStartLine &&
+          match.contextEndLine &&
+          (match.contextStartLine !== match.lineNumber ||
+            match.contextEndLine !== match.lineNumber)
+            ? ` (上下文 ${match.contextStartLine}-${match.contextEndLine})`
+            : "";
+        return `- [内容] ${match.path}:${match.lineNumber} ${match.lineText ?? ""}${contextLabel}`.trimEnd();
       }
 
       const label = match.matchType === "directory_name" ? "文件夹" : "文件名";
@@ -139,7 +155,11 @@ export function normalizeBrowseMode(value: unknown): BrowseMode {
 }
 
 export function normalizeReadMode(value: unknown): ReadMode {
-  return value === "head" || value === "range" || value === "tail"
+  return value === "anchor_range" ||
+    value === "head" ||
+    value === "heading_range" ||
+    value === "range" ||
+    value === "tail"
     ? value
     : "full";
 }
@@ -149,7 +169,10 @@ export function normalizeEditAction(value: unknown): EditAction {
     value === "append" ||
     value === "insert_after" ||
     value === "insert_before" ||
-    value === "prepend"
+    value === "prepend" ||
+    value === "replace_anchor_range" ||
+    value === "replace_heading_range" ||
+    value === "replace_lines"
   ) {
     return value;
   }
@@ -210,7 +233,10 @@ function countExactMatches(source: string, target: string) {
 
 export function applyTextEdit(
   source: string,
-  action: EditAction,
+  action: Exclude<
+    EditAction,
+    "replace_anchor_range" | "replace_heading_range" | "replace_lines"
+  >,
   target: string | undefined,
   content: string,
   expectedCount: number,
@@ -254,5 +280,44 @@ export function applyTextEdit(
     nextContent: replaceAll
       ? source.split(exactTarget).join(replacement)
       : source.replace(exactTarget, replacement),
+  };
+}
+
+export function replaceTextByLineRange(
+  source: string,
+  content: string,
+  startLine: number,
+  endLine: number,
+) {
+  if (endLine < startLine) {
+    throw new Error("edit.replace_lines 的 endLine 不能小于 startLine。");
+  }
+
+  const lines = splitTextLines(source);
+  if (startLine > lines.length) {
+    throw new Error(`edit.replace_lines 的 startLine 超出文件范围：${startLine}。`);
+  }
+
+  const normalized = source.replace(/\r\n/g, "\n");
+  const hasTrailingNewline = normalized.endsWith("\n");
+  const boundedEndLine = Math.min(endLine, lines.length);
+  const replacementLines = content
+    ? content.replace(/\r\n/g, "\n").split("\n")
+    : [];
+  const nextLines = [
+    ...lines.slice(0, startLine - 1),
+    ...replacementLines,
+    ...lines.slice(boundedEndLine),
+  ];
+
+  let nextContent = nextLines.join("\n");
+  if (hasTrailingNewline && nextContent) {
+    nextContent += "\n";
+  }
+
+  return {
+    endLine: boundedEndLine,
+    nextContent,
+    startLine,
   };
 }

@@ -2,12 +2,24 @@ import {
   createWorkspaceDirectory,
   createWorkspaceTextFile,
   deleteWorkspaceEntry,
+  readWorkspaceTextFile,
   moveWorkspaceEntry,
   readWorkspaceTree,
   renameWorkspaceEntry,
   searchWorkspaceContent,
 } from "../../bookWorkspace/api";
+import type { WorkspaceSearchMatch } from "../../bookWorkspace/types";
 import type { AgentTool } from "../runtime";
+import {
+  addSearchContextWindow,
+  buildSearchQueries,
+  dedupeSearchMatches,
+  filterSearchMatch,
+  normalizeSearchMatchMode,
+  limitSearchMatchesPerFile,
+  normalizeSearchSortBy,
+  sortSearchMatches,
+} from "./workspaceSearchHelpers";
 import {
   findTreeNode,
   formatBrowseListSummary,
@@ -30,6 +42,75 @@ import {
   toDisplayPath,
   type WorkspaceToolContext,
 } from "./shared";
+
+type BrowseChild = ReturnType<typeof listTreeChildren>[number];
+
+function asNonNegativeInt(value: unknown, fallback: number) {
+  const parsed =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.trunc(value)
+      : Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function normalizeBrowseKind(value: unknown) {
+  return value === "directory" || value === "file" ? value : "all";
+}
+
+function normalizeBrowseSortBy(value: unknown) {
+  return value === "type" ? "type" : "name";
+}
+
+function sortBrowseChildren(children: BrowseChild[], sortBy: "name" | "type") {
+  return [...children].sort((left, right) => {
+    if (sortBy === "type" && left.kind !== right.kind) {
+      return left.kind === "directory" ? -1 : 1;
+    }
+
+    return left.path.localeCompare(right.path, "zh-CN");
+  });
+}
+
+function matchesBrowseExtensions(
+  child: BrowseChild,
+  extensions: string[],
+) {
+  if (extensions.length === 0) {
+    return true;
+  }
+  if (child.kind !== "file") {
+    return false;
+  }
+
+  const normalizedPath = child.path.toLowerCase();
+  return extensions.some((extension) => normalizedPath.endsWith(extension));
+}
+
+async function buildSearchContextMap(
+  rootPath: string,
+  matches: WorkspaceSearchMatch[],
+  context: ReturnType<typeof getAbortContext>,
+) {
+  const contentPaths = Array.from(
+    new Set(
+      matches
+        .filter((match) => match.matchType === "content" && match.lineNumber)
+        .map((match) => match.path),
+    ),
+  );
+
+  const files = await Promise.all(
+    contentPaths.map(async (path) => [
+      path,
+      await readWorkspaceTextFile(rootPath, path, context),
+    ] as const),
+  );
+
+  return new Map(files);
+}
 
 export function createWorkspaceStructureTools({
   onWorkspaceMutated,
@@ -70,9 +151,31 @@ export function createWorkspaceStructureTools({
           throw new Error("browse.list 只能用于目录。");
         }
 
-        const children = listTreeChildren(rootPath, node);
-        return ok(formatBrowseListSummary(displayPath, children), {
-          children,
+        const kindFilter = normalizeBrowseKind(input.kind);
+        const sortBy = normalizeBrowseSortBy(input.sortBy);
+        const limit =
+          input.limit == null ? null : asPositiveInt(input.limit, 50);
+        const extensions = Array.isArray(input.extensions)
+          ? input.extensions
+              .map((extension) => String(extension).trim().toLowerCase())
+              .filter((extension) => extension)
+              .map((extension) =>
+                extension.startsWith(".") ? extension : `.${extension}`,
+              )
+          : [];
+        const children = sortBrowseChildren(
+          listTreeChildren(rootPath, node).filter((child) => {
+            if (kindFilter !== "all" && child.kind !== kindFilter) {
+              return false;
+            }
+            return matchesBrowseExtensions(child, extensions);
+          }),
+          sortBy,
+        );
+        const limitedChildren =
+          limit == null ? children : children.slice(0, limit);
+        return ok(formatBrowseListSummary(displayPath, limitedChildren), {
+          children: limitedChildren,
           kind: node.kind,
           name: node.name,
           path: displayPath,
@@ -82,13 +185,21 @@ export function createWorkspaceStructureTools({
     search: {
       description: "搜索工作区内容",
       execute: async (input, context) => {
+        const abortContext = getAbortContext(context);
         const query = ensureString(input.query, "search.query");
         const limit = asPositiveInt(input.limit, 50);
+        const beforeLines = asNonNegativeInt(input.beforeLines, 0);
+        const afterLines = asNonNegativeInt(input.afterLines, 0);
+        const caseSensitive = Boolean(input.caseSensitive);
+        const matchMode = normalizeSearchMatchMode(input.matchMode);
+        const wholeWord = Boolean(input.wholeWord);
+        const maxPerFile = asNonNegativeInt(input.maxPerFile, 0);
         const pathFilter = normalizeRelativePath(
           rootPath,
           String(input.path ?? ""),
         );
         const scope = normalizeSearchScope(input.scope);
+        const sortBy = normalizeSearchSortBy(input.sortBy);
         const extensions = Array.isArray(input.extensions)
           ? input.extensions
               .map((extension) => String(extension).trim().toLowerCase())
@@ -98,15 +209,30 @@ export function createWorkspaceStructureTools({
               )
           : [];
         const needsExtraResults = Boolean(
-          pathFilter || scope !== "all" || extensions.length > 0,
+          afterLines > 0 ||
+            beforeLines > 0 ||
+            caseSensitive ||
+            matchMode !== "phrase" ||
+            maxPerFile > 0 ||
+            pathFilter ||
+            scope !== "all" ||
+            sortBy === "relevance" ||
+            wholeWord ||
+            extensions.length > 0,
         );
-        const rawLimit = Math.min(needsExtraResults ? limit * 4 : limit, 200);
-        const matches = await searchWorkspaceContent(
-          rootPath,
-          query,
-          rawLimit,
-          getAbortContext(context),
+        const rawLimit = Math.min(needsExtraResults ? limit * 6 : limit, 200);
+        const rawQueries = buildSearchQueries(query, matchMode);
+        const rawMatches = await Promise.all(
+          rawQueries.map((rawQuery) =>
+            searchWorkspaceContent(
+              rootPath,
+              rawQuery,
+              rawLimit,
+              abortContext,
+            ),
+          ),
         );
+        const matches = dedupeSearchMatches(rawMatches.flat());
         const filtered = matches
           .filter((match) => {
             if (scope === "content" && match.matchType !== "content") {
@@ -129,9 +255,33 @@ export function createWorkspaceStructureTools({
               match.matchType,
             );
           })
-          .slice(0, limit);
+          .flatMap((match) => {
+            const filteredMatch = filterSearchMatch(match, {
+              caseSensitive,
+              matchMode,
+              query,
+              wholeWord,
+            });
+            return filteredMatch ? [filteredMatch] : [];
+          });
+        const sorted = sortSearchMatches(filtered, sortBy);
+        const limited = maxPerFile > 0
+          ? limitSearchMatchesPerFile(sorted, maxPerFile)
+          : sorted;
+        const trimmed = limited.slice(0, limit);
+        const fileContents =
+          beforeLines > 0 || afterLines > 0
+            ? await buildSearchContextMap(rootPath, trimmed, abortContext)
+            : null;
+        const enriched = trimmed.map((match) => {
+          const contents = fileContents?.get(match.path);
+          if (!contents) {
+            return match;
+          }
+          return addSearchContextWindow(match, contents, beforeLines, afterLines);
+        });
 
-        return ok(formatSearchSummary(query, filtered), filtered);
+        return ok(formatSearchSummary(query, enriched), enriched);
       },
     },
     path: {

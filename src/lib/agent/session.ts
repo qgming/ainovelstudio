@@ -366,7 +366,7 @@ function buildAiSdkTools(
     browse: (toolName, tool) =>
       defineTool({
         description:
-          "浏览工作区结构。适合先看目录树、列出目录内容，或检查某个路径的概况。",
+          "浏览工作区结构。支持查看目录树、列出目录内容、检查路径概况，以及对 list 结果做筛选、排序和限量。",
         inputSchema: z.object({
           depth: z
             .number()
@@ -375,6 +375,21 @@ function buildAiSdkTools(
             .max(8)
             .optional()
             .describe("仅在 mode=tree 时使用。限制返回的树深度，默认 2。"),
+          extensions: z
+            .array(z.string())
+            .optional()
+            .describe("仅在 mode=list 时使用。按文件扩展名过滤，如 ['md', '.json']。"),
+          kind: z
+            .enum(["all", "directory", "file"])
+            .default("all")
+            .describe("仅在 mode=list 时使用。筛选目录、文件或全部。"),
+          limit: z
+            .number()
+            .int()
+            .positive()
+            .max(200)
+            .optional()
+            .describe("仅在 mode=list 时使用。限制返回的子项数量。"),
           mode: z
             .enum(["list", "stat", "tree"])
             .default("list")
@@ -385,6 +400,10 @@ function buildAiSdkTools(
             .string()
             .optional()
             .describe("要浏览的相对工作区路径；不传时默认为工作区根目录。"),
+          sortBy: z
+            .enum(["name", "type"])
+            .default("name")
+            .describe("仅在 mode=list 时使用。name 按名称排序，type 先目录后文件。"),
         }),
         execute: async (input) => {
           const result = await runTool(
@@ -398,8 +417,26 @@ function buildAiSdkTools(
     search: (toolName, tool) =>
       defineTool({
         description:
-          "搜索目录名、文件名和正文内容，用于先定位目标，再决定是否 read 或 edit。",
+          "搜索目录名、文件名和正文内容，支持大小写、整词、排序和上下文窗口，用于更精准地定位目标。",
         inputSchema: z.object({
+          afterLines: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(20)
+            .optional()
+            .describe("仅对正文命中生效。返回命中行之后的上下文行数。"),
+          beforeLines: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(20)
+            .optional()
+            .describe("仅对正文命中生效。返回命中行之前的上下文行数。"),
+          caseSensitive: z
+            .boolean()
+            .optional()
+            .describe("为 true 时启用大小写敏感匹配。默认 false。"),
           extensions: z
             .array(z.string())
             .optional()
@@ -411,6 +448,17 @@ function buildAiSdkTools(
             .max(200)
             .optional()
             .describe("最多返回多少条结果。默认 50。"),
+          matchMode: z
+            .enum(["phrase", "all_terms", "any_term"])
+            .default("phrase")
+            .describe("phrase 按完整短语匹配；all_terms 要求所有词都命中；any_term 允许任一词命中。"),
+          maxPerFile: z
+            .number()
+            .int()
+            .positive()
+            .max(20)
+            .optional()
+            .describe("每个文件最多保留多少条结果。"),
           path: z
             .string()
             .optional()
@@ -418,12 +466,20 @@ function buildAiSdkTools(
           query: z
             .string()
             .describe("搜索关键词，建议传短语、章节名、角色名或字段名。"),
+          sortBy: z
+            .enum(["path", "relevance"])
+            .default("relevance")
+            .describe("结果排序方式。relevance 更偏重命中质量，path 按路径排序。"),
           scope: z
             .enum(["all", "content", "names"])
             .default("all")
             .describe(
               "all 搜目录名+文件名+正文，content 只搜正文，names 只搜目录名和文件名。",
             ),
+          wholeWord: z
+            .boolean()
+            .optional()
+            .describe("为 true 时优先匹配整词边界，适合英文名词或标识符。"),
         }),
         execute: async (input) => {
           const result = await runTool(
@@ -437,8 +493,12 @@ function buildAiSdkTools(
     web_search: (toolName, tool) =>
       defineTool({
         description:
-          "搜索公开网络信息并返回标题、摘要和链接，适合查询外部资料、平台规则和最新公开网页内容。",
+          "搜索公开网络信息并返回标题、摘要和链接，支持站点过滤，适合查询外部资料、平台规则和最新公开网页内容。",
         inputSchema: z.object({
+          domains: z
+            .array(z.string())
+            .optional()
+            .describe("可选。限制结果优先来自这些站点域名，如 ['openai.com', 'platform.openai.com']。"),
           language: z
             .string()
             .optional()
@@ -468,8 +528,42 @@ function buildAiSdkTools(
     web_fetch: (toolName, tool) =>
       defineTool({
         description:
-          "读取指定网页并提取标题与主要正文，适合在搜索后继续展开阅读。",
+          "读取指定网页并提取标题与主要正文，支持整页、锚点附近或标题块定向提取。",
         inputSchema: z.object({
+          afterBlocks: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(20)
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。命中块之后额外返回多少块。"),
+          anchor: z
+            .string()
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。用于定位的正文锚点。"),
+          beforeBlocks: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(20)
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。命中块之前额外返回多少块。"),
+          caseSensitive: z
+            .boolean()
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。是否大小写敏感。"),
+          heading: z
+            .string()
+            .optional()
+            .describe("仅在 mode=heading_range 时使用。要提取的标题文本，可带或不带 #。"),
+          includeLinks: z
+            .boolean()
+            .optional()
+            .describe("是否额外提取正文区域内的结构化链接列表。"),
+          includeTables: z
+            .boolean()
+            .optional()
+            .describe("是否额外提取正文区域内的结构化表格。"),
           maxChars: z
             .number()
             .int()
@@ -477,6 +571,16 @@ function buildAiSdkTools(
             .max(20000)
             .optional()
             .describe("正文最大返回字符数，默认 8000，最大 20000。"),
+          mode: z
+            .enum(["full", "anchor_range", "heading_range"])
+            .default("full")
+            .describe("full 返回整页正文；anchor_range 返回锚点附近块；heading_range 返回指定标题块。"),
+          occurrence: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("在 anchor_range 或 heading_range 中使用第几次命中，默认 1。"),
           url: z.string().url().describe("要读取的完整网页地址。"),
         }),
         execute: async (input) => {
@@ -491,14 +595,40 @@ function buildAiSdkTools(
     read: (toolName, tool) =>
       defineTool({
         description:
-          "读取文本文件。已知准确路径时使用；支持全文、头部、尾部或指定行段。",
+          "读取文本文件。已知准确路径时使用；支持全文、头尾、行段、锚点范围和 Markdown 标题范围。",
         inputSchema: z.object({
+          afterLines: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(200)
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。命中行之后额外返回多少行。"),
+          anchor: z
+            .string()
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。用于定位的锚点文本。"),
+          beforeLines: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(200)
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。命中行之前额外返回多少行。"),
+          caseSensitive: z
+            .boolean()
+            .optional()
+            .describe("仅在 mode=anchor_range 时使用。是否大小写敏感。"),
           endLine: z
             .number()
             .int()
             .positive()
             .optional()
             .describe("仅在 mode=range 时使用。结束行号，包含该行。"),
+          heading: z
+            .string()
+            .optional()
+            .describe("仅在 mode=heading_range 时使用。Markdown 标题文本，可带或不带 #。"),
           limit: z
             .number()
             .int()
@@ -507,11 +637,24 @@ function buildAiSdkTools(
             .optional()
             .describe("在 head 或 tail 模式下返回的最大行数，默认 80。"),
           mode: z
-            .enum(["full", "head", "range", "tail"])
+            .enum([
+              "anchor_range",
+              "full",
+              "head",
+              "heading_range",
+              "range",
+              "tail",
+            ])
             .default("full")
             .describe(
-              "full 返回全文；head / tail 返回头尾片段；range 返回指定行段。",
+              "full 返回全文；head / tail 返回头尾片段；range 返回指定行段；anchor_range 返回锚点附近内容；heading_range 返回 Markdown 标题块。",
             ),
+          occurrence: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("在 anchor_range 或 heading_range 中使用第几次命中，默认 1。"),
           path: z.string().describe("目标文本文件的相对工作区路径。"),
           startLine: z
             .number()
@@ -550,7 +693,7 @@ function buildAiSdkTools(
     edit: (toolName, tool) =>
       defineTool({
         description:
-          "对文本做局部编辑。适合替换、前插、后插、追加或前置，不需要整份重写。",
+          "对文本做局部编辑。支持精确锚点替换，以及按行段整体替换，不需要整份重写。",
         inputSchema: z.object({
           action: z
             .enum([
@@ -558,21 +701,68 @@ function buildAiSdkTools(
               "insert_after",
               "insert_before",
               "prepend",
+              "replace_anchor_range",
+              "replace_heading_range",
+              "replace_lines",
               "replace",
             ])
             .default("replace"),
+          afterLines: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(200)
+            .optional()
+            .describe("仅在 action=replace_anchor_range 时使用。命中行之后额外覆盖多少行。"),
+          anchor: z
+            .string()
+            .optional()
+            .describe("仅在 action=replace_anchor_range 时使用。用于定位的锚点文本。"),
+          beforeLines: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(200)
+            .optional()
+            .describe("仅在 action=replace_anchor_range 时使用。命中行之前额外覆盖多少行。"),
+          caseSensitive: z
+            .boolean()
+            .optional()
+            .describe("仅在 action=replace_anchor_range 时使用。是否大小写敏感。"),
           content: z.string().describe("要写入的新文本。"),
+          endLine: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("仅在 action=replace_lines 时使用。结束行号，包含该行。"),
           expectedCount: z
             .number()
             .int()
             .positive()
             .optional()
             .describe("replaceAll=false 时，预期 target 命中的次数，默认 1。"),
+          heading: z
+            .string()
+            .optional()
+            .describe("仅在 action=replace_heading_range 时使用。Markdown 标题文本，可带或不带 #。"),
+          occurrence: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("在 replace_anchor_range 或 replace_heading_range 中使用第几次命中，默认 1。"),
           path: z.string().describe("目标文本文件的相对工作区路径。"),
           replaceAll: z
             .boolean()
             .optional()
             .describe("为 true 时，对所有命中的 target 生效。"),
+          startLine: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("仅在 action=replace_lines 时使用。起始行号，从 1 开始。"),
           target: z
             .string()
             .optional()
@@ -608,11 +798,31 @@ function buildAiSdkTools(
     json: (toolName, tool) =>
       defineTool({
         description:
-          "读取或局部更新 JSON。优先用它改字段、对象和数组，不要为了改一个键整份重写。",
+          "读取或局部更新 JSON。优先用它改字段、对象和数组；多步变更优先 action=batch，一次写回。",
         inputSchema: z.object({
           action: z
-            .enum(["append", "delete", "get", "merge", "set"])
+            .enum(["append", "batch", "delete", "get", "merge", "set"])
             .default("get"),
+          operations: z
+            .array(
+              z.object({
+                action: z
+                  .enum(["append", "delete", "merge", "set"])
+                  .describe("batch 中的单步动作。"),
+                pointer: z
+                  .string()
+                  .optional()
+                  .describe(
+                    "batch 中该步操作的 JSON Pointer。空字符串表示根节点。",
+                  ),
+                value: z
+                  .unknown()
+                  .optional()
+                  .describe("append / merge / set 时要写入的新值。"),
+              }),
+            )
+            .optional()
+            .describe("仅在 action=batch 时使用。按顺序依次执行的操作列表。"),
           path: z.string().describe("目标 JSON 文件的相对工作区路径。"),
           pointer: z
             .string()

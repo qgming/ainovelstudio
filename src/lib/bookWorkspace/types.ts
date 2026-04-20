@@ -11,10 +11,16 @@ export type TreeNode = {
 export type WorkspaceSearchMatchType = "directory_name" | "file_name" | "content";
 
 export type WorkspaceSearchMatch = {
+  contextEndLine?: number;
+  contextStartLine?: number;
+  contextText?: string;
   lineNumber?: number;
   lineText?: string;
+  matchEnd?: number;
+  matchStart?: number;
   matchType: WorkspaceSearchMatchType;
   path: string;
+  score?: number;
 };
 
 export type WorkspaceLineResult = {

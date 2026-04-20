@@ -1,6 +1,12 @@
 import { isPlainObject } from "./shared";
 
-export type JsonAction = "append" | "delete" | "get" | "merge" | "set";
+export type JsonAction =
+  | "append"
+  | "batch"
+  | "delete"
+  | "get"
+  | "merge"
+  | "set";
 
 type JsonObject = Record<string, unknown>;
 type JsonContainer = unknown[] | JsonObject;
@@ -8,6 +14,7 @@ type JsonContainer = unknown[] | JsonObject;
 export function normalizeJsonAction(value: unknown): JsonAction {
   if (
     value === "append" ||
+    value === "batch" ||
     value === "delete" ||
     value === "merge" ||
     value === "set"

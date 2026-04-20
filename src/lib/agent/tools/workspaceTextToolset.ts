@@ -16,9 +16,20 @@ import {
   setJsonValueAtPointer,
 } from "./json";
 import {
+  applyJsonOperations,
+  normalizeJsonBatchOperation,
+} from "./jsonBatch";
+import {
+  readRangeAroundAnchor,
+  readRangeByHeading,
+  resolveAnchorWindow,
+  resolveHeadingWindow,
+} from "./workspaceReadHelpers";
+import {
   applyTextEdit,
   normalizeEditAction,
   normalizeReadMode,
+  replaceTextByLineRange,
   renderLineWindow,
   splitTextLines,
 } from "./workspaceHelpers";
@@ -29,6 +40,17 @@ import {
   ok,
   type WorkspaceToolContext,
 } from "./shared";
+
+function asNonNegativeInt(value: unknown, fallback: number) {
+  const parsed =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.trunc(value)
+      : Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
+}
 
 export function createWorkspaceTextTools({
   onWorkspaceMutated,
@@ -61,6 +83,31 @@ export function createWorkspaceTextTools({
           return ok(renderLineWindow(path, startLine, lines.slice(-limit)));
         }
 
+        if (mode === "anchor_range") {
+          return ok(
+            readRangeAroundAnchor({
+              afterLines: asNonNegativeInt(input.afterLines, 20),
+              anchor: ensureString(input.anchor, "read.anchor"),
+              beforeLines: asNonNegativeInt(input.beforeLines, 20),
+              caseSensitive: Boolean(input.caseSensitive),
+              contents: content,
+              occurrence: asPositiveInt(input.occurrence, 1),
+              path,
+            }),
+          );
+        }
+
+        if (mode === "heading_range") {
+          return ok(
+            readRangeByHeading({
+              contents: content,
+              heading: ensureString(input.heading, "read.heading"),
+              occurrence: asPositiveInt(input.occurrence, 1),
+              path,
+            }),
+          );
+        }
+
         const startLine = asPositiveInt(input.startLine, 1);
         const endLine = asPositiveInt(input.endLine, startLine);
         if (endLine < startLine) {
@@ -87,6 +134,77 @@ export function createWorkspaceTextTools({
           path,
           getAbortContext(context),
         );
+        if (action === "replace_lines") {
+          const startLine = asPositiveInt(input.startLine, 1);
+          const endLine = asPositiveInt(input.endLine, startLine);
+          const result = replaceTextByLineRange(
+            currentContent,
+            content,
+            startLine,
+            endLine,
+          );
+          await writeWorkspaceTextFile(
+            rootPath,
+            path,
+            result.nextContent,
+            getAbortContext(context),
+          );
+          await onWorkspaceMutated?.();
+          return ok(
+            `已更新 ${path}（replace_lines，行 ${result.startLine}-${result.endLine}）。`,
+          );
+        }
+        if (action === "replace_anchor_range") {
+          const lines = splitTextLines(currentContent);
+          const { startIndex, endIndex } = resolveAnchorWindow({
+            afterLines: asNonNegativeInt(input.afterLines, 20),
+            anchor: ensureString(input.anchor, "edit.anchor"),
+            beforeLines: asNonNegativeInt(input.beforeLines, 20),
+            caseSensitive: Boolean(input.caseSensitive),
+            lines,
+            occurrence: asPositiveInt(input.occurrence, 1),
+          });
+          const result = replaceTextByLineRange(
+            currentContent,
+            content,
+            startIndex + 1,
+            endIndex,
+          );
+          await writeWorkspaceTextFile(
+            rootPath,
+            path,
+            result.nextContent,
+            getAbortContext(context),
+          );
+          await onWorkspaceMutated?.();
+          return ok(
+            `已更新 ${path}（replace_anchor_range，行 ${result.startLine}-${result.endLine}）。`,
+          );
+        }
+        if (action === "replace_heading_range") {
+          const lines = splitTextLines(currentContent);
+          const { startIndex, endIndex } = resolveHeadingWindow({
+            heading: ensureString(input.heading, "edit.heading"),
+            lines,
+            occurrence: asPositiveInt(input.occurrence, 1),
+          });
+          const result = replaceTextByLineRange(
+            currentContent,
+            content,
+            startIndex + 1,
+            endIndex,
+          );
+          await writeWorkspaceTextFile(
+            rootPath,
+            path,
+            result.nextContent,
+            getAbortContext(context),
+          );
+          await onWorkspaceMutated?.();
+          return ok(
+            `已更新 ${path}（replace_heading_range，行 ${result.startLine}-${result.endLine}）。`,
+          );
+        }
         const result = applyTextEdit(
           currentContent,
           action,
@@ -125,14 +243,40 @@ export function createWorkspaceTextTools({
       execute: async (input, context) => {
         const action = normalizeJsonAction(input.action);
         const path = ensureString(input.path, "json.path");
-        const pointer = String(input.pointer ?? "");
-        const segments = parseJsonPointer(pointer);
         const currentContents = await readWorkspaceTextFile(
           rootPath,
           path,
           getAbortContext(context),
         );
         const currentJson = parseJsonDocument(currentContents, path);
+        if (action === "batch") {
+          if (!Array.isArray(input.operations) || input.operations.length === 0) {
+            throw new Error("json.batch 需要提供非空 operations。");
+          }
+
+          const operations = input.operations.map(normalizeJsonBatchOperation);
+          const { results, root: nextJson } = applyJsonOperations(
+            cloneJsonValue(currentJson),
+            operations,
+          );
+          await writeWorkspaceTextFile(
+            rootPath,
+            path,
+            serializeJsonWithStyle(nextJson, currentContents),
+            getAbortContext(context),
+          );
+          await onWorkspaceMutated?.();
+
+          return ok(`已批量更新 ${path} 中 ${results.length} 个 JSON 操作。`, {
+            action,
+            operations: results,
+            operationsApplied: results.length,
+            path,
+          });
+        }
+
+        const pointer = String(input.pointer ?? "");
+        const segments = parseJsonPointer(pointer);
         if (action === "get") {
           return ok(
             `已读取 ${path} 中 ${pointer || "/"} 的 JSON 数据。`,

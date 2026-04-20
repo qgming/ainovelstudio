@@ -15,15 +15,32 @@ export type WebSearchResult = {
   source: string;
 };
 
+export type WebFetchLink = {
+  text: string;
+  url: string;
+};
+
+export type WebFetchTable = {
+  caption?: string;
+  headers: string[];
+  rows: string[][];
+};
+
 export type WebFetchResponse = {
   success: boolean;
   url: string;
   title: string;
   content: string;
   excerpt: string;
+  links?: WebFetchLink[];
   textLength: number;
+  tables?: WebFetchTable[];
   truncated: boolean;
+  mode?: "anchor_range" | "full" | "heading_range";
   provider: "direct_html";
+  selectedBlockCount?: number;
+  selectedBlockEnd?: number;
+  selectedBlockStart?: number;
   error?: string;
 };
 
