@@ -9,6 +9,7 @@ import { TooltipProvider } from "./components/ui/tooltip";
 import { isMobileRuntime } from "./lib/platform";
 import { HomePage } from "./pages/HomePage";
 import { useThemeStore } from "./stores/themeStore";
+import { useUpdateStore } from "./stores/updateStore";
 
 const AgentDetailPage = lazy(() =>
   import("./pages/AgentDetailPage").then((module) => ({ default: module.AgentDetailPage })),
@@ -45,11 +46,16 @@ function AppRouteLoadingState() {
 
 function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
+  const runStartupUpdateFlow = useUpdateStore((state) => state.runStartupUpdateFlow);
   const mobileRuntime = isMobileRuntime();
 
   useEffect(() => {
     initializeTheme();
   }, [initializeTheme]);
+
+  useEffect(() => {
+    void runStartupUpdateFlow();
+  }, [runStartupUpdateFlow]);
 
   useEffect(() => {
     if (mobileRuntime) {

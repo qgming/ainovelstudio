@@ -1,4 +1,3 @@
-mod app_update;
 mod agents;
 mod app_control;
 mod chat;
@@ -70,15 +69,23 @@ impl ToolCancellationRegistry {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .manage(ToolCancellationRegistry::default())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_dialog::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_process::init())
+            .plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![
             workspace::cancel_tool_request,
             workspace::cancel_tool_requests,
             terminate_application,
-            app_update::fetch_latest_release_info,
             agents::scan_installed_agents,
             agents::initialize_builtin_agents,
             agents::reset_builtin_agents,

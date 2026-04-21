@@ -1,7 +1,9 @@
-import { copyFile, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const RELEASE_DIR = "release-packages";
+const GITHUB_OWNER = "qgming";
+const GITHUB_REPO = "ainovelstudio";
 const WINDOWS_PLATFORM = "windows";
 const WINDOWS_ARCH = "x64";
 const ANDROID_PLATFORM = "android";
@@ -53,14 +55,42 @@ async function collectWindowsBundle(projectRoot, version) {
     throw new Error(`未找到版本 ${version} 的 Windows 安装包。`);
   }
 
+  const sourceSignaturePath = `${sourcePath}.sig`;
+  const signature = (await readFile(sourceSignaturePath, "utf8")).trim();
+
   const targetPath = path.join(
     projectRoot,
     RELEASE_DIR,
     `ainovelstudio_${version}_${WINDOWS_PLATFORM}_${WINDOWS_ARCH}.exe`,
   );
+  const targetSignaturePath = `${targetPath}.sig`;
+  const latestJsonPath = path.join(projectRoot, RELEASE_DIR, "latest.json");
+  const releaseTag = `v${version}`;
+  const updateUrl =
+    `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}` +
+    `/releases/download/${releaseTag}/${path.basename(targetPath)}`;
+  const latestJson = {
+    version,
+    notes: "",
+    pub_date: new Date().toISOString(),
+    platforms: {
+      "windows-x86_64": {
+        signature,
+        url: updateUrl,
+      },
+    },
+  };
+
   await rm(targetPath, { force: true });
+  await rm(targetSignaturePath, { force: true });
   await copyFile(sourcePath, targetPath);
-  return targetPath;
+  await copyFile(sourceSignaturePath, targetSignaturePath);
+  await writeFile(latestJsonPath, JSON.stringify(latestJson, null, 2));
+  return {
+    latestJsonPath,
+    targetPath,
+    targetSignaturePath,
+  };
 }
 
 async function collectAndroidBundle(projectRoot, version) {
@@ -110,8 +140,10 @@ async function main() {
   await mkdir(path.join(projectRoot, RELEASE_DIR), { recursive: true });
 
   if (platform === "windows") {
-    const collectedPath = await collectWindowsBundle(projectRoot, version);
-    console.log(`Collected Windows bundle: ${collectedPath}`);
+    const collected = await collectWindowsBundle(projectRoot, version);
+    console.log(`Collected Windows bundle: ${collected.targetPath}`);
+    console.log(`Collected Windows signature: ${collected.targetSignaturePath}`);
+    console.log(`Generated updater manifest: ${collected.latestJsonPath}`);
     return;
   }
 

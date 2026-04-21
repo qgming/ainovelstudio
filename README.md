@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  把书籍工作区、Agent、Skill、Workflow、模型配置、数据备份与 WebDAV 同步整合进一个桌面应用
+  把书籍工作区、Agent、Skill、Workflow、模型配置、数据备份与 WebDAV 云备份整合进一个桌面应用
 </p>
 
 <p align="center">
   <a href="https://github.com/qgming/ainovelstudio">
     <img src="https://img.shields.io/github/stars/qgming/ainovelstudio?style=for-the-badge&logo=github&label=Stars" alt="GitHub Stars" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.1.5-111827?style=for-the-badge" alt="Version 0.1.5" />
+  <img src="https://img.shields.io/badge/Version-0.1.6-111827?style=for-the-badge" alt="Version 0.1.6" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 
@@ -59,7 +59,7 @@
     </td>
     <td width="25%" valign="top">
       <strong>同步与备份</strong><br />
-      支持完整备份 ZIP 与 WebDAV 云端同步
+      支持完整备份 ZIP 与 WebDAV 云端备份
     </td>
   </tr>
 </table>
@@ -73,7 +73,7 @@
 - 代理库：支持内置代理、ZIP 导入、自建代理模板，以及代理启停管理。
 - 工作流引擎：把书籍、代理和步骤编排成可重复运行的多节点流程，支持运行、暂停、继续、查看历史与节点执行结果。
 - 模型设置：配置任意 OpenAI-compatible 接口，内置常见供应商地址推荐与连接测试。
-- 数据管理：支持本地备份导入导出、WebDAV 云同步、重写内置技能、代理与工作流初始化数据。
+- 数据管理：支持本地备份导入导出、WebDAV 云备份、重写内置技能、代理与工作流初始化数据。
 - 用量统计：记录请求数、Token 和模型维度的使用日志。
 - 工具库：按工具维度控制 Agent 会话可用能力。
 
@@ -181,7 +181,7 @@ npm run build:exe
 输出文件：
 
 ```text
-release-packages/ainovelstudio_0.1.5_windows_x64.exe
+release-packages/ainovelstudio_0.1.6_windows_x64.exe
 ```
 
 Android APK：
@@ -193,36 +193,8 @@ npm run build:android
 输出文件：
 
 ```text
-release-packages/ainovelstudio_0.1.5_android_arm64.apk
+release-packages/ainovelstudio_0.1.6_android_arm64.apk
 ```
-
-## GitHub Release 发布
-
-仓库已内置 GitHub Actions 发布工作流：`.github/workflows/release.yml`
-
-发布步骤：
-
-1. 同步更新 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 中的版本号。
-2. 提交并推送代码到 `main`。
-3. 创建并推送版本标签，例如：
-
-```bash
-git tag v0.1.6
-git push origin v0.1.6
-```
-
-工作流会自动执行以下动作：
-
-- 在 `windows-latest` 上安装依赖并构建 Tauri Windows 安装包
-- 校验 tag 与仓库版本号是否一致
-- 自动创建 GitHub Release
-- 自动上传统一命名后的安装包到 Release Assets：`ainovelstudio_版本号_windows_x64.exe`
-
-当前默认规则：
-
-- 仅在推送 `v*` 标签时触发
-- 发布正式版 Release
-- 当前自动构建 Windows 安装包
 
 ## 项目结构
 
@@ -247,7 +219,7 @@ git push origin v0.1.6
 - 管理一部长篇小说的章节、设定、状态文件和写作过程。
 - 把“规划 -> 写作 -> 审校 -> 润稿 -> 回写设定”串成自动化创作流程。
 - 沉淀可复用的 Agent、Skill、Workflow 包，并通过 ZIP 分发给其他项目。
-- 在本地优先的数据环境里完成创作，同时通过 WebDAV 做跨设备同步。
+- 在本地优先的数据环境里完成创作，同时通过 WebDAV 做跨设备云备份。
 
 ## 模型接入
 
@@ -274,12 +246,12 @@ git push origin v0.1.6
 - 应用支持导出完整备份 ZIP，并恢复为完整客户端状态。
 - WebDAV 云备份以完整数据包为单位进行上传和下载。
 
-## 更新检查
+## 自动更新
 
-- 桌面端关于页内置“检查更新”入口。
-- 当前实现基于 GitHub Releases 的最新版本信息接口，检查 `qgming/ainovelstudio` 的最新正式版本。
-- 当发现新版本时，应用会展示版本信息、发布时间、Release Notes，并跳转到匹配的平台安装包或 Release 页面。
+- 桌面端关于页支持手动检查更新与自动更新开关。
+- 自动更新默认开启，应用启动后会在后台检测 GitHub Release 的新版本并自动下载。
+- 下载完成后会提示“立即安装”或“稍后安装”，选择稍后安装会在下次打开应用时继续安装流程。
 
 ## 版本
 
-当前仓库版本：`0.1.5`
+当前仓库版本：`0.1.6`

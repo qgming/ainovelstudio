@@ -1,12 +1,12 @@
 {
   "name": "ainovelstudio",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:exe": "tauri build --bundles nsis && node scripts/collect-release-bundles.mjs windows",
+    "build:exe": "node scripts/build-windows-release.mjs",
     "build:android": "tauri android build --apk --target aarch64 --split-per-abi && node scripts/collect-release-bundles.mjs android",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -20,6 +20,8 @@
     "@tailwindcss/vite": "^4.2.2",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "ai": "^6.0.153",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

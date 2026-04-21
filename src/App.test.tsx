@@ -19,12 +19,28 @@ const { mockOpenUrl } = vi.hoisted(() => ({
   mockOpenUrl: vi.fn(),
 }));
 
+const { updateStoreState } = vi.hoisted(() => ({
+  updateStoreState: {
+    autoUpdateEnabled: true,
+    checkForUpdates: vi.fn(),
+    initializePreferences: vi.fn(),
+    installDownloadedUpdate: vi.fn(),
+    pendingInstallVersion: null as string | null,
+    progress: null as number | null,
+    runStartupUpdateFlow: vi.fn().mockResolvedValue(undefined),
+    setAutoUpdateEnabled: vi.fn(),
+    status: "idle" as "idle" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error",
+    updateSummary: null as { version: string } | null,
+  },
+}));
+
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => mockWindow,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mockInvoke,
+  isTauri: () => true,
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -49,6 +65,10 @@ vi.mock("@lobehub/icons", () => ({
   SiliconCloud: {
     Color: ({ size }: { size?: number }) => <span data-size={size} data-testid="provider-icon-siliconflow" />,
   },
+}));
+
+vi.mock("./stores/updateStore", () => ({
+  useUpdateStore: <T,>(selector: (state: typeof updateStoreState) => T) => selector(updateStoreState),
 }));
 
 import App from "./App";
@@ -135,6 +155,17 @@ describe("App shell", () => {
     mockWindow.onResized.mockResolvedValue(() => {});
     mockWindow.unmaximize.mockReset();
     mockOpenUrl.mockReset();
+    updateStoreState.autoUpdateEnabled = true;
+    updateStoreState.pendingInstallVersion = null;
+    updateStoreState.progress = null;
+    updateStoreState.status = "idle";
+    updateStoreState.updateSummary = null;
+    updateStoreState.checkForUpdates.mockReset();
+    updateStoreState.initializePreferences.mockReset();
+    updateStoreState.installDownloadedUpdate.mockReset();
+    updateStoreState.runStartupUpdateFlow.mockReset();
+    updateStoreState.runStartupUpdateFlow.mockResolvedValue(undefined);
+    updateStoreState.setAutoUpdateEnabled.mockReset();
 
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -539,8 +570,10 @@ describe("App shell", () => {
 
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
-    expect(screen.getByText("版本 0.1.5")).toBeInTheDocument();
+    expect(screen.getByText("版本")).toBeInTheDocument();
+    expect(screen.getByText("0.1.6")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "自动更新" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
     expect(screen.queryByText("www.qgming.com")).not.toBeInTheDocument();
   });

@@ -1,6 +1,13 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { LatestReleaseInfo } from "./types";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 
-export function fetchLatestReleaseInfo() {
-  return invoke<LatestReleaseInfo>("fetch_latest_release_info");
+export type AppUpdateHandle = Update;
+export type AppUpdateProgressEvent = DownloadEvent;
+
+export function checkForAppUpdate() {
+  return check();
+}
+
+export function relaunchToApplyUpdate() {
+  return relaunch();
 }

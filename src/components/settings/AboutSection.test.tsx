@@ -1,47 +1,43 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AboutSection } from "./AboutSection";
 
-const { fetchLatestReleaseInfoMock, openUrlMock, toastMock } = vi.hoisted(() => ({
-  fetchLatestReleaseInfoMock: vi.fn(),
-  openUrlMock: vi.fn(),
-  toastMock: Object.assign(vi.fn(), {
-    error: vi.fn(),
-    success: vi.fn(),
-  }),
-}));
+const updateStoreState = {
+  autoUpdateEnabled: true,
+  checkForUpdates: vi.fn(),
+  initializePreferences: vi.fn(),
+  installDownloadedUpdate: vi.fn(),
+  pendingInstallVersion: null as string | null,
+  progress: null as number | null,
+  setAutoUpdateEnabled: vi.fn(),
+  status: "idle" as "idle" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error",
+  updateSummary: null as { version: string } | null,
+};
 
-vi.mock("../../lib/update/api", () => ({
-  fetchLatestReleaseInfo: fetchLatestReleaseInfoMock,
-}));
-
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  openUrl: openUrlMock,
-}));
-
-vi.mock("sonner", () => ({
-  toast: toastMock,
-}));
-
-vi.mock("../../hooks/use-mobile", () => ({
-  useIsMobile: () => false,
+vi.mock("../../stores/updateStore", () => ({
+  useUpdateStore: <T,>(selector: (state: typeof updateStoreState) => T) => selector(updateStoreState),
 }));
 
 describe("AboutSection", () => {
   beforeEach(() => {
-    fetchLatestReleaseInfoMock.mockReset();
-    openUrlMock.mockReset();
-    toastMock.mockReset();
-    toastMock.success.mockReset();
-    toastMock.error.mockReset();
+    updateStoreState.autoUpdateEnabled = true;
+    updateStoreState.pendingInstallVersion = null;
+    updateStoreState.progress = null;
+    updateStoreState.status = "idle";
+    updateStoreState.updateSummary = null;
+    updateStoreState.checkForUpdates.mockReset();
+    updateStoreState.initializePreferences.mockReset();
+    updateStoreState.installDownloadedUpdate.mockReset();
+    updateStoreState.setAutoUpdateEnabled.mockReset();
   });
 
-  it("展示当前版本和检查更新按钮", () => {
+  it("展示版本信息、自动更新开关和联系入口", () => {
     render(<AboutSection />);
 
     expect(screen.getByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
-    expect(screen.getByText("0.1.5")).toBeInTheDocument();
+    expect(screen.getByText("0.1.6")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "自动更新" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
     expect(screen.getByRole("link", { name: "查看 GitHub" })).toHaveAttribute(
       "href",
@@ -49,43 +45,34 @@ describe("AboutSection", () => {
     );
   });
 
-  it("发现新版本后展示下载和 release 入口", async () => {
-    fetchLatestReleaseInfoMock.mockResolvedValue({
-      assets: [
-        {
-          contentType: "application/octet-stream",
-          downloadUrl: "https://example.com/ainovelstudio-setup.exe",
-          name: "ainovelstudio-setup.exe",
-          size: 123,
-        },
-      ],
-      body: "修复若干问题",
-      draft: false,
-      htmlUrl: "https://github.com/qgming/ainovelstudio/releases/tag/v0.1.6",
-      name: "v0.1.6",
-      prerelease: false,
-      publishedAt: "2026-04-21T00:00:00Z",
-      tagName: "v0.1.6",
-    });
-
+  it("点击检查更新会触发更新检查", () => {
     render(<AboutSection />);
 
     fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
 
-    await waitFor(() => {
-      expect(toastMock).toHaveBeenCalledWith("发现新版本", {
-        description: "0.1.6 已可下载。",
-      });
-    });
+    expect(updateStoreState.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
 
-    expect(await screen.findByRole("heading", { name: "v0.1.6" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "下载更新" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看 Release" })).toBeInTheDocument();
+  it("检测到已下载更新时按钮会切换为立即安装", () => {
+    updateStoreState.status = "downloaded";
+    updateStoreState.pendingInstallVersion = "0.1.6";
+    updateStoreState.updateSummary = { version: "0.1.6" };
 
-    fireEvent.click(screen.getByRole("button", { name: "下载更新" }));
+    render(<AboutSection />);
 
-    await waitFor(() => {
-      expect(openUrlMock).toHaveBeenCalledWith("https://example.com/ainovelstudio-setup.exe");
-    });
+    expect(screen.getByRole("button", { name: "立即安装" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "立即安装" }));
+
+    expect(updateStoreState.installDownloadedUpdate).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("已下载 0.1.6，下次打开应用时会继续安装。")).toBeInTheDocument();
+  });
+
+  it("切换自动更新时会写入新的开关状态", () => {
+    render(<AboutSection />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "自动更新" }));
+
+    expect(updateStoreState.setAutoUpdateEnabled).toHaveBeenCalledWith(false);
   });
 });
