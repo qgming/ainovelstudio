@@ -95,28 +95,39 @@ function isSameConfig(left: DataSyncSettingsDocument, right: DataSyncSettingsDoc
 }
 
 function SyncCard({
+  canOperateCloudBackup,
   config,
+  downloading,
   errorMessage,
   onChange,
+  onDownload,
+  onUpload,
+  uploading,
 }: {
+  canOperateCloudBackup: boolean;
   config: DataSyncSettingsDocument;
+  downloading: boolean;
   errorMessage: string | null;
   onChange: (patch: Partial<DataSyncSettingsDocument>) => void;
+  onDownload: () => void;
+  onUpload: () => void;
+  uploading: boolean;
 }) {
   const serverId = useId();
   const pathId = useId();
   const userId = useId();
   const passwordId = useId();
-  const canSync = Boolean(config.serverUrl.trim());
+  const hasServerUrl = Boolean(config.serverUrl.trim());
 
   return (
     <section className="px-4 py-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <h3 className="text-[17px] font-medium tracking-[-0.03em] text-foreground">云同步</h3>
+          <h3 className="text-[17px] font-medium tracking-[-0.03em] text-foreground">云备份</h3>
         </div>
-        {canSync ? <p className="text-sm leading-6 text-muted-foreground">已配置 WebDAV</p> : null}
       </div>
+
+      {hasServerUrl ? <p className="mt-4 text-sm leading-6 text-muted-foreground">已配置 WebDAV</p> : null}
 
       <div className="mt-5 grid gap-x-4 gap-y-4 md:grid-cols-2">
         <div className="grid gap-2">
@@ -124,7 +135,7 @@ function SyncCard({
           <Input id={serverId} value={config.serverUrl} onChange={(event) => onChange({ serverUrl: event.target.value })} placeholder="https://dav.jianguoyun.com/dav/" />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor={pathId}>同步目录</Label>
+          <Label htmlFor={pathId}>云备份目录</Label>
           <Input id={pathId} value={config.remotePath} onChange={(event) => onChange({ remotePath: event.target.value })} placeholder="ainovelstudio" />
         </div>
         <div className="grid gap-2">
@@ -142,6 +153,17 @@ function SyncCard({
           {errorMessage}
         </div>
       ) : null}
+
+      <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-4">
+        <Button type="button" variant="outline" disabled={!canOperateCloudBackup} onClick={onUpload}>
+          {uploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploading ? "上传中..." : "上传云备份"}
+        </Button>
+        <Button type="button" disabled={!canOperateCloudBackup} onClick={onDownload}>
+          {downloading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          {downloading ? "下载中..." : "下载云备份"}
+        </Button>
+      </div>
     </section>
   );
 }
@@ -158,17 +180,20 @@ export function DataManagementSection() {
   const reinitializeWorkflows = useDataManagementStore((state) => state.reinitializeWorkflows);
   const saveConfig = useDataManagementStore((state) => state.saveConfig);
   const status = useDataManagementStore((state) => state.status);
-  const syncNow = useDataManagementStore((state) => state.syncNow);
+  const uploadCloudBackup = useDataManagementStore((state) => state.uploadCloudBackup);
+  const downloadCloudBackup = useDataManagementStore((state) => state.downloadCloudBackup);
   const [draft, setDraft] = useState(getDefaultDataSyncSettings());
   const [isDirty, setIsDirty] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [cloudAction, setCloudAction] = useState<"upload" | "download" | null>(null);
+  const [downloadConfirmOpen, setDownloadConfirmOpen] = useState(false);
   const [pendingResetTarget, setPendingResetTarget] = useState<ResetTarget | null>(null);
   const [resettingTarget, setResettingTarget] = useState<ResetTarget | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const canTestConnection = Boolean(draft.serverUrl.trim()) && !isTesting;
-  const canSync = Boolean(draft.serverUrl.trim()) && !isDirty && status !== "syncing";
   const isSaving = status === "saving";
   const isMutating = status === "loading" || status === "saving" || status === "syncing" || resettingTarget !== null;
+  const canOperateCloudBackup = Boolean(draft.serverUrl.trim()) && !isDirty && !isMutating;
 
   useEffect(() => {
     void initialize();
@@ -205,23 +230,33 @@ export function DataManagementSection() {
     }
   }
 
-  async function handleSync() {
+  async function handleUploadCloudBackup() {
     try {
-      const result = await syncNow();
-      if (result.action === "downloaded" && result.clientState) {
-        toast.success("云端数据已拉取", { description: "应用将刷新为云端最新数据。" });
-        applyAppClientStateAndReload(result.clientState);
-        return;
-      }
-      if (result.action === "uploaded") {
-        toast.success("本地数据已推送到云端");
-        return;
-      }
-      toast("本地与云端已一致");
+      setCloudAction("upload");
+      await uploadCloudBackup();
+      toast.success("云备份已上传", { description: "当前本地数据已经写入 WebDAV。" });
     } catch (error) {
-      toast.error("同步失败", {
+      toast.error("上传失败", {
         description: error instanceof Error && error.message.trim() ? error.message : "请先检查 WebDAV 配置。",
       });
+    } finally {
+      setCloudAction(null);
+    }
+  }
+
+  async function handleDownloadCloudBackup() {
+    try {
+      setCloudAction("download");
+      const result = await downloadCloudBackup();
+      setDownloadConfirmOpen(false);
+      toast.success("云备份已下载", { description: "应用将刷新为云端备份内容。" });
+      applyAppClientStateAndReload(result.clientState);
+    } catch (error) {
+      toast.error("下载失败", {
+        description: error instanceof Error && error.message.trim() ? error.message : "请先检查 WebDAV 配置。",
+      });
+    } finally {
+      setCloudAction(null);
     }
   }
 
@@ -230,11 +265,11 @@ export function DataManagementSection() {
       const saved = await saveConfig(draft);
       setDraft(saved);
       setIsDirty(false);
-      toast.success("云同步配置已保存");
+      toast.success("云备份配置已保存");
     } catch (error) {
       toast.error("保存失败", {
         description:
-          error instanceof Error && error.message.trim() ? error.message : "保存云同步配置失败。",
+          error instanceof Error && error.message.trim() ? error.message : "保存云备份配置失败。",
       });
     }
   }
@@ -340,22 +375,15 @@ export function DataManagementSection() {
               icon={isTesting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Cable className="h-3.5 w-3.5" />}
               onClick={() => void handleTestConnection()}
             />
-            <SettingsHeaderResponsiveButton
-              type="button"
-              label={status === "syncing" ? "同步中..." : "立即同步"}
-              disabled={!canSync || resettingTarget !== null}
-              size={isMobile ? "icon-sm" : "sm"}
-              text="立即同步"
-              icon={status === "syncing" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              onClick={() => void handleSync()}
-            />
           </>
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="divide-y divide-border">
           <SyncCard
+            canOperateCloudBackup={canOperateCloudBackup}
             config={draft}
+            downloading={cloudAction === "download"}
             errorMessage={errorMessage}
             onChange={(patch) => {
               setDraft((current) => {
@@ -364,6 +392,9 @@ export function DataManagementSection() {
                 return next;
               });
             }}
+            onDownload={() => setDownloadConfirmOpen(true)}
+            onUpload={() => void handleUploadCloudBackup()}
+            uploading={cloudAction === "upload"}
           />
           <section className="px-4 py-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -437,6 +468,37 @@ export function DataManagementSection() {
           </section>
         </div>
       </div>
+      <AlertDialog
+        open={downloadConfirmOpen}
+        onOpenChange={(open) => {
+          if (!cloudAction) {
+            setDownloadConfirmOpen(open);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>下载云备份</AlertDialogTitle>
+            <AlertDialogDescription>
+              下载后会用云端备份覆盖当前本地数据，并在完成后刷新应用。请确认本地数据已经完成备份。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cloudAction === "download"}>
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cloudAction === "download"}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDownloadCloudBackup();
+              }}
+            >
+              {cloudAction === "download" ? "下载中..." : "覆盖并下载"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={pendingResetTarget !== null}
         onOpenChange={(open) => {

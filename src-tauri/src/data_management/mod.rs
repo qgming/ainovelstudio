@@ -34,10 +34,7 @@ pub struct DataSyncSettingsDocument {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DataSyncResult {
-    pub action: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub client_state: Option<ClientStateSnapshot>,
+pub struct CloudBackupUploadResult {
     pub local_updated_at: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remote_updated_at: Option<u64>,
@@ -195,10 +192,10 @@ pub fn import_app_data_backup(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub async fn sync_app_data_via_webdav(
+pub async fn upload_app_data_backup_via_webdav(
     app: AppHandle,
     clientState: ClientStateSnapshot,
-) -> CommandResult<DataSyncResult> {
+) -> CommandResult<CloudBackupUploadResult> {
     let settings = load_data_sync_settings(&app)?;
     if settings.server_url.trim().is_empty() {
         return Err("请先填写 WebDAV 地址。".into());
@@ -206,45 +203,34 @@ pub async fn sync_app_data_via_webdav(
 
     let local_bundle = build_backup_bundle(&app, clientState)?;
     let local_updated_at = local_bundle.manifest.composite_updated_at;
-    let remote_archive = webdav::fetch_remote_archive(&settings).await?;
+    let remote_updated_at = webdav::fetch_remote_archive(&settings)
+        .await?
+        .map(|remote_bytes| inspect_backup_archive(&remote_bytes))
+        .transpose()?
+        .map(|preview| preview.manifest.composite_updated_at);
 
+    webdav::upload_remote_archive(&settings, &local_bundle.bytes).await?;
+
+    Ok(CloudBackupUploadResult {
+        local_updated_at,
+        remote_updated_at,
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn download_app_data_backup_via_webdav(
+    app: AppHandle,
+) -> CommandResult<BackupRestoreResult> {
+    let settings = load_data_sync_settings(&app)?;
+    if settings.server_url.trim().is_empty() {
+        return Err("请先填写 WebDAV 地址。".into());
+    }
+
+    let remote_archive = webdav::fetch_remote_archive(&settings).await?;
     let Some(remote_bytes) = remote_archive else {
-        webdav::upload_remote_archive(&settings, &local_bundle.bytes).await?;
-        return Ok(DataSyncResult {
-            action: "uploaded".into(),
-            client_state: None,
-            local_updated_at,
-            remote_updated_at: None,
-        });
+        return Err("云端备份不存在，请先上传云备份。".into());
     };
 
-    let remote_preview = inspect_backup_archive(&remote_bytes)?;
-    let remote_updated_at = remote_preview.manifest.composite_updated_at;
-
-    if remote_updated_at > local_updated_at {
-        let restored = restore_backup_archive(&app, &remote_bytes)?;
-        return Ok(DataSyncResult {
-            action: "downloaded".into(),
-            client_state: Some(restored.client_state),
-            local_updated_at,
-            remote_updated_at: Some(remote_updated_at),
-        });
-    }
-
-    if local_updated_at > remote_updated_at {
-        webdav::upload_remote_archive(&settings, &local_bundle.bytes).await?;
-        return Ok(DataSyncResult {
-            action: "uploaded".into(),
-            client_state: None,
-            local_updated_at,
-            remote_updated_at: Some(remote_updated_at),
-        });
-    }
-
-    Ok(DataSyncResult {
-        action: "noop".into(),
-        client_state: Some(remote_preview.client_state),
-        local_updated_at,
-        remote_updated_at: Some(remote_updated_at),
-    })
+    restore_backup_archive(&app, &remote_bytes)
 }

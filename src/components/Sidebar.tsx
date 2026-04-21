@@ -1,12 +1,9 @@
-import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, RefreshCw, type LucideIcon } from "lucide-react";
+import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
 import { NavLink, useLocation, useMatch, useResolvedPath } from "react-router-dom";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "../hooks/use-mobile";
-import { applyAppClientStateAndReload } from "../lib/dataManagement/clientState";
-import { useDataManagementStore } from "../stores/dataManagementStore";
 import { useThemeStore } from "../stores/themeStore";
 
 type NavItem = {
@@ -76,8 +73,6 @@ function MobileNavLink({ to, label, Icon, end }: NavItem) {
 export function Sidebar() {
   const isMobile = useIsMobile();
   const location = useLocation();
-  const syncNow = useDataManagementStore((state) => state.syncNow);
-  const syncStatus = useDataManagementStore((state) => state.status);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const shouldHideMobileNav =
@@ -110,27 +105,6 @@ export function Sidebar() {
     );
   }
 
-  function handleSyncClick() {
-    void syncNow()
-      .then((result) => {
-        if (result.action === "downloaded" && result.clientState) {
-          toast.success("云端数据已拉取", { description: "应用将刷新为云端最新数据。" });
-          applyAppClientStateAndReload(result.clientState);
-          return;
-        }
-        if (result.action === "uploaded") {
-          toast.success("本地数据已同步到云端");
-          return;
-        }
-        toast("本地与云端已一致");
-      })
-      .catch((error) => {
-        const description =
-          error instanceof Error && error.message.trim() ? error.message : "请先在数据管理中配置 WebDAV。";
-        toast.error("同步失败", { description });
-      });
-  }
-
   return (
     <aside className="flex h-full w-11 shrink-0 flex-col items-center justify-between overflow-hidden border-r border-border bg-sidebar py-2">
       <nav aria-label="主导航" className="flex w-full flex-col gap-1.5">
@@ -140,23 +114,6 @@ export function Sidebar() {
       </nav>
 
       <div className="flex w-full flex-col items-stretch gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              aria-label="立即同步"
-              variant="ghost"
-              onClick={handleSyncClick}
-              className="h-11 w-full rounded-none px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-            >
-              <RefreshCw
-                className={cn(DESKTOP_SIDEBAR_ICON_CLASS, syncStatus === "syncing" && "animate-spin")}
-                strokeWidth={2.1}
-              />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">立即同步</TooltipContent>
-        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

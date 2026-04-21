@@ -1,13 +1,14 @@
 import { create } from "zustand";
 import {
+  downloadAppDataBackupViaWebdav,
   exportAppDataBackup,
   getDefaultDataSyncSettings,
   importAppDataBackup,
   readDataSyncSettings,
-  syncAppDataViaWebdav,
+  uploadAppDataBackupViaWebdav,
   writeDataSyncSettings,
   type BackupRestoreResult,
-  type DataSyncResult,
+  type CloudBackupUploadResult,
   type DataSyncSettingsDocument,
 } from "../lib/dataManagement/api";
 import { collectAppClientState } from "../lib/dataManagement/clientState";
@@ -31,6 +32,7 @@ type DataManagementState = {
 };
 
 type DataManagementActions = {
+  downloadCloudBackup: () => Promise<BackupRestoreResult>;
   exportBackup: () => Promise<string | null>;
   importBackup: (fileName: string, archiveBytes: number[]) => Promise<BackupRestoreResult>;
   initialize: () => Promise<void>;
@@ -38,7 +40,7 @@ type DataManagementActions = {
   reinitializeSkills: () => Promise<BuiltinSkillsInitializationResult>;
   reinitializeWorkflows: () => Promise<BuiltinWorkflowsInitializationResult>;
   saveConfig: (config: DataSyncSettingsDocument) => Promise<DataSyncSettingsDocument>;
-  syncNow: () => Promise<DataSyncResult>;
+  uploadCloudBackup: () => Promise<CloudBackupUploadResult>;
 };
 
 export type DataManagementStore = DataManagementState & DataManagementActions;
@@ -64,6 +66,22 @@ export const useDataManagementStore = create<DataManagementStore>((set, get) => 
   config: getDefaultDataSyncSettings(),
   errorMessage: null,
   status: "idle",
+  downloadCloudBackup: async () => {
+    set((state) => ({ ...state, errorMessage: null, status: "syncing" }));
+    try {
+      const config = await ensureLoaded(get());
+      if (get().status !== "ready" && get().status !== "syncing") {
+        set((state) => ({ ...state, config }));
+      }
+      const result = await downloadAppDataBackupViaWebdav();
+      set((state) => ({ ...state, config, errorMessage: null, status: "ready" }));
+      return result;
+    } catch (error) {
+      const message = formatError(error, "下载云备份失败。");
+      set((state) => ({ ...state, errorMessage: message, status: "error" }));
+      throw error;
+    }
+  },
   exportBackup: async () => {
     try {
       const savedPath = await exportAppDataBackup(collectAppClientState());
@@ -97,7 +115,7 @@ export const useDataManagementStore = create<DataManagementStore>((set, get) => 
     } catch (error) {
       set((state) => ({
         ...state,
-        errorMessage: formatError(error, "读取云同步配置失败。"),
+        errorMessage: formatError(error, "读取云备份配置失败。"),
         status: "error",
       }));
     }
@@ -109,7 +127,7 @@ export const useDataManagementStore = create<DataManagementStore>((set, get) => 
       set((state) => ({ ...state, config: saved, errorMessage: null, status: "ready" }));
       return saved;
     } catch (error) {
-      const message = formatError(error, "保存云同步配置失败。");
+      const message = formatError(error, "保存云备份配置失败。");
       set((state) => ({ ...state, errorMessage: message, status: "error" }));
       throw error;
     }
@@ -147,18 +165,18 @@ export const useDataManagementStore = create<DataManagementStore>((set, get) => 
       throw error;
     }
   },
-  syncNow: async () => {
+  uploadCloudBackup: async () => {
     set((state) => ({ ...state, errorMessage: null, status: "syncing" }));
     try {
       const config = await ensureLoaded(get());
       if (get().status !== "ready" && get().status !== "syncing") {
         set((state) => ({ ...state, config }));
       }
-      const result = await syncAppDataViaWebdav(collectAppClientState());
+      const result = await uploadAppDataBackupViaWebdav(collectAppClientState());
       set((state) => ({ ...state, config, errorMessage: null, status: "ready" }));
       return result;
     } catch (error) {
-      const message = formatError(error, "同步失败。");
+      const message = formatError(error, "上传云备份失败。");
       set((state) => ({ ...state, errorMessage: message, status: "error" }));
       throw error;
     }

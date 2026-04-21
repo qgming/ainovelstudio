@@ -53,18 +53,16 @@ describe("Sidebar", () => {
     expect(labels.slice(0, 4)).toEqual(["首页", "工作流", "技能", "代理"]);
   });
 
-  it("桌面侧边栏提供手动同步按钮", () => {
+  it("桌面侧边栏只保留主题按钮和导航入口", () => {
     renderSidebar();
 
-    const syncButton = screen.getByRole("button", { name: "立即同步" });
     const themeButton = screen.getByRole("button", { name: "主题切换" });
     const homeLink = screen.getByRole("link", { name: "首页" });
 
-    expect(syncButton).toBeInTheDocument();
     expect(themeButton).toBeInTheDocument();
-    expect(syncButton.querySelector("svg")).toHaveClass("size-5");
     expect(themeButton.querySelector("svg")).toHaveClass("size-5");
     expect(homeLink.querySelector("svg")).toHaveClass("size-5");
+    expect(screen.queryByRole("button", { name: "立即同步" })).not.toBeInTheDocument();
   });
 
   it("只有当前选中的桌面导航项显示左侧线条", () => {

@@ -52,7 +52,6 @@ pub struct BackupRestoreResult {
 
 #[derive(Clone)]
 pub struct BackupArchivePreview {
-    pub client_state: ClientStateSnapshot,
     pub manifest: BackupManifest,
 }
 
@@ -257,7 +256,6 @@ pub fn build_backup_bundle(app: &AppHandle, client_state: ClientStateSnapshot) -
 pub fn inspect_backup_archive(archive_bytes: &[u8]) -> CommandResult<BackupArchivePreview> {
     let parsed = parse_archive(archive_bytes)?;
     Ok(BackupArchivePreview {
-        client_state: parsed.client_state,
         manifest: parsed.manifest,
     })
 }

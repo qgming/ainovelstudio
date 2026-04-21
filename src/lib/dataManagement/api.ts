@@ -14,9 +14,7 @@ export type BackupRestoreResult = {
   restoredAt: number;
 };
 
-export type DataSyncResult = {
-  action: "uploaded" | "downloaded" | "noop";
-  clientState?: ClientStateSnapshot | null;
+export type CloudBackupUploadResult = {
   localUpdatedAt: number;
   remoteUpdatedAt?: number | null;
 };
@@ -56,6 +54,10 @@ export function importAppDataBackup(fileName: string, archiveBytes: number[]) {
   return invoke<BackupRestoreResult>("import_app_data_backup", { archiveBytes, fileName });
 }
 
-export function syncAppDataViaWebdav(clientState: ClientStateSnapshot) {
-  return invoke<DataSyncResult>("sync_app_data_via_webdav", { clientState });
+export function uploadAppDataBackupViaWebdav(clientState: ClientStateSnapshot) {
+  return invoke<CloudBackupUploadResult>("upload_app_data_backup_via_webdav", { clientState });
+}
+
+export function downloadAppDataBackupViaWebdav() {
+  return invoke<BackupRestoreResult>("download_app_data_backup_via_webdav");
 }
