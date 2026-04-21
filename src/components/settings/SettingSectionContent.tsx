@@ -1,7 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Info } from "lucide-react";
-import appIcon from "../../assets/icon.png";
-import packageJson from "../../../package.json";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../../lib/agent/promptContext";
 import { BUILTIN_TOOLS } from "../../lib/agent/toolDefs";
 import { getDefaultAgentProviderConfig, useAgentSettingsStore } from "../../stores/agentSettingsStore";
@@ -12,9 +9,7 @@ import { UsageAnalyticsSection } from "./UsageAnalyticsSection";
 import { Switch } from "../ui/switch";
 import type { SettingSectionKey } from "./settingNavigation";
 import { DataManagementSection } from "./DataManagementSection";
-
-const APP_VERSION = packageJson.version;
-const OFFICIAL_WEBSITE = "https://www.qgming.com";
+import { AboutSection } from "./AboutSection";
 
 function isSameProviderConfig(
   left: ReturnType<typeof getDefaultAgentProviderConfig>,
@@ -68,43 +63,6 @@ function ToolLibrarySection({
               </article>
             );
           })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AboutSection() {
-  return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
-      <SettingsSectionHeader title="关于我们" icon={<Info className="h-4 w-4" />} />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="px-4 py-5">
-          <div className="flex items-center gap-4">
-            <img src={appIcon} alt="神笔写作 Logo" className="h-14 w-14 shrink-0 rounded-[14px] object-contain" />
-            <div className="min-w-0">
-              <h2 className="truncate text-[22px] font-semibold tracking-[-0.04em] text-[#0f172a] dark:text-white">
-                神笔写作
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-[#64748b] dark:text-zinc-400">版本 {APP_VERSION}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-[#e2e8f0] dark:border-[#20242b]" />
-
-        <div className="px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm leading-6 text-[#64748b] dark:text-zinc-400">官网</p>
-            <a
-              href={OFFICIAL_WEBSITE}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-9 shrink-0 items-center rounded-[10px] border border-[#dbe3ee] px-3 text-sm font-medium text-[#0f172a] transition hover:border-[#cbd5e1] dark:border-[#2b313b] dark:text-zinc-100 dark:hover:border-[#334155]"
-            >
-              打开官网
-            </a>
-          </div>
         </div>
       </div>
     </section>

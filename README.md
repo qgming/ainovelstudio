@@ -178,11 +178,51 @@ Windows EXE：
 npm run build:exe
 ```
 
+输出文件：
+
+```text
+release-packages/ainovelstudio_0.1.5_windows_x64.exe
+```
+
 Android APK：
 
 ```bash
 npm run build:android
 ```
+
+输出文件：
+
+```text
+release-packages/ainovelstudio_0.1.5_android_arm64.apk
+```
+
+## GitHub Release 发布
+
+仓库已内置 GitHub Actions 发布工作流：`.github/workflows/release.yml`
+
+发布步骤：
+
+1. 同步更新 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 中的版本号。
+2. 提交并推送代码到 `main`。
+3. 创建并推送版本标签，例如：
+
+```bash
+git tag v0.1.6
+git push origin v0.1.6
+```
+
+工作流会自动执行以下动作：
+
+- 在 `windows-latest` 上安装依赖并构建 Tauri Windows 安装包
+- 校验 tag 与仓库版本号是否一致
+- 自动创建 GitHub Release
+- 自动上传统一命名后的安装包到 Release Assets：`ainovelstudio_版本号_windows_x64.exe`
+
+当前默认规则：
+
+- 仅在推送 `v*` 标签时触发
+- 发布正式版 Release
+- 当前自动构建 Windows 安装包
 
 ## 项目结构
 
@@ -232,7 +272,13 @@ npm run build:android
 
 - 书籍、技能、代理、工作流和应用状态由本地数据库与资源目录共同管理。
 - 应用支持导出完整备份 ZIP，并恢复为完整客户端状态。
-- WebDAV 同步以完整数据包为单位进行上传、下载和版本比较。
+- WebDAV 云备份以完整数据包为单位进行上传和下载。
+
+## 更新检查
+
+- 桌面端关于页内置“检查更新”入口。
+- 当前实现基于 GitHub Releases 的最新版本信息接口，检查 `qgming/ainovelstudio` 的最新正式版本。
+- 当发现新版本时，应用会展示版本信息、发布时间、Release Notes，并跳转到匹配的平台安装包或 Release 页面。
 
 ## 版本
 

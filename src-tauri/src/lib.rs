@@ -1,3 +1,4 @@
+mod app_update;
 mod agents;
 mod app_control;
 mod chat;
@@ -77,6 +78,7 @@ pub fn run() {
             workspace::cancel_tool_request,
             workspace::cancel_tool_requests,
             terminate_application,
+            app_update::fetch_latest_release_info,
             agents::scan_installed_agents,
             agents::initialize_builtin_agents,
             agents::reset_builtin_agents,

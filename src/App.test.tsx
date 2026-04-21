@@ -15,12 +15,20 @@ const { mockInvoke, mockWindow } = vi.hoisted(() => ({
   },
 }));
 
+const { mockOpenUrl } = vi.hoisted(() => ({
+  mockOpenUrl: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => mockWindow,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mockInvoke,
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: mockOpenUrl,
 }));
 
 vi.mock("@lobehub/icons", () => ({
@@ -126,6 +134,7 @@ describe("App shell", () => {
     mockWindow.onResized.mockReset();
     mockWindow.onResized.mockResolvedValue(() => {});
     mockWindow.unmaximize.mockReset();
+    mockOpenUrl.mockReset();
 
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -530,7 +539,8 @@ describe("App shell", () => {
 
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
-    expect(screen.getByText("版本 0.1.3")).toBeInTheDocument();
+    expect(screen.getByText("版本 0.1.5")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
     expect(screen.queryByText("www.qgming.com")).not.toBeInTheDocument();
   });
