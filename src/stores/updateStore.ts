@@ -1,14 +1,9 @@
-import { isTauri } from "@tauri-apps/api/core";
 import packageJson from "../../package.json";
 import { toast } from "sonner";
 import { create } from "zustand";
 import {
-  checkForAppUpdate,
   fetchLatestDirectUpdate,
   openExternalUpdateUrl,
-  relaunchToApplyUpdate,
-  type AppUpdateHandle,
-  type AppUpdateProgressEvent,
   type DirectUpdateTarget,
 } from "../lib/update/api";
 import { isMobileRuntime } from "../lib/platform";
@@ -16,25 +11,14 @@ import type { UpdateSummary } from "../lib/update/types";
 import { compareVersions, normalizeVersionLabel } from "../lib/update/version";
 
 const AUTO_UPDATE_ENABLED_KEY = "ainovelstudio:auto-update-enabled";
-const PENDING_INSTALL_VERSION_KEY = "ainovelstudio:pending-install-version";
 const CURRENT_VERSION = packageJson.version;
 
-type UpdateStatus =
-  | "idle"
-  | "available"
-  | "checking"
-  | "downloading"
-  | "downloaded"
-  | "installing"
-  | "latest"
-  | "error";
+type UpdateStatus = "idle" | "available" | "checking" | "latest" | "error";
 
 type UpdateState = {
   autoUpdateEnabled: boolean;
   errorMessage: string | null;
   initialized: boolean;
-  pendingInstallVersion: string | null;
-  progress: number | null;
   status: UpdateStatus;
   updateSummary: UpdateSummary | null;
 };
@@ -43,14 +27,12 @@ type UpdateActions = {
   checkForUpdates: (options?: { silent?: boolean }) => Promise<void>;
   downloadAvailableUpdate: () => Promise<void>;
   initializePreferences: () => void;
-  installDownloadedUpdate: () => Promise<void>;
   runStartupUpdateFlow: () => Promise<void>;
   setAutoUpdateEnabled: (enabled: boolean) => void;
 };
 
 export type UpdateStore = UpdateState & UpdateActions;
 
-let stagedUpdate: AppUpdateHandle | null = null;
 let startupPromise: Promise<void> | null = null;
 
 function getDefaultState(): UpdateState {
@@ -58,36 +40,23 @@ function getDefaultState(): UpdateState {
     autoUpdateEnabled: true,
     errorMessage: null,
     initialized: false,
-    pendingInstallVersion: null,
-    progress: null,
     status: "idle",
     updateSummary: null,
   };
-}
-
-function canUseDesktopUpdater() {
-  return isTauri() && !isMobileRuntime();
 }
 
 function resolveDirectUpdateTarget(): DirectUpdateTarget {
   return isMobileRuntime() ? "android-arm64" : "windows-x64";
 }
 
-function closeStagedUpdate() {
-  const current = stagedUpdate;
-  stagedUpdate = null;
-  if (!current) {
-    return;
-  }
-  void current.close().catch(() => undefined);
-}
-
-function createUpdateSummary(update: AppUpdateHandle): UpdateSummary {
+function createUpdateSummary(summary: Awaited<ReturnType<typeof fetchLatestDirectUpdate>>): UpdateSummary {
   return {
-    currentVersion: update.currentVersion,
-    version: update.version,
-    notes: update.body?.trim() ?? "",
-    publishedAt: update.date ?? null,
+    currentVersion: CURRENT_VERSION,
+    version: summary.version,
+    notes: summary.notes,
+    publishedAt: summary.publishedAt,
+    downloadUrl: summary.downloadUrl,
+    packageKind: summary.packageKind,
   };
 }
 
@@ -119,75 +88,11 @@ function readBooleanStorage(key: string, fallbackValue: boolean) {
   return fallbackValue;
 }
 
-function readStringStorage(key: string) {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const value = window.localStorage.getItem(key);
-  return value?.trim() ? value : null;
-}
-
 function writeBooleanStorage(key: string, value: boolean) {
   if (typeof window === "undefined") {
     return;
   }
   window.localStorage.setItem(key, String(value));
-}
-
-function writePendingInstallVersion(version: string | null) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  if (!version) {
-    window.localStorage.removeItem(PENDING_INSTALL_VERSION_KEY);
-    return;
-  }
-  window.localStorage.setItem(PENDING_INSTALL_VERSION_KEY, version);
-}
-
-function buildProgressHandler(onProgress: (progress: number | null) => void) {
-  let downloadedBytes = 0;
-  let totalBytes = 0;
-
-  return (event: AppUpdateProgressEvent) => {
-    if (event.event === "Started") {
-      totalBytes = event.data.contentLength ?? 0;
-      onProgress(0);
-      return;
-    }
-
-    if (event.event === "Progress") {
-      downloadedBytes += event.data.chunkLength;
-      if (totalBytes > 0) {
-        onProgress(Math.min(99, Math.round((downloadedBytes / totalBytes) * 100)));
-      }
-      return;
-    }
-
-    onProgress(100);
-  };
-}
-
-function showDownloadedToast(summary: UpdateSummary) {
-  const versionLabel = formatVersionLabel(summary.version);
-  toast.success("新版本已下载完成", {
-    description: `${versionLabel} 已准备好。立即安装会重启应用，稍后安装会在下次打开时继续。`,
-    duration: 20000,
-    action: {
-      label: "立即安装",
-      onClick: () => {
-        void useUpdateStore.getState().installDownloadedUpdate();
-      },
-    },
-    cancel: {
-      label: "稍后安装",
-      onClick: () => {
-        toast("已安排稍后安装", {
-          description: `下次打开应用时会继续安装 ${versionLabel}。`,
-        });
-      },
-    },
-  });
 }
 
 export const useUpdateStore = create<UpdateStore>((set, get) => {
@@ -197,113 +102,28 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
     }
 
     const autoUpdateEnabled = readBooleanStorage(AUTO_UPDATE_ENABLED_KEY, true);
-    const pendingInstallVersion = readStringStorage(PENDING_INSTALL_VERSION_KEY);
-    const shouldClearPending =
-      pendingInstallVersion &&
-      compareVersions(CURRENT_VERSION, pendingInstallVersion) >= 0;
-
-    if (shouldClearPending) {
-      writePendingInstallVersion(null);
-    }
-
     set((state) => ({
       ...state,
       autoUpdateEnabled,
       initialized: true,
-      pendingInstallVersion: shouldClearPending ? null : pendingInstallVersion,
     }));
   }
 
-  async function downloadUpdate(update: AppUpdateHandle) {
-    const summary = createUpdateSummary(update);
-    closeStagedUpdate();
-    set((state) => ({
-      ...state,
-      errorMessage: null,
-      progress: 0,
-      status: "downloading",
-      updateSummary: summary,
-    }));
-
-    try {
-      await update.download(
-        buildProgressHandler((progress) => {
-          set((state) => ({ ...state, progress }));
-        }),
-      );
-      stagedUpdate = update;
-      writePendingInstallVersion(summary.version);
-      set((state) => ({
-        ...state,
-        pendingInstallVersion: summary.version,
-        progress: 100,
-        status: "downloaded",
-        updateSummary: summary,
-      }));
-      showDownloadedToast(summary);
-    } catch (error) {
-      void update.close().catch(() => undefined);
-      set((state) => ({
-        ...state,
-        errorMessage: formatError(error, "下载更新失败。"),
-        progress: null,
-        status: "error",
-      }));
-      toast.error("下载更新失败", {
-        description: formatError(error, "请稍后重试。"),
-      });
+  async function openAvailableUpdate(summary: UpdateSummary) {
+    if (!summary.downloadUrl) {
+      return;
     }
-  }
 
-  async function continuePendingInstall(version: string) {
-    const versionLabel = formatVersionLabel(version);
-    set((state) => ({
-      ...state,
-      errorMessage: null,
-      progress: null,
-      status: "installing",
-    }));
-    toast("继续安装更新", {
-      description: `${versionLabel} 将在准备完成后自动应用。`,
+    await openExternalUpdateUrl(summary.downloadUrl);
+    toast.success("已打开更新下载链接", {
+      description: `${formatVersionLabel(summary.version)} 将通过浏览器继续下载。`,
     });
-
-    try {
-      const update = await checkForAppUpdate();
-      if (!update || compareVersions(update.version, version) !== 0) {
-        writePendingInstallVersion(null);
-        set((state) => ({
-          ...state,
-          pendingInstallVersion: null,
-          progress: null,
-          status: "latest",
-        }));
-        return;
-      }
-
-      await update.downloadAndInstall(
-        buildProgressHandler((progress) => {
-          set((state) => ({ ...state, progress }));
-        }),
-      );
-      await relaunchToApplyUpdate();
-    } catch (error) {
-      set((state) => ({
-        ...state,
-        errorMessage: formatError(error, "安装更新失败。"),
-        progress: null,
-        status: "error",
-      }));
-      toast.error("安装更新失败", {
-        description: formatError(error, "请稍后重试。"),
-      });
-    }
   }
 
-  async function handleDirectDownloadUpdate(silent: boolean) {
+  async function performDirectUpdateCheck(silent: boolean) {
     set((state) => ({
       ...state,
       errorMessage: null,
-      progress: null,
       status: "checking",
     }));
 
@@ -313,7 +133,6 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
         set((state) => ({
           ...state,
           errorMessage: null,
-          progress: null,
           status: "latest",
           updateSummary: null,
         }));
@@ -325,26 +144,16 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
         return;
       }
 
-      const summary: UpdateSummary = {
-        currentVersion: CURRENT_VERSION,
-        version: release.version,
-        notes: release.notes,
-        publishedAt: release.publishedAt,
-        downloadUrl: release.downloadUrl,
-        packageKind: release.packageKind,
-      };
       set((state) => ({
         ...state,
         errorMessage: null,
-        progress: null,
         status: "available",
-        updateSummary: summary,
+        updateSummary: createUpdateSummary(release),
       }));
     } catch (error) {
       set((state) => ({
         ...state,
         errorMessage: formatError(error, "检查更新失败。"),
-        progress: null,
         status: "error",
       }));
       if (!silent) {
@@ -364,42 +173,20 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
         return;
       }
 
-      if (!canUseDesktopUpdater()) {
-        if (currentSummary.downloadUrl) {
-          await openExternalUpdateUrl(currentSummary.downloadUrl);
-        }
-        return;
-      }
-
       set((state) => ({
         ...state,
         errorMessage: null,
-        progress: null,
-        status: "checking",
       }));
 
       try {
-        const update = await checkForAppUpdate();
-        if (!update || compareVersions(update.version, currentSummary.version) !== 0) {
-          set((state) => ({
-            ...state,
-            errorMessage: null,
-            progress: null,
-            status: "latest",
-            updateSummary: null,
-          }));
-          return;
-        }
-
-        await downloadUpdate(update);
+        await openAvailableUpdate(currentSummary);
       } catch (error) {
         set((state) => ({
           ...state,
-          errorMessage: formatError(error, "下载更新失败。"),
-          progress: null,
+          errorMessage: formatError(error, "打开下载链接失败。"),
           status: "error",
         }));
-        toast.error("下载更新失败", {
+        toast.error("打开下载链接失败", {
           description: formatError(error, "请稍后重试。"),
         });
       }
@@ -414,117 +201,10 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
     },
     checkForUpdates: async ({ silent = false } = {}) => {
       initializePreferences();
-      if (!canUseDesktopUpdater()) {
-        await handleDirectDownloadUpdate(silent);
+      if (get().status === "checking") {
         return;
       }
-
-      if (get().status === "checking" || get().status === "downloading" || get().status === "installing") {
-        return;
-      }
-
-      if (get().status === "downloaded" && stagedUpdate) {
-        showDownloadedToast(get().updateSummary ?? createUpdateSummary(stagedUpdate));
-        return;
-      }
-
-      set((state) => ({
-        ...state,
-        errorMessage: null,
-        progress: null,
-        status: "checking",
-      }));
-
-      try {
-        const update = await checkForAppUpdate();
-        if (!update) {
-          closeStagedUpdate();
-          set((state) => ({
-            ...state,
-            errorMessage: null,
-            progress: null,
-            status: "latest",
-            updateSummary: null,
-          }));
-          if (!silent) {
-            toast.success("当前已是最新版本", {
-              description: `当前版本 ${formatVersionLabel(CURRENT_VERSION)}`,
-            });
-          }
-          return;
-        }
-
-        if (silent) {
-          await downloadUpdate(update);
-          return;
-        }
-
-        set((state) => ({
-          ...state,
-          errorMessage: null,
-          progress: null,
-          status: "available",
-          updateSummary: createUpdateSummary(update),
-        }));
-      } catch (error) {
-        set((state) => ({
-          ...state,
-          errorMessage: formatError(error, "检查更新失败。"),
-          progress: null,
-          status: "error",
-        }));
-        if (!silent) {
-          toast.error("检查更新失败", {
-            description: formatError(error, "请稍后重试。"),
-          });
-        }
-      }
-    },
-    installDownloadedUpdate: async () => {
-      initializePreferences();
-      if (!canUseDesktopUpdater()) {
-        const downloadUrl = get().updateSummary?.downloadUrl;
-        if (downloadUrl) {
-          await openExternalUpdateUrl(downloadUrl);
-        }
-        return;
-      }
-
-      const pendingVersion = get().pendingInstallVersion;
-      if (stagedUpdate) {
-        set((state) => ({
-          ...state,
-          errorMessage: null,
-          progress: 100,
-          status: "installing",
-        }));
-
-        try {
-          await stagedUpdate.install();
-          closeStagedUpdate();
-          await relaunchToApplyUpdate();
-        } catch (error) {
-          set((state) => ({
-            ...state,
-            errorMessage: formatError(error, "安装更新失败。"),
-            progress: null,
-            status: "error",
-          }));
-          toast.error("安装更新失败", {
-            description: formatError(error, "请稍后重试。"),
-          });
-        }
-        return;
-      }
-
-      if (pendingVersion) {
-        await continuePendingInstall(pendingVersion);
-        return;
-      }
-
-      toast("当前没有待安装的更新", {
-        description: `当前版本 ${formatVersionLabel(CURRENT_VERSION)}`,
-      });
+      await performDirectUpdateCheck(silent);
     },
     runStartupUpdateFlow: async () => {
       if (startupPromise) {
@@ -533,19 +213,11 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
 
       startupPromise = (async () => {
         initializePreferences();
-        if (!canUseDesktopUpdater()) {
+        if (!get().autoUpdateEnabled) {
           return;
         }
 
-        const pendingVersion = get().pendingInstallVersion;
-        if (pendingVersion) {
-          await continuePendingInstall(pendingVersion);
-          return;
-        }
-
-        if (get().autoUpdateEnabled) {
-          await get().checkForUpdates({ silent: true });
-        }
+        await get().checkForUpdates({ silent: true });
       })().finally(() => {
         startupPromise = null;
       });

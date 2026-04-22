@@ -2,16 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useUpdateStore } from "./updateStore";
 
 const {
-  checkForAppUpdateMock,
   fetchLatestDirectUpdateMock,
   openExternalUpdateUrlMock,
-  relaunchToApplyUpdateMock,
   toastMock,
 } = vi.hoisted(() => ({
-  checkForAppUpdateMock: vi.fn(),
   fetchLatestDirectUpdateMock: vi.fn(),
   openExternalUpdateUrlMock: vi.fn(),
-  relaunchToApplyUpdateMock: vi.fn(),
   toastMock: Object.assign(vi.fn(), {
     error: vi.fn(),
     success: vi.fn(),
@@ -19,10 +15,8 @@ const {
 }));
 
 vi.mock("../lib/update/api", () => ({
-  checkForAppUpdate: checkForAppUpdateMock,
   fetchLatestDirectUpdate: fetchLatestDirectUpdateMock,
   openExternalUpdateUrl: openExternalUpdateUrlMock,
-  relaunchToApplyUpdate: relaunchToApplyUpdateMock,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -33,30 +27,11 @@ vi.mock("sonner", () => ({
   toast: toastMock,
 }));
 
-function createDownloadableUpdate(version = "0.1.7") {
-  return {
-    body: "修复若干问题",
-    close: vi.fn().mockResolvedValue(undefined),
-    currentVersion: "0.1.7",
-    date: "2026-04-21T00:00:00Z",
-    download: vi.fn().mockImplementation(async (onEvent?: (event: unknown) => void) => {
-      onEvent?.({ event: "Started", data: { contentLength: 100 } });
-      onEvent?.({ event: "Progress", data: { chunkLength: 50 } });
-      onEvent?.({ event: "Finished" });
-    }),
-    downloadAndInstall: vi.fn().mockResolvedValue(undefined),
-    install: vi.fn().mockResolvedValue(undefined),
-    version,
-  };
-}
-
 function resetStore() {
   useUpdateStore.setState({
     autoUpdateEnabled: true,
     errorMessage: null,
     initialized: false,
-    pendingInstallVersion: null,
-    progress: null,
     status: "idle",
     updateSummary: null,
   });
@@ -66,10 +41,8 @@ describe("updateStore", () => {
   beforeEach(() => {
     window.localStorage.clear();
     resetStore();
-    checkForAppUpdateMock.mockReset();
     fetchLatestDirectUpdateMock.mockReset();
     openExternalUpdateUrlMock.mockReset();
-    relaunchToApplyUpdateMock.mockReset();
     toastMock.mockReset();
     toastMock.error.mockReset();
     toastMock.success.mockReset();
@@ -87,51 +60,62 @@ describe("updateStore", () => {
     expect(useUpdateStore.getState().autoUpdateEnabled).toBe(false);
   });
 
-  it("检查到新版本后会下载并记录待安装版本", async () => {
-    const update = createDownloadableUpdate("0.1.7");
-    checkForAppUpdateMock.mockResolvedValue(update);
+  it("检测到新版本后会保存更新摘要", async () => {
+    fetchLatestDirectUpdateMock.mockResolvedValue({
+      downloadUrl: "https://example.com/ainovelstudio_0.1.9_windows_x64.exe",
+      notes: "修复若干问题",
+      packageKind: "exe",
+      publishedAt: "2026-04-21T00:00:00Z",
+      version: "0.1.9",
+    });
 
     await useUpdateStore.getState().checkForUpdates();
 
-    expect(update.download).not.toHaveBeenCalled();
     expect(useUpdateStore.getState().status).toBe("available");
     expect(useUpdateStore.getState().updateSummary).toMatchObject({
-      version: "0.1.7",
+      currentVersion: "0.1.8",
+      version: "0.1.9",
     });
   });
 
-  it("确认下载可用更新后会开始下载并记录待安装版本", async () => {
-    const update = createDownloadableUpdate("0.1.7");
-    checkForAppUpdateMock.mockResolvedValue(update);
-
+  it("下载更新会直接打开外部安装包链接", async () => {
     useUpdateStore.setState({
+      autoUpdateEnabled: true,
+      errorMessage: null,
       initialized: true,
       status: "available",
       updateSummary: {
-        currentVersion: "0.1.7",
-        version: "0.1.7",
+        currentVersion: "0.1.8",
+        downloadUrl: "https://example.com/ainovelstudio_0.1.8_windows_x64.exe",
         notes: "修复若干问题",
+        packageKind: "exe",
         publishedAt: "2026-04-21T00:00:00Z",
+        version: "0.1.8",
       },
     });
 
     await useUpdateStore.getState().downloadAvailableUpdate();
 
-    expect(update.download).toHaveBeenCalledTimes(1);
-    expect(useUpdateStore.getState().status).toBe("downloaded");
-    expect(useUpdateStore.getState().progress).toBe(100);
-    expect(useUpdateStore.getState().pendingInstallVersion).toBe("0.1.7");
-    expect(window.localStorage.getItem("ainovelstudio:pending-install-version")).toBe("0.1.7");
+    expect(openExternalUpdateUrlMock).toHaveBeenCalledWith(
+      "https://example.com/ainovelstudio_0.1.8_windows_x64.exe",
+    );
+    expect(toastMock.success).toHaveBeenCalledTimes(1);
   });
 
-  it("启动时遇到待安装版本会继续执行安装流程", async () => {
-    window.localStorage.setItem("ainovelstudio:pending-install-version", "0.1.8");
-    const update = createDownloadableUpdate("0.1.8");
-    checkForAppUpdateMock.mockResolvedValue(update);
+  it("启动时静默检查更新并保留可用版本", async () => {
+    fetchLatestDirectUpdateMock.mockResolvedValue({
+      downloadUrl: "https://example.com/ainovelstudio_0.1.9_windows_x64.exe",
+      notes: "修复若干问题",
+      packageKind: "exe",
+      publishedAt: "2026-04-21T00:00:00Z",
+      version: "0.1.9",
+    });
 
     await useUpdateStore.getState().runStartupUpdateFlow();
 
-    expect(update.downloadAndInstall).toHaveBeenCalledTimes(1);
-    expect(relaunchToApplyUpdateMock).toHaveBeenCalledTimes(1);
+    expect(fetchLatestDirectUpdateMock).toHaveBeenCalledTimes(1);
+    expect(useUpdateStore.getState().status).toBe("available");
+    expect(useUpdateStore.getState().updateSummary?.version).toBe("0.1.9");
+    expect(toastMock.success).not.toHaveBeenCalled();
   });
 });

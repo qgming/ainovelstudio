@@ -4,17 +4,9 @@ import { toast } from "sonner";
 import appIcon from "../../assets/icon.png";
 import packageJson from "../../../package.json";
 import { normalizeVersionLabel } from "../../lib/update/version";
-import type { UpdateSummary } from "../../lib/update/types";
 import { useUpdateStore } from "../../stores/updateStore";
+import { UpdateReleaseDialog } from "../update/UpdateReleaseDialog";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
 import { Switch } from "../ui/switch";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";
 
@@ -55,33 +47,16 @@ function ExternalLinkRow({
   );
 }
 
-function formatPublishedAt(value: string | null) {
-  if (!value) {
-    return "未提供";
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function getPackageLabel(packageKind: UpdateSummary["packageKind"]) {
-  return packageKind === "apk" ? "APK" : "EXE";
-}
-
 export function AboutSection() {
   const autoUpdateEnabled = useUpdateStore((state) => state.autoUpdateEnabled);
   const checkForUpdates = useUpdateStore((state) => state.checkForUpdates);
   const downloadAvailableUpdate = useUpdateStore((state) => state.downloadAvailableUpdate);
   const initializePreferences = useUpdateStore((state) => state.initializePreferences);
-  const installDownloadedUpdate = useUpdateStore((state) => state.installDownloadedUpdate);
   const setAutoUpdateEnabled = useUpdateStore((state) => state.setAutoUpdateEnabled);
   const status = useUpdateStore((state) => state.status);
   const updateSummary = useUpdateStore((state) => state.updateSummary);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
-  const isBusy = status === "checking" || status === "downloading" || status === "installing";
+  const isBusy = status === "checking";
 
   useEffect(() => {
     initializePreferences();
@@ -99,11 +74,6 @@ export function AboutSection() {
   }, [status, updateSummary]);
 
   function handleCheckButtonClick() {
-    if (status === "downloaded") {
-      void installDownloadedUpdate();
-      return;
-    }
-
     if (status === "available") {
       setUpdateDialogOpen(true);
       return;
@@ -162,17 +132,11 @@ export function AboutSection() {
                     ? <Download className="h-4 w-4" />
                     : <RefreshCw className="h-4 w-4" />
                 )}
-                {status === "downloaded"
-                  ? "立即安装"
-                  : status === "available"
-                    ? "查看更新"
+                {status === "available"
+                  ? "查看更新"
                   : status === "checking"
                     ? "检查中..."
-                    : status === "downloading"
-                      ? "下载中..."
-                      : status === "installing"
-                        ? "安装中..."
-                        : "检查更新"}
+                    : "检查更新"}
               </Button>
             </div>
           </section>
@@ -213,55 +177,12 @@ export function AboutSection() {
           </section>
         </div>
       </div>
-      <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {updateSummary ? `发现 ${normalizeVersionLabel(updateSummary.version)}` : "发现新版本"}
-            </DialogTitle>
-            <DialogDescription>
-              当前版本 {normalizeVersionLabel(APP_VERSION)}
-              {updateSummary ? `，发布时间 ${formatPublishedAt(updateSummary.publishedAt)}` : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {updateSummary ? (
-              <div className="rounded-[16px] border border-[#dbe3ee] bg-[#f8fafc] px-4 py-3 dark:border-[#2b313b] dark:bg-[#151a21]">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[#0f172a] dark:text-zinc-100">
-                      {normalizeVersionLabel(updateSummary.version)}
-                    </p>
-                    <p className="mt-1 text-xs text-[#64748b] dark:text-zinc-400">
-                      安装包类型：{getPackageLabel(updateSummary.packageKind ?? null)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">更新日志</p>
-              <div className="max-h-[280px] overflow-y-auto rounded-[16px] border border-[#dbe3ee] bg-white px-4 py-3 text-sm leading-6 text-[#334155] dark:border-[#2b313b] dark:bg-[#11151a] dark:text-zinc-300">
-                {updateSummary?.notes?.trim() ? (
-                  <pre className="whitespace-pre-wrap break-words font-sans">
-                    {updateSummary.notes.trim()}
-                  </pre>
-                ) : (
-                  <p>本次版本暂未提供更新日志。</p>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setUpdateDialogOpen(false)}>
-              稍后再说
-            </Button>
-            <Button type="button" onClick={handleDownloadAvailableUpdate}>
-              下载更新
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UpdateReleaseDialog
+        open={updateDialogOpen}
+        onOpenChange={setUpdateDialogOpen}
+        onDownload={handleDownloadAvailableUpdate}
+        summary={updateSummary}
+      />
     </section>
   );
 }

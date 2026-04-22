@@ -16,7 +16,7 @@
   <a href="https://github.com/qgming/ainovelstudio">
     <img src="https://img.shields.io/github/stars/qgming/ainovelstudio?style=for-the-badge&logo=github&label=Stars" alt="GitHub Stars" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.1.7-111827?style=for-the-badge" alt="Version 0.1.7" />
+  <img src="https://img.shields.io/badge/Version-0.1.8-111827?style=for-the-badge" alt="Version 0.1.8" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 
@@ -178,22 +178,10 @@ Windows EXE：
 npm run build:exe
 ```
 
-输出文件：
-
-```text
-release-packages/ainovelstudio_0.1.7_windows_x64.exe
-```
-
 Android APK：
 
 ```bash
 npm run build:android
-```
-
-输出文件：
-
-```text
-release-packages/ainovelstudio_0.1.7_android_arm64.apk
 ```
 
 ## 项目结构
@@ -245,13 +233,3 @@ release-packages/ainovelstudio_0.1.7_android_arm64.apk
 - 书籍、技能、代理、工作流和应用状态由本地数据库与资源目录共同管理。
 - 应用支持导出完整备份 ZIP，并恢复为完整客户端状态。
 - WebDAV 云备份以完整数据包为单位进行上传和下载。
-
-## 自动更新
-
-- 桌面端关于页支持手动检查更新与自动更新开关。
-- 自动更新默认开启，应用启动后会在后台检测 GitHub Release 的新版本并自动下载。
-- 下载完成后会提示“立即安装”或“稍后安装”，选择稍后安装会在下次打开应用时继续安装流程。
-
-## 版本
-
-当前仓库版本：`0.1.7`

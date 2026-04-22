@@ -1,11 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
 import type { UpdatePackageKind } from "./types";
 
-export type AppUpdateHandle = Update;
-export type AppUpdateProgressEvent = DownloadEvent;
 export type DirectUpdateTarget = "windows-x64" | "android-arm64";
 export type DirectUpdateRelease = {
   version: string;
@@ -19,11 +15,18 @@ const GITHUB_OWNER = "qgming";
 const GITHUB_REPO = "ainovelstudio";
 const GITHUB_LATEST_RELEASE_API =
   `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
-const DIRECT_DOWNLOAD_URLS: Record<DirectUpdateTarget, string> = {
-  "android-arm64":
-    `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download/ainovelstudio_android_arm64.apk`,
-  "windows-x64":
-    `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download/ainovelstudio_windows_x64.exe`,
+const DIRECT_PACKAGE_METADATA: Record<
+  DirectUpdateTarget,
+  { fileName: (version: string) => string; packageKind: UpdatePackageKind }
+> = {
+  "android-arm64": {
+    fileName: (version) => `ainovelstudio_${version}_android_arm64.apk`,
+    packageKind: "apk",
+  },
+  "windows-x64": {
+    fileName: (version) => `ainovelstudio_${version}_windows_x64.exe`,
+    packageKind: "exe",
+  },
 };
 
 type GitHubLatestReleaseResponse = {
@@ -36,12 +39,10 @@ function normalizeReleaseVersion(tagName: string) {
   return tagName.trim().replace(/^v/i, "");
 }
 
-export function checkForAppUpdate() {
-  return check();
-}
-
-export function relaunchToApplyUpdate() {
-  return relaunch();
+function buildDirectDownloadUrl(version: string, target: DirectUpdateTarget) {
+  const releaseTag = `v${version}`;
+  const fileName = DIRECT_PACKAGE_METADATA[target].fileName(version);
+  return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${releaseTag}/${fileName}`;
 }
 
 export async function fetchLatestDirectUpdate(target: DirectUpdateTarget): Promise<DirectUpdateRelease> {
@@ -64,8 +65,8 @@ export async function fetchLatestDirectUpdate(target: DirectUpdateTarget): Promi
     version,
     notes: release.body?.trim() ?? "",
     publishedAt: release.published_at ?? null,
-    downloadUrl: DIRECT_DOWNLOAD_URLS[target],
-    packageKind: target === "android-arm64" ? "apk" : "exe",
+    downloadUrl: buildDirectDownloadUrl(version, target),
+    packageKind: DIRECT_PACKAGE_METADATA[target].packageKind,
   };
 }
 

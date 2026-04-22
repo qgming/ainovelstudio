@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { TooltipProvider } from "./ui/tooltip";
 import { useThemeStore } from "../stores/themeStore";
+import { useUpdateStore } from "../stores/updateStore";
 
 function mockViewport(width: number) {
   Object.defineProperty(window, "innerWidth", {
@@ -40,6 +41,13 @@ describe("Sidebar", () => {
   beforeEach(() => {
     mockViewport(1280);
     useThemeStore.setState({ theme: "light", initialized: true });
+    useUpdateStore.setState({
+      autoUpdateEnabled: true,
+      errorMessage: null,
+      initialized: true,
+      status: "idle",
+      updateSummary: null,
+    });
   });
 
   it("把工作流入口放在首页和技能之间", () => {
@@ -63,6 +71,32 @@ describe("Sidebar", () => {
     expect(themeButton.querySelector("svg")).toHaveClass("size-5");
     expect(homeLink.querySelector("svg")).toHaveClass("size-5");
     expect(screen.queryByRole("button", { name: "立即同步" })).not.toBeInTheDocument();
+  });
+
+  it("检测到新版本时会显示位于主题切换上方的独立更新按钮", () => {
+    useUpdateStore.setState({
+      autoUpdateEnabled: true,
+      errorMessage: null,
+      initialized: true,
+      status: "available",
+      updateSummary: {
+        currentVersion: "0.1.8",
+        downloadUrl: "https://example.com/ainovelstudio_0.1.9_windows_x64.exe",
+        notes: "修复更新流程",
+        packageKind: "exe",
+        publishedAt: "2026-04-22T06:30:00Z",
+        version: "0.1.9",
+      },
+    });
+
+    renderSidebar();
+
+    const updateButton = screen.getByRole("button", { name: "查看 0.1.9 更新" });
+    const themeButton = screen.getByRole("button", { name: "主题切换" });
+
+    expect(updateButton).toBeInTheDocument();
+    expect(themeButton).toBeInTheDocument();
+    expect(updateButton.compareDocumentPosition(themeButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("只有当前选中的桌面导航项显示左侧线条", () => {

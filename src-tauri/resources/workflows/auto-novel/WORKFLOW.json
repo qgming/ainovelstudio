@@ -1,60 +1,46 @@
 {
   "templateKey": "builtin:auto-novel",
-  "name": "全自动写小说",
-  "description": "基于主编、大纲编辑、章节编辑、连载作者、审稿编辑、润稿编辑和设定编辑的新长篇连载流水线，自动推进章节、返修、润稿和设定回写。",
-  "basePrompt": "直接使用当前内置编辑链完成长篇连载流水线。所有节点都以当前绑定书籍工作区中的文件为长期事实源：先读文件，再决定创建、更新、维护、合并或删除哪些文件。每一轮默认围绕“当前应推进的章节”工作：先由主编确认本轮推进重点，再同步结构与单章规划，随后落稿、审稿、润稿，并在通过后回写 canon 与动态状态。若出现新人物、新地点、新组织、新道具、新线索或新的状态变化，应优先维护工作区文件本身，而不是只输出一段文本。步骤跳转、修订反馈和循环由程序控制。",
+  "name": "长篇续写",
+  "description": "面向 100 万字以上番茄长篇连载的高频续写工作流，聚焦选章、拆章、成稿、审稿和连续性回写。",
+  "basePrompt": "直接使用当前内置编辑链完成番茄长篇连载续写。核心目标只有一个：持续把绑定书籍工作区中的长篇小说往后写，而不是反复做重型前期准备。所有节点都以当前绑定书籍工作区中的文件为长期事实源，先读文件，再决定创建、更新、维护哪些文件。必须优先遵循用户在工作流里设置的主提示词，包括题材、受众、主卖点、情绪基调、平台风格、禁用元素和篇幅方向。每一轮默认只推进一个当前最该写的章节或一个直接相关的小结构单元：先确定本轮目标，再做单章拆解，随后成稿、审稿，并在通过后回写连续性与状态文件。除非出现明显结构断链，否则不要把大量时间消耗在全书大纲重做、全量设定重抄或逐章精修上；优先保证可持续续写、稳定更新、章末钩子和番茄平台追读节奏。",
   "loopConfig": {
-    "maxLoops": 5
+    "maxLoops": 50
   },
   "teamMembers": [
     {
       "key": "director",
       "agentId": "chief-editor",
-      "name": "主编",
-      "roleLabel": "本轮调度",
-      "responsibilityPrompt": "先读取当前绑定书籍工作区中的已有大纲、设定、最近章节、最近审稿结果和项目状态，再判断本轮最该推进的章节或结构目标。你的职责是给本轮写作链路定焦：明确本轮目标章节、推进重点、风险点、需要先补的文件和建议交付顺序。若发现项目当前更适合先修结构或设定，也要写清楚本轮的优先动作。正文输出只需简短说明本轮目标、优先顺序和关键风险。"
-    },
-    {
-      "key": "structure",
-      "agentId": "outline-editor",
-      "name": "大纲编辑",
-      "roleLabel": "结构同步",
-      "responsibilityPrompt": "围绕主编给出的本轮目标，读取当前绑定书籍工作区中的全书纲、卷纲、角色弧线、伏笔表、最近章节和最近审稿意见，更新与当前章节强相关的结构文件。你的职责是保证本轮进入拆章前，相关卷纲、阶段目标、角色弧线和伏笔回收计划已经同步。若发现结构断链、升级链缺口或伏笔错位，应直接在大纲文件中修正并写清影响范围。"
+      "name": "连载主编",
+      "roleLabel": "续写调度",
+      "responsibilityPrompt": "先读取当前绑定书籍工作区中的主提示词、全书方向、卷纲、最近 2-4 章正文、最近一次审稿结论和项目状态，再判断这一轮最该续写哪一章。你的目标是提高长篇连载推进效率，而不是追求流程完整感。优先输出本轮目标章节、章节作用、应承接的前情、必须兑现的冲突、章末钩子方向和本轮禁止跑偏的点。只有在明显影响当前章节时才要求补结构文件，否则保持轻量推进。"
     },
     {
       "key": "chapter",
       "agentId": "chapter-editor",
-      "name": "章节编辑",
-      "roleLabel": "单章规划",
-      "responsibilityPrompt": "读取本轮最新的大纲结果、相关设定、上一章正文和项目状态，为当前目标章节生成可直接落稿的章节方案。你的职责是创建或更新单章目标、场景清单、场景节拍、信息释放、高潮位置、章末钩子和风险提示。若发现当前章节依赖的局部设定或索引文件缺失，也应补建或标注。"
+      "name": "章节策划",
+      "roleLabel": "单章拆包",
+      "responsibilityPrompt": "围绕连载主编给出的本轮目标，读取相关卷纲、上一章正文、必要设定和状态文件，把当前目标章节拆成可直接落稿的章节包。重点输出本章开头承接、本章核心冲突、关键场景顺序、升级点、情绪拉扯、信息释放、章末钩子和需要避开的逻辑坑。若当前章节依赖的小设定缺口会直接拖慢写作，请只补这一章真正需要的最小文件，不做重型建档。"
     },
     {
       "key": "writer",
       "agentId": "serial-writer",
       "name": "连载作者",
-      "roleLabel": "正文成稿",
-      "responsibilityPrompt": "读取当前章节规划、直接前文、相关设定和必要状态文件，完成当前章节正文。若收到 revision_brief，则按返修要求重写或修订当前章节，不要误写下一章。你的职责是把规划转成可直接发布的正文，同时在需要时更新与本章直接相关的正文文件、目录索引或轻量状态文件。正文输出只需简短说明本轮写了什么、改了哪些文件、还遗留哪些问题。"
+      "roleLabel": "正文续写",
+      "responsibilityPrompt": "读取本轮章节包、直接前文、必要设定、最新状态文件和 revision_brief，完成当前章节正文。你的目标是稳定产出能继续连载的章节，不要误写下一章，不要在正文里夹带分析。番茄长篇优先强开头承接、持续冲突、明确爽点或情绪回报、自然信息释放和有追读驱动力的章末。返修时只处理当前章节及其直接相关文件。"
     },
     {
       "key": "review",
       "agentId": "review-editor",
-      "name": "审稿编辑",
-      "roleLabel": "成稿审查",
-      "responsibilityPrompt": "读取最新章节、相关大纲、相关设定、状态文件以及本轮新增或改动过的关键文件，检查人设、逻辑、时间线、场景状态、伏笔与变更影响。最终必须使用 workflow_decision 提交 pass、issues、revision_brief。issues 和 revision_brief 要尽量具体到返修动作、需要回写的文件和潜在影响范围。正文输出只需简短说明结论和最关键的问题。"
-    },
-    {
-      "key": "polish",
-      "agentId": "polish-editor",
-      "name": "润稿编辑",
-      "roleLabel": "终稿润色",
-      "responsibilityPrompt": "在章节已经通过审稿后，读取最终章节正文、必要上下文和相关文风要求，对当前章节做最后一轮语言整理。你的职责是统一文风、清理重复表达、降低 AI 痕迹、优化对白和段落节奏，同时保持剧情事实不变。若发现审稿之外的新逻辑问题，应明确指出而不是悄悄改写结构事实。"
+      "name": "追读审稿",
+      "roleLabel": "连载质检",
+      "responsibilityPrompt": "读取最新章节、相关卷纲、必要设定、状态文件和直接前文，按番茄长篇连载标准检查承接是否顺、冲突是否够、信息是否清、爽点或情绪点是否落地、章末钩子是否能拉追更。最终必须使用 workflow_decision 提交 pass、issues、revision_brief。revision_brief 必须具体到当前章节的返修动作，优先指出真正影响追读和连续性的高价值问题。"
     },
     {
       "key": "lore",
       "agentId": "lore-editor",
-      "name": "设定编辑",
-      "roleLabel": "设定回写",
-      "responsibilityPrompt": "读取已经润好的最新章节、相关设定文件、时间线、术语表和动态状态文件，把本章新增事实同步回长期 canon。你的职责是更新人物、地点、组织、阵营、时间线、术语、关键场景状态，以及项目存在时的 story-state JSON。若发现重复、过期或命名不合理的资料文件，先迁移有效信息，再合并、重命名或清理。正文输出只需简短说明本轮新增、更新、删除了哪些文件，以及后续还需谁接手。"
+      "name": "连续性编辑",
+      "roleLabel": "状态回写",
+      "responsibilityPrompt": "读取已通过审稿的最新章节、必要设定文件、时间线和动态状态文件，把本章新增事实同步回长期连续性资产。优先更新 latest-plot、character-state、system-state、continuity-index、时间线和本章新增的重要设定。只维护真正影响后续续写的文件，避免做与当前推进无关的大规模资料整理。"
     }
   ],
   "steps": [
@@ -62,70 +48,52 @@
       "key": "start",
       "type": "start",
       "name": "开始",
-      "nextStepKey": "editorial-dispatch"
+      "nextStepKey": "series-dispatch"
     },
     {
-      "key": "editorial-dispatch",
+      "key": "series-dispatch",
       "type": "agent_task",
-      "name": "本轮调度",
+      "name": "本轮续写调度",
       "memberKey": "director",
-      "promptTemplate": "请先读取当前绑定书籍工作区中的项目状态、已有大纲、核心设定、最近章节和最近审稿结果，再判断这一轮最该推进哪一章、哪一段结构或哪一类返修。把本轮目标、优先顺序、关键风险和建议先补齐的文件整理清楚，并尽量写回合适的项目说明或阶段计划文件。正文只需简短汇报本轮调度结论，不要严格输出 JSON。",
+      "promptTemplate": "请先读取主提示词、全书方向、卷纲、最近 2-4 章正文、最近一次审稿结论和项目状态，再决定这一轮最该推进哪一章。输出本轮目标章节、章节作用、前情承接、必须兑现的冲突、章末钩子方向和禁止跑偏点。除非当前章节明显被结构问题卡住，否则不要升级成重型全书改线。正文只需简短汇报本轮续写目标和风险点，不要严格输出 JSON。",
       "outputMode": "text",
-      "nextStepKey": "outline-sync"
+      "nextStepKey": "chapter-pack"
     },
     {
-      "key": "outline-sync",
+      "key": "chapter-pack",
       "type": "agent_task",
-      "name": "结构同步",
-      "memberKey": "structure",
-      "promptTemplate": "请围绕本轮调度结果，读取当前绑定书籍工作区中的全书纲、卷纲、角色弧线、伏笔计划、相关设定和最近章节，先把本轮会影响到的结构文件同步到最新状态。若当前章节的结构前置条件还没准备好，就优先补齐；若发现结构断链、伏笔错位或角色线脱节，就先修大纲再交给下一步。正文只需简短说明本轮同步了哪些结构文件、修了哪些结构问题，不要严格输出 JSON。",
-      "outputMode": "text",
-      "nextStepKey": "chapter-plan"
-    },
-    {
-      "key": "chapter-plan",
-      "type": "agent_task",
-      "name": "单章规划",
+      "name": "章节拆包",
       "memberKey": "chapter",
-      "promptTemplate": "请读取本轮最新的大纲结果、相关设定、上一章正文和必要状态文件，为当前目标章节创建或更新单章规划。输出重点不是讲道理，而是把可执行的规划文件写好：本章作用、本章目标、场景清单、场景节拍、信息释放、高潮位置、章末钩子和风险点。若发现章节规划依赖的局部设定或索引缺失，也请一并补齐。正文只需简短汇报本轮规划目标与主要改动文件，不要严格输出 JSON。",
+      "promptTemplate": "请围绕本轮续写目标，读取相关卷纲、上一章正文、必要设定和状态文件，把当前目标章节拆成可直接落稿的章节包。重点写清本章开头承接、核心冲突、关键场景顺序、升级点、信息释放、情绪节奏和章末钩子。若只缺一个会直接影响本章落稿的小文件，请顺手补齐。正文只需简短汇报本轮拆包结果和主要改动文件，不要严格输出 JSON。",
       "outputMode": "text",
       "nextStepKey": "draft-chapter"
     },
     {
       "key": "draft-chapter",
       "type": "agent_task",
-      "name": "正文落稿",
+      "name": "正文续写",
       "memberKey": "writer",
-      "promptTemplate": "请读取当前章节规划、直接前文、相关设定、必要状态文件和本轮调度结果，完成当前章节正文。若收到 revision_brief，请只返修当前章节和与之直接相关的文件。优先把章节正文写到可直接发布的程度，并在需要时同步更新当前章节目录、正文索引或轻量进度文件。正文只需简短说明本轮完成了什么、改了哪些文件、是否还需要后续润稿或设定回写，不要严格输出 JSON。",
+      "promptTemplate": "请读取当前章节包、直接前文、必要设定、最新状态文件和 revision_brief，完成当前章节正文。优先保证番茄长篇的承接、冲突、爽点或情绪回报、节奏推进和章末追读驱动力。若收到 revision_brief，请只返修当前章节及其直接相关文件，不要推进下一章。正文只需简短说明本轮写了哪些文件、是否还有待注意风险，不要严格输出 JSON。",
       "outputMode": "text",
       "nextStepKey": "review-chapter"
     },
     {
       "key": "review-chapter",
       "type": "decision",
-      "name": "成稿审查",
+      "name": "追读质检",
       "memberKey": "review",
-      "promptTemplate": "请读取最新章节、相关大纲、相关设定、状态文件和本轮新增或改动过的关键文件，检查人设、逻辑、时间线、场景状态、伏笔安排和变更影响。最终使用 workflow_decision 提交 pass、issues、revision_brief。若不通过，请把 revision_brief 写成当前章节可直接执行的返修说明，尽量具体到文件和问题点。正文只需简短说明判断结论和最关键的问题，不要严格输出 JSON。",
+      "promptTemplate": "请读取最新章节、相关卷纲、必要设定、状态文件和直接前文，按番茄长篇连载标准检查承接、冲突密度、信息清晰度、人物一致性、连续性和章末钩子力度。最终使用 workflow_decision 提交 pass、issues、revision_brief。若不通过，请把 revision_brief 写成当前章节可直接执行的返修单，优先列高价值问题。正文只需简短说明判断结论，不要严格输出 JSON。",
       "sourceStepKey": "draft-chapter",
-      "trueNextStepKey": "polish-chapter",
+      "trueNextStepKey": "update-continuity",
       "falseNextStepKey": "draft-chapter",
       "passRule": "workflow_decision.pass == true"
     },
     {
-      "key": "polish-chapter",
+      "key": "update-continuity",
       "type": "agent_task",
-      "name": "终稿润色",
-      "memberKey": "polish",
-      "promptTemplate": "请在章节已经通过审稿后，读取当前章节正文、必要上下文和文风要求，对该章做最后一轮润稿。重点处理文风统一、重复表达、AI 痕迹、对白顺滑度和段落节奏，不改动已确认的剧情事实。若发现需要回退到结构或逻辑返修的问题，请在正文中简短说明。正文只需汇报本轮润稿完成了什么，不要严格输出 JSON。",
-      "outputMode": "text",
-      "nextStepKey": "update-lore"
-    },
-    {
-      "key": "update-lore",
-      "type": "agent_task",
-      "name": "设定回写",
+      "name": "连续性回写",
       "memberKey": "lore",
-      "promptTemplate": "请读取已经润好的最新章节、相关设定文件、时间线、术语表和项目中的动态状态文件，把本章新增事实同步回长期 canon 与状态层。重点更新人物、地点、组织、阵营、时间线、术语、关键场景状态，以及项目存在时的 latest-plot、character-state、system-state、continuity-index 等结构化文件。若发现重复、过期或命名不合理的资料文件，先迁移有效信息，再合并或清理。正文只需简短汇报本轮更新了哪些 canon / state 文件，不要严格输出 JSON。",
+      "promptTemplate": "请读取已通过质检的最新章节、必要设定文件、时间线和动态状态文件，把本章新增事实同步回长期连续性资产。优先更新 latest-plot、character-state、system-state、continuity-index、时间线和直接影响后续续写的索引。正文只需简短汇报本轮回写了哪些关键文件，不要严格输出 JSON。",
       "outputMode": "text",
       "nextStepKey": "success-end"
     },
@@ -134,7 +102,7 @@
       "type": "end",
       "name": "成功结束",
       "stopReason": "completed",
-      "summaryTemplate": "本轮章节已完成调度、结构同步、落稿、审查、润稿与设定回写，工作流将按循环配置继续推进下一轮。",
+      "summaryTemplate": "本轮已完成一次番茄长篇续写，目标章节已经过调度、拆包、成稿、质检与连续性回写，工作流将按循环配置继续推进下一章。",
       "loopBehavior": "continue_if_possible",
       "loopTargetStepKey": "start"
     }

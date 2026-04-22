@@ -1,10 +1,14 @@
-import { FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
+import { Download, FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { NavLink, useLocation, useMatch, useResolvedPath } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { UpdateReleaseDialog } from "@/components/update/UpdateReleaseDialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useThemeStore } from "../stores/themeStore";
+import { useUpdateStore } from "../stores/updateStore";
+import { normalizeVersionLabel } from "../lib/update/version";
 
 type NavItem = {
   to: string;
@@ -70,11 +74,43 @@ function MobileNavLink({ to, label, Icon, end }: NavItem) {
   );
 }
 
+function SidebarActionButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          aria-label={label}
+          variant="ghost"
+          onClick={onClick}
+          className="h-11 w-full rounded-none px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function Sidebar() {
   const isMobile = useIsMobile();
   const location = useLocation();
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
+  const downloadAvailableUpdate = useUpdateStore((state) => state.downloadAvailableUpdate);
+  const status = useUpdateStore((state) => state.status);
+  const updateSummary = useUpdateStore((state) => state.updateSummary);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const hasAvailableUpdate = status === "available" && updateSummary;
   const shouldHideMobileNav =
     location.pathname.startsWith("/books/") || location.pathname.startsWith("/workflows/");
 
@@ -114,30 +150,38 @@ export function Sidebar() {
       </nav>
 
       <div className="flex w-full flex-col items-stretch gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              aria-label="主题切换"
-              variant="ghost"
-              onClick={toggleTheme}
-              className="h-11 w-full rounded-none px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-            >
-              {theme === "dark" ? (
-                <Sun className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />
-              ) : (
-                <Moon className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}</TooltipContent>
-        </Tooltip>
+        {hasAvailableUpdate ? (
+          <SidebarActionButton
+            label={`查看 ${normalizeVersionLabel(updateSummary.version)} 更新`}
+            onClick={() => setUpdateDialogOpen(true)}
+            icon={<Download className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />}
+          />
+        ) : null}
+        <SidebarActionButton
+          label="主题切换"
+          onClick={toggleTheme}
+          icon={
+            theme === "dark" ? (
+              <Sun className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />
+            ) : (
+              <Moon className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />
+            )
+          }
+        />
         <nav aria-label="辅助导航" className="flex w-full flex-col gap-1.5">
           {secondaryItems.map((item) => (
             <DesktopSidebarLink key={item.to} {...item} />
           ))}
         </nav>
       </div>
+      <UpdateReleaseDialog
+        open={updateDialogOpen}
+        onOpenChange={setUpdateDialogOpen}
+        onDownload={() => {
+          void downloadAvailableUpdate();
+        }}
+        summary={updateSummary}
+      />
     </aside>
   );
 }

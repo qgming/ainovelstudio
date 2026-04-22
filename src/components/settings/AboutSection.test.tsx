@@ -12,11 +12,8 @@ const updateStoreState = {
   downloadAvailableUpdate: vi.fn(),
   errorMessage: null as string | null,
   initializePreferences: vi.fn(),
-  installDownloadedUpdate: vi.fn(),
-  pendingInstallVersion: null as string | null,
-  progress: null as number | null,
   setAutoUpdateEnabled: vi.fn(),
-  status: "idle" as "idle" | "available" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error",
+  status: "idle" as "idle" | "available" | "checking" | "latest" | "error",
   updateSummary: null as {
     version: string;
     notes?: string;
@@ -36,15 +33,12 @@ vi.mock("sonner", () => ({
 describe("AboutSection", () => {
   beforeEach(() => {
     updateStoreState.autoUpdateEnabled = true;
-    updateStoreState.pendingInstallVersion = null;
-    updateStoreState.progress = null;
     updateStoreState.errorMessage = null;
     updateStoreState.status = "idle";
     updateStoreState.updateSummary = null;
     updateStoreState.checkForUpdates.mockReset();
     updateStoreState.downloadAvailableUpdate.mockReset();
     updateStoreState.initializePreferences.mockReset();
-    updateStoreState.installDownloadedUpdate.mockReset();
     updateStoreState.setAutoUpdateEnabled.mockReset();
     toastMock.mockReset();
   });
@@ -53,7 +47,7 @@ describe("AboutSection", () => {
     render(<AboutSection />);
 
     expect(screen.getByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
-    expect(screen.getByText("0.1.7")).toBeInTheDocument();
+    expect(screen.getByText("0.1.8")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
@@ -73,25 +67,20 @@ describe("AboutSection", () => {
     expect(updateStoreState.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
-  it("检测到已下载更新时按钮会切换为立即安装", () => {
-    updateStoreState.status = "downloaded";
-    updateStoreState.pendingInstallVersion = "0.1.7";
-    updateStoreState.updateSummary = { version: "0.1.7" };
+  it("检测到新版本后会直接展示更新日志弹窗", () => {
+    updateStoreState.status = "available";
+    updateStoreState.updateSummary = { version: "0.1.8" };
 
     render(<AboutSection />);
 
-    expect(screen.getByRole("button", { name: "立即安装" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "立即安装" }));
-
-    expect(updateStoreState.installDownloadedUpdate).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("更新已就绪")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("发现 0.1.8")).toBeInTheDocument();
   });
 
   it("有更新时会弹出更新日志对话框，并通过按钮触发下载", () => {
     updateStoreState.status = "available";
     updateStoreState.updateSummary = {
-      version: "0.1.7",
+      version: "0.1.9",
       notes: "修复更新流程\n补齐工作流统计",
       packageKind: "exe",
       publishedAt: "2026-04-22T06:30:00Z",
@@ -100,7 +89,7 @@ describe("AboutSection", () => {
     render(<AboutSection />);
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("发现 0.1.7")).toBeInTheDocument();
+    expect(screen.getByText("发现 0.1.9")).toBeInTheDocument();
     expect(screen.getByText(/修复更新流程[\s\S]*补齐工作流统计/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "下载更新" }));
