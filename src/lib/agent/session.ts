@@ -3,7 +3,7 @@ import type { ToolSet } from "ai";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { AgentMessage, AgentPart } from "./types";
-import { streamAgentText, defineTool } from "./modelGateway";
+import { generateAgentText, streamAgentText, defineTool } from "./modelGateway";
 import type { AgentTool } from "./runtime";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { selectSubAgentForPrompt } from "./delegation";
@@ -806,11 +806,37 @@ function buildAiSdkTools(
     json: (toolName, tool) =>
       defineTool({
         description:
-          "读取或局部更新 JSON。优先用它改字段、对象和数组；多步变更优先 action=batch，一次写回。",
+          "读取或局部更新 JSON。优先用它改字段、对象和数组；支持模板补齐、历史追加和 patch；多步变更优先 action=batch 或 patch，一次写回。",
         inputSchema: z.object({
           action: z
-            .enum(["append", "batch", "delete", "get", "merge", "set"])
+            .enum([
+              "append",
+              "batch",
+              "delete",
+              "ensure_template",
+              "get",
+              "history_append",
+              "merge",
+              "patch",
+              "set",
+            ])
             .default("get"),
+          patch: z
+            .array(
+              z.object({
+                from: z
+                  .string()
+                  .optional()
+                  .describe("copy / move 时来源 JSON Pointer。"),
+                op: z
+                  .enum(["add", "copy", "move", "remove", "replace", "test"])
+                  .describe("RFC 6902 风格的 patch 动作。"),
+                path: z.string().describe("patch 目标 JSON Pointer。"),
+                value: z.unknown().optional().describe("add / replace / test 时使用的值。"),
+              }),
+            )
+            .optional()
+            .describe("仅在 action=patch 时使用。按顺序执行的 JSON Patch 操作。"),
           operations: z
             .array(
               z.object({
@@ -831,6 +857,12 @@ function buildAiSdkTools(
             )
             .optional()
             .describe("仅在 action=batch 时使用。按顺序依次执行的操作列表。"),
+          limit: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("仅在 action=history_append 时使用。限制历史数组最大保留条数。"),
           path: z.string().describe("目标 JSON 文件的相对工作区路径。"),
           pointer: z
             .string()
@@ -838,10 +870,18 @@ function buildAiSdkTools(
             .describe(
               "JSON Pointer。空字符串表示根节点，例如 /stage、/chapters/0/title。",
             ),
+          timestamp: z
+            .string()
+            .optional()
+            .describe("仅在 action=history_append 时使用。手动指定写入时间。"),
+          timestampField: z
+            .string()
+            .optional()
+            .describe("仅在 action=history_append 时使用。记录时间字段名，默认 updatedAt。"),
           value: z
             .unknown()
             .optional()
-            .describe("set / merge / append 时需要的新值。"),
+            .describe("set / merge / append / ensure_template / history_append 时需要的新值。"),
         }),
         execute: async (input) => {
           const result = await runTool(
@@ -1157,7 +1197,49 @@ export async function* runAgentTurn({
     prompt,
     subagentAnalysis: null,
   });
-  const messages = buildConversationMessages(conversationHistory, userContent);
+  const messages = await buildConversationMessages(conversationHistory, userContent, {
+    summarizeHistory: async ({ currentUserContent, taskMemory }) => {
+      const memoryLines = [
+        taskMemory.userGoals.length > 0
+          ? `当前目标：${taskMemory.userGoals.join(" | ")}`
+          : null,
+        taskMemory.progress.length > 0
+          ? `已有进展：${taskMemory.progress.join(" | ")}`
+          : null,
+        taskMemory.facts.length > 0
+          ? `已确认事实：${taskMemory.facts.join(" | ")}`
+          : null,
+        taskMemory.constraints.length > 0
+          ? `当前约束：${taskMemory.constraints.join(" | ")}`
+          : null,
+        taskMemory.paths.length > 0
+          ? `相关路径：${taskMemory.paths.join(" | ")}`
+          : null,
+        taskMemory.tools.length > 0
+          ? `已用工具：${taskMemory.tools.join(", ")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      return generateAgentText({
+        prompt: [
+          "请把下面的会话任务记忆压缩成一段高密度摘要。",
+          "输出要求：",
+          "- 只保留继续当前任务真正需要的信息",
+          "- 优先保留目标、已确认事实、约束、相关文件和下一步",
+          "- 不要复述无关寒暄，不要写解释，不要分段标题",
+          "- 使用简体中文，控制在 180 字以内",
+          "",
+          `当前用户请求：${currentUserContent}`,
+          "",
+          memoryLines,
+        ].join("\n"),
+        providerConfig,
+        system: "你是任务记忆压缩器。只输出一段精炼摘要，不输出标题，不输出多余说明。",
+      });
+    },
+  });
 
   logPromptDebug({
     label: debugLabel ?? "chat-turn",

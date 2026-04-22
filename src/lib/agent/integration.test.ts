@@ -95,6 +95,11 @@ describe("agent session (streaming)", () => {
             name: "AGENTS.md",
             path: ".project/AGENTS.md",
           },
+          {
+            content: '{"chapter": 12}',
+            name: "latest-plot.json",
+            path: ".project/status/latest-plot.json",
+          },
         ],
       },
       prompt: "续写",
@@ -114,6 +119,7 @@ describe("agent session (streaming)", () => {
     const call = mockStreamFn.mock.calls[0]?.[0];
     expect(call?.messages?.[0]?.content).toContain("## s14 项目默认上下文");
     expect(call?.messages?.[0]?.content).toContain(".project/AGENTS.md");
+    expect(call?.messages?.[0]?.content).toContain(".project/status/latest-plot.json");
     expect(call?.messages?.[0]?.content).toContain("先读取设定");
   });
 

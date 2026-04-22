@@ -784,6 +784,169 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
+  it("json 支持按模板补齐缺失字段", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      '{\n  "progress": {\n    "currentWordCount": 1200\n  }\n}\n',
+    );
+
+    const result = await toolset.json.execute({
+      action: "ensure_template",
+      path: ".project/status/project-state.json",
+      pointer: "/progress",
+      value: {
+        currentWordCount: 0,
+        targetWordCount: null,
+        completedChapters: 0,
+      },
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      ".project/status/project-state.json",
+      [
+        "{",
+        '  "progress": {',
+        '    "currentWordCount": 1200,',
+        '    "targetWordCount": null,',
+        '    "completedChapters": 0',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary:
+        "已按模板补齐 .project/status/project-state.json 中 /progress 的 JSON 数据。",
+      data: {
+        action: "ensure_template",
+        path: ".project/status/project-state.json",
+        pointer: "/progress",
+        value: {
+          currentWordCount: 1200,
+          targetWordCount: null,
+          completedChapters: 0,
+        },
+      },
+    });
+  });
+
+  it("json 支持追加历史记录并自动补时间戳", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      '{\n  "recentUpdates": []\n}\n',
+    );
+
+    const result = await toolset.json.execute({
+      action: "history_append",
+      path: ".project/status/project-state.json",
+      pointer: "/recentUpdates",
+      timestamp: "2026-04-22T12:00:00+08:00",
+      value: {
+        note: "完成第 3 章规划",
+        type: "chapter_plan",
+      },
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      ".project/status/project-state.json",
+      [
+        "{",
+        '  "recentUpdates": [',
+        "    {",
+        '      "note": "完成第 3 章规划",',
+        '      "type": "chapter_plan",',
+        '      "updatedAt": "2026-04-22T12:00:00+08:00"',
+        "    }",
+        "  ]",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary:
+        "已向 .project/status/project-state.json 中 /recentUpdates 追加一条历史记录。",
+      data: {
+        action: "history_append",
+        path: ".project/status/project-state.json",
+        pointer: "/recentUpdates",
+        value: {
+          note: "完成第 3 章规划",
+          type: "chapter_plan",
+          updatedAt: "2026-04-22T12:00:00+08:00",
+        },
+      },
+    });
+  });
+
+  it("json 支持通过 patch 执行标准 JSON 补丁操作", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      [
+        "{",
+        '  "progress": {',
+        '    "currentChapter": 2',
+        "  },",
+        '  "recentUpdates": []',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await toolset.json.execute({
+      action: "patch",
+      path: ".project/status/project-state.json",
+      patch: [
+        { op: "replace", path: "/progress/currentChapter", value: 3 },
+        { op: "add", path: "/recentUpdates/-", value: { type: "chapter_completed" } },
+      ],
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      ".project/status/project-state.json",
+      [
+        "{",
+        '  "progress": {',
+        '    "currentChapter": 3',
+        "  },",
+        '  "recentUpdates": [',
+        "    {",
+        '      "type": "chapter_completed"',
+        "    }",
+        "  ]",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary:
+        "已按 patch 更新 .project/status/project-state.json 中 2 个 JSON 操作。",
+      data: {
+        action: "patch",
+        operations: [
+          { op: "replace", path: "/progress/currentChapter", value: 3 },
+          { op: "add", path: "/recentUpdates/-", value: { type: "chapter_completed" } },
+        ],
+        operationsApplied: 2,
+        path: ".project/status/project-state.json",
+      },
+    });
+  });
+
   it("path 支持迁移文件或文件夹到指定目录", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";

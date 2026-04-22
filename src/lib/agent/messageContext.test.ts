@@ -21,12 +21,12 @@ function createAssistantMessage(index: number): AgentMessage {
 }
 
 describe("buildConversationMessages", () => {
-  it("只保留最近20条历史消息", () => {
+  it("只保留最近20条历史消息", async () => {
     const history = Array.from({ length: 24 }, (_, index) =>
       index % 2 === 0 ? createUserMessage(index + 1) : createAssistantMessage(index + 1),
     );
 
-    const messages = buildConversationMessages(history, "当前问题");
+    const messages = await buildConversationMessages(history, "当前问题");
 
     expect(messages).toHaveLength(21);
     expect(messages[0]).toEqual({ role: "user", content: "用户消息 5" });
@@ -34,8 +34,8 @@ describe("buildConversationMessages", () => {
     expect(messages[20]).toEqual({ role: "user", content: "当前问题" });
   });
 
-  it("assistant 历史会保留 toolCallId 语义，并优先使用输出摘要而不是完整原始结果", () => {
-    const messages = buildConversationMessages(
+  it("assistant 历史会保留 toolCallId 语义，并优先使用输出摘要而不是完整原始结果", async () => {
+    const messages = await buildConversationMessages(
       [
         {
           id: "assistant-1",
@@ -72,8 +72,8 @@ describe("buildConversationMessages", () => {
     });
   });
 
-  it("异常 tool-result 不会丢失，并会保留校验错误", () => {
-    const messages = buildConversationMessages(
+  it("异常 tool-result 不会丢失，并会保留校验错误", async () => {
+    const messages = await buildConversationMessages(
       [
         {
           id: "assistant-1",
@@ -100,8 +100,8 @@ describe("buildConversationMessages", () => {
     });
   });
 
-  it("较早的工具历史会折叠为占位提示，只保留最近消息的详细内容", () => {
-    const messages = buildConversationMessages(
+  it("较早的工具历史会折叠为占位提示，只保留最近消息的详细内容", async () => {
+    const messages = await buildConversationMessages(
       [
         createUserMessage(1),
         {
@@ -143,7 +143,7 @@ describe("buildConversationMessages", () => {
     expect(messages[messages.length - 1]).toEqual({ role: "user", content: "继续分析" });
   });
 
-  it("历史超预算时会生成连续性摘要", () => {
+  it("历史超预算时会生成规则任务记忆摘要", async () => {
     const longText = "很长的上下文 ".repeat(800);
     const history = Array.from({ length: 12 }, (_, index) =>
       index % 2 === 0
@@ -161,19 +161,77 @@ describe("buildConversationMessages", () => {
           },
     );
 
-    const messages = buildConversationMessages(history, "继续推进");
+    const messages = await buildConversationMessages(history, "继续推进");
 
     expect(messages[0]).toEqual(
       expect.objectContaining({
         role: "user",
-        content: expect.stringContaining("# 会话连续性摘要"),
+        content: expect.stringContaining("# 任务记忆摘要"),
       }),
     );
+    expect(messages[0]?.content).toContain("## 当前目标");
+    expect(messages[0]?.content).toContain("## 已有进展");
     expect(messages[messages.length - 1]).toEqual({ role: "user", content: "继续推进" });
     expect(messages.length).toBeLessThan(history.length + 1);
   });
 
-  it("只在构建新上下文时压缩，不会改写原始 AI 输出或工具结果", () => {
+  it("模型摘要会与规则记忆一起注入", async () => {
+    const longText = "很长的上下文 ".repeat(800);
+    const history = Array.from({ length: 12 }, (_, index) =>
+      index % 2 === 0
+        ? {
+            id: `user-${index}`,
+            role: "user" as const,
+            author: "你",
+            parts: [{ type: "text" as const, text: `用户目标 ${index} ${longText}` }],
+          }
+        : {
+            id: `assistant-${index}`,
+            role: "assistant" as const,
+            author: "主代理",
+            parts: [{ type: "text" as const, text: `处理进展 ${index} 必须保留身份秘密 ${longText}` }],
+          },
+    );
+
+    const messages = await buildConversationMessages(history, "继续推进", {
+      summarizeHistory: async () => "目标是继续推进当前任务，同时保持身份秘密并沿用已有路径。",
+    });
+
+    expect(messages[0]?.content).toContain("## 模型压缩摘要");
+    expect(messages[0]?.content).toContain("保持身份秘密");
+    expect(messages[0]?.content).toContain("## 当前目标");
+    expect(messages[0]?.content).toContain("## 当前约束");
+  });
+
+  it("模型摘要失败时会回退到规则任务记忆摘要", async () => {
+    const longText = "很长的上下文 ".repeat(800);
+    const history = Array.from({ length: 12 }, (_, index) =>
+      index % 2 === 0
+        ? {
+            id: `user-${index}`,
+            role: "user" as const,
+            author: "你",
+            parts: [{ type: "text" as const, text: `用户目标 ${index} ${longText}` }],
+          }
+        : {
+            id: `assistant-${index}`,
+            role: "assistant" as const,
+            author: "主代理",
+            parts: [{ type: "text" as const, text: `处理进展 ${index} ${longText}` }],
+          },
+    );
+
+    const messages = await buildConversationMessages(history, "继续推进", {
+      summarizeHistory: async () => {
+        throw new Error("summary failed");
+      },
+    });
+
+    expect(messages[0]?.content).toContain("# 任务记忆摘要");
+    expect(messages[0]?.content).not.toContain("## 模型压缩摘要");
+  });
+
+  it("只在构建新上下文时压缩，不会改写原始 AI 输出或工具结果", async () => {
     const originalOutput = "完整工具结果 ".repeat(500);
     const history: AgentMessage[] = [
       {
@@ -198,7 +256,7 @@ describe("buildConversationMessages", () => {
       },
     ];
 
-    const messages = buildConversationMessages(history, "继续");
+    const messages = await buildConversationMessages(history, "继续");
 
     expect(messages[0]?.content.length).toBeLessThan(originalOutput.length);
     const part = history[0]?.parts[0];

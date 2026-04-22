@@ -73,7 +73,7 @@ describe("updateStore", () => {
 
     expect(useUpdateStore.getState().status).toBe("available");
     expect(useUpdateStore.getState().updateSummary).toMatchObject({
-      currentVersion: "0.1.8",
+      currentVersion: "0.1.9",
       version: "0.1.9",
     });
   });
@@ -85,19 +85,19 @@ describe("updateStore", () => {
       initialized: true,
       status: "available",
       updateSummary: {
-        currentVersion: "0.1.8",
-        downloadUrl: "https://example.com/ainovelstudio_0.1.8_windows_x64.exe",
+        currentVersion: "0.1.9",
+        downloadUrl: "https://example.com/ainovelstudio_0.1.9_windows_x64.exe",
         notes: "修复若干问题",
         packageKind: "exe",
         publishedAt: "2026-04-21T00:00:00Z",
-        version: "0.1.8",
+        version: "0.1.9",
       },
     });
 
     await useUpdateStore.getState().downloadAvailableUpdate();
 
     expect(openExternalUpdateUrlMock).toHaveBeenCalledWith(
-      "https://example.com/ainovelstudio_0.1.8_windows_x64.exe",
+      "https://example.com/ainovelstudio_0.1.9_windows_x64.exe",
     );
     expect(toastMock.success).toHaveBeenCalledTimes(1);
   });

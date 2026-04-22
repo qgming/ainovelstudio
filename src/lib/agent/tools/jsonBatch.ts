@@ -33,7 +33,12 @@ export function normalizeJsonBatchOperation(
 
   const record = operation as Record<string, unknown>;
   const action = normalizeJsonAction(record.action);
-  if (action === "batch" || action === "get") {
+  if (
+    action !== "append" &&
+    action !== "delete" &&
+    action !== "merge" &&
+    action !== "set"
+  ) {
     throw new Error(
       `json.batch 第 ${index + 1} 项 action 仅支持 set / merge / append / delete。`,
     );

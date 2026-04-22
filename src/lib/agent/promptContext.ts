@@ -160,7 +160,7 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   word_count: "校对字符数、中文字符数、英文词数、段落数、行数。",
   edit: "小范围改（≤30%）；先 read 再 edit；action：replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中范围；改连续行段优先用 replace_lines；改锚点附近或 Markdown 标题块优先用对应 range 动作。",
   write: "整份覆盖写入；只有已准备好完整新内容时再用，缺失目录会自动创建。",
-  json: "按 JSON Pointer 局部读写字段/对象/数组；action：get/set/merge/append/delete/batch；多步 JSON 变更优先 batch，一次写回。",
+  json: "按 JSON Pointer 局部读写字段/对象/数组；action：get/set/merge/append/delete/batch/ensure_template/history_append/patch；初始化补结构优先 ensure_template，写日志优先 history_append，多步变更优先 batch 或 patch，一次写回。",
   path: "只动结构：create_file / create_folder / rename / move / delete；不写入正文。",
   skill: '读/管理本地 skill。先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；writes 改 skill 内文件。',
   agent: 'action：list/read/write/create/delete；读写 agent 内文件（manifest.json / AGENTS.md）；执行子任务请用 task，不是 agent。',

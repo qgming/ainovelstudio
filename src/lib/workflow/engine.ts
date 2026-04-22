@@ -10,12 +10,14 @@ import { loadProjectContext } from "../agent/projectContext";
 import { runAgentTurn } from "../agent/session";
 import type { AgentPart } from "../agent/types";
 import { readWorkspaceTextFile } from "../bookWorkspace/api";
+import { readWorkspaceTree } from "../bookWorkspace/api";
 import {
   createGlobalToolset,
   createLocalResourceToolset,
   createWorkspaceToolset,
 } from "../agent/tools";
 import { parseWorkflowMessagePayload } from "./api";
+import { buildWorkflowDeltaMemory } from "./contextMemory";
 import type {
   WorkflowDecisionResult,
   WorkflowDecisionStepDefinition,
@@ -92,12 +94,11 @@ function buildStepPrompt(params: {
     incomingMessages = [],
     chapterWriteMode,
   } = params;
-  const incomingMessageSummary =
-    incomingMessages.length > 0
-      ? incomingMessages
-          .map((message) => `- ${message.type}: ${JSON.stringify(message.payload, null, 2)}`)
-          .join("\n")
-      : null;
+  const deltaMemory = buildWorkflowDeltaMemory({
+    incomingMessages,
+    previousResult,
+    reviewResult,
+  });
 
   const sections = [
     `你正在执行工作流《${workflowName}》中的步骤。`,
@@ -148,14 +149,12 @@ function buildStepPrompt(params: {
           `- 正文保持简短结论，程序分支只读取 ${WORKFLOW_DECISION_TOOL_ID} 工具结果。`,
         ].join("\n")
       : null,
-    previousResult
-      ? `上一步结果摘要（仅供参考，涉及事实请回到工作区文件核对）：\n${previousResult}`
-      : null,
-    reviewResult
-      ? `最近一次审查结果（仅供参考，涉及事实请回到工作区文件核对）：\n${JSON.stringify(reviewResult, null, 2)}`
-      : null,
-    incomingMessageSummary
-      ? `当前可用的结构化消息（仅供协作参考，涉及事实请回到工作区文件核对）：\n${incomingMessageSummary}`
+    deltaMemory.text
+      ? [
+          "以下是程序按预算裁剪后的 workflow delta memory。",
+          "它只保留继续当前步骤最需要的增量信息；涉及事实仍以工作区文件为准。",
+          deltaMemory.text,
+        ].join("\n")
       : null,
   ].filter(Boolean);
 
@@ -632,6 +631,7 @@ async function executeConfiguredStep(params: {
   let workflowDecisionResult: WorkflowDecisionResult | null = null;
   const projectContext = await loadProjectContext({
     readFile: readWorkspaceTextFile,
+    readTree: readWorkspaceTree,
     workspaceRootPath: run.workspaceBinding.rootPath,
   });
   const localResourceTools = createLocalResourceToolset({

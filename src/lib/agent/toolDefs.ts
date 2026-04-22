@@ -72,7 +72,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "json",
     name: "JSON 数据",
     description:
-      "按 JSON Pointer 读取或局部更新 JSON 内容；适合改字段、合并对象、删除键和追加数组项。",
+      "按 JSON Pointer 读取或局部更新 JSON 内容；适合改字段、补齐模板、追加历史、执行 patch 和维护状态数组。",
   },
   {
     id: "path",

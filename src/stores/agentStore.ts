@@ -9,7 +9,7 @@ import {
   switchChatSession,
   updateChatMessage,
 } from "../lib/chat/api";
-import { readWorkspaceTextFile, cancelToolRequests } from "../lib/bookWorkspace/api";
+import { readWorkspaceTextFile, readWorkspaceTree, cancelToolRequests } from "../lib/bookWorkspace/api";
 import type { ChatBootstrap, ChatSessionSummary } from "../lib/chat/types";
 import {
   buildAssistantPlaceholderMessage,
@@ -604,6 +604,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           : null;
         const projectContext = await loadProjectContext({
           readFile: readWorkspaceTextFile,
+          readTree: readWorkspaceTree,
           workspaceRootPath: workspaceState.rootPath,
         });
         if (!isCurrentRun()) {

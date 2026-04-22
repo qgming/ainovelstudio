@@ -4,9 +4,12 @@ import {
 } from "../../bookWorkspace/api";
 import type { AgentTool } from "../runtime";
 import {
+  applyJsonPatch,
   appendJsonValueAtPointer,
+  appendJsonHistoryAtPointer,
   cloneJsonValue,
   deleteJsonValueAtPointer,
+  ensureJsonTemplateAtPointer,
   getJsonValueAtPointer,
   mergeJsonValueAtPointer,
   normalizeJsonAction,
@@ -275,6 +278,31 @@ export function createWorkspaceTextTools({
           });
         }
 
+        if (action === "patch") {
+          if (!Array.isArray(input.patch) || input.patch.length === 0) {
+            throw new Error("json.patch 需要提供非空 patch。");
+          }
+
+          const { operations, root: nextJson } = applyJsonPatch(
+            cloneJsonValue(currentJson),
+            input.patch as Parameters<typeof applyJsonPatch>[1],
+          );
+          await writeWorkspaceTextFile(
+            rootPath,
+            path,
+            serializeJsonWithStyle(nextJson, currentContents),
+            getAbortContext(context),
+          );
+          await onWorkspaceMutated?.();
+
+          return ok(`已按 patch 更新 ${path} 中 ${operations.length} 个 JSON 操作。`, {
+            action,
+            operations,
+            operationsApplied: operations.length,
+            path,
+          });
+        }
+
         const pointer = String(input.pointer ?? "");
         const segments = parseJsonPointer(pointer);
         if (action === "get") {
@@ -291,6 +319,19 @@ export function createWorkspaceTextTools({
         let nextJson = cloneJsonValue(currentJson);
         if (action === "set") {
           nextJson = setJsonValueAtPointer(nextJson, segments, input.value);
+        } else if (action === "ensure_template") {
+          nextJson = ensureJsonTemplateAtPointer(nextJson, segments, input.value);
+        } else if (action === "history_append") {
+          nextJson = appendJsonHistoryAtPointer(nextJson, segments, input.value, {
+            limit:
+              typeof input.limit === "number" ? input.limit : undefined,
+            timestamp:
+              typeof input.timestamp === "string" ? input.timestamp : undefined,
+            timestampField:
+              typeof input.timestampField === "string"
+                ? input.timestampField
+                : undefined,
+          });
         } else if (action === "merge") {
           nextJson = mergeJsonValueAtPointer(nextJson, segments, input.value);
         } else if (action === "append") {
@@ -313,6 +354,25 @@ export function createWorkspaceTextTools({
             deleted: true,
             path,
             pointer: pointer || "/",
+          });
+        }
+
+        if (action === "history_append") {
+          const target = getJsonValueAtPointer(nextJson, segments);
+          return ok(`已向 ${path} 中 ${pointer || "/"} 追加一条历史记录。`, {
+            action,
+            path,
+            pointer: pointer || "/",
+            value: Array.isArray(target) ? target[target.length - 1] : target,
+          });
+        }
+
+        if (action === "ensure_template") {
+          return ok(`已按模板补齐 ${path} 中 ${pointer || "/"} 的 JSON 数据。`, {
+            action,
+            path,
+            pointer: pointer || "/",
+            value: getJsonValueAtPointer(nextJson, segments),
           });
         }
 
