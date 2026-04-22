@@ -102,6 +102,7 @@ describe("workflowStore", () => {
       activeRunId: null,
       abortController: null,
       inflightToolRequestIds: [],
+      finishAfterCurrentLoopRequested: false,
       stopRequested: false,
     });
   });
@@ -116,6 +117,7 @@ describe("workflowStore", () => {
       activeRunId: runId,
       abortController,
       inflightToolRequestIds: ["tool-read-1", "tool-write-2"],
+      finishAfterCurrentLoopRequested: false,
     });
 
     await useWorkflowStore.getState().requestStopRun();

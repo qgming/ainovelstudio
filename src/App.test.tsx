@@ -23,13 +23,15 @@ const { updateStoreState } = vi.hoisted(() => ({
   updateStoreState: {
     autoUpdateEnabled: true,
     checkForUpdates: vi.fn(),
+    downloadAvailableUpdate: vi.fn(),
+    errorMessage: null as string | null,
     initializePreferences: vi.fn(),
     installDownloadedUpdate: vi.fn(),
     pendingInstallVersion: null as string | null,
     progress: null as number | null,
     runStartupUpdateFlow: vi.fn().mockResolvedValue(undefined),
     setAutoUpdateEnabled: vi.fn(),
-    status: "idle" as "idle" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error",
+    status: "idle" as "idle" | "available" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error",
     updateSummary: null as { version: string } | null,
   },
 }));
@@ -158,9 +160,11 @@ describe("App shell", () => {
     updateStoreState.autoUpdateEnabled = true;
     updateStoreState.pendingInstallVersion = null;
     updateStoreState.progress = null;
+    updateStoreState.errorMessage = null;
     updateStoreState.status = "idle";
     updateStoreState.updateSummary = null;
     updateStoreState.checkForUpdates.mockReset();
+    updateStoreState.downloadAvailableUpdate.mockReset();
     updateStoreState.initializePreferences.mockReset();
     updateStoreState.installDownloadedUpdate.mockReset();
     updateStoreState.runStartupUpdateFlow.mockReset();
@@ -571,7 +575,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
     expect(screen.getByText("版本")).toBeInTheDocument();
-    expect(screen.getByText("0.1.6")).toBeInTheDocument();
+    expect(screen.getByText("0.1.7")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");

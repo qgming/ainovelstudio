@@ -2,20 +2,35 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AboutSection } from "./AboutSection";
 
+const { toastMock } = vi.hoisted(() => ({
+  toastMock: vi.fn(),
+}));
+
 const updateStoreState = {
   autoUpdateEnabled: true,
   checkForUpdates: vi.fn(),
+  downloadAvailableUpdate: vi.fn(),
+  errorMessage: null as string | null,
   initializePreferences: vi.fn(),
   installDownloadedUpdate: vi.fn(),
   pendingInstallVersion: null as string | null,
   progress: null as number | null,
   setAutoUpdateEnabled: vi.fn(),
-  status: "idle" as "idle" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error",
-  updateSummary: null as { version: string } | null,
+  status: "idle" as "idle" | "available" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error",
+  updateSummary: null as {
+    version: string;
+    notes?: string;
+    packageKind?: "exe" | "apk" | null;
+    publishedAt?: string | null;
+  } | null,
 };
 
 vi.mock("../../stores/updateStore", () => ({
   useUpdateStore: <T,>(selector: (state: typeof updateStoreState) => T) => selector(updateStoreState),
+}));
+
+vi.mock("sonner", () => ({
+  toast: toastMock,
 }));
 
 describe("AboutSection", () => {
@@ -23,19 +38,22 @@ describe("AboutSection", () => {
     updateStoreState.autoUpdateEnabled = true;
     updateStoreState.pendingInstallVersion = null;
     updateStoreState.progress = null;
+    updateStoreState.errorMessage = null;
     updateStoreState.status = "idle";
     updateStoreState.updateSummary = null;
     updateStoreState.checkForUpdates.mockReset();
+    updateStoreState.downloadAvailableUpdate.mockReset();
     updateStoreState.initializePreferences.mockReset();
     updateStoreState.installDownloadedUpdate.mockReset();
     updateStoreState.setAutoUpdateEnabled.mockReset();
+    toastMock.mockReset();
   });
 
   it("展示版本信息、自动更新开关和联系入口", () => {
     render(<AboutSection />);
 
     expect(screen.getByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
-    expect(screen.getByText("0.1.6")).toBeInTheDocument();
+    expect(screen.getByText("0.1.7")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
@@ -43,6 +61,7 @@ describe("AboutSection", () => {
       "href",
       "https://github.com/qgming/ainovelstudio",
     );
+    expect(screen.queryByText("桌面端会自动下载并安装对应的 EXE，移动端会打开对应的 APK 下载链接。")).not.toBeInTheDocument();
   });
 
   it("点击检查更新会触发更新检查", () => {
@@ -50,13 +69,14 @@ describe("AboutSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
 
+    expect(toastMock).toHaveBeenCalledTimes(1);
     expect(updateStoreState.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
   it("检测到已下载更新时按钮会切换为立即安装", () => {
     updateStoreState.status = "downloaded";
-    updateStoreState.pendingInstallVersion = "0.1.6";
-    updateStoreState.updateSummary = { version: "0.1.6" };
+    updateStoreState.pendingInstallVersion = "0.1.7";
+    updateStoreState.updateSummary = { version: "0.1.7" };
 
     render(<AboutSection />);
 
@@ -65,7 +85,27 @@ describe("AboutSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "立即安装" }));
 
     expect(updateStoreState.installDownloadedUpdate).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("已下载 0.1.6，下次打开应用时会继续安装。")).toBeInTheDocument();
+    expect(screen.queryByText("更新已就绪")).not.toBeInTheDocument();
+  });
+
+  it("有更新时会弹出更新日志对话框，并通过按钮触发下载", () => {
+    updateStoreState.status = "available";
+    updateStoreState.updateSummary = {
+      version: "0.1.7",
+      notes: "修复更新流程\n补齐工作流统计",
+      packageKind: "exe",
+      publishedAt: "2026-04-22T06:30:00Z",
+    };
+
+    render(<AboutSection />);
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("发现 0.1.7")).toBeInTheDocument();
+    expect(screen.getByText(/修复更新流程[\s\S]*补齐工作流统计/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "下载更新" }));
+
+    expect(updateStoreState.downloadAvailableUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("切换自动更新时会写入新的开关状态", () => {

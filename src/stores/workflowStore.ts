@@ -57,6 +57,7 @@ type WorkflowStoreState = {
   activeRunId: string | null;
   abortController: AbortController | null;
   inflightToolRequestIds: string[];
+  finishAfterCurrentLoopRequested: boolean;
   stopRequested: boolean;
 };
 
@@ -92,12 +93,15 @@ type WorkflowStoreActions = {
   setRunningState: (status: {
     activeRunId: string | null;
     isRunning: boolean;
+    finishAfterCurrentLoopRequested?: boolean;
     stopRequested?: boolean;
     abortController?: AbortController | null;
     inflightToolRequestIds?: string[];
   }) => void;
   trackInflightToolRequest: (requestId: string, action: "start" | "finish") => void;
+  requestFinishAfterCurrentLoop: () => void;
   requestStopRun: () => Promise<void>;
+  clearFinishAfterCurrentLoopRequest: () => void;
   clearStopRequest: () => void;
   parseReviewResult: (text: string) => WorkflowReviewResult | null;
 };
@@ -115,6 +119,7 @@ function buildInitialState(): WorkflowStoreState {
     activeRunId: null,
     abortController: null,
     inflightToolRequestIds: [],
+    finishAfterCurrentLoopRequested: false,
     stopRequested: false,
   };
 }
@@ -353,6 +358,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   setRunningState: ({
     activeRunId,
     isRunning,
+    finishAfterCurrentLoopRequested,
     stopRequested = false,
     abortController,
     inflightToolRequestIds,
@@ -360,6 +366,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     set((state) => ({
       activeRunId,
       isRunning,
+      finishAfterCurrentLoopRequested:
+        finishAfterCurrentLoopRequested === undefined
+          ? state.finishAfterCurrentLoopRequested
+          : finishAfterCurrentLoopRequested,
       stopRequested,
       abortController:
         abortController === undefined ? state.abortController : abortController,
@@ -373,11 +383,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           ? Array.from(new Set([...state.inflightToolRequestIds, requestId]))
           : state.inflightToolRequestIds.filter((candidate) => candidate !== requestId),
     })),
+  requestFinishAfterCurrentLoop: () =>
+    set((state) => ({
+      finishAfterCurrentLoopRequested: state.activeRunId ? true : state.finishAfterCurrentLoopRequested,
+    })),
   requestStopRun: async () => {
     const state = get();
     const runId = state.activeRunId;
     if (!runId) {
       set({
+        finishAfterCurrentLoopRequested: false,
         stopRequested: true,
         isRunning: false,
         abortController: null,
@@ -391,6 +406,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     set((current) => ({
       ...updatePausedRunInDetail(current.currentDetail, runId, current.selectedStepRunId),
       activeRunId: null,
+      finishAfterCurrentLoopRequested: false,
       isRunning: false,
       abortController: null,
       inflightToolRequestIds: [],
@@ -408,6 +424,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       ...failedStepRuns.map((stepRun) => saveWorkflowStepRun(stepRun)),
     ]);
   },
+  clearFinishAfterCurrentLoopRequest: () => set({ finishAfterCurrentLoopRequested: false }),
   clearStopRequest: () => set({ stopRequested: false }),
   parseReviewResult: (text) => parseWorkflowReviewResult(text),
 }));

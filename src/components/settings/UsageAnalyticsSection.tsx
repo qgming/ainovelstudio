@@ -278,7 +278,7 @@ export function UsageAnalyticsSection() {
         <div className="min-h-[320px] px-4 py-4">
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-[#64748b] dark:text-zinc-400" />
-            <h3 className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">对话日志</h3>
+            <h3 className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">用量日志</h3>
           </div>
           <UsageLogTable
             errorMessage={errorMessage}

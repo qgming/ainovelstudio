@@ -1,4 +1,5 @@
 import {
+  Flag,
   GitBranch,
   Pause,
   Play,
@@ -147,6 +148,7 @@ export function WorkflowDetailPage() {
   const selectedStepRunId = useWorkflowStore((state) => state.selectedStepRunId);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const activeRunId = useWorkflowStore((state) => state.activeRunId);
+  const finishAfterCurrentLoopRequested = useWorkflowStore((state) => state.finishAfterCurrentLoopRequested);
   const loadWorkflowDetail = useWorkflowStore((state) => state.loadWorkflowDetail);
   const saveWorkflowBasics = useWorkflowStore((state) => state.saveWorkflowBasics);
   const bindWorkspace = useWorkflowStore((state) => state.bindWorkspace);
@@ -159,6 +161,7 @@ export function WorkflowDetailPage() {
   const removeStep = useWorkflowStore((state) => state.removeStep);
   const reorderSteps = useWorkflowStore((state) => state.reorderSteps);
   const selectStepRun = useWorkflowStore((state) => state.selectStepRun);
+  const requestFinishAfterCurrentLoop = useWorkflowStore((state) => state.requestFinishAfterCurrentLoop);
   const requestStopRun = useWorkflowStore((state) => state.requestStopRun);
   const initializeAgents = useSubAgentStore((state) => state.initialize);
   const agentStatus = useSubAgentStore((state) => state.status);
@@ -609,6 +612,13 @@ export function WorkflowDetailPage() {
 
   const runActions = isRunning
     ? [
+        {
+          disabled: finishAfterCurrentLoopRequested,
+          icon: Flag,
+          label: finishAfterCurrentLoopRequested ? "本轮后结束中" : "本轮后结束",
+          tone: "default" as const,
+          onClick: () => requestFinishAfterCurrentLoop(),
+        },
         { icon: Pause, label: "暂停", tone: "default" as const, onClick: () => void requestStopRun() },
       ]
     : resumableRun

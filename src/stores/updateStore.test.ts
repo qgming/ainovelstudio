@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useUpdateStore } from "./updateStore";
 
-const { checkForAppUpdateMock, relaunchToApplyUpdateMock, toastMock } = vi.hoisted(() => ({
+const {
+  checkForAppUpdateMock,
+  fetchLatestDirectUpdateMock,
+  openExternalUpdateUrlMock,
+  relaunchToApplyUpdateMock,
+  toastMock,
+} = vi.hoisted(() => ({
   checkForAppUpdateMock: vi.fn(),
+  fetchLatestDirectUpdateMock: vi.fn(),
+  openExternalUpdateUrlMock: vi.fn(),
   relaunchToApplyUpdateMock: vi.fn(),
   toastMock: Object.assign(vi.fn(), {
     error: vi.fn(),
@@ -12,6 +20,8 @@ const { checkForAppUpdateMock, relaunchToApplyUpdateMock, toastMock } = vi.hoist
 
 vi.mock("../lib/update/api", () => ({
   checkForAppUpdate: checkForAppUpdateMock,
+  fetchLatestDirectUpdate: fetchLatestDirectUpdateMock,
+  openExternalUpdateUrl: openExternalUpdateUrlMock,
   relaunchToApplyUpdate: relaunchToApplyUpdateMock,
 }));
 
@@ -23,11 +33,11 @@ vi.mock("sonner", () => ({
   toast: toastMock,
 }));
 
-function createDownloadableUpdate(version = "0.1.6") {
+function createDownloadableUpdate(version = "0.1.7") {
   return {
     body: "修复若干问题",
     close: vi.fn().mockResolvedValue(undefined),
-    currentVersion: "0.1.6",
+    currentVersion: "0.1.7",
     date: "2026-04-21T00:00:00Z",
     download: vi.fn().mockImplementation(async (onEvent?: (event: unknown) => void) => {
       onEvent?.({ event: "Started", data: { contentLength: 100 } });
@@ -57,6 +67,8 @@ describe("updateStore", () => {
     window.localStorage.clear();
     resetStore();
     checkForAppUpdateMock.mockReset();
+    fetchLatestDirectUpdateMock.mockReset();
+    openExternalUpdateUrlMock.mockReset();
     relaunchToApplyUpdateMock.mockReset();
     toastMock.mockReset();
     toastMock.error.mockReset();
@@ -81,6 +93,30 @@ describe("updateStore", () => {
 
     await useUpdateStore.getState().checkForUpdates();
 
+    expect(update.download).not.toHaveBeenCalled();
+    expect(useUpdateStore.getState().status).toBe("available");
+    expect(useUpdateStore.getState().updateSummary).toMatchObject({
+      version: "0.1.7",
+    });
+  });
+
+  it("确认下载可用更新后会开始下载并记录待安装版本", async () => {
+    const update = createDownloadableUpdate("0.1.7");
+    checkForAppUpdateMock.mockResolvedValue(update);
+
+    useUpdateStore.setState({
+      initialized: true,
+      status: "available",
+      updateSummary: {
+        currentVersion: "0.1.7",
+        version: "0.1.7",
+        notes: "修复若干问题",
+        publishedAt: "2026-04-21T00:00:00Z",
+      },
+    });
+
+    await useUpdateStore.getState().downloadAvailableUpdate();
+
     expect(update.download).toHaveBeenCalledTimes(1);
     expect(useUpdateStore.getState().status).toBe("downloaded");
     expect(useUpdateStore.getState().progress).toBe(100);
@@ -89,8 +125,8 @@ describe("updateStore", () => {
   });
 
   it("启动时遇到待安装版本会继续执行安装流程", async () => {
-    window.localStorage.setItem("ainovelstudio:pending-install-version", "0.1.7");
-    const update = createDownloadableUpdate("0.1.7");
+    window.localStorage.setItem("ainovelstudio:pending-install-version", "0.1.8");
+    const update = createDownloadableUpdate("0.1.8");
     checkForAppUpdateMock.mockResolvedValue(update);
 
     await useUpdateStore.getState().runStartupUpdateFlow();

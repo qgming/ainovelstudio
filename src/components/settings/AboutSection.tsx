@@ -1,10 +1,20 @@
-import { type ReactNode, useEffect } from "react";
-import { GitBranch, Globe, Info, LoaderCircle, RefreshCw } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { Download, GitBranch, Globe, Info, LoaderCircle, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import appIcon from "../../assets/icon.png";
 import packageJson from "../../../package.json";
 import { normalizeVersionLabel } from "../../lib/update/version";
+import type { UpdateSummary } from "../../lib/update/types";
 import { useUpdateStore } from "../../stores/updateStore";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import { Switch } from "../ui/switch";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";
 
@@ -45,65 +55,48 @@ function ExternalLinkRow({
   );
 }
 
-function getUpdateStatusText({
-  autoUpdateEnabled,
-  pendingInstallVersion,
-  progress,
-  status,
-  updateVersion,
-}: {
-  autoUpdateEnabled: boolean;
-  pendingInstallVersion: string | null;
-  progress: number | null;
-  status: "idle" | "checking" | "downloading" | "downloaded" | "installing" | "latest" | "error";
-  updateVersion: string | null;
-}) {
-  if (status === "downloading" && updateVersion) {
-    const progressLabel = typeof progress === "number" ? ` ${progress}%` : "";
-    return `正在后台下载 ${normalizeVersionLabel(updateVersion)}${progressLabel}`;
+function formatPublishedAt(value: string | null) {
+  if (!value) {
+    return "未提供";
   }
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
 
-  if (status === "downloaded" && pendingInstallVersion) {
-    return `已下载 ${normalizeVersionLabel(pendingInstallVersion)}，下次打开应用时会继续安装。`;
-  }
-
-  if (status === "installing" && pendingInstallVersion) {
-    return `正在准备安装 ${normalizeVersionLabel(pendingInstallVersion)}。`;
-  }
-
-  if (status === "latest") {
-    return "当前版本已是最新。";
-  }
-
-  if (autoUpdateEnabled) {
-    return "启动后会在后台检查并自动下载桌面端新版本。";
-  }
-
-  return "关闭后仅在手动检查更新时执行下载与安装。";
+function getPackageLabel(packageKind: UpdateSummary["packageKind"]) {
+  return packageKind === "apk" ? "APK" : "EXE";
 }
 
 export function AboutSection() {
   const autoUpdateEnabled = useUpdateStore((state) => state.autoUpdateEnabled);
   const checkForUpdates = useUpdateStore((state) => state.checkForUpdates);
+  const downloadAvailableUpdate = useUpdateStore((state) => state.downloadAvailableUpdate);
   const initializePreferences = useUpdateStore((state) => state.initializePreferences);
   const installDownloadedUpdate = useUpdateStore((state) => state.installDownloadedUpdate);
-  const pendingInstallVersion = useUpdateStore((state) => state.pendingInstallVersion);
-  const progress = useUpdateStore((state) => state.progress);
   const setAutoUpdateEnabled = useUpdateStore((state) => state.setAutoUpdateEnabled);
   const status = useUpdateStore((state) => state.status);
   const updateSummary = useUpdateStore((state) => state.updateSummary);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const isBusy = status === "checking" || status === "downloading" || status === "installing";
-  const updateStatusText = getUpdateStatusText({
-    autoUpdateEnabled,
-    pendingInstallVersion,
-    progress,
-    status,
-    updateVersion: updateSummary?.version ?? null,
-  });
 
   useEffect(() => {
     initializePreferences();
   }, [initializePreferences]);
+
+  useEffect(() => {
+    if (status === "available" && updateSummary) {
+      setUpdateDialogOpen(true);
+      return;
+    }
+
+    if (status !== "available") {
+      setUpdateDialogOpen(false);
+    }
+  }, [status, updateSummary]);
 
   function handleCheckButtonClick() {
     if (status === "downloaded") {
@@ -111,7 +104,19 @@ export function AboutSection() {
       return;
     }
 
+    if (status === "available") {
+      setUpdateDialogOpen(true);
+      return;
+    }
+
+    toast("正在检查更新", {
+      description: "正在连接更新源并检查最新版本。",
+    });
     void checkForUpdates();
+  }
+
+  function handleDownloadAvailableUpdate() {
+    void downloadAvailableUpdate();
   }
 
   return (
@@ -153,10 +158,14 @@ export function AboutSection() {
                 {isBusy ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                 ) : (
-                  <RefreshCw className="h-4 w-4" />
+                  status === "available"
+                    ? <Download className="h-4 w-4" />
+                    : <RefreshCw className="h-4 w-4" />
                 )}
                 {status === "downloaded"
                   ? "立即安装"
+                  : status === "available"
+                    ? "查看更新"
                   : status === "checking"
                     ? "检查中..."
                     : status === "downloading"
@@ -166,9 +175,6 @@ export function AboutSection() {
                         : "检查更新"}
               </Button>
             </div>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {updateStatusText}
-            </p>
           </section>
 
           <section className="px-4 py-5">
@@ -177,9 +183,6 @@ export function AboutSection() {
                 <h3 className="text-[17px] font-medium tracking-[-0.03em] text-foreground">
                   自动更新
                 </h3>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  发现新版本后会在后台自动下载，下载完成后提示立即安装或稍后安装。
-                </p>
               </div>
               <Switch
                 checked={autoUpdateEnabled}
@@ -210,6 +213,55 @@ export function AboutSection() {
           </section>
         </div>
       </div>
+      <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {updateSummary ? `发现 ${normalizeVersionLabel(updateSummary.version)}` : "发现新版本"}
+            </DialogTitle>
+            <DialogDescription>
+              当前版本 {normalizeVersionLabel(APP_VERSION)}
+              {updateSummary ? `，发布时间 ${formatPublishedAt(updateSummary.publishedAt)}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {updateSummary ? (
+              <div className="rounded-[16px] border border-[#dbe3ee] bg-[#f8fafc] px-4 py-3 dark:border-[#2b313b] dark:bg-[#151a21]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#0f172a] dark:text-zinc-100">
+                      {normalizeVersionLabel(updateSummary.version)}
+                    </p>
+                    <p className="mt-1 text-xs text-[#64748b] dark:text-zinc-400">
+                      安装包类型：{getPackageLabel(updateSummary.packageKind ?? null)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-[#0f172a] dark:text-zinc-100">更新日志</p>
+              <div className="max-h-[280px] overflow-y-auto rounded-[16px] border border-[#dbe3ee] bg-white px-4 py-3 text-sm leading-6 text-[#334155] dark:border-[#2b313b] dark:bg-[#11151a] dark:text-zinc-300">
+                {updateSummary?.notes?.trim() ? (
+                  <pre className="whitespace-pre-wrap break-words font-sans">
+                    {updateSummary.notes.trim()}
+                  </pre>
+                ) : (
+                  <p>本次版本暂未提供更新日志。</p>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setUpdateDialogOpen(false)}>
+              稍后再说
+            </Button>
+            <Button type="button" onClick={handleDownloadAvailableUpdate}>
+              下载更新
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

@@ -767,6 +767,10 @@ function resolveInitialStep(detail: WorkflowDetail) {
   return detail.steps.find((step): step is WorkflowStartStepDefinition => step.type === "start") ?? detail.steps[0] ?? null;
 }
 
+function buildFinishAfterCurrentLoopSummary(loopIndex: number) {
+  return `已按请求在第 ${loopIndex} 轮完整结束后停止继续下一轮。`;
+}
+
 function findResumableRun(detail: WorkflowDetail, runId?: string | null) {
   if (runId) {
     const run = detail.runs.find((item) => item.id === runId);
@@ -813,6 +817,7 @@ async function runWorkflowFromCursor(params: {
   await store.saveRun(run);
   store.setRunningState({
     activeRunId: run.id,
+    finishAfterCurrentLoopRequested: false,
     isRunning: true,
     stopRequested: false,
     abortController,
@@ -929,10 +934,15 @@ async function runWorkflowFromCursor(params: {
       }
 
       if (currentStep.type === "end") {
-        const shouldContinue =
+        const shouldContinueByLoopConfig =
           currentStep.loopBehavior === "continue_if_possible"
           && currentStep.loopTargetStepId
           && hasRemainingLoops(run.maxLoops, runtime.loopIndex + 1);
+        const finishAfterCurrentLoopRequested =
+          useWorkflowStore.getState().finishAfterCurrentLoopRequested;
+        const shouldContinue =
+          shouldContinueByLoopConfig
+          && !finishAfterCurrentLoopRequested;
         const stepRun = createSystemStepRun({
           detail,
           run,
@@ -941,11 +951,15 @@ async function runWorkflowFromCursor(params: {
           attemptIndex: runtime.attemptIndex,
           resultText: shouldContinue
             ? `结束节点允许继续下一轮，准备进入第 ${runtime.loopIndex + 1} 轮。`
+            : finishAfterCurrentLoopRequested && shouldContinueByLoopConfig
+              ? buildFinishAfterCurrentLoopSummary(runtime.loopIndex)
             : currentStep.summaryTemplate.trim() || `到达结束节点《${currentStep.name}》。`,
           decision: {
             outcome: shouldContinue ? "retry" : "end",
             reason: shouldContinue
               ? `结束节点要求在轮次允许时继续执行，下一轮从 ${currentStep.loopTargetStepId} 开始。`
+              : finishAfterCurrentLoopRequested && shouldContinueByLoopConfig
+                ? "已收到“本轮后结束”请求，当前轮完成后停止继续下一轮。"
               : `结束节点要求以 ${currentStep.stopReason} 结束工作流。`,
             branchKey: shouldContinue ? "continue" : currentStep.stopReason,
           },
@@ -965,6 +979,16 @@ async function runWorkflowFromCursor(params: {
           runtime.lastReviewResult = null;
           currentStep = getStepById(detail, currentStep.loopTargetStepId);
           continue;
+        }
+
+        if (finishAfterCurrentLoopRequested && shouldContinueByLoopConfig) {
+          run = applyRunCompletion(
+            run,
+            "completed",
+            buildFinishAfterCurrentLoopSummary(runtime.loopIndex),
+          );
+          await store.saveRun(run);
+          break;
         }
 
         const stopReason =
@@ -1011,6 +1035,7 @@ async function runWorkflowFromCursor(params: {
     store.setRunningState({
       activeRunId: null,
       abortController: null,
+      finishAfterCurrentLoopRequested: false,
       inflightToolRequestIds: [],
       isRunning: false,
       stopRequested: false,

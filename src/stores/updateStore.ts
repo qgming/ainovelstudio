@@ -4,9 +4,12 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import {
   checkForAppUpdate,
+  fetchLatestDirectUpdate,
+  openExternalUpdateUrl,
   relaunchToApplyUpdate,
   type AppUpdateHandle,
   type AppUpdateProgressEvent,
+  type DirectUpdateTarget,
 } from "../lib/update/api";
 import { isMobileRuntime } from "../lib/platform";
 import type { UpdateSummary } from "../lib/update/types";
@@ -18,6 +21,7 @@ const CURRENT_VERSION = packageJson.version;
 
 type UpdateStatus =
   | "idle"
+  | "available"
   | "checking"
   | "downloading"
   | "downloaded"
@@ -37,6 +41,7 @@ type UpdateState = {
 
 type UpdateActions = {
   checkForUpdates: (options?: { silent?: boolean }) => Promise<void>;
+  downloadAvailableUpdate: () => Promise<void>;
   initializePreferences: () => void;
   installDownloadedUpdate: () => Promise<void>;
   runStartupUpdateFlow: () => Promise<void>;
@@ -62,6 +67,10 @@ function getDefaultState(): UpdateState {
 
 function canUseDesktopUpdater() {
   return isTauri() && !isMobileRuntime();
+}
+
+function resolveDirectUpdateTarget(): DirectUpdateTarget {
+  return isMobileRuntime() ? "android-arm64" : "windows-x64";
 }
 
 function closeStagedUpdate() {
@@ -290,8 +299,111 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
     }
   }
 
+  async function handleDirectDownloadUpdate(silent: boolean) {
+    set((state) => ({
+      ...state,
+      errorMessage: null,
+      progress: null,
+      status: "checking",
+    }));
+
+    try {
+      const release = await fetchLatestDirectUpdate(resolveDirectUpdateTarget());
+      if (compareVersions(release.version, CURRENT_VERSION) <= 0) {
+        set((state) => ({
+          ...state,
+          errorMessage: null,
+          progress: null,
+          status: "latest",
+          updateSummary: null,
+        }));
+        if (!silent) {
+          toast.success("当前已是最新版本", {
+            description: `当前版本 ${formatVersionLabel(CURRENT_VERSION)}`,
+          });
+        }
+        return;
+      }
+
+      const summary: UpdateSummary = {
+        currentVersion: CURRENT_VERSION,
+        version: release.version,
+        notes: release.notes,
+        publishedAt: release.publishedAt,
+        downloadUrl: release.downloadUrl,
+        packageKind: release.packageKind,
+      };
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        progress: null,
+        status: "available",
+        updateSummary: summary,
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatError(error, "检查更新失败。"),
+        progress: null,
+        status: "error",
+      }));
+      if (!silent) {
+        toast.error("检查更新失败", {
+          description: formatError(error, "请稍后重试。"),
+        });
+      }
+    }
+  }
+
   return {
     ...getDefaultState(),
+    downloadAvailableUpdate: async () => {
+      initializePreferences();
+      const currentSummary = get().updateSummary;
+      if (!currentSummary) {
+        return;
+      }
+
+      if (!canUseDesktopUpdater()) {
+        if (currentSummary.downloadUrl) {
+          await openExternalUpdateUrl(currentSummary.downloadUrl);
+        }
+        return;
+      }
+
+      set((state) => ({
+        ...state,
+        errorMessage: null,
+        progress: null,
+        status: "checking",
+      }));
+
+      try {
+        const update = await checkForAppUpdate();
+        if (!update || compareVersions(update.version, currentSummary.version) !== 0) {
+          set((state) => ({
+            ...state,
+            errorMessage: null,
+            progress: null,
+            status: "latest",
+            updateSummary: null,
+          }));
+          return;
+        }
+
+        await downloadUpdate(update);
+      } catch (error) {
+        set((state) => ({
+          ...state,
+          errorMessage: formatError(error, "下载更新失败。"),
+          progress: null,
+          status: "error",
+        }));
+        toast.error("下载更新失败", {
+          description: formatError(error, "请稍后重试。"),
+        });
+      }
+    },
     initializePreferences,
     setAutoUpdateEnabled: (enabled) => {
       writeBooleanStorage(AUTO_UPDATE_ENABLED_KEY, enabled);
@@ -303,6 +415,7 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
     checkForUpdates: async ({ silent = false } = {}) => {
       initializePreferences();
       if (!canUseDesktopUpdater()) {
+        await handleDirectDownloadUpdate(silent);
         return;
       }
 
@@ -341,12 +454,18 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
           return;
         }
 
-        if (!silent) {
-          toast("发现新版本", {
-            description: `${formatVersionLabel(update.version)} 正在后台下载。`,
-          });
+        if (silent) {
+          await downloadUpdate(update);
+          return;
         }
-        await downloadUpdate(update);
+
+        set((state) => ({
+          ...state,
+          errorMessage: null,
+          progress: null,
+          status: "available",
+          updateSummary: createUpdateSummary(update),
+        }));
       } catch (error) {
         set((state) => ({
           ...state,
@@ -364,6 +483,10 @@ export const useUpdateStore = create<UpdateStore>((set, get) => {
     installDownloadedUpdate: async () => {
       initializePreferences();
       if (!canUseDesktopUpdater()) {
+        const downloadUrl = get().updateSummary?.downloadUrl;
+        if (downloadUrl) {
+          await openExternalUpdateUrl(downloadUrl);
+        }
         return;
       }
 

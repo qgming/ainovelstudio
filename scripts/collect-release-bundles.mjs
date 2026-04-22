@@ -63,6 +63,11 @@ async function collectWindowsBundle(projectRoot, version) {
     RELEASE_DIR,
     `ainovelstudio_${version}_${WINDOWS_PLATFORM}_${WINDOWS_ARCH}.exe`,
   );
+  const latestTargetPath = path.join(
+    projectRoot,
+    RELEASE_DIR,
+    `ainovelstudio_${WINDOWS_PLATFORM}_${WINDOWS_ARCH}.exe`,
+  );
   const targetSignaturePath = `${targetPath}.sig`;
   const latestJsonPath = path.join(projectRoot, RELEASE_DIR, "latest.json");
   const releaseTag = `v${version}`;
@@ -82,11 +87,14 @@ async function collectWindowsBundle(projectRoot, version) {
   };
 
   await rm(targetPath, { force: true });
+  await rm(latestTargetPath, { force: true });
   await rm(targetSignaturePath, { force: true });
   await copyFile(sourcePath, targetPath);
+  await copyFile(sourcePath, latestTargetPath);
   await copyFile(sourceSignaturePath, targetSignaturePath);
   await writeFile(latestJsonPath, JSON.stringify(latestJson, null, 2));
   return {
+    latestTargetPath,
     latestJsonPath,
     targetPath,
     targetSignaturePath,
@@ -123,9 +131,16 @@ async function collectAndroidBundle(projectRoot, version) {
     RELEASE_DIR,
     `ainovelstudio_${version}_${ANDROID_PLATFORM}_${ANDROID_ARCH}.apk`,
   );
+  const latestTargetPath = path.join(
+    projectRoot,
+    RELEASE_DIR,
+    `ainovelstudio_${ANDROID_PLATFORM}_${ANDROID_ARCH}.apk`,
+  );
   await rm(targetPath, { force: true });
+  await rm(latestTargetPath, { force: true });
   await copyFile(sourcePath, targetPath);
-  return targetPath;
+  await copyFile(sourcePath, latestTargetPath);
+  return { latestTargetPath, targetPath };
 }
 
 async function main() {
@@ -142,6 +157,7 @@ async function main() {
   if (platform === "windows") {
     const collected = await collectWindowsBundle(projectRoot, version);
     console.log(`Collected Windows bundle: ${collected.targetPath}`);
+    console.log(`Collected Windows latest bundle: ${collected.latestTargetPath}`);
     console.log(`Collected Windows signature: ${collected.targetSignaturePath}`);
     console.log(`Generated updater manifest: ${collected.latestJsonPath}`);
     return;
@@ -149,7 +165,8 @@ async function main() {
 
   if (platform === "android") {
     const collectedPath = await collectAndroidBundle(projectRoot, version);
-    console.log(`Collected Android bundle: ${collectedPath}`);
+    console.log(`Collected Android bundle: ${collectedPath.targetPath}`);
+    console.log(`Collected Android latest bundle: ${collectedPath.latestTargetPath}`);
     return;
   }
 

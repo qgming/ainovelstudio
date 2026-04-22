@@ -164,6 +164,7 @@ describe("WorkflowDetailPage", () => {
       activeRunId: null,
       abortController: null,
       inflightToolRequestIds: [],
+      finishAfterCurrentLoopRequested: false,
       stopRequested: false,
       loadWorkflowDetail,
       saveWorkflowBasics: overrides?.saveWorkflowBasics ?? vi.fn(async () => undefined),
@@ -177,7 +178,9 @@ describe("WorkflowDetailPage", () => {
       removeStep: vi.fn(async () => undefined),
       reorderSteps: vi.fn(async () => undefined),
       selectStepRun: vi.fn(),
+      requestFinishAfterCurrentLoop: vi.fn(),
       requestStopRun: vi.fn(async () => undefined),
+      clearFinishAfterCurrentLoopRequest: vi.fn(),
     });
     useSubAgentStore.setState({
       status: "ready",
@@ -299,5 +302,65 @@ describe("WorkflowDetailPage", () => {
     });
     expect(screen.getByRole("button", { name: "重新运行" })).toBeInTheDocument();
     expect(startWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it("运行中显示本轮后结束按钮，并在已请求后禁用", async () => {
+    const detail = createWorkflowDetail();
+    const requestFinishAfterCurrentLoop = vi.fn();
+    useWorkflowStore.setState({
+      workflows: [detail.workflow],
+      currentDetail: detail,
+      selectedStepRunId: null,
+      status: "ready",
+      errorMessage: null,
+      isRunning: true,
+      activeRunId: "run-active",
+      abortController: null,
+      inflightToolRequestIds: [],
+      finishAfterCurrentLoopRequested: false,
+      stopRequested: false,
+      loadWorkflowDetail: vi.fn(async () => undefined),
+      saveWorkflowBasics: vi.fn(async () => undefined),
+      bindWorkspace: vi.fn(async () => undefined),
+      updateLoopConfig: vi.fn(async () => undefined),
+      addTeamMember: vi.fn(async () => undefined),
+      updateTeamMember: vi.fn(async () => undefined),
+      removeTeamMember: vi.fn(async () => undefined),
+      updateStep: vi.fn(async () => undefined),
+      removeStep: vi.fn(async () => undefined),
+      reorderSteps: vi.fn(async () => undefined),
+      saveRun: vi.fn(async () => undefined),
+      saveStepRun: vi.fn(async () => undefined),
+      selectStepRun: vi.fn(),
+      setRunningState: vi.fn(),
+      trackInflightToolRequest: vi.fn(),
+      requestFinishAfterCurrentLoop,
+      requestStopRun: vi.fn(async () => undefined),
+      clearFinishAfterCurrentLoopRequest: vi.fn(),
+      clearStopRequest: vi.fn(),
+      parseReviewResult: vi.fn(() => null),
+      initialize: vi.fn(async () => undefined),
+      refreshList: vi.fn(async () => undefined),
+      createWorkflow: vi.fn(async () => detail.workflow),
+      exportWorkflowZip: vi.fn(async () => null),
+      deleteWorkflowById: vi.fn(async () => undefined),
+      addStep: vi.fn(async () => undefined),
+      addAgentStep: vi.fn(async () => undefined),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/workflows/${workflowId}`]}>
+        <Routes>
+          <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "本轮后结束" }));
+    expect(requestFinishAfterCurrentLoop).toHaveBeenCalledTimes(1);
+
+    useWorkflowStore.setState({ finishAfterCurrentLoopRequested: true });
+
+    expect(await screen.findByRole("button", { name: "本轮后结束中" })).toBeDisabled();
   });
 });

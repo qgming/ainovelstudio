@@ -5,6 +5,7 @@ import { useIsMobile } from "../hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 type PageAction = {
+  disabled?: boolean;
   icon: LucideIcon;
   label: string;
   onClick?: () => void;
@@ -47,10 +48,11 @@ export function PageShell({
           {title ? <div className="min-w-0 flex-1">{title}</div> : null}
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {headerRight}
-            {actions.map(({ icon: Icon, label, onClick, tone = "default" }) => (
+            {actions.map(({ disabled = false, icon: Icon, label, onClick, tone = "default" }) => (
               <Button
                 key={label}
                 aria-label={label}
+                disabled={disabled}
                 onClick={onClick}
                 size={isMobile ? "icon-sm" : "sm"}
                 variant={actionVariants[tone]}

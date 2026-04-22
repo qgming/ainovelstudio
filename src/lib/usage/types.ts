@@ -2,6 +2,8 @@ export type UsageLogEntry = {
   messageId: string;
   sessionId: string;
   sessionTitle: string;
+  sourceType: "chat" | "workflow";
+  sourceName: string;
   bookName: string;
   createdAt: string;
   recordedAt: string;

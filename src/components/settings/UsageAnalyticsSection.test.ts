@@ -19,6 +19,8 @@ function createLog(overrides: Partial<UsageLogEntry> = {}): UsageLogEntry {
     recordedAt: "0",
     sessionId: "session-1",
     sessionTitle: "测试会话",
+    sourceName: "测试会话",
+    sourceType: "chat",
     totalTokens: 15,
     ...overrides,
   };

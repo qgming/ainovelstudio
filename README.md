@@ -16,7 +16,7 @@
   <a href="https://github.com/qgming/ainovelstudio">
     <img src="https://img.shields.io/github/stars/qgming/ainovelstudio?style=for-the-badge&logo=github&label=Stars" alt="GitHub Stars" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.1.6-111827?style=for-the-badge" alt="Version 0.1.6" />
+  <img src="https://img.shields.io/badge/Version-0.1.7-111827?style=for-the-badge" alt="Version 0.1.7" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 
@@ -181,7 +181,7 @@ npm run build:exe
 输出文件：
 
 ```text
-release-packages/ainovelstudio_0.1.6_windows_x64.exe
+release-packages/ainovelstudio_0.1.7_windows_x64.exe
 ```
 
 Android APK：
@@ -193,7 +193,7 @@ npm run build:android
 输出文件：
 
 ```text
-release-packages/ainovelstudio_0.1.6_android_arm64.apk
+release-packages/ainovelstudio_0.1.7_android_arm64.apk
 ```
 
 ## 项目结构
@@ -254,4 +254,4 @@ release-packages/ainovelstudio_0.1.6_android_arm64.apk
 
 ## 版本
 
-当前仓库版本：`0.1.6`
+当前仓库版本：`0.1.7`
