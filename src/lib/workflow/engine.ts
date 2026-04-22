@@ -654,6 +654,7 @@ async function executeConfiguredStep(params: {
   const stream = runAgentTurn({
     abortSignal,
     activeFilePath: null,
+    debugLabel: `workflow:${detail.workflow.name}:loop-${runtime.loopIndex}:attempt-${runtime.attemptIndex}:step-${step.name}`,
     workspaceRootPath: run.workspaceBinding.rootPath,
     conversationHistory: [],
     defaultAgentMarkdown: agent.body,

@@ -22,6 +22,7 @@ import type { AgentUsage } from "./types";
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
   activeFilePath: string | null;
+  debugLabel?: string;
   workspaceRootPath?: string | null;
   conversationHistory?: AgentMessage[];
   defaultAgentMarkdown?: string;
@@ -46,6 +47,11 @@ type RunAgentTurnInput = {
   _streamFn?: typeof streamAgentText;
   /** 可选：用于测试注入的子代理流式调用 */
   _subagentStreamFn?: typeof streamAgentText;
+};
+
+type DebuggableMessage = {
+  content: string;
+  role: string;
 };
 
 function hasProviderConfig(config: AgentProviderConfig) {
@@ -677,7 +683,7 @@ function buildAiSdkTools(
     word_count: (toolName, tool) =>
       defineTool({
         description:
-          "统计指定文本文件的字符数、非空白字符数、汉字数、英文单词数、数字数、行数和段落数。",
+          "统计指定文本文件的字符数、非空白字符数、中文字符数、英文单词数、数字数、行数和段落数。",
         inputSchema: z.object({
           path: z
             .string()
@@ -1020,6 +1026,42 @@ function createSystemMessage(text: string): AgentMessage {
   };
 }
 
+function normalizeDebugMessageContent(content: unknown) {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  try {
+    return JSON.stringify(content, null, 2);
+  } catch {
+    return String(content);
+  }
+}
+
+function logPromptDebug(params: {
+  label: string;
+  messages: DebuggableMessage[];
+  system: string;
+}) {
+  const { label, messages, system } = params;
+  const header = `[Prompt Debug] ${label}`;
+  const groupLabel = typeof console.groupCollapsed === "function"
+    ? console.groupCollapsed
+    : console.log;
+  const groupEnd = typeof console.groupEnd === "function"
+    ? console.groupEnd
+    : null;
+
+  groupLabel(header);
+  console.log("System Prompt:");
+  console.log(system);
+  messages.forEach((message, index) => {
+    console.log(`Message ${index + 1} [${message.role}]:`);
+    console.log(message.content);
+  });
+  groupEnd?.();
+}
+
 /**
  * 运行一轮 agent 对话，以 async generator 形式逐步 yield AgentPart。
  * 调用方可实时消费每个 part 更新 UI。
@@ -1027,6 +1069,7 @@ function createSystemMessage(text: string): AgentMessage {
 export async function* runAgentTurn({
   abortSignal,
   activeFilePath,
+  debugLabel,
   workspaceRootPath,
   conversationHistory = [],
   defaultAgentMarkdown,
@@ -1114,10 +1157,20 @@ export async function* runAgentTurn({
     prompt,
     subagentAnalysis: null,
   });
+  const messages = buildConversationMessages(conversationHistory, userContent);
+
+  logPromptDebug({
+    label: debugLabel ?? "chat-turn",
+    messages: messages.map((message) => ({
+      content: normalizeDebugMessageContent(message.content),
+      role: message.role,
+    })),
+    system,
+  });
 
   const result = _streamFn({
     abortSignal,
-    messages: buildConversationMessages(conversationHistory, userContent),
+    messages,
     providerConfig,
     system,
     tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,

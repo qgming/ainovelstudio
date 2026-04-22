@@ -157,7 +157,7 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   web_search: "查平台规则、榜单、外部资料；可配 domains 限制站点范围；返回标题+摘要+链接，再用 web_fetch 展开正文。",
   web_fetch: "拿到外部链接后读正文；支持 full / anchor_range / heading_range；需要结构化信息时加 includeLinks / includeTables；maxChars 默认 8000，最大 20000。",
   read: "已知准确路径时使用；大文件优先 mode=head/tail/range；按锚点读局部用 anchor_range；按 Markdown 标题块读取用 heading_range。",
-  word_count: "校对字符数、汉字数、英文词数、段落数、行数。",
+  word_count: "校对字符数、中文字符数、英文词数、段落数、行数。",
   edit: "小范围改（≤30%）；先 read 再 edit；action：replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中范围；改连续行段优先用 replace_lines；改锚点附近或 Markdown 标题块优先用对应 range 动作。",
   write: "整份覆盖写入；只有已准备好完整新内容时再用，缺失目录会自动创建。",
   json: "按 JSON Pointer 局部读写字段/对象/数组；action：get/set/merge/append/delete/batch；多步 JSON 变更优先 batch，一次写回。",

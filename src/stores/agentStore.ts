@@ -632,6 +632,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         const stream = runAgentTurn({
           abortSignal: abortController.signal,
           activeFilePath: workspaceState.activeFilePath,
+          debugLabel: `chat-session:${sessionId}`,
           workspaceRootPath: workspaceState.rootPath,
           conversationHistory: persistedConversationHistory,
           defaultAgentMarkdown,

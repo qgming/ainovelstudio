@@ -54,7 +54,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "word_count",
     name: "字数统计",
     description:
-      "读取指定文本文件并返回字符数、非空白字符数、汉字数、英文单词数、数字数、段落数和行数。",
+      "读取指定文本文件并返回字符数、非空白字符数、中文字符数、英文单词数、数字数、段落数和行数。",
   },
   {
     id: "edit",
