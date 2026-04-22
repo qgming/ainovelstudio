@@ -94,7 +94,6 @@ pub enum WorkflowStepDefinition {
         source_step_id: String,
         true_next_step_id: Option<String>,
         false_next_step_id: Option<String>,
-        pass_rule: String,
     },
     End {
         id: String,
@@ -133,7 +132,6 @@ pub enum WorkflowStepInput {
         source_step_id: String,
         true_next_step_id: Option<String>,
         false_next_step_id: Option<String>,
-        pass_rule: String,
     },
     End {
         name: String,
@@ -167,6 +165,15 @@ pub struct WorkflowReviewResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowDecisionResult {
+    pub(crate) pass: bool,
+    pub(crate) label: Option<String>,
+    pub(crate) reason: String,
+    pub(crate) issues: Vec<WorkflowReviewIssue>,
+    pub(crate) revision_brief: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowStepRun {
     pub(crate) id: String,
@@ -182,6 +189,7 @@ pub struct WorkflowStepRun {
     pub(crate) input_prompt: String,
     pub(crate) result_text: String,
     pub(crate) result_json: Option<WorkflowReviewResult>,
+    pub(crate) decision_result_json: Option<WorkflowDecisionResult>,
     pub(crate) message_type: Option<String>,
     pub(crate) message_json: Option<Value>,
     pub(crate) decision: Option<WorkflowStepDecision>,
@@ -315,7 +323,6 @@ pub(crate) enum WorkflowTemplateStep {
         source_step_key: String,
         true_next_step_key: Option<String>,
         false_next_step_key: Option<String>,
-        pass_rule: String,
     },
     End {
         key: String,

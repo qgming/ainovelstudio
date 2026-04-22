@@ -21,10 +21,10 @@
 - 所有大纲都应服务章节落稿。
 
 ## 工具使用
-- `read`：优先读取 `立项/`、`设定/`、已有 `大纲/`、关键正文和最近审查结果。
+- `read`：优先读取 `.project/AGENTS.md`、`.project/status/project-state.json`、`01_设定/`、`.project/MEMORY/` 中已有大纲资料、关键正文和最近审查结果。
 - `search`：用于找主线节点、角色线、伏笔埋点和回收点。
 - `browse`：在用户明确要求查连载结构、平台节奏或外部方法时使用。
-- `write`：优先写入 `大纲/` 目录。
+- `write`：优先写入 `.project/MEMORY/outlines/` 或项目已有的大纲目录。
 
 ## 技能读取策略
 - 你可以自由读取 `skills/` 中的任意相关技能。

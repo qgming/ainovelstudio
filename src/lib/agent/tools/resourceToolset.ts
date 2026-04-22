@@ -30,12 +30,12 @@ import {
   ok,
 } from "./shared";
 import type {
+  WorkflowDecisionResult,
   WorkflowReviewIssue,
-  WorkflowReviewResult,
 } from "../../workflow/types";
 
 type LocalResourceToolsetContext = LocalResourceToolContext & {
-  onWorkflowDecision?: (decision: WorkflowReviewResult) => void;
+  onWorkflowDecision?: (decision: WorkflowDecisionResult) => void;
 };
 
 const WORKFLOW_DECISION_SEVERITIES = new Set(["low", "medium", "high"]);
@@ -67,22 +67,29 @@ function normalizeWorkflowDecisionIssue(
 
 function normalizeWorkflowDecision(
   input: Record<string, unknown>,
-): WorkflowReviewResult {
+): WorkflowDecisionResult {
   if (typeof input.pass !== "boolean") {
     throw new Error("workflow_decision.pass 必须是布尔值。");
   }
 
-  const issues = Array.isArray(input.issues)
-    ? input.issues.map((issue, index) =>
-        normalizeWorkflowDecisionIssue(issue, index),
-      )
-    : [];
+  const reason = ensureString(input.reason, "workflow_decision.reason");
+  if (!Array.isArray(input.issues)) {
+    throw new Error("workflow_decision.issues 必须是数组。");
+  }
+  if (typeof input.revision_brief !== "string") {
+    throw new Error("workflow_decision.revision_brief 必须是字符串。");
+  }
+
+  const issues = input.issues.map((issue, index) =>
+    normalizeWorkflowDecisionIssue(issue, index),
+  );
 
   return {
     pass: input.pass,
+    label: input.pass ? "yes" : "no",
+    reason,
     issues,
-    revision_brief:
-      typeof input.revision_brief === "string" ? input.revision_brief.trim() : "",
+    revision_brief: input.revision_brief.trim(),
   };
 }
 
@@ -259,7 +266,7 @@ export function createLocalResourceToolset({
         const decision = normalizeWorkflowDecision(input);
         onWorkflowDecision(decision);
         return ok(
-          decision.pass ? "已记录判断结果：通过。" : "已记录判断结果：不通过。",
+          decision.pass ? "已记录判断结果：通过，原因已记录。" : "已记录判断结果：不通过，原因已记录。",
           decision,
         );
       },

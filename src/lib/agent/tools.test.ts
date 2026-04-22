@@ -1227,6 +1227,7 @@ describe("createLocalResourceToolset", () => {
         },
       ],
       pass: false,
+      reason: "当前章节连续性问题会直接影响返工分支。",
       revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
     });
 
@@ -1238,12 +1239,14 @@ describe("createLocalResourceToolset", () => {
           type: "continuity",
         },
       ],
+      label: "no",
       pass: false,
+      reason: "当前章节连续性问题会直接影响返工分支。",
       revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
     });
     expect(result).toEqual({
       ok: true,
-      summary: "已记录判断结果：不通过。",
+      summary: "已记录判断结果：不通过，原因已记录。",
       data: {
         issues: [
           {
@@ -1252,7 +1255,9 @@ describe("createLocalResourceToolset", () => {
             type: "continuity",
           },
         ],
+        label: "no",
         pass: false,
+        reason: "当前章节连续性问题会直接影响返工分支。",
         revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
       },
     });

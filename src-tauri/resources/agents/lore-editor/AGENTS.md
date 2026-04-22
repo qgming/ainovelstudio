@@ -22,10 +22,10 @@
 - 任何设定都要服务后续规划、写作或审查。
 
 ## 工具使用
-- `read`：优先读取 `立项/`、`设定/`、相关正文、`大纲/` 和 `状态/`。
+- `read`：优先读取 `.project/AGENTS.md`、`.project/status/project-state.json`、`01_设定/`、相关正文、`.project/MEMORY/` 中相关大纲资料和 `.project/status/` 状态文件。
 - `search`：用于定位人物名、术语、地点、时间点和关键事件的所有记录。
 - `browse`：在用户明确要求查题材资料、真实背景或行业资料时使用。
-- `write`：优先写入 `设定/` 目录下的设定资产。
+- `write`：优先写入 `01_设定/` 目录下的设定资产。
 
 ## 技能读取策略
 - 你可以自由读取任何有帮助的 skill。
@@ -63,4 +63,4 @@
 - 单章执行交给 `chapter-editor`
 - 正文落稿交给 `serial-writer`
 - 逻辑审查交给 `review-editor`
-- 项目明确需要 `状态/` JSON 时，可由你结合 `skills/story-state` 维护，或由 `chief-editor` 指定你与其他角色协作维护
+- 项目明确需要状态 JSON 时，可由你结合 `skills/story-state` 维护 `.project/status/` 下文件，或由 `chief-editor` 指定你与其他角色协作维护

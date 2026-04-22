@@ -75,6 +75,48 @@ describe("agent session (streaming)", () => {
     ]);
   });
 
+  it("会把项目默认上下文注入当前轮消息", async () => {
+    const mockStreamFn = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        return;
+      })(),
+    });
+
+    const stream = runAgentTurn({
+      activeFilePath: "chapter-1.md",
+      enabledAgents: [],
+      enabledSkills: [],
+      enabledToolIds: [],
+      projectContext: {
+        source: "项目默认上下文",
+        files: [
+          {
+            content: "# 项目规则\n\n先读取设定。",
+            name: "AGENTS.md",
+            path: ".project/AGENTS.md",
+          },
+        ],
+      },
+      prompt: "续写",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const call = mockStreamFn.mock.calls[0]?.[0];
+    expect(call?.messages?.[0]?.content).toContain("## s14 项目默认上下文");
+    expect(call?.messages?.[0]?.content).toContain(".project/AGENTS.md");
+    expect(call?.messages?.[0]?.content).toContain("先读取设定");
+  });
+
   it("传入 abortSignal 给流式调用", async () => {
     const abortSignal = new AbortController().signal;
     const mockStreamFn = vi.fn().mockReturnValue({
@@ -642,7 +684,7 @@ describe("agent session (streaming)", () => {
     }
 
     const request = mockStreamFn.mock.calls[0][0];
-    expect(request.messages[0].content).toContain("## s14 手动指定上下文");
+    expect(request.messages[0].content).toContain("## s15 手动指定上下文");
     expect(request.messages[0].content).toContain("### 手动指定技能");
     expect(request.messages[0].content).toContain("剧情规划：拆解冲突和节奏。");
     expect(request.messages[0].content).toContain("### 手动指定子代理");

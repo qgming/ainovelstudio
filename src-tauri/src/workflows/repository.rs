@@ -8,9 +8,8 @@ use super::{
         WorkflowStepDefinition, WorkflowStepInput, WorkflowStepRun, WorkflowTeamMember,
     },
     validate::{
-        deserialize_json, error_to_string, now_timestamp, parse_optional_json,
-        serialize_json, step_id, validate_loop_config, validate_member_payload,
-        validate_run_status,
+        deserialize_json, error_to_string, now_timestamp, parse_optional_json, serialize_json,
+        step_id, validate_loop_config, validate_member_payload, validate_run_status,
     },
     CommandResult,
 };
@@ -63,7 +62,6 @@ pub(crate) fn validate_step_input(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
-            pass_rule,
         } => {
             if name.trim().is_empty() {
                 return Err("步骤名称不能为空。".into());
@@ -78,9 +76,6 @@ pub(crate) fn validate_step_input(
                 || !has_step(connection, workflow_id, source_step_id)?
             {
                 return Err("判断节点引用的来源步骤不存在。".into());
-            }
-            if pass_rule.trim().is_empty() {
-                return Err("判断节点规则不能为空。".into());
             }
             if let Some(true_next_step_id) = true_next_step_id {
                 if !has_step(connection, workflow_id, true_next_step_id)? {
@@ -184,7 +179,6 @@ pub(crate) fn validate_step_definition(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
-            pass_rule,
             ..
         } => {
             if id.trim().is_empty() || step_workflow_id != workflow_id {
@@ -203,9 +197,6 @@ pub(crate) fn validate_step_definition(
                 || !has_step(connection, workflow_id, source_step_id)?
             {
                 return Err("判断节点引用的来源步骤不存在。".into());
-            }
-            if pass_rule.trim().is_empty() {
-                return Err("判断节点规则不能为空。".into());
             }
             if let Some(true_next_step_id) = true_next_step_id {
                 if !has_step(connection, workflow_id, true_next_step_id)? && true_next_step_id != id
@@ -447,7 +438,6 @@ fn upsert_step_internal(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
-            pass_rule,
             ..
         } => (
             id.clone(),
@@ -460,7 +450,6 @@ fn upsert_step_internal(
                 "sourceStepId": source_step_id,
                 "trueNextStepId": true_next_step_id,
                 "falseNextStepId": false_next_step_id,
-                "passRule": pass_rule,
             }))?,
         ),
         WorkflowStepDefinition::End {
@@ -735,11 +724,6 @@ pub(crate) fn list_steps(
                     .get("falseNextStepId")
                     .and_then(Value::as_str)
                     .map(ToString::to_string),
-                pass_rule: payload_value
-                    .get("passRule")
-                    .and_then(Value::as_str)
-                    .unwrap_or("workflow_decision.pass == true")
-                    .to_string(),
             },
             "end" => WorkflowStepDefinition::End {
                 id,
@@ -831,7 +815,7 @@ pub(crate) fn list_step_runs(
         .prepare(
             r#"
             SELECT id, run_id, workflow_id, step_id, loop_index, attempt_index, member_id, status,
-                   started_at, finished_at, input_prompt, result_text, result_json, message_type,
+                   started_at, finished_at, input_prompt, result_text, result_json, decision_result_json, message_type,
                    message_json, decision_json, parts_json, usage_json, error_message
             FROM workflow_step_runs
             WHERE workflow_id = ?1
@@ -866,16 +850,19 @@ pub(crate) fn list_step_runs(
             result_json: parse_optional_json::<WorkflowReviewResult>(
                 row.get::<_, Option<String>>(12).map_err(error_to_string)?,
             )?,
-            message_type: row.get::<_, Option<String>>(13).map_err(error_to_string)?,
-            message_json: parse_optional_json::<Value>(
-                row.get::<_, Option<String>>(14).map_err(error_to_string)?,
+            decision_result_json: parse_optional_json::<super::types::WorkflowDecisionResult>(
+                row.get::<_, Option<String>>(13).map_err(error_to_string)?,
             )?,
-            decision: parse_optional_json::<WorkflowStepDecision>(
+            message_type: row.get::<_, Option<String>>(14).map_err(error_to_string)?,
+            message_json: parse_optional_json::<Value>(
                 row.get::<_, Option<String>>(15).map_err(error_to_string)?,
             )?,
-            parts: deserialize_json(&row.get::<_, String>(16).map_err(error_to_string)?)?,
-            usage: parse_optional_json(row.get::<_, Option<String>>(17).map_err(error_to_string)?)?,
-            error_message: row.get::<_, Option<String>>(18).map_err(error_to_string)?,
+            decision: parse_optional_json::<WorkflowStepDecision>(
+                row.get::<_, Option<String>>(16).map_err(error_to_string)?,
+            )?,
+            parts: deserialize_json(&row.get::<_, String>(17).map_err(error_to_string)?)?,
+            usage: parse_optional_json(row.get::<_, Option<String>>(18).map_err(error_to_string)?)?,
+            error_message: row.get::<_, Option<String>>(19).map_err(error_to_string)?,
         });
     }
     Ok(result)

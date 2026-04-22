@@ -174,7 +174,10 @@ fn build_archive_bytes(
         .map(|finished| finished.into_inner())
 }
 
-fn read_archive_entry(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> CommandResult<Vec<u8>> {
+fn read_archive_entry(
+    archive: &mut ZipArchive<Cursor<&[u8]>>,
+    name: &str,
+) -> CommandResult<Vec<u8>> {
     let mut entry = archive.by_name(name).map_err(error_to_string)?;
     let mut contents = Vec::with_capacity(entry.size() as usize);
     entry.read_to_end(&mut contents).map_err(error_to_string)?;
@@ -195,11 +198,14 @@ fn parse_archive(archive_bytes: &[u8]) -> CommandResult<ParsedBackupArchive> {
     let client_state_bytes = read_archive_entry(&mut archive, ARCHIVE_CLIENT_STATE_FILE)?;
     let database_bytes = read_archive_entry(&mut archive, ARCHIVE_DB_FILE)?;
 
-    if manifest_bytes.len() + client_state_bytes.len() + database_bytes.len() > MAX_ARCHIVE_TOTAL_SIZE {
+    if manifest_bytes.len() + client_state_bytes.len() + database_bytes.len()
+        > MAX_ARCHIVE_TOTAL_SIZE
+    {
         return Err("备份文件过大。".into());
     }
 
-    let manifest = serde_json::from_slice::<BackupManifest>(&manifest_bytes).map_err(error_to_string)?;
+    let manifest =
+        serde_json::from_slice::<BackupManifest>(&manifest_bytes).map_err(error_to_string)?;
     if manifest.schema_version != ARCHIVE_SCHEMA_VERSION {
         return Err("备份版本不受支持。".into());
     }
@@ -239,7 +245,10 @@ fn replace_database_file(app: &AppHandle, database_bytes: &[u8]) -> CommandResul
     }
 }
 
-pub fn build_backup_bundle(app: &AppHandle, client_state: ClientStateSnapshot) -> CommandResult<BackupBundle> {
+pub fn build_backup_bundle(
+    app: &AppHandle,
+    client_state: ClientStateSnapshot,
+) -> CommandResult<BackupBundle> {
     let normalized_client_state = normalize_client_state(client_state);
     let connection = open_database(app)?;
     checkpoint_database(&connection)?;
@@ -260,7 +269,10 @@ pub fn inspect_backup_archive(archive_bytes: &[u8]) -> CommandResult<BackupArchi
     })
 }
 
-pub fn restore_backup_archive(app: &AppHandle, archive_bytes: &[u8]) -> CommandResult<BackupRestoreResult> {
+pub fn restore_backup_archive(
+    app: &AppHandle,
+    archive_bytes: &[u8],
+) -> CommandResult<BackupRestoreResult> {
     let parsed = parse_archive(archive_bytes)?;
     replace_database_file(app, &parsed.database_bytes)?;
     Ok(BackupRestoreResult {

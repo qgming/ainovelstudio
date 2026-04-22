@@ -9,6 +9,7 @@ import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { selectSubAgentForPrompt } from "./delegation";
 import { buildConversationMessages } from "./messageContext";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
+import type { ProjectContextPayload } from "./projectContext";
 import {
   buildSubAgentSystem,
   buildSystemPrompt,
@@ -31,6 +32,7 @@ type RunAgentTurnInput = {
   includeAgentCatalog?: boolean;
   manualContext?: ManualTurnContextPayload | null;
   planningState?: PlanningState | null;
+  projectContext?: ProjectContextPayload | null;
   prompt: string;
   providerConfig: AgentProviderConfig;
   /** workspace 工具集 */
@@ -967,9 +969,10 @@ function buildAiSdkTools(
     workflow_decision: (toolName, tool) =>
       defineTool({
         description:
-          "向当前工作流判断节点提交最终结构化判定。程序会依据这个工具结果决定通过或失败分支。",
+          "向当前工作流判断节点提交最终结构化判定。程序只会依据这个工具结果决定通过或失败分支。",
         inputSchema: z.object({
           pass: z.boolean().describe("true 表示通过，false 表示存在问题。"),
+          reason: z.string().min(1).describe("本次判断结论的结构化原因。"),
           issues: z
             .array(
               z.object({
@@ -980,12 +983,10 @@ function buildAiSdkTools(
                 message: z.string().min(1).describe("具体问题说明。"),
               }),
             )
-            .default([])
-            .describe("结构化问题列表。"),
+            .describe("结构化问题列表，可为空数组。"),
           revision_brief: z
             .string()
-            .default("")
-            .describe("给下一步章节修订直接使用的简明修改摘要。"),
+            .describe("给下一步章节修订直接使用的简明修改摘要，可为空字符串。"),
         }),
         execute: async (input) => {
           const result = await runTool(
@@ -1035,6 +1036,7 @@ export async function* runAgentTurn({
   includeAgentCatalog = true,
   manualContext,
   planningState,
+  projectContext,
   prompt,
   providerConfig,
   workspaceTools,
@@ -1107,6 +1109,7 @@ export async function* runAgentTurn({
     manualContext,
     planningIntervention,
     planningState,
+    projectContext,
     workspaceRootPath,
     prompt,
     subagentAnalysis: null,

@@ -31,6 +31,7 @@ import {
   useAgentSettingsStore,
 } from "./agentSettingsStore";
 import { resolveManualTurnContext, type ManualTurnContextSelection } from "../lib/agent/manualTurnContext";
+import { loadProjectContext } from "../lib/agent/projectContext";
 import { formatProviderError } from "../lib/agent/errorFormatting";
 import { derivePlanningState, type PlanningState } from "../lib/agent/planning";
 import { runAgentTurn } from "../lib/agent/session";
@@ -601,6 +602,10 @@ export const useAgentStore = create<AgentStore>((set, get) => {
               workspaceRootPath: workspaceState.rootPath,
             })
           : null;
+        const projectContext = await loadProjectContext({
+          readFile: readWorkspaceTextFile,
+          workspaceRootPath: workspaceState.rootPath,
+        });
         if (!isCurrentRun()) {
           return;
         }
@@ -636,6 +641,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           manualContext,
           onUsage: attachUsageToAssistant,
           planningState,
+          projectContext,
           prompt: nextInput,
           providerConfig,
           workspaceTools: { ...globalTools, ...workspaceTools, ...localResourceTools },

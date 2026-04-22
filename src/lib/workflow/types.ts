@@ -87,7 +87,6 @@ export type WorkflowDecisionStepDefinition = {
   sourceStepId: string;
   trueNextStepId: string | null;
   falseNextStepId: string | null;
-  passRule: "workflow_decision.pass == true";
 };
 
 export type WorkflowEndStepDefinition = {
@@ -150,6 +149,14 @@ export type WorkflowReviewResult = {
   revision_brief: string;
 };
 
+export type WorkflowDecisionResult = {
+  pass: boolean;
+  label?: "yes" | "no";
+  reason: string;
+  issues: WorkflowReviewIssue[];
+  revision_brief: string;
+};
+
 export type WorkflowStepDecision =
   | {
       outcome: "pass" | "fail" | "retry" | "end";
@@ -172,6 +179,7 @@ export type WorkflowStepRun = {
   inputPrompt: string;
   resultText: string;
   resultJson: WorkflowReviewResult | null;
+  decisionResultJson: WorkflowDecisionResult | null;
   messageType: WorkflowMessageType | null;
   messageJson: WorkflowMessagePayload | null;
   decision: WorkflowStepDecision;

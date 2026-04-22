@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
+import type { ProjectContextPayload } from "./projectContext";
 
 function createSkill(overrides: Partial<ResolvedSkill> = {}): ResolvedSkill {
   return {
@@ -114,5 +115,29 @@ describe("prompt context", () => {
     });
 
     expect(prompt).toContain("- 当前系统日期：2026年4月18日");
+  });
+
+  it("项目默认上下文会单独注入 .project/AGENTS.md", () => {
+    const projectContext: ProjectContextPayload = {
+      source: "项目默认上下文",
+      files: [
+        {
+          content: "# 项目规则\n\n先看设定再动笔。",
+          name: "AGENTS.md",
+          path: ".project/AGENTS.md",
+        },
+      ],
+    };
+
+    const prompt = buildUserTurnContent({
+      activeFilePath: "章节/第一章.md",
+      projectContext,
+      prompt: "继续写这一章",
+      workspaceRootPath: "C:/books/北境余烬",
+    });
+
+    expect(prompt).toContain("## s14 项目默认上下文");
+    expect(prompt).toContain(".project/AGENTS.md");
+    expect(prompt).toContain("先看设定再动笔");
   });
 });

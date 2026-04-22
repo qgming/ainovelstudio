@@ -197,7 +197,6 @@ fn build_template_steps(
                 source_step_id,
                 true_next_step_id,
                 false_next_step_id,
-                pass_rule,
                 ..
             } => Ok(WorkflowTemplateStep::Decision {
                 key: required_key(step_keys, id, "步骤")?,
@@ -207,7 +206,6 @@ fn build_template_steps(
                 source_step_key: required_key(step_keys, source_step_id, "来源步骤")?,
                 true_next_step_key: optional_key(step_keys, true_next_step_id.as_deref()),
                 false_next_step_key: optional_key(step_keys, false_next_step_id.as_deref()),
-                pass_rule: pass_rule.clone(),
             }),
             WorkflowStepDefinition::End {
                 id,

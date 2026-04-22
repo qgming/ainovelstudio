@@ -89,6 +89,7 @@ const WORKFLOW_SCHEMA_SQL: &str = r#"
         input_prompt TEXT NOT NULL,
         result_text TEXT NOT NULL,
         result_json TEXT,
+        decision_result_json TEXT,
         message_type TEXT,
         message_json TEXT,
         decision_json TEXT,
@@ -141,6 +142,12 @@ pub(crate) fn run_workflow_migrations(connection: &Connection) -> CommandResult<
     )?;
     ensure_column(connection, "workflow_step_runs", "message_type", "TEXT")?;
     ensure_column(connection, "workflow_step_runs", "message_json", "TEXT")?;
+    ensure_column(
+        connection,
+        "workflow_step_runs",
+        "decision_result_json",
+        "TEXT",
+    )?;
     rebuild_development_workflow_run_tables(connection)?;
     Ok(())
 }

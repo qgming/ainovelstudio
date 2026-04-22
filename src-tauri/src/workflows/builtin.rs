@@ -36,7 +36,7 @@ pub(crate) fn collect_embedded_workflow_files(workflow_id: &str) -> WorkflowFile
 }
 
 pub(crate) fn embedded_workflow_ids() -> Vec<String> {
-  let mut ids = EMBEDDED_WORKFLOW_FILES
+    let mut ids = EMBEDDED_WORKFLOW_FILES
         .iter()
         .filter_map(|file| file.path.split('/').next())
         .map(ToString::to_string)
@@ -53,7 +53,9 @@ fn list_builtin_package_ids(connection: &Connection) -> CommandResult<Vec<String
         )
         .map_err(super::validate::error_to_string)?;
     let rows = statement
-        .query_map(params![WORKFLOW_SOURCE_BUILTIN], |row| row.get::<_, String>(0))
+        .query_map(params![WORKFLOW_SOURCE_BUILTIN], |row| {
+            row.get::<_, String>(0)
+        })
         .map_err(super::validate::error_to_string)?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(super::validate::error_to_string)
@@ -76,7 +78,10 @@ fn remove_stale_builtin_workflows(connection: &Connection) -> CommandResult<()> 
             )
             .map_err(super::validate::error_to_string)?;
         connection
-            .execute("DELETE FROM workflow_packages WHERE id = ?1", params![package_id])
+            .execute(
+                "DELETE FROM workflow_packages WHERE id = ?1",
+                params![package_id],
+            )
             .map_err(super::validate::error_to_string)?;
     }
 
@@ -356,7 +361,6 @@ pub(crate) fn materialize_workflow_from_package_force(
                     source_step_key,
                     true_next_step_key,
                     false_next_step_key,
-                    pass_rule,
                 } => WorkflowStepDefinition::Decision {
                     id: step_ids_by_key
                         .get(key)
@@ -380,7 +384,6 @@ pub(crate) fn materialize_workflow_from_package_force(
                     false_next_step_id: false_next_step_key
                         .as_ref()
                         .and_then(|value| step_ids_by_key.get(value).cloned()),
-                    pass_rule: pass_rule.clone(),
                 },
                 WorkflowTemplateStep::End {
                     key,

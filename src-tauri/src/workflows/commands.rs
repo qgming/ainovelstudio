@@ -112,11 +112,7 @@ pub fn get_workflow_detail(app: AppHandle, workflowId: String) -> CommandResult<
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn delete_workflow_run(
-    app: AppHandle,
-    workflowId: String,
-    runId: String,
-) -> CommandResult<()> {
+pub fn delete_workflow_run(app: AppHandle, workflowId: String, runId: String) -> CommandResult<()> {
     let connection = open_database(&app)?;
     connection
         .execute(
@@ -457,7 +453,6 @@ pub fn update_workflow_step(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
-            pass_rule,
             ..
         } => WorkflowStepDefinition::Decision {
             id: stepId,
@@ -469,7 +464,6 @@ pub fn update_workflow_step(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
-            pass_rule,
         },
         WorkflowStepDefinition::End {
             name,
@@ -623,9 +617,9 @@ pub fn save_workflow_step_run(
             r#"
             INSERT INTO workflow_step_runs (
                 id, run_id, workflow_id, step_id, loop_index, attempt_index, member_id, status,
-                started_at, finished_at, input_prompt, result_text, result_json, message_type,
+                started_at, finished_at, input_prompt, result_text, result_json, decision_result_json, message_type,
                 message_json, decision_json, parts_json, usage_json, error_message
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
             ON CONFLICT(id) DO UPDATE
             SET status = excluded.status,
                 started_at = excluded.started_at,
@@ -633,6 +627,7 @@ pub fn save_workflow_step_run(
                 input_prompt = excluded.input_prompt,
                 result_text = excluded.result_text,
                 result_json = excluded.result_json,
+                decision_result_json = excluded.decision_result_json,
                 message_type = excluded.message_type,
                 message_json = excluded.message_json,
                 decision_json = excluded.decision_json,
@@ -655,6 +650,11 @@ pub fn save_workflow_step_run(
                 stepRun.result_text,
                 stepRun
                     .result_json
+                    .as_ref()
+                    .map(serialize_json)
+                    .transpose()?,
+                stepRun
+                    .decision_result_json
                     .as_ref()
                     .map(serialize_json)
                     .transpose()?,

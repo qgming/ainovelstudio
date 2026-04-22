@@ -62,14 +62,22 @@ pub struct WebdavProbeResult {
     pub message: String,
 }
 
-async fn ensure_remote_collection(client: &Client, settings: &DataSyncSettingsDocument) -> CommandResult<()> {
+async fn ensure_remote_collection(
+    client: &Client,
+    settings: &DataSyncSettingsDocument,
+) -> CommandResult<()> {
     let root_collection = build_collection_url(&settings.server_url, "")?;
     let mut current = root_collection;
 
     for segment in normalize_remote_segments(&settings.remote_path) {
-        current = current.join(&format!("{segment}/")).map_err(error_to_string)?;
+        current = current
+            .join(&format!("{segment}/"))
+            .map_err(error_to_string)?;
         let response = with_auth(
-            client.request(reqwest::Method::from_bytes(b"MKCOL").map_err(error_to_string)?, current.clone()),
+            client.request(
+                reqwest::Method::from_bytes(b"MKCOL").map_err(error_to_string)?,
+                current.clone(),
+            ),
             settings,
         )
         .send()
@@ -84,7 +92,9 @@ async fn ensure_remote_collection(client: &Client, settings: &DataSyncSettingsDo
     Ok(())
 }
 
-pub async fn fetch_remote_archive(settings: &DataSyncSettingsDocument) -> CommandResult<Option<Vec<u8>>> {
+pub async fn fetch_remote_archive(
+    settings: &DataSyncSettingsDocument,
+) -> CommandResult<Option<Vec<u8>>> {
     let client = build_client()?;
     let url = build_archive_url(&settings.server_url, &settings.remote_path)?;
     let response = with_auth(client.get(url), settings)
@@ -92,7 +102,10 @@ pub async fn fetch_remote_archive(settings: &DataSyncSettingsDocument) -> Comman
         .await
         .map_err(error_to_string)?;
 
-    if matches!(response.status(), StatusCode::NOT_FOUND | StatusCode::CONFLICT) {
+    if matches!(
+        response.status(),
+        StatusCode::NOT_FOUND | StatusCode::CONFLICT
+    ) {
         return Ok(None);
     }
     if !response.status().is_success() {
@@ -106,7 +119,9 @@ pub async fn fetch_remote_archive(settings: &DataSyncSettingsDocument) -> Comman
         .map_err(error_to_string)
 }
 
-pub async fn probe_connection(settings: &DataSyncSettingsDocument) -> CommandResult<WebdavProbeResult> {
+pub async fn probe_connection(
+    settings: &DataSyncSettingsDocument,
+) -> CommandResult<WebdavProbeResult> {
     let client = build_client()?;
     let root_url = build_collection_url(&settings.server_url, "")?;
     let root_response = with_auth(client.get(root_url), settings)
@@ -136,7 +151,10 @@ pub async fn probe_connection(settings: &DataSyncSettingsDocument) -> CommandRes
         });
     }
 
-    if matches!(collection_status, StatusCode::NOT_FOUND | StatusCode::CONFLICT) {
+    if matches!(
+        collection_status,
+        StatusCode::NOT_FOUND | StatusCode::CONFLICT
+    ) {
         return Ok(WebdavProbeResult {
             ok: true,
             message: "连接成功，远端目录将在首次同步时自动创建。".into(),

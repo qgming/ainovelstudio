@@ -135,6 +135,14 @@ export function WorkflowRunsColumn({
                   </pre>
                 </div>
               ) : null}
+              {selectedStepRun.decisionResultJson ? (
+                <div className="px-3 py-3">
+                  <p className="text-xs text-muted-foreground">结构化判断结果</p>
+                  <pre className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
+                    {JSON.stringify(selectedStepRun.decisionResultJson, null, 2)}
+                  </pre>
+                </div>
+              ) : null}
               {selectedStepRun.messageType ? (
                 <div className="px-3 py-3">
                   <p className="text-xs text-muted-foreground">消息类型</p>

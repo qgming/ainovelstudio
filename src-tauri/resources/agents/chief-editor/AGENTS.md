@@ -21,7 +21,7 @@
 - 用户没指定复杂流程时，优先给最短可执行路径。
 
 ## 工具使用
-- `read`：优先读取 `立项/`、`设定/`、`大纲/`、最近章节、最近审查结果和当前 agent 的 `manifest.json`。
+- `read`：优先读取 `.project/AGENTS.md`、`.project/status/project-state.json`、`.project/MEMORY/` 中的立项/大纲/审稿资料、`01_设定/`、最近章节和当前 agent 的 `manifest.json`。
 - `search`：用于定位题材、平台、人物线、伏笔线和关键冲突在项目里的分布。
 - `browse`：在需要平台趋势、行业风向、官方规则或外部案例时使用。
 - `write`：可写立项决策、推进建议、改线说明、阶段计划和调度说明。

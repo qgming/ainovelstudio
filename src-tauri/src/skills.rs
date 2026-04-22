@@ -401,10 +401,7 @@ fn build_skill_virtual_path(skill_id: &str, relative_path: &str) -> String {
     format!("sqlite://skills/{skill_id}/{relative_path}")
 }
 
-fn collect_skill_entries_from_files(
-    files: &SkillFiles,
-    prefix: &str,
-) -> Vec<SkillReferenceEntry> {
+fn collect_skill_entries_from_files(files: &SkillFiles, prefix: &str) -> Vec<SkillReferenceEntry> {
     let mut entries = files
         .iter()
         .filter(|(path, _)| path.starts_with(prefix))
@@ -1028,9 +1025,7 @@ fn reset_builtin_skills_in_database(
 }
 
 #[tauri::command]
-pub fn reset_builtin_skills(
-    app: AppHandle,
-) -> CommandResult<BuiltinSkillsInitializationResult> {
+pub fn reset_builtin_skills(app: AppHandle) -> CommandResult<BuiltinSkillsInitializationResult> {
     reset_builtin_skills_in_database(&app)
 }
 

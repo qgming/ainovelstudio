@@ -23,7 +23,7 @@ const MAX_BOOK_ARCHIVE_ENTRIES: usize = 5_000;
 const MAX_BOOK_ARCHIVE_FILE_SIZE: u64 = 10 * 1024 * 1024;
 const MAX_BOOK_ARCHIVE_TOTAL_SIZE: u64 = 256 * 1024 * 1024;
 const MAX_SEARCH_LIMIT: usize = 200;
-const REQUIRED_BOOK_WORKSPACE_FILES: [&str; 1] = ["README.md"];
+const REQUIRED_BOOK_WORKSPACE_FILES: [&str; 1] = [".project/AGENTS.md"];
 
 #[derive(Clone, Serialize)]
 pub struct TreeNode {
@@ -433,24 +433,37 @@ fn bytes_to_text(bytes: Vec<u8>) -> CommandResult<String> {
     String::from_utf8(bytes).map_err(|_| "文件不是 UTF-8 文本，无法按文本方式读取。".into())
 }
 
-fn create_book_readme_template(book_name: &str) -> String {
+fn create_project_agents_template(book_name: &str) -> String {
     format!(
-        "# {book_name}\n\n你正在处理一本小说项目工作区。\n\n## 书名\n- `{book_name}`\n\n## 工作区结构\n- `README.md`：本项目的 AI 协作说明书。\n- `项目状态.json`：当前项目状态、目录用途、写作约束与协作约定。\n- `01_设定/`：人物设定、世界观、题材规则、故事方案。\n- `02_正文/`：章节正文、番外、修订稿、最终稿。\n- `03_素材/`：资料、灵感、截图、命名备忘、参考片段。\n\n## AI 协作通用说明\n1. 开始写作前，优先读取 `README.md` 和 `项目状态.json`。\n2. 新建内容时，优先复用现有目录，不主动扩展无关目录层级。\n3. 设定类内容写入 `01_设定/`，正文类内容写入 `02_正文/`，资料类内容写入 `03_素材/`。\n4. 生成正文时保持章节命名清晰，文件名建议包含章序号和标题。\n5. 修改故事方向、篇幅、阶段进度后，同步更新 `项目状态.json`。\n6. 临时分析、批注、提纲应优先落盘到工作区文件，避免只停留在对话里。\n\n## 默认写作约束\n- 保持目录简洁，优先在现有结构内推进。\n- 文件命名保持稳定、可检索、可批量处理。\n- 设定、正文、素材分区明确，避免混放。\n"
+        "# {book_name} 项目说明\n\n你正在处理一本网络小说项目工作区。对话与工作流会默认加载本文件，用它快速理解这本书的定位、剧情主线、写作风格、目录分工和协作约束。\n\n## 作品定位\n- 书名：`{book_name}`\n- 平台：待补充\n- 写作模式：长篇 / 短篇待定\n- 题材大类：待补充\n- 细分题材：待补充\n- 目标读者：待补充\n- 目标字数：待补充\n- 核心卖点：待补充\n- 一句话 premise：待补充\n\n## 故事总览\n- 剧情梗概（100 字左右）：待补充。用 80-120 字概括整本书主线，至少说明主角是谁、主角想达成什么目标、主要阻力是什么、故事会往哪个方向升级。\n- 主角目标：待补充\n- 核心冲突：待补充\n- 长线悬念：待补充\n- 结局方向：待补充\n\n## 写作风格\n- 叙事视角：待补充\n- 叙事语气：待补充\n- 节奏要求：待补充\n- 语言风格：待补充\n- 情绪基调：待补充\n- 平台适配重点：待补充\n- 禁写约束：待补充\n\n## 当前推进重点\n- 当前阶段：构思中\n- 当前进度：待补充\n- 当前卷 / 当前剧情位置：待补充\n- 下一步最重要动作：先补齐题材定位、剧情梗概和写作风格\n- 当前缺口：待补充\n\n## 工作区结构\n- `.project/AGENTS.md`：项目级 AI 协作入口说明；对话和工作流会默认加载本文件。\n- `.project/status/project-state.json`：当前项目状态、目录用途、写作约束与协作约定。\n- `.project/MEMORY/`：项目长期记忆目录；用于沉淀专题记忆、阶段记录、检查清单与后续持续补充的项目资料。\n- `01_设定/`：人物设定、世界观、题材规则、故事方案。\n- `02_正文/`：章节正文、番外、修订稿、最终稿。\n- `03_素材/`：资料、灵感、截图、命名备忘、参考片段。\n\n## 建议优先补齐的项目文件\n- `01_设定/作品定位.md`：平台、题材、卖点、受众、篇幅方向。\n- `01_设定/剧情梗概.md`：全书主线、主角目标、主要冲突、阶段升级。\n- `01_设定/写作风格.md`：视角、语气、节奏、语言习惯、禁写项。\n- `01_设定/人物设定.md`：主角、重要配角、关系与动机。\n\n## AI 协作通用说明\n1. 开始任务前，优先遵循 `.project/AGENTS.md` 与 `.project/status/project-state.json`。\n2. `.project/MEMORY/` 下如有相关记忆文件，按任务需要主动读取并利用。\n3. 先读真实文件，再写正文、设定、梗概、规划或审稿意见。\n4. 新建内容时优先复用现有目录，不主动扩展无关目录层级。\n5. 设定类内容写入 `01_设定/`，正文类内容写入 `02_正文/`，资料类内容写入 `03_素材/`。\n6. 生成正文时严格参考本文件中的剧情梗概、主角目标和写作风格；这些信息缺失时，优先补齐再推进长篇续写。\n7. 修改故事方向、篇幅、风格、阶段进度后，同步更新 `.project/status/project-state.json`。\n8. 临时分析、批注、提纲应优先落盘到工作区文件，避免只停留在对话里。\n\n## 默认写作约束\n- 保持目录简洁，优先在现有结构内推进。\n- 文件命名保持稳定、可检索、可批量处理。\n- 设定、正文、素材分区明确，避免混放。\n- 剧情推进优先围绕主角目标、核心冲突和阶段 payoff 展开。\n- 风格漂移、人物动机漂移、设定漂移发生后，要优先回写项目资料再继续创作。\n"
     )
 }
 
 fn create_project_status_template(book_name: &str) -> String {
     format!(
-        "{{\n  \"bookName\": \"{book_name}\",\n  \"projectStage\": \"构思中\",\n  \"workspaceVersion\": 1,\n  \"primaryLanguage\": \"zh-CN\",\n  \"targetWordCount\": null,\n  \"currentWordCount\": 0,\n  \"writingMode\": \"长篇/短篇待定\",\n  \"directories\": {{\n    \"setting\": \"01_设定\",\n    \"draft\": \"02_正文\",\n    \"assets\": \"03_素材\"\n  }},\n  \"defaultFiles\": {{\n    \"guide\": \"README.md\",\n    \"projectState\": \"项目状态.json\"\n  }},\n  \"aiInstructions\": [\n    \"开始任务前先读取 README.md 和 项目状态.json。\",\n    \"设定写入 01_设定，正文写入 02_正文，素材写入 03_素材。\",\n    \"不要擅自重命名顶层目录。\",\n    \"新增章节时优先使用清晰且稳定的文件名。\",\n    \"项目阶段、字数目标、结构调整后要同步回写本文件。\"\n  ],\n  \"status\": {{\n    \"currentFocus\": \"待明确题材、核心设定与写作目标\",\n    \"nextAction\": \"在 01_设定 中建立基础设定文件\",\n    \"lastUpdated\": null\n  }}\n}}\n"
+        "{{\n  \"bookName\": \"{book_name}\",\n  \"projectStage\": \"构思中\",\n  \"workspaceVersion\": 1,\n  \"primaryLanguage\": \"zh-CN\",\n  \"targetWordCount\": null,\n  \"currentWordCount\": 0,\n  \"writingMode\": \"长篇/短篇待定\",\n  \"storyProfile\": {{\n    \"platform\": \"待补充\",\n    \"genre\": \"待补充\",\n    \"subGenre\": \"待补充\",\n    \"targetAudience\": \"待补充\",\n    \"coreSellingPoint\": \"待补充\",\n    \"premise\": \"待补充\",\n    \"plotSynopsis100\": \"待补充：用 80-120 字概括整本书主线、主角目标、主要阻力和升级方向。\",\n    \"protagonistGoal\": \"待补充\",\n    \"coreConflict\": \"待补充\",\n    \"longlineSuspense\": \"待补充\",\n    \"endingDirection\": \"待补充\"\n  }},\n  \"writingStyle\": {{\n    \"narrativePerspective\": \"待补充\",\n    \"tone\": \"待补充\",\n    \"pace\": \"待补充\",\n    \"languageStyle\": \"待补充\",\n    \"emotionalTone\": \"待补充\",\n    \"platformAdaptation\": \"待补充\",\n    \"taboos\": [\n      \"待补充\"\n    ]\n  }},\n  \"directories\": {{\n    \"setting\": \"01_设定\",\n    \"draft\": \"02_正文\",\n    \"assets\": \"03_素材\",\n    \"projectMeta\": \".project\",\n    \"projectMemory\": \".project/MEMORY\",\n    \"projectStatus\": \".project/status\"\n  }},\n  \"defaultFiles\": {{\n    \"guide\": \".project/AGENTS.md\",\n    \"projectState\": \".project/status/project-state.json\"\n  }},\n  \"recommendedFiles\": {{\n    \"projectPositioning\": \"01_设定/作品定位.md\",\n    \"plotSynopsis\": \"01_设定/剧情梗概.md\",\n    \"writingStyle\": \"01_设定/写作风格.md\",\n    \"characterBible\": \"01_设定/人物设定.md\"\n  }},\n  \"aiInstructions\": [\n    \"开始任务前先读取 .project/AGENTS.md 和 .project/status/project-state.json。\",\n    \"如 .project/MEMORY 下存在相关资料，按任务需要主动读取。\",\n    \"设定写入 01_设定，正文写入 02_正文，素材写入 03_素材。\",\n    \"不要擅自重命名顶层目录。\",\n    \"新增章节时优先使用清晰且稳定的文件名。\",\n    \"剧情梗概、主角目标和写作风格缺失时，优先补齐再推进长篇续写。\",\n    \"项目阶段、字数目标、结构调整、风格调整后要同步回写本文件。\"\n  ],\n  \"status\": {{\n    \"currentFocus\": \"待明确题材、剧情梗概、主角目标与写作风格\",\n    \"nextAction\": \"在 01_设定 中补齐作品定位、剧情梗概和写作风格\",\n    \"currentArc\": null,\n    \"lastUpdated\": null\n  }}\n}}\n"
     )
 }
 
 fn build_book_template(book_name: &str) -> (Vec<&'static str>, Vec<(&'static str, String)>) {
     (
-        vec!["01_设定", "02_正文", "03_素材"],
         vec![
-            ("README.md", create_book_readme_template(book_name)),
-            ("项目状态.json", create_project_status_template(book_name)),
+            ".project",
+            ".project/MEMORY",
+            ".project/status",
+            "01_设定",
+            "02_正文",
+            "03_素材",
+        ],
+        vec![
+            (
+                ".project/AGENTS.md",
+                create_project_agents_template(book_name),
+            ),
+            (
+                ".project/status/project-state.json",
+                create_project_status_template(book_name),
+            ),
         ],
     )
 }
@@ -1397,7 +1410,7 @@ fn detect_book_archive_root(file_paths: &[String]) -> CommandResult<String> {
 
     if matching_roots.is_empty() {
         return Err(format!(
-            "ZIP 中未找到有效书籍工作区。至少需要包含 README.md。检测到的文件示例：{}",
+            "ZIP 中未找到有效书籍工作区。至少需要包含 .project/AGENTS.md。检测到的文件示例：{}",
             preview_archive_paths(file_paths)
         ));
     }
@@ -1956,32 +1969,51 @@ mod tests {
 
         assert_eq!(tree.name, "北境余烬");
         assert_eq!(tree.path, "books/北境余烬");
-        let readme = read_text_file_db(
+        let project_agents = read_text_file_db(
             &connection,
             &book.root_path,
-            "books/北境余烬/README.md",
+            "books/北境余烬/.project/AGENTS.md",
         )
-        .expect("README should load");
-        assert!(readme.contains("# 北境余烬"));
-        assert!(readme.contains("项目状态.json"));
+        .expect("project AGENTS should load");
+        assert!(project_agents.contains("# 北境余烬 项目说明"));
+        assert!(project_agents.contains(".project/status/project-state.json"));
+        assert!(project_agents.contains("剧情梗概（100 字左右）"));
+        assert!(project_agents.contains("## 写作风格"));
+        assert!(project_agents.contains("主角目标"));
 
         let project_status = read_text_file_db(
             &connection,
             &book.root_path,
-            "books/北境余烬/项目状态.json",
+            "books/北境余烬/.project/status/project-state.json",
         )
         .expect("project status should load");
         assert!(project_status.contains("\"bookName\": \"北境余烬\""));
+        assert!(project_status.contains("\"projectMemory\": \".project/MEMORY\""));
+        assert!(project_status.contains("\"projectStatus\": \".project/status\""));
+        assert!(project_status.contains("\"plotSynopsis100\""));
+        assert!(project_status.contains("\"protagonistGoal\""));
+        assert!(project_status.contains("\"writingStyle\""));
 
-        let child_names = tree
+        let children = tree.children.expect("tree should contain children");
+        let child_names = children
+            .iter()
+            .map(|child| child.name.clone())
+            .collect::<Vec<_>>();
+        let project_node = children
+            .into_iter()
+            .find(|child| child.name == ".project")
+            .expect(".project should exist");
+        let project_child_names = project_node
             .children
-            .expect("tree should contain children")
+            .expect(".project should contain children")
             .into_iter()
             .map(|child| child.name)
             .collect::<Vec<_>>();
+        assert_eq!(project_child_names, vec!["MEMORY", "status", "AGENTS.md"]);
+
         assert_eq!(
             child_names,
-            vec!["01_设定", "02_正文", "03_素材", "README.md", "项目状态.json"]
+            vec![".project", "01_设定", "02_正文", "03_素材"]
         );
     }
 
@@ -2037,8 +2069,8 @@ mod tests {
         let transaction = target_connection
             .transaction()
             .expect("transaction should open");
-        let book = import_book_zip_db(&transaction, "北境余烬.zip", exported)
-            .expect("zip should import");
+        let book =
+            import_book_zip_db(&transaction, "北境余烬.zip", exported).expect("zip should import");
         transaction.commit().expect("transaction should commit");
 
         let tree =
@@ -2051,7 +2083,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             child_names,
-            vec!["01_设定", "02_正文", "03_素材", "README.md", "项目状态.json"]
+            vec![".project", "01_设定", "02_正文", "03_素材"]
         );
     }
 }

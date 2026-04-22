@@ -310,7 +310,8 @@ fn serialize_json<T: Serialize>(value: &T) -> CommandResult<String> {
 }
 
 fn canonicalize_agent_files(files: &AgentFiles) -> AgentFiles {
-    files.iter()
+    files
+        .iter()
         .filter(|(path, _)| PRIMARY_AGENT_FILES.contains(&path.as_str()))
         .map(|(path, content)| (path.clone(), content.clone()))
         .collect()
@@ -791,9 +792,7 @@ fn reset_builtin_agents_in_database(
 }
 
 #[tauri::command]
-pub fn reset_builtin_agents(
-    app: AppHandle,
-) -> CommandResult<BuiltinAgentsInitializationResult> {
+pub fn reset_builtin_agents(app: AppHandle) -> CommandResult<BuiltinAgentsInitializationResult> {
     reset_builtin_agents_in_database(&app)
 }
 

@@ -437,7 +437,6 @@ export function WorkflowDetailPage() {
         sourceStepId: currentStep.type === "decision" ? currentStep.sourceStepId : sourceCandidates[0]?.id ?? "",
         trueNextStepId: currentStep.type === "decision" ? currentStep.trueNextStepId : fallbackNextStepId,
         falseNextStepId: currentStep.type === "decision" ? currentStep.falseNextStepId : null,
-        passRule: "workflow_decision.pass == true",
       };
     }
 

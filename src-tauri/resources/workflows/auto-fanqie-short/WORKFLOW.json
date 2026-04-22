@@ -12,7 +12,7 @@
       "agentId": "chief-editor",
       "name": "选题主编",
       "roleLabel": "选题立项",
-      "responsibilityPrompt": "把绑定工作区视为短篇集工厂根目录。先读取用户主提示词、已有项目目录和工厂索引，再为本轮新短篇锁定题材、受众、关系结构、冲突引擎、情绪走向、反转方式、目标字数、目标章节数和书名候选。你的目标是让这一篇既符合主提示词，又和最近几篇明显区分。请创建新的项目目录和立项文件，并写清本轮的题材关键词、卖点和避重说明。"
+      "responsibilityPrompt": "把绑定工作区视为短篇集工厂根目录。先读取用户主提示词、已有项目目录、`.project/status/project-state.json` 和 `.project/status/factory-index.json`（若存在），再为本轮新短篇锁定题材、受众、关系结构、冲突引擎、情绪走向、反转方式、目标字数、目标章节数和书名候选。你的目标是让这一篇既符合主提示词，又和最近几篇明显区分。请创建新的项目目录和立项文件，并写清本轮的题材关键词、卖点和避重说明。"
     },
     {
       "key": "outline",
@@ -40,7 +40,7 @@
       "agentId": "polish-editor",
       "name": "发布整理",
       "roleLabel": "终稿收口",
-      "responsibilityPrompt": "在当前短篇已经通过终审后，读取终稿、故事蓝图和主提示词，对发布稿做最后一轮整理。你的目标是清理 AI 痕迹、统一文风、强化简介和标签、整理项目状态，并把这一篇标记为已完结可收录进短篇集索引。只处理当前项目，不要回头改其他短篇。"
+      "responsibilityPrompt": "在当前短篇已经通过终审后，读取终稿、故事蓝图和主提示词，对发布稿做最后一轮整理。你的目标是清理 AI 痕迹、统一文风、强化简介和标签，更新当前项目的 `.project/status/project-state.json`，并把这一篇登记进工厂级 `.project/status/factory-index.json`。只处理当前项目，不要回头改其他短篇。"
     }
   ],
   "steps": [
@@ -55,7 +55,7 @@
       "type": "agent_task",
       "name": "选题立项",
       "memberKey": "director",
-      "promptTemplate": "请把当前绑定工作区当作短篇集工厂根目录。先读取用户主提示词、已有项目目录和工厂索引，再创建本轮新的短篇项目目录。为这一篇锁定题材、受众、关系结构、冲突引擎、情绪走向、反转方式、目标字数、目标章节数和书名候选，并写清与最近几篇的差异点。正文只需简短汇报本轮立项结果，不要严格输出 JSON。",
+      "promptTemplate": "请把当前绑定工作区当作短篇集工厂根目录。先读取用户主提示词、已有项目目录、`.project/status/project-state.json` 和 `.project/status/factory-index.json`（若存在），再创建本轮新的短篇项目目录。为这一篇锁定题材、受众、关系结构、冲突引擎、情绪走向、反转方式、目标字数、目标章节数和书名候选，并写清与最近几篇的差异点。正文只需简短汇报本轮立项结果，不要严格输出 JSON。",
       "outputMode": "text",
       "nextStepKey": "story-blueprint"
     },
@@ -82,18 +82,17 @@
       "type": "decision",
       "name": "发布终审",
       "memberKey": "review",
-      "promptTemplate": "请定位本轮当前短篇项目目录，读取全本终稿、故事蓝图和最小设定，按番茄短篇标准检查开头抓人程度、冲突密度、反转有效性、节奏、结局满足感、一致性和可发布性。最终使用 workflow_decision 提交 pass、issues、revision_brief。若未通过，请把 revision_brief 写成只针对当前项目的返工单。正文只需简短说明终审结论，不要严格输出 JSON。",
+      "promptTemplate": "请定位本轮当前短篇项目目录，读取全本终稿、故事蓝图和最小设定，按番茄短篇标准检查开头抓人程度、冲突密度、反转有效性、节奏、结局满足感、一致性和可发布性。最终使用 workflow_decision 提交 pass、reason、issues、revision_brief。若未通过，请把 revision_brief 写成只针对当前项目的返工单。正文只需简短说明终审结论，不要严格输出 JSON。",
       "sourceStepKey": "draft-short",
       "trueNextStepKey": "release-pack",
-      "falseNextStepKey": "draft-short",
-      "passRule": "workflow_decision.pass == true"
+      "falseNextStepKey": "draft-short"
     },
     {
       "key": "release-pack",
       "type": "agent_task",
       "name": "发布整理",
       "memberKey": "polish",
-      "promptTemplate": "请在当前短篇已经通过终审后，读取终稿、故事蓝图和主提示词，对发布稿做最后一轮整理。重点清理 AI 痕迹、统一文风、强化简介和标签、更新项目状态，并把该短篇收录进短篇集索引。正文只需简短说明本轮整理了哪些发布文件，不要严格输出 JSON。",
+      "promptTemplate": "请在当前短篇已经通过终审后，读取终稿、故事蓝图和主提示词，对发布稿做最后一轮整理。重点清理 AI 痕迹、统一文风、强化简介和标签，更新当前项目的 `.project/status/project-state.json`，并把该短篇收录进工厂级 `.project/status/factory-index.json`。正文只需简短说明本轮整理了哪些发布文件，不要严格输出 JSON。",
       "outputMode": "text",
       "nextStepKey": "success-end"
     },

@@ -82,7 +82,11 @@ fn get_state_value(connection: &rusqlite::Connection, key: &str) -> CommandResul
     Ok(raw.and_then(|value| serde_json::from_str::<Value>(&value).ok()))
 }
 
-fn set_state_value(connection: &rusqlite::Connection, key: &str, value: &Value) -> CommandResult<()> {
+fn set_state_value(
+    connection: &rusqlite::Connection,
+    key: &str,
+    value: &Value,
+) -> CommandResult<()> {
     connection
         .execute(
             r#"
@@ -159,7 +163,10 @@ pub async fn export_app_data_backup(
         let Some(save_path) = save_path else {
             return Ok(None);
         };
-        let final_path = match save_path.extension().and_then(|extension| extension.to_str()) {
+        let final_path = match save_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
             Some(extension) if extension.eq_ignore_ascii_case("zip") => save_path,
             _ => save_path.with_extension("zip"),
         };

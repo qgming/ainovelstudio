@@ -6,8 +6,10 @@ import { useWorkflowStore } from "../../stores/workflowStore";
 import { mergePart } from "../chat/sessionRuntime";
 import { normalizeRecoveredMessageParts } from "../chat/sessionRuntime";
 import { derivePlanningState } from "../agent/planning";
+import { loadProjectContext } from "../agent/projectContext";
 import { runAgentTurn } from "../agent/session";
 import type { AgentPart } from "../agent/types";
+import { readWorkspaceTextFile } from "../bookWorkspace/api";
 import {
   createGlobalToolset,
   createLocalResourceToolset,
@@ -15,6 +17,7 @@ import {
 } from "../agent/tools";
 import { parseWorkflowMessagePayload } from "./api";
 import type {
+  WorkflowDecisionResult,
   WorkflowDecisionStepDefinition,
   WorkflowDetail,
   WorkflowEndStepDefinition,
@@ -138,10 +141,11 @@ function buildStepPrompt(params: {
           `- 审查完成后，调用 ${WORKFLOW_DECISION_TOOL_ID} 工具提交最终结构化判定。`,
           "- pass=true 表示通过并进入成功分支。",
           "- pass=false 表示存在问题并进入失败分支。",
-          "- issues 提交结构化问题列表。",
-          "- revision_brief 提交给章节写作节点直接执行的修订摘要。",
+          "- reason 必须说明这次程序分支判断的原因。",
+          "- issues 必须提交结构化问题列表，可为空数组。",
+          "- revision_brief 必须提交给章节写作节点直接执行的修订摘要，可为空字符串。",
           "- 正文不需要再输出严格 JSON。",
-          `- 正文保持简短结论，程序分支读取 ${WORKFLOW_DECISION_TOOL_ID} 工具结果。`,
+          `- 正文保持简短结论，程序分支只读取 ${WORKFLOW_DECISION_TOOL_ID} 工具结果。`,
         ].join("\n")
       : null,
     previousResult
@@ -241,7 +245,7 @@ function normalizeWorkflowReviewIssue(value: unknown): WorkflowReviewIssue | nul
   };
 }
 
-function normalizeWorkflowReviewResult(value: unknown): WorkflowReviewResult | null {
+function normalizeWorkflowDecisionResult(value: unknown): WorkflowDecisionResult | null {
   if (!value || Array.isArray(value) || typeof value !== "object") {
     return null;
   }
@@ -250,24 +254,30 @@ function normalizeWorkflowReviewResult(value: unknown): WorkflowReviewResult | n
   if (typeof payload.pass !== "boolean") {
     return null;
   }
+  if (typeof payload.reason !== "string" || !payload.reason.trim()) {
+    return null;
+  }
+  if (!Array.isArray(payload.issues)) {
+    return null;
+  }
+  if (typeof payload.revision_brief !== "string") {
+    return null;
+  }
 
-  const issues = Array.isArray(payload.issues)
-    ? payload.issues
-        .map((issue) => normalizeWorkflowReviewIssue(issue))
-        .filter((issue): issue is WorkflowReviewIssue => Boolean(issue))
-    : [];
+  const issues = payload.issues
+    .map((issue) => normalizeWorkflowReviewIssue(issue))
+    .filter((issue): issue is WorkflowReviewIssue => Boolean(issue));
 
   return {
     pass: payload.pass,
+    label: payload.pass ? "yes" : "no",
+    reason: payload.reason.trim(),
     issues,
-    revision_brief:
-      typeof payload.revision_brief === "string"
-        ? payload.revision_brief.trim()
-        : "",
+    revision_brief: payload.revision_brief.trim(),
   };
 }
 
-function extractWorkflowDecisionResult(parts: AgentPart[]): WorkflowReviewResult | null {
+function extractWorkflowDecisionResult(parts: AgentPart[]): WorkflowDecisionResult | null {
   for (let index = parts.length - 1; index >= 0; index -= 1) {
     const part = parts[index];
     if (
@@ -275,7 +285,7 @@ function extractWorkflowDecisionResult(parts: AgentPart[]): WorkflowReviewResult
       && part.toolName === WORKFLOW_DECISION_TOOL_ID
       && part.status === "completed"
     ) {
-      const result = normalizeWorkflowReviewResult(part.output);
+      const result = normalizeWorkflowDecisionResult(part.output);
       if (result) {
         return result;
       }
@@ -287,7 +297,7 @@ function extractWorkflowDecisionResult(parts: AgentPart[]): WorkflowReviewResult
 
 function requireWorkflowDecisionResult(
   step: Extract<WorkflowStepDefinition, { type: "decision" }>,
-  directResult: WorkflowReviewResult | null,
+  directResult: WorkflowDecisionResult | null,
   parts: AgentPart[],
 ) {
   const decisionResult = directResult ?? extractWorkflowDecisionResult(parts);
@@ -369,6 +379,22 @@ function updateRuntimeFromStepRun(runtime: WorkflowRuntimeState, stepRun: Workfl
       runtime.latestMessageByType.set("revision_brief", {
         revision_brief: stepRun.resultJson.revision_brief,
         issues: stepRun.resultJson.issues,
+      });
+    }
+  }
+
+  if (stepRun.decisionResultJson) {
+    if (stepRun.decisionResultJson.issues.length > 0 || stepRun.decisionResultJson.revision_brief.trim()) {
+      const reviewResult: WorkflowReviewResult = {
+        pass: stepRun.decisionResultJson.pass,
+        issues: stepRun.decisionResultJson.issues,
+        revision_brief: stepRun.decisionResultJson.revision_brief,
+      };
+      runtime.lastReviewResult = reviewResult;
+      runtime.latestMessageByType.set("review_result", reviewResult as unknown as WorkflowMessagePayload);
+      runtime.latestMessageByType.set("revision_brief", {
+        revision_brief: reviewResult.revision_brief,
+        issues: reviewResult.issues,
       });
     }
   }
@@ -487,6 +513,7 @@ function createSystemStepRun(params: {
     inputPrompt: "程序节点自动执行。",
     resultText,
     resultJson: null,
+    decisionResultJson: null,
     messageType: null,
     messageJson: null,
     decision,
@@ -555,6 +582,7 @@ async function executeConfiguredStep(params: {
     inputPrompt: prompt,
     resultText: "",
     resultJson: null,
+    decisionResultJson: null,
     messageType: null,
     messageJson: null,
     decision: null,
@@ -601,7 +629,11 @@ async function executeConfiguredStep(params: {
       }
     },
   });
-  let workflowDecisionResult: WorkflowReviewResult | null = null;
+  let workflowDecisionResult: WorkflowDecisionResult | null = null;
+  const projectContext = await loadProjectContext({
+    readFile: readWorkspaceTextFile,
+    workspaceRootPath: run.workspaceBinding.rootPath,
+  });
   const localResourceTools = createLocalResourceToolset({
     refreshAgents: async () => {
       await useSubAgentStore.getState().refresh();
@@ -634,6 +666,7 @@ async function executeConfiguredStep(params: {
       usage = nextUsage;
     },
     planningState: derivePlanningState([]),
+    projectContext,
     prompt,
     providerConfig,
     workspaceTools: { ...globalTools, ...workspaceTools, ...localResourceTools },
@@ -678,8 +711,11 @@ async function executeConfiguredStep(params: {
     .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("\n\n");
-  const reviewResultValue = step.type === "decision"
+  const decisionResultValue = step.type === "decision"
     ? requireWorkflowDecisionResult(step, workflowDecisionResult, parts)
+    : null;
+  const reviewResultValue = step.type === "decision"
+    ? null
     : outputMode === "review_json"
       ? useWorkflowStore.getState().parseReviewResult(resultText)
       : null;
@@ -695,6 +731,7 @@ async function executeConfiguredStep(params: {
     finishedAt: getNow(),
     resultText,
     resultJson: reviewResultValue,
+    decisionResultJson: decisionResultValue,
     messageType: stepMessage?.messageType ?? null,
     messageJson: stepMessage?.messageJson ?? null,
     parts,
@@ -711,16 +748,18 @@ function evaluateDecisionNode(params: {
   attemptIndex: number;
 }): { stepRun: WorkflowStepRun; nextStepId: string | null; nextAttemptIndex: number; endReason: WorkflowRunStopReason | null } {
   const { step, decisionStepRun, attemptIndex } = params;
-  const passed = decisionStepRun.resultJson?.pass === true;
+  const decisionResult = decisionStepRun.decisionResultJson;
+  if (!decisionResult) {
+    throw new Error(`判断步骤 ${step.name} 缺少结构化 decisionResultJson。`);
+  }
+  const passed = decisionResult.pass;
   const nextStepId = passed ? step.trueNextStepId : step.falseNextStepId;
 
   const stepRun: WorkflowStepRun = {
     ...decisionStepRun,
     decision: {
       outcome: passed ? "pass" : "fail",
-      reason: passed
-        ? "判断节点提交的结构化结果 pass=true。"
-        : "判断节点提交的结构化结果 pass=false，进入失败分支并回传修订意见。",
+      reason: decisionResult.reason,
       branchKey: passed ? "true" : "false",
     },
     resultText: decisionStepRun.resultText || (passed ? "判断通过。" : "判断未通过。"),

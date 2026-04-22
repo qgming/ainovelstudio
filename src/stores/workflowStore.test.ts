@@ -78,6 +78,7 @@ function createDetail(): WorkflowDetail {
         inputPrompt: "请执行",
         resultText: "",
         resultJson: null,
+        decisionResultJson: null,
         messageType: null,
         messageJson: null,
         decision: null,

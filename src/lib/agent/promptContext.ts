@@ -1,6 +1,7 @@
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
+import type { ProjectContextPayload } from "./projectContext";
 import {
   renderPlanItems,
   type PlanningIntervention,
@@ -31,6 +32,7 @@ type BuildUserTurnContentInput = {
   manualContext?: ManualTurnContextPayload | null;
   planningIntervention?: PlanningIntervention | null;
   planningState?: PlanningState | null;
+  projectContext?: ProjectContextPayload | null;
   workspaceRootPath?: string | null;
   prompt: string;
   subagentAnalysis?: {
@@ -376,6 +378,31 @@ function buildManualContextBlock(
   ].join("\n\n");
 }
 
+function buildProjectContextBlock(
+  projectContext?: ProjectContextPayload | null,
+) {
+  if (!projectContext || projectContext.files.length === 0) {
+    return null;
+  }
+
+  return [
+    "以下资源属于工作区默认项目上下文。进入对话或工作流时系统会优先注入，用于帮助你快速了解项目。",
+    ...projectContext.files.map((file) => {
+      const excerpt = createMiddleExcerpt(file.content, MANUAL_CONTEXT_FILE_CHAR_LIMIT);
+      return [
+        `### ${file.name}`,
+        `- 路径：${file.path}`,
+        excerpt.truncated
+          ? `- 注入方式：已裁剪摘录，约省略 ${excerpt.omittedChars} 个字符；如需全文请再用 read 读取。`
+          : "- 注入方式：已直接注入当前文件内容。",
+        "```text",
+        excerpt.text,
+        "```",
+      ].join("\n");
+    }),
+  ].join("\n\n");
+}
+
 function buildSubAgentManifestSummary(agent: ResolvedAgent) {
   const suggestedTools = normalizeSuggestedToolIds(agent.suggestedTools);
 
@@ -545,6 +572,7 @@ export function buildUserTurnContent({
   manualContext,
   planningIntervention,
   planningState,
+  projectContext,
   workspaceRootPath,
   prompt,
   subagentAnalysis,
@@ -600,6 +628,11 @@ export function buildUserTurnContent({
       },
       {
         key: "s14",
+        title: "项目默认上下文",
+        body: buildProjectContextBlock(projectContext),
+      },
+      {
+        key: "s15",
         title: "手动指定上下文",
         body: buildManualContextBlock(manualContext),
       },
