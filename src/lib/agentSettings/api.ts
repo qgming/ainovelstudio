@@ -7,9 +7,30 @@ export type AgentProviderConfigDocument = {
   simulateOpencodeBeta?: boolean;
 };
 
+export type AgentProviderPreset = {
+  id: string;
+  name: string;
+  model: string;
+  provider: string;
+  baseURL: string;
+  websiteUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentModelConfigPreset = {
+  id: string;
+  name: string;
+  config: AgentProviderConfigDocument;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AgentSettingsDocument = {
   config: AgentProviderConfigDocument;
   enabledTools: Record<string, boolean>;
+  providerPresets: AgentProviderPreset[];
+  modelConfigPresets: AgentModelConfigPreset[];
 };
 
 export function readAgentSettings() {

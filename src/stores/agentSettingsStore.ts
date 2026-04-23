@@ -9,6 +9,7 @@ import {
   readAgentSettings,
   writeAgentSettings,
 } from "../lib/agentSettings/api";
+import type { AgentProviderPreset, AgentModelConfigPreset } from "../lib/agentSettings/api";
 import {
   getDefaultEnabledTools,
   migrateEnabledTools,
@@ -23,16 +24,24 @@ export type AgentProviderConfig = {
   simulateOpencodeBeta?: boolean;
 };
 
+export type { AgentProviderPreset, AgentModelConfigPreset };
+
 type AgentSettingsState = {
   config: AgentProviderConfig;
   configFilePath: string | null;
   defaultAgentMarkdown: string;
   enabledTools: Record<string, boolean>;
   errorMessage: string | null;
+  modelConfigPresets: AgentModelConfigPreset[];
+  providerPresets: AgentProviderPreset[];
   status: "idle" | "loading" | "ready" | "error";
 };
 
 type AgentSettingsActions = {
+  addModelConfigPreset: (preset: AgentModelConfigPreset) => void;
+  addProviderPreset: (preset: AgentProviderPreset) => void;
+  deleteModelConfigPreset: (id: string) => void;
+  deleteProviderPreset: (id: string) => void;
   initialize: () => Promise<void>;
   refreshDefaultAgentMarkdown: () => Promise<void>;
   reset: () => void;
@@ -65,6 +74,8 @@ function getDefaultState(): AgentSettingsState {
     defaultAgentMarkdown: "",
     enabledTools: getDefaultEnabledTools(),
     errorMessage: null,
+    modelConfigPresets: [],
+    providerPresets: [],
     status: "idle",
   };
 }
@@ -83,20 +94,24 @@ async function loadPersistedAgentSettings() {
   return {
     config: { ...defaults.config, ...persisted.config },
     enabledTools: migrateEnabledTools(persisted.enabledTools),
+    providerPresets: persisted.providerPresets ?? [],
+    modelConfigPresets: persisted.modelConfigPresets ?? [],
   };
 }
 
 async function persistAgentSettings(
-  state: Pick<AgentSettingsState, "config" | "enabledTools">,
+  state: Pick<AgentSettingsState, "config" | "enabledTools" | "providerPresets" | "modelConfigPresets">,
 ) {
   await writeAgentSettings({
     config: state.config,
     enabledTools: state.enabledTools,
+    providerPresets: state.providerPresets,
+    modelConfigPresets: state.modelConfigPresets,
   });
 }
 
 function persistAgentSettingsInBackground(
-  state: Pick<AgentSettingsState, "config" | "enabledTools">,
+  state: Pick<AgentSettingsState, "config" | "enabledTools" | "providerPresets" | "modelConfigPresets">,
   onError: (message: string) => void,
 ) {
   void persistAgentSettings(state).catch((error) => {
@@ -158,6 +173,8 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
           ...state,
           config: persisted?.config ?? state.config,
           enabledTools: persisted?.enabledTools ?? state.enabledTools,
+          providerPresets: persisted?.providerPresets ?? state.providerPresets,
+          modelConfigPresets: persisted?.modelConfigPresets ?? state.modelConfigPresets,
           configFilePath: typeof doc?.path === "string" ? doc.path : null,
           defaultAgentMarkdown: normalizeMainAgentMarkdown(doc?.markdown),
           errorMessage: null,
@@ -213,14 +230,15 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
   resetConfig: () =>
     set((state) => {
       const config = getDefaultConfig();
-      const nextState = { config, enabledTools: state.enabledTools };
+      const nextState = { config, enabledTools: state.enabledTools, providerPresets: state.providerPresets, modelConfigPresets: state.modelConfigPresets };
       persistAgentSettingsInBackground(nextState, (message) => {
         set((current) => ({ ...current, errorMessage: message }));
       });
       return { config, errorMessage: null };
     }),
   saveConfig: async (config) => {
-    const nextState = { config, enabledTools: get().enabledTools };
+    const s = get();
+    const nextState = { config, enabledTools: s.enabledTools, providerPresets: s.providerPresets, modelConfigPresets: s.modelConfigPresets };
     await persistAgentSettings(nextState);
     set((state) => ({
       ...state,
@@ -234,7 +252,7 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
         ...state.enabledTools,
         [toolId]: !(state.enabledTools[toolId] ?? true),
       };
-      const nextState = { config: state.config, enabledTools };
+      const nextState = { config: state.config, enabledTools, providerPresets: state.providerPresets, modelConfigPresets: state.modelConfigPresets };
       persistAgentSettingsInBackground(nextState, (message) => {
         set((current) => ({ ...current, errorMessage: message }));
       });
@@ -243,11 +261,47 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
   updateConfig: (nextConfig) =>
     set((state) => {
       const config = { ...state.config, ...nextConfig };
-      const nextState = { config, enabledTools: state.enabledTools };
+      const nextState = { config, enabledTools: state.enabledTools, providerPresets: state.providerPresets, modelConfigPresets: state.modelConfigPresets };
       persistAgentSettingsInBackground(nextState, (message) => {
         set((current) => ({ ...current, errorMessage: message }));
       });
       return { config, errorMessage: null };
+    }),
+  addProviderPreset: (preset) =>
+    set((state) => {
+      const providerPresets = [...state.providerPresets.filter((p) => p.id !== preset.id), preset];
+      const nextState = { config: state.config, enabledTools: state.enabledTools, providerPresets, modelConfigPresets: state.modelConfigPresets };
+      persistAgentSettingsInBackground(nextState, (message) => {
+        set((current) => ({ ...current, errorMessage: message }));
+      });
+      return { providerPresets, errorMessage: null };
+    }),
+  deleteProviderPreset: (id) =>
+    set((state) => {
+      const providerPresets = state.providerPresets.filter((p) => p.id !== id);
+      const nextState = { config: state.config, enabledTools: state.enabledTools, providerPresets, modelConfigPresets: state.modelConfigPresets };
+      persistAgentSettingsInBackground(nextState, (message) => {
+        set((current) => ({ ...current, errorMessage: message }));
+      });
+      return { providerPresets, errorMessage: null };
+    }),
+  addModelConfigPreset: (preset) =>
+    set((state) => {
+      const modelConfigPresets = [...state.modelConfigPresets.filter((p) => p.id !== preset.id), preset];
+      const nextState = { config: state.config, enabledTools: state.enabledTools, providerPresets: state.providerPresets, modelConfigPresets };
+      persistAgentSettingsInBackground(nextState, (message) => {
+        set((current) => ({ ...current, errorMessage: message }));
+      });
+      return { modelConfigPresets, errorMessage: null };
+    }),
+  deleteModelConfigPreset: (id) =>
+    set((state) => {
+      const modelConfigPresets = state.modelConfigPresets.filter((p) => p.id !== id);
+      const nextState = { config: state.config, enabledTools: state.enabledTools, providerPresets: state.providerPresets, modelConfigPresets };
+      persistAgentSettingsInBackground(nextState, (message) => {
+        set((current) => ({ ...current, errorMessage: message }));
+      });
+      return { modelConfigPresets, errorMessage: null };
     }),
   updateDefaultAgentMarkdown: async (content) => {
     try {

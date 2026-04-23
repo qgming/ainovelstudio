@@ -61,6 +61,9 @@ describe("ModelProviderCard", () => {
   it("隐藏温度和最大 token 配置，仅保留核心字段", () => {
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-test",
           baseURL: "",
@@ -85,6 +88,9 @@ describe("ModelProviderCard", () => {
   it("缺少必要配置时禁用测试连接按钮", () => {
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "",
           baseURL: "https://example.com/v1",
@@ -118,6 +124,9 @@ describe("ModelProviderCard", () => {
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
@@ -161,6 +170,9 @@ describe("ModelProviderCard", () => {
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
@@ -196,6 +208,9 @@ describe("ModelProviderCard", () => {
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
@@ -231,6 +246,9 @@ describe("ModelProviderCard", () => {
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
@@ -252,6 +270,9 @@ describe("ModelProviderCard", () => {
   it("显示推荐供应商卡片与详情链接", () => {
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "",
           baseURL: "",
@@ -288,11 +309,51 @@ describe("ModelProviderCard", () => {
     expect(detailButtons).toHaveLength(14);
   });
 
-  it("点击推荐供应商卡片时回填 Base URL", () => {
+  it("显示预存供应商标题，且卡片背景与推荐供应商区域一致", () => {
+    render(
+      <ModelProviderCard
+        providerPresets={[
+          {
+            id: "preset-1",
+            name: "OpenAI",
+            model: "gpt-4.1",
+            provider: "openai",
+            baseURL: "https://api.openai.com/v1",
+            createdAt: "2026-04-23T00:00:00.000Z",
+            updatedAt: "2026-04-23T00:00:00.000Z",
+          },
+        ]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "",
+          baseURL: "https://api.openai.com/v1",
+          model: "",
+        }}
+        isDirty={false}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("预存供应商")).toBeInTheDocument();
+
+    const presetCard = screen.getByText("gpt-4.1").closest("article");
+    expect(presetCard).toHaveClass("editor-block-tile", "aspect-square");
+    expect(presetCard).not.toHaveClass("bg-background");
+    expect(screen.getByRole("button", { name: "使用 OpenAI 地址" })).not.toHaveClass("bg-accent/35");
+  });
+
+  it("点击推荐供应商卡片时回填 Base URL 并保存到预存供应商库", () => {
     const handleChange = vi.fn();
+    const handleAddProviderPreset = vi.fn();
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={handleAddProviderPreset}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "",
           baseURL: "",
@@ -308,6 +369,9 @@ describe("ModelProviderCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "使用 OpenAI 地址" }));
 
     expect(handleChange).toHaveBeenCalledWith({ baseURL: "https://api.openai.com/v1" });
+    expect(handleAddProviderPreset).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "OpenAI", baseURL: "https://api.openai.com/v1" }),
+    );
   });
 
   it("点击保存按钮时触发保存回调", () => {
@@ -315,6 +379,9 @@ describe("ModelProviderCard", () => {
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
@@ -337,6 +404,9 @@ describe("ModelProviderCard", () => {
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
@@ -358,6 +428,9 @@ describe("ModelProviderCard", () => {
   it("支持切换 API Key 明文显示", () => {
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-secret",
           baseURL: "https://example.com/v1",
@@ -385,6 +458,9 @@ describe("ModelProviderCard", () => {
 
     render(
       <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
         config={{
           apiKey: "sk-secret",
           baseURL: "https://example.com/v1",

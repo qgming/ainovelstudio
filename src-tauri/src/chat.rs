@@ -91,11 +91,51 @@ pub struct AgentProviderConfig {
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentProviderPreset {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    model: String,
+    #[serde(default)]
+    provider: String,
+    #[serde(default, rename = "baseURL")]
+    base_url: String,
+    #[serde(default)]
+    website_url: Option<String>,
+    #[serde(default)]
+    created_at: String,
+    #[serde(default)]
+    updated_at: String,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentModelConfigPreset {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    config: AgentProviderConfig,
+    #[serde(default)]
+    created_at: String,
+    #[serde(default)]
+    updated_at: String,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentSettingsDocument {
     #[serde(default)]
     config: AgentProviderConfig,
     #[serde(default)]
     enabled_tools: std::collections::HashMap<String, bool>,
+    #[serde(default)]
+    provider_presets: Vec<AgentProviderPreset>,
+    #[serde(default)]
+    model_config_presets: Vec<AgentModelConfigPreset>,
 }
 
 fn error_to_string(error: impl ToString) -> String {

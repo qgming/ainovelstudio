@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, ReceiptText, Save } from "lucide-react";
+import { Copy, Eye, EyeOff, Save } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
@@ -67,7 +67,7 @@ export function BookEditorPanel({
               size="icon-sm"
               className="text-muted-foreground"
             >
-              <ReceiptText className="h-4 w-4" />
+              {isMarkdownPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </Button>
           ) : null}
           <Button

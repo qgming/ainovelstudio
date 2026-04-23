@@ -47,7 +47,7 @@ import { getEnabledAgents, useSubAgentStore } from "./subAgentStore";
 
 type AgentStoreStatus = "idle" | "loading" | "ready" | "error";
 
-type RunInterruptReason = "manual_stop" | "app_close" | "restart" | "reset";
+type RunInterruptReason = "manual_stop" | "app_close" | "restart" | "reset" | "coach";
 const DEFAULT_CHAT_BOOK_ID = "__global__";
 
 type AgentStoreState = {
@@ -71,6 +71,7 @@ type AgentStoreState = {
 
 type AgentStoreActions = {
   closeHistory: () => void;
+  coachMessage: () => Promise<void>;
   createNewSession: () => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   hardStopCurrentRun: (reason?: RunInterruptReason) => Promise<void>;
@@ -313,6 +314,371 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     return bootstrap.activeSessionId;
   }
 
+  const COACH_PROMPT = "你刚才中断或偏离了目标。先用一句话说明当前进展，然后严格回到原始任务继续执行；如果之前的方案无效，立刻换一种方案，不要重复已失败的步骤。";
+
+  async function sendMessageInternal(promptOverride: string | null, selection?: ManualTurnContextSelection) {
+    const nextInput = promptOverride ?? get().input.trim();
+    if (!nextInput) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    const runRequestId = buildRunRequestId();
+    const optimisticSessionId = get().activeSessionId;
+    const conversationHistory = optimisticSessionId ? get().messagesBySession[optimisticSessionId] ?? [] : [];
+    const workspaceState = useBookWorkspaceStore.getState();
+    const messageMeta = buildMessageMeta(workspaceState.rootPath, workspaceState.activeFilePath);
+    const userMessage = buildUserMessage(nextInput, messageMeta);
+    const assistantMessage = buildAssistantPlaceholderMessage(messageMeta);
+    let sessionId: string | null = optimisticSessionId;
+    let latestMessages = [...conversationHistory, userMessage, assistantMessage];
+    let persistTimer: ReturnType<typeof setTimeout> | null = null;
+    let persistChain = Promise.resolve();
+
+    const isCurrentRun = () => {
+      const state = get();
+      return state.activeRunRequestId === runRequestId && !abortController.signal.aborted;
+    };
+
+    const persistSummary = async (promise: Promise<ChatSessionSummary>) => {
+      try {
+        applyPersistedSummary(set, await promise);
+      } catch (error) {
+        set({ errorMessage: formatAgentError(error, "历史会话保存失败。") });
+      }
+    };
+
+    const flushAssistant = async (status: AgentRunStatus) => {
+      if (!sessionId) {
+        return;
+      }
+      const assistant = latestMessages[latestMessages.length - 1];
+      if (!assistant || assistant.id !== assistantMessage.id) {
+        return;
+      }
+
+      await persistSummary(
+        updateChatMessage(
+          get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
+          sessionId,
+          assistantMessage.id,
+          assistant.parts,
+          assistant.meta,
+          buildSessionPatch(latestMessages, status),
+        ),
+      );
+    };
+
+    const scheduleAssistantPersist = () => {
+      if (persistTimer) {
+        return;
+      }
+
+      persistTimer = setTimeout(() => {
+        persistTimer = null;
+        persistChain = persistChain.then(() => flushAssistant("running"));
+      }, 350);
+    };
+
+    const attachUsageToAssistant = (usage: AgentUsage) => {
+      if (!isCurrentRun() || !sessionId) {
+        return;
+      }
+
+      const currentSessionId = sessionId;
+      set((state) => {
+        if (state.activeRunRequestId !== runRequestId) {
+          return state;
+        }
+        const messages = [...(state.messagesBySession[currentSessionId] ?? [])];
+        const lastMessage = messages[messages.length - 1];
+        if (!lastMessage || lastMessage.id !== assistantMessage.id) {
+          return state;
+        }
+
+        messages[messages.length - 1] = {
+          ...lastMessage,
+          meta: {
+            ...(lastMessage.meta ?? {}),
+            usage,
+          },
+        };
+        latestMessages = messages;
+        return ensureSessionState(state, currentSessionId, messages, "", "running");
+      });
+    };
+
+    set((state) => {
+      if (!optimisticSessionId) {
+        return {
+          abortController,
+          activeRunRequestId: runRequestId,
+          inflightToolRequestIds: [],
+          errorMessage: null,
+          input: "",
+          planningState: derivePlanningState(latestMessages),
+          run: buildRun("pending-session", deriveSessionTitle(latestMessages), "running", latestMessages),
+        };
+      }
+
+      return {
+        abortController,
+        activeRunRequestId: runRequestId,
+        inflightToolRequestIds: [],
+        errorMessage: null,
+        ...ensureSessionState(state, optimisticSessionId, latestMessages, "", "running"),
+      };
+    });
+
+    if (optimisticSessionId) {
+      void setChatDraft(optimisticSessionId, "");
+    }
+
+    let providerConfig = useAgentSettingsStore.getState().config;
+
+    try {
+      sessionId = await ensureActiveSession();
+      if (!sessionId) {
+        throw new Error("创建会话失败。");
+      }
+      if (!isCurrentRun()) {
+        return;
+      }
+
+      const persistedConversationHistory = sessionId === optimisticSessionId
+        ? conversationHistory
+        : get().messagesBySession[sessionId] ?? [];
+      latestMessages = [...persistedConversationHistory, userMessage, assistantMessage];
+      const currentSessionId = sessionId;
+      set((state) => ({
+        abortController,
+        activeRunRequestId: runRequestId,
+        inflightToolRequestIds: [],
+        errorMessage: null,
+        ...ensureSessionState(state, currentSessionId, latestMessages, "", "running"),
+      }));
+      void setChatDraft(currentSessionId, "");
+
+      const currentBookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
+
+      await persistSummary(
+        appendChatMessage(currentBookId, sessionId, userMessage, buildSessionPatch(latestMessages, "running")),
+      );
+      await persistSummary(appendChatMessage(currentBookId, sessionId, assistantMessage));
+
+      await ensureAgentSettingsReady();
+      if (!isCurrentRun()) {
+        return;
+      }
+
+      providerConfig = useAgentSettingsStore.getState().config;
+      const enabledSkills = getEnabledSkills(useSkillsStore.getState());
+      const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
+      const enabledToolsMap = useAgentSettingsStore.getState().enabledTools;
+      const defaultAgentMarkdown = await ensureMainAgentMarkdown();
+      if (!isCurrentRun()) {
+        return;
+      }
+
+      const enabledToolIds = Object.entries(enabledToolsMap)
+        .filter(([, value]) => value)
+        .map(([toolId]) => toolId);
+      const manualContext = selection
+        ? await resolveManualTurnContext({
+            activeFilePath: workspaceState.activeFilePath,
+            draftContent: workspaceState.draftContent,
+            enabledAgents,
+            enabledSkills,
+            readFile: readWorkspaceTextFile,
+            selection,
+            workspaceRootPath: workspaceState.rootPath,
+          })
+        : null;
+      const projectContext = await loadProjectContext({
+        readFile: readWorkspaceTextFile,
+        readTree: readWorkspaceTree,
+        workspaceRootPath: workspaceState.rootPath,
+      });
+      if (!isCurrentRun()) {
+        return;
+      }
+
+      const planningState = derivePlanningState(persistedConversationHistory);
+      const globalTools = createGlobalToolset();
+      const workspaceTools = workspaceState.rootPath
+        ? createWorkspaceToolset({
+            onWorkspaceMutated: async () => {
+              await useBookWorkspaceStore.getState().refreshWorkspaceAfterExternalChange();
+            },
+            rootPath: workspaceState.rootPath,
+          })
+        : {};
+      const localResourceTools = createLocalResourceToolset({
+        refreshAgents: async () => {
+          await useSubAgentStore.getState().refresh();
+        },
+        refreshSkills: async () => {
+          await useSkillsStore.getState().refresh();
+        },
+      });
+
+      const stream = runAgentTurn({
+        abortSignal: abortController.signal,
+        activeFilePath: workspaceState.activeFilePath,
+        debugLabel: `chat-session:${sessionId}`,
+        workspaceRootPath: workspaceState.rootPath,
+        conversationHistory: persistedConversationHistory,
+        defaultAgentMarkdown,
+        enabledAgents,
+        enabledSkills,
+        enabledToolIds,
+        manualContext,
+        onUsage: attachUsageToAssistant,
+        planningState,
+        projectContext,
+        prompt: nextInput,
+        providerConfig,
+        workspaceTools: { ...globalTools, ...workspaceTools, ...localResourceTools },
+        onToolRequestStateChange: ({ requestId, status }) => {
+          if (!isCurrentRun() && status === "start") {
+            return;
+          }
+          trackInflightToolRequest(set, requestId, status === "start" ? "start" : "finish");
+        },
+      });
+
+      for await (const part of stream) {
+        if (!isCurrentRun()) {
+          return;
+        }
+
+        const activeSessionId = sessionId;
+        set((state) => {
+          if (state.activeRunRequestId !== runRequestId) {
+            return state;
+          }
+          const messages = [...(state.messagesBySession[activeSessionId] ?? [])];
+          const lastMessage = messages[messages.length - 1];
+          if (lastMessage?.role !== "assistant") {
+            return state;
+          }
+
+          messages[messages.length - 1] = {
+            ...lastMessage,
+            parts: mergePart(lastMessage.parts, part as AgentPart),
+          };
+          latestMessages = messages;
+          scheduleAssistantPersist();
+          return ensureSessionState(state, activeSessionId, messages, "", "running");
+        });
+      }
+
+      if (persistTimer) {
+        window.clearTimeout(persistTimer);
+        persistTimer = null;
+      }
+      await persistChain;
+      if (!isCurrentRun()) {
+        return;
+      }
+      const completedSessionId = sessionId;
+      set((state) => ({
+        abortController: null,
+        activeRunRequestId: state.activeRunRequestId === runRequestId ? null : state.activeRunRequestId,
+        inflightToolRequestIds: [],
+        ...ensureSessionState(state, completedSessionId, latestMessages, "", "completed"),
+      }));
+      await flushAssistant("completed");
+    } catch (error) {
+      if (persistTimer) {
+        window.clearTimeout(persistTimer);
+        persistTimer = null;
+      }
+      await persistChain;
+
+      if (abortController.signal.aborted) {
+        const abortedState = resolveAbortedAssistantState(latestMessages, assistantMessage.id);
+        latestMessages = abortedState.messages;
+        if (get().activeRunRequestId === runRequestId) {
+          set((state) => {
+            if (!sessionId) {
+              return {
+                abortController: null,
+                activeRunRequestId: null,
+                inflightToolRequestIds: [],
+                planningState: derivePlanningState(latestMessages),
+                run: buildInitialRun(),
+              };
+            }
+
+            return {
+              abortController: null,
+              activeRunRequestId: null,
+              inflightToolRequestIds: [],
+              ...ensureSessionState(state, sessionId, latestMessages, "", "idle"),
+            };
+          });
+        }
+        if (sessionId && abortedState.removePlaceholder && abortedState.assistant) {
+          await persistSummary(
+            deleteChatMessage(
+              get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
+              sessionId,
+              abortedState.assistant.id,
+              buildSessionPatch(latestMessages, "idle"),
+            ),
+          );
+          return;
+        }
+
+        await flushAssistant("idle");
+        return;
+      }
+
+      if (get().activeRunRequestId !== runRequestId) {
+        return;
+      }
+
+      const systemMessage = buildSystemMessage(
+        formatProviderError(error, "Agent 执行失败，请稍后重试。", {
+          baseURL: providerConfig.baseURL,
+          model: providerConfig.model,
+        }),
+        messageMeta,
+      );
+      latestMessages = [...latestMessages, systemMessage];
+      set((state) => {
+        if (!sessionId) {
+          return {
+            abortController: null,
+            activeRunRequestId: null,
+            inflightToolRequestIds: [],
+            errorMessage: formatAgentError(error, "Agent 执行失败，请稍后重试。"),
+            planningState: derivePlanningState(latestMessages),
+            run: buildRun("failed-run", deriveSessionTitle(latestMessages), "failed", latestMessages),
+          };
+        }
+
+        return {
+          abortController: null,
+          activeRunRequestId: null,
+          inflightToolRequestIds: [],
+          ...ensureSessionState(state, sessionId, latestMessages, "", "failed"),
+        };
+      });
+      if (sessionId) {
+        await persistSummary(
+          appendChatMessage(
+            get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
+            sessionId,
+            systemMessage,
+            buildSessionPatch(latestMessages, "failed"),
+          ),
+        );
+      }
+    }
+  }
+
   return {
     ...buildInitialState(),
     closeHistory: () => set({ isHistoryOpen: false }),
@@ -424,367 +790,13 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       if (selectIsAgentRunActive(get())) {
         return;
       }
-
-      const nextInput = get().input.trim();
-      if (!nextInput) {
-        return;
+      await sendMessageInternal(null, selection);
+    },
+    coachMessage: async () => {
+      if (selectIsAgentRunActive(get())) {
+        await get().hardStopCurrentRun("coach");
       }
-
-      const abortController = new AbortController();
-      const runRequestId = buildRunRequestId();
-      const optimisticSessionId = get().activeSessionId;
-      const conversationHistory = optimisticSessionId ? get().messagesBySession[optimisticSessionId] ?? [] : [];
-      const workspaceState = useBookWorkspaceStore.getState();
-      const messageMeta = buildMessageMeta(workspaceState.rootPath, workspaceState.activeFilePath);
-      const userMessage = buildUserMessage(nextInput, messageMeta);
-      const assistantMessage = buildAssistantPlaceholderMessage(messageMeta);
-      let sessionId: string | null = optimisticSessionId;
-      let latestMessages = [...conversationHistory, userMessage, assistantMessage];
-      let persistTimer: ReturnType<typeof setTimeout> | null = null;
-      let persistChain = Promise.resolve();
-
-      const isCurrentRun = () => {
-        const state = get();
-        return state.activeRunRequestId === runRequestId && !abortController.signal.aborted;
-      };
-
-      const persistSummary = async (promise: Promise<ChatSessionSummary>) => {
-        try {
-          applyPersistedSummary(set, await promise);
-        } catch (error) {
-          set({ errorMessage: formatAgentError(error, "历史会话保存失败。") });
-        }
-      };
-
-      const flushAssistant = async (status: AgentRunStatus) => {
-        if (!sessionId) {
-          return;
-        }
-        const assistant = latestMessages[latestMessages.length - 1];
-        if (!assistant || assistant.id !== assistantMessage.id) {
-          return;
-        }
-
-        await persistSummary(
-          updateChatMessage(
-            get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
-            sessionId,
-            assistantMessage.id,
-            assistant.parts,
-            assistant.meta,
-            buildSessionPatch(latestMessages, status),
-          ),
-        );
-      };
-
-      const scheduleAssistantPersist = () => {
-        if (persistTimer) {
-          return;
-        }
-
-        persistTimer = setTimeout(() => {
-          persistTimer = null;
-          persistChain = persistChain.then(() => flushAssistant("running"));
-        }, 350);
-      };
-
-      const attachUsageToAssistant = (usage: AgentUsage) => {
-        if (!isCurrentRun() || !sessionId) {
-          return;
-        }
-
-        const currentSessionId = sessionId;
-        set((state) => {
-          if (state.activeRunRequestId !== runRequestId) {
-            return state;
-          }
-          const messages = [...(state.messagesBySession[currentSessionId] ?? [])];
-          const lastMessage = messages[messages.length - 1];
-          if (!lastMessage || lastMessage.id !== assistantMessage.id) {
-            return state;
-          }
-
-          messages[messages.length - 1] = {
-            ...lastMessage,
-            meta: {
-              ...(lastMessage.meta ?? {}),
-              usage,
-            },
-          };
-          latestMessages = messages;
-          return ensureSessionState(state, currentSessionId, messages, "", "running");
-        });
-      };
-
-      set((state) => {
-        if (!optimisticSessionId) {
-          return {
-            abortController,
-            activeRunRequestId: runRequestId,
-            inflightToolRequestIds: [],
-            errorMessage: null,
-            input: "",
-            planningState: derivePlanningState(latestMessages),
-            run: buildRun("pending-session", deriveSessionTitle(latestMessages), "running", latestMessages),
-          };
-        }
-
-        return {
-          abortController,
-          activeRunRequestId: runRequestId,
-          inflightToolRequestIds: [],
-          errorMessage: null,
-          ...ensureSessionState(state, optimisticSessionId, latestMessages, "", "running"),
-        };
-      });
-
-      if (optimisticSessionId) {
-        void setChatDraft(optimisticSessionId, "");
-      }
-
-      let providerConfig = useAgentSettingsStore.getState().config;
-
-      try {
-        sessionId = await ensureActiveSession();
-        if (!sessionId) {
-          throw new Error("创建会话失败。");
-        }
-        if (!isCurrentRun()) {
-          return;
-        }
-
-        const persistedConversationHistory = sessionId === optimisticSessionId
-          ? conversationHistory
-          : get().messagesBySession[sessionId] ?? [];
-        latestMessages = [...persistedConversationHistory, userMessage, assistantMessage];
-        const currentSessionId = sessionId;
-        set((state) => ({
-          abortController,
-          activeRunRequestId: runRequestId,
-          inflightToolRequestIds: [],
-          errorMessage: null,
-          ...ensureSessionState(state, currentSessionId, latestMessages, "", "running"),
-        }));
-        void setChatDraft(currentSessionId, "");
-
-        const currentBookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
-
-        await persistSummary(
-          appendChatMessage(currentBookId, sessionId, userMessage, buildSessionPatch(latestMessages, "running")),
-        );
-        await persistSummary(appendChatMessage(currentBookId, sessionId, assistantMessage));
-
-        await ensureAgentSettingsReady();
-        if (!isCurrentRun()) {
-          return;
-        }
-
-        providerConfig = useAgentSettingsStore.getState().config;
-        const enabledSkills = getEnabledSkills(useSkillsStore.getState());
-        const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
-        const enabledToolsMap = useAgentSettingsStore.getState().enabledTools;
-        const defaultAgentMarkdown = await ensureMainAgentMarkdown();
-        if (!isCurrentRun()) {
-          return;
-        }
-
-        const enabledToolIds = Object.entries(enabledToolsMap)
-          .filter(([, value]) => value)
-          .map(([toolId]) => toolId);
-        const manualContext = selection
-          ? await resolveManualTurnContext({
-              activeFilePath: workspaceState.activeFilePath,
-              draftContent: workspaceState.draftContent,
-              enabledAgents,
-              enabledSkills,
-              readFile: readWorkspaceTextFile,
-              selection,
-              workspaceRootPath: workspaceState.rootPath,
-            })
-          : null;
-        const projectContext = await loadProjectContext({
-          readFile: readWorkspaceTextFile,
-          readTree: readWorkspaceTree,
-          workspaceRootPath: workspaceState.rootPath,
-        });
-        if (!isCurrentRun()) {
-          return;
-        }
-
-        const planningState = derivePlanningState(persistedConversationHistory);
-        const globalTools = createGlobalToolset();
-        const workspaceTools = workspaceState.rootPath
-          ? createWorkspaceToolset({
-              onWorkspaceMutated: async () => {
-                await useBookWorkspaceStore.getState().refreshWorkspaceAfterExternalChange();
-              },
-              rootPath: workspaceState.rootPath,
-            })
-          : {};
-        const localResourceTools = createLocalResourceToolset({
-          refreshAgents: async () => {
-            await useSubAgentStore.getState().refresh();
-          },
-          refreshSkills: async () => {
-            await useSkillsStore.getState().refresh();
-          },
-        });
-
-        const stream = runAgentTurn({
-          abortSignal: abortController.signal,
-          activeFilePath: workspaceState.activeFilePath,
-          debugLabel: `chat-session:${sessionId}`,
-          workspaceRootPath: workspaceState.rootPath,
-          conversationHistory: persistedConversationHistory,
-          defaultAgentMarkdown,
-          enabledAgents,
-          enabledSkills,
-          enabledToolIds,
-          manualContext,
-          onUsage: attachUsageToAssistant,
-          planningState,
-          projectContext,
-          prompt: nextInput,
-          providerConfig,
-          workspaceTools: { ...globalTools, ...workspaceTools, ...localResourceTools },
-          onToolRequestStateChange: ({ requestId, status }) => {
-            if (!isCurrentRun() && status === "start") {
-              return;
-            }
-            trackInflightToolRequest(set, requestId, status === "start" ? "start" : "finish");
-          },
-        });
-
-        for await (const part of stream) {
-          if (!isCurrentRun()) {
-            return;
-          }
-
-          const activeSessionId = sessionId;
-          set((state) => {
-            if (state.activeRunRequestId !== runRequestId) {
-              return state;
-            }
-            const messages = [...(state.messagesBySession[activeSessionId] ?? [])];
-            const lastMessage = messages[messages.length - 1];
-            if (lastMessage?.role !== "assistant") {
-              return state;
-            }
-
-            messages[messages.length - 1] = {
-              ...lastMessage,
-              parts: mergePart(lastMessage.parts, part as AgentPart),
-            };
-            latestMessages = messages;
-            scheduleAssistantPersist();
-            return ensureSessionState(state, activeSessionId, messages, "", "running");
-          });
-        }
-
-        if (persistTimer) {
-          window.clearTimeout(persistTimer);
-          persistTimer = null;
-        }
-        await persistChain;
-        if (!isCurrentRun()) {
-          return;
-        }
-        const completedSessionId = sessionId;
-        set((state) => ({
-          abortController: null,
-          activeRunRequestId: state.activeRunRequestId === runRequestId ? null : state.activeRunRequestId,
-          inflightToolRequestIds: [],
-          ...ensureSessionState(state, completedSessionId, latestMessages, "", "completed"),
-        }));
-        await flushAssistant("completed");
-      } catch (error) {
-        if (persistTimer) {
-          window.clearTimeout(persistTimer);
-          persistTimer = null;
-        }
-        await persistChain;
-
-        if (abortController.signal.aborted) {
-          const abortedState = resolveAbortedAssistantState(latestMessages, assistantMessage.id);
-          latestMessages = abortedState.messages;
-          if (get().activeRunRequestId === runRequestId) {
-            set((state) => {
-              if (!sessionId) {
-                return {
-                  abortController: null,
-                  activeRunRequestId: null,
-                  inflightToolRequestIds: [],
-                  planningState: derivePlanningState(latestMessages),
-                  run: buildInitialRun(),
-                };
-              }
-
-              return {
-                abortController: null,
-                activeRunRequestId: null,
-                inflightToolRequestIds: [],
-                ...ensureSessionState(state, sessionId, latestMessages, "", "idle"),
-              };
-            });
-          }
-          if (sessionId && abortedState.removePlaceholder && abortedState.assistant) {
-            await persistSummary(
-              deleteChatMessage(
-                get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
-                sessionId,
-                abortedState.assistant.id,
-                buildSessionPatch(latestMessages, "idle"),
-              ),
-            );
-            return;
-          }
-
-          await flushAssistant("idle");
-          return;
-        }
-
-        if (get().activeRunRequestId !== runRequestId) {
-          return;
-        }
-
-        const systemMessage = buildSystemMessage(
-          formatProviderError(error, "Agent 执行失败，请稍后重试。", {
-            baseURL: providerConfig.baseURL,
-            model: providerConfig.model,
-          }),
-          messageMeta,
-        );
-        latestMessages = [...latestMessages, systemMessage];
-        set((state) => {
-          if (!sessionId) {
-            return {
-              abortController: null,
-              activeRunRequestId: null,
-              inflightToolRequestIds: [],
-              errorMessage: formatAgentError(error, "Agent 执行失败，请稍后重试。"),
-              planningState: derivePlanningState(latestMessages),
-              run: buildRun("failed-run", deriveSessionTitle(latestMessages), "failed", latestMessages),
-            };
-          }
-
-          return {
-            abortController: null,
-            activeRunRequestId: null,
-            inflightToolRequestIds: [],
-            ...ensureSessionState(state, sessionId, latestMessages, "", "failed"),
-          };
-        });
-        if (sessionId) {
-          await persistSummary(
-            appendChatMessage(
-              get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
-              sessionId,
-              systemMessage,
-              buildSessionPatch(latestMessages, "failed"),
-            ),
-          );
-        }
-      }
+      await sendMessageInternal(COACH_PROMPT);
     },
     setInput: (value) => {
       const sessionId = get().activeSessionId;

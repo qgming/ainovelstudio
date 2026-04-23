@@ -70,6 +70,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const run = useAgentStore((state) => state.run);
   const isRunning = useAgentStore(selectIsAgentRunActive);
   const sendMessage = useAgentStore((state) => state.sendMessage);
+  const coachMessage = useAgentStore((state) => state.coachMessage);
   const sessions = useAgentStore((state) => state.sessions);
   const setInput = useAgentStore((state) => state.setInput);
   const stopMessage = useAgentStore((state) => state.stopMessage);
@@ -184,6 +185,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       <AgentMessageList messages={run.messages} runStatus={displayRunStatus} />
       <AgentComposer
         input={input}
+        onCoach={coachMessage}
         onInputChange={setInput}
         onStop={stopMessage}
         planningState={planningState}

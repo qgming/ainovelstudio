@@ -1,18 +1,51 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
-import { Claude, Gemini, ProviderIcon, Qwen, SiliconCloud, XiaomiMiMo, Zhipu } from "@lobehub/icons";
-import { Cable, ExternalLink, Eye, EyeOff, KeyRound, LoaderCircle, PlugZap, RotateCcw, Save } from "lucide-react";
+import {
+  Claude,
+  Gemini,
+  ProviderIcon,
+  Qwen,
+  SiliconCloud,
+  XiaomiMiMo,
+  Zhipu,
+} from "@lobehub/icons";
+import {
+  Bookmark,
+  Cable,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  KeyRound,
+  LoaderCircle,
+  MoreHorizontal,
+  PlugZap,
+  RotateCcw,
+  Save,
+  Trash2,
+} from "lucide-react";
 import { ModelCatalogButton } from "./ModelCatalogButton";
 import { Toast, type ToastTone } from "../common/Toast";
 import { testAgentProviderConnection } from "../../lib/agent/modelGateway";
 import type { ProviderConnectionTestResult } from "../../lib/agent/modelGateway";
-import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
+import type {
+  AgentProviderConfig,
+  AgentProviderPreset,
+} from "../../stores/agentSettingsStore";
 import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { MODEL_PROVIDER_RECOMMENDATIONS } from "./modelProviderRecommendations";
-import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
+import {
+  SettingsHeaderResponsiveButton,
+  SettingsSectionHeader,
+} from "./SettingsSectionHeader";
 import { cn } from "../../lib/utils";
 import { useIsMobile } from "../../hooks/use-mobile";
 
@@ -20,7 +53,10 @@ type ModelProviderCardProps = {
   config: AgentProviderConfig;
   isDirty: boolean;
   isSaving?: boolean;
+  providerPresets: AgentProviderPreset[];
+  onAddProviderPreset: (preset: AgentProviderPreset) => void;
   onChange: (patch: Partial<AgentProviderConfig>) => void;
+  onDeleteProviderPreset: (id: string) => void;
   onReset: () => void;
   onSave: () => void | Promise<void>;
 };
@@ -30,6 +66,10 @@ type ToastState = {
   title: string;
   tone: ToastTone;
 };
+
+function generateId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function formatDuration(durationMs?: number) {
   if (!durationMs || durationMs < 0) {
@@ -75,6 +115,27 @@ function normalizeUrlForCompare(url: string) {
   return url.trim().replace(/\/+$/, "");
 }
 
+function extractHost(url: string) {
+  try {
+    return new URL(url.trim()).host;
+  } catch {
+    return "";
+  }
+}
+
+function deriveProviderFromUrl(url: string) {
+  const host = extractHost(url).toLowerCase();
+  if (host.includes("deepseek")) return "deepseek";
+  if (host.includes("openrouter")) return "openrouter";
+  if (host.includes("openai")) return "openai";
+  if (host.includes("anthropic")) return "anthropic";
+  if (host.includes("google") || host.includes("gemini")) return "google";
+  if (host.includes("zhipu") || host.includes("bigmodel")) return "zhipu";
+  if (host.includes("siliconflow")) return "siliconflow";
+  if (host.includes("qwen") || host.includes("dashscope")) return "qwen";
+  return "generic";
+}
+
 function renderProviderLogo(provider: string) {
   if (provider === "anthropic") {
     return <Claude.Color size={28} />;
@@ -103,7 +164,17 @@ function renderProviderLogo(provider: string) {
   return <ProviderIcon provider={provider} size={28} type="color" />;
 }
 
-export function ModelProviderCard({ config, isDirty, isSaving = false, onChange, onReset, onSave }: ModelProviderCardProps) {
+export function ModelProviderCard({
+  config,
+  isDirty,
+  isSaving = false,
+  providerPresets,
+  onAddProviderPreset,
+  onChange,
+  onDeleteProviderPreset,
+  onReset,
+  onSave,
+}: ModelProviderCardProps) {
   const isMobile = useIsMobile();
   const baseUrl = config.baseURL.trim();
   const apiKey = config.apiKey.trim();
@@ -112,7 +183,8 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
   const [isTesting, setIsTesting] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const normalizedBaseUrl = normalizeUrlForCompare(baseUrl);
-  const canTestConnection = baseUrl.length > 0 && apiKey.length > 0 && model.length > 0 && !isTesting;
+  const canTestConnection =
+    baseUrl.length > 0 && apiKey.length > 0 && model.length > 0 && !isTesting;
   const canSave = isDirty && !isSaving;
 
   useEffect(() => {
@@ -152,6 +224,75 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
     });
   }
 
+  function handleSaveCurrentAsProviderPreset() {
+    if (!baseUrl) {
+      setToast({
+        title: "保存失败",
+        description: "需要填写 Base URL",
+        tone: "error",
+      });
+      return;
+    }
+    const alreadyExists = providerPresets.some(
+      (p) => normalizeUrlForCompare(p.baseURL) === normalizedBaseUrl,
+    );
+    if (alreadyExists) {
+      setToast({
+        title: "已存在",
+        description: "该供应商已在预存供应商中",
+        tone: "success",
+      });
+      return;
+    }
+    const now = new Date().toISOString();
+    onAddProviderPreset({
+      id: generateId(),
+      name: extractHost(baseUrl) || baseUrl,
+      model,
+      provider: deriveProviderFromUrl(baseUrl),
+      baseURL: config.baseURL,
+      createdAt: now,
+      updatedAt: now,
+    });
+    setToast({
+      title: "已保存",
+      description: "当前供应商已保存到预存供应商",
+      tone: "success",
+    });
+  }
+
+  function handleApplyProviderPreset(preset: AgentProviderPreset) {
+    onChange({ baseURL: preset.baseURL });
+    void onSave();
+  }
+
+  function handleApplyRecommendation(recommendation: {
+    baseURL: string;
+    name: string;
+    provider: string;
+    websiteUrl: string;
+  }) {
+    onChange({ baseURL: recommendation.baseURL });
+    const now = new Date().toISOString();
+    const alreadyExists = providerPresets.some(
+      (p) =>
+        normalizeUrlForCompare(p.baseURL) ===
+        normalizeUrlForCompare(recommendation.baseURL),
+    );
+    if (!alreadyExists) {
+      onAddProviderPreset({
+        id: generateId(),
+        name: recommendation.name,
+        model: model || recommendation.name,
+        provider: recommendation.provider,
+        baseURL: recommendation.baseURL,
+        websiteUrl: recommendation.websiteUrl,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
       <Toast
@@ -166,6 +307,14 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
         icon={<PlugZap className="h-4 w-4" />}
         actions={
           <>
+            <SettingsHeaderResponsiveButton
+              type="button"
+              label="预存配置"
+              size={isMobile ? "icon-sm" : "sm"}
+              text="预存配置"
+              icon={<Bookmark className="h-3.5 w-3.5" />}
+              onClick={handleSaveCurrentAsProviderPreset}
+            />
             <ModelCatalogButton
               config={config}
               iconOnly={isMobile}
@@ -178,7 +327,13 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
               disabled={!canSave}
               size={isMobile ? "icon-sm" : "sm"}
               text="保存"
-              icon={isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              icon={
+                isSaving ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )
+              }
               onClick={() => void onSave()}
             />
             <SettingsHeaderResponsiveButton
@@ -187,7 +342,13 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
               disabled={!canTestConnection}
               size={isMobile ? "icon-sm" : "sm"}
               text="测试连接"
-              icon={isTesting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Cable className="h-3.5 w-3.5" />}
+              icon={
+                isTesting ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Cable className="h-3.5 w-3.5" />
+                )
+              }
               onClick={() => void handleTestConnection()}
             />
             <SettingsHeaderResponsiveButton
@@ -237,7 +398,11 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
                 onClick={() => setIsApiKeyVisible((current) => !current)}
                 className="absolute inset-y-0 right-0 my-auto mr-1 text-muted-foreground"
               >
-                {isApiKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {isApiKeyVisible ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>
@@ -251,44 +416,143 @@ export function ModelProviderCard({ config, isDirty, isSaving = false, onChange,
             />
           </div>
 
-        <div className="lg:col-span-2 -mx-3">
-          <div className="flex items-start justify-between gap-4 border-t border-border px-3 pt-3">
-            <div className="min-w-0 pr-4">
-              <p className="text-sm font-medium text-foreground">模拟 OpenCode（beta）</p>
+          <div className="lg:col-span-2 -mx-3">
+            <div className="flex items-start justify-between gap-4 border-t border-border px-3 pt-3">
+              <div className="min-w-0 pr-4">
+                <p className="text-sm font-medium text-foreground">
+                  模拟 OpenCode（beta）
+                </p>
+              </div>
+              <Switch
+                checked={Boolean(config.simulateOpencodeBeta)}
+                label="切换模拟 OpenCode（beta）"
+                onChange={(checked) =>
+                  onChange({ simulateOpencodeBeta: checked })
+                }
+              />
             </div>
-            <Switch
-              checked={Boolean(config.simulateOpencodeBeta)}
-              label="切换模拟 OpenCode（beta）"
-              onChange={(checked) => onChange({ simulateOpencodeBeta: checked })}
-            />
           </div>
-        </div>
 
+          {/* 预存供应商 */}
           <div className="lg:col-span-2 -mx-3">
             <div className="border-t border-border pt-3">
-              <div className="mb-3 border-b border-border px-3 pb-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">推荐供应商</p>
+              <div className="border-b border-border px-3 pb-3">
+                <p className="text-sm font-medium text-foreground">预存供应商</p>
+              </div>
+              {providerPresets.length === 0 ? (
+                <p className="px-3 pb-3 text-sm text-muted-foreground">
+                  暂无预存供应商，点击顶部"预存配置"添加。
+                </p>
+              ) : (
+                <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+                  {providerPresets.map((preset) => {
+                    return (
+                      <article
+                        key={preset.id}
+                        className="editor-block-tile aspect-square"
+                      >
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`使用 ${preset.name} 地址`}
+                          onClick={() => handleApplyProviderPreset(preset)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleApplyProviderPreset(preset);
+                            }
+                          }}
+                          className="editor-block-content relative h-full cursor-pointer overflow-hidden rounded-none border border-transparent transition-colors hover:bg-accent/40"
+                        >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                aria-label={`${preset.name} 更多操作`}
+                                variant="outline"
+                                size="icon-sm"
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute top-3 right-3"
+                              >
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteProviderPreset(preset.id);
+                                }}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                删除
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+
+                          <div className="flex h-full flex-col">
+                            <div className="flex min-h-[40px] items-center">
+                              {renderProviderLogo(preset.provider)}
+                            </div>
+
+                            <div className="mt-3 min-w-0">
+                              <h3 className="pr-8 text-base font-semibold tracking-[-0.03em] text-foreground">
+                                {preset.model || preset.name}
+                              </h3>
+                              <p
+                                title={preset.baseURL}
+                                className="mt-2 overflow-hidden break-all pr-8 text-xs leading-5 text-muted-foreground"
+                                style={{
+                                  display: "-webkit-box",
+                                  WebkitBoxOrient: "vertical",
+                                  WebkitLineClamp: 4,
+                                }}
+                              >
+                                {preset.baseURL}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* 推荐供应商 */}
+          <div className="lg:col-span-2 -mx-3">
+            <div className="border-t border-border pt-3">
+              <div className="border-b border-border px-3 pb-3">
+                <p className="text-sm font-medium text-foreground">推荐供应商</p>
               </div>
               <div
                 data-testid="model-provider-recommendations"
                 className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
               >
                 {MODEL_PROVIDER_RECOMMENDATIONS.map((recommendation) => {
-                  const isSelected = normalizeUrlForCompare(recommendation.baseURL) === normalizedBaseUrl;
+                  const isSelected =
+                    normalizeUrlForCompare(recommendation.baseURL) ===
+                    normalizedBaseUrl;
 
                   return (
-                    <article key={recommendation.id} className="editor-block-tile aspect-square">
+                    <article
+                      key={recommendation.id}
+                      className="editor-block-tile aspect-square"
+                    >
                       <div
                         role="button"
                         tabIndex={0}
                         aria-label={`使用 ${recommendation.name} 地址`}
-                        onClick={() => onChange({ baseURL: recommendation.baseURL })}
+                        onClick={() =>
+                          handleApplyRecommendation(recommendation)
+                        }
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            onChange({ baseURL: recommendation.baseURL });
+                            handleApplyRecommendation(recommendation);
                           }
                         }}
                         className={cn(

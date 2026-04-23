@@ -76,6 +76,9 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
   const errorMessage = useAgentSettingsStore((state) => state.errorMessage);
   const initializeAgentSettings = useAgentSettingsStore((state) => state.initialize);
   const saveConfig = useAgentSettingsStore((state) => state.saveConfig);
+  const providerPresets = useAgentSettingsStore((state) => state.providerPresets);
+  const addProviderPreset = useAgentSettingsStore((state) => state.addProviderPreset);
+  const deleteProviderPreset = useAgentSettingsStore((state) => state.deleteProviderPreset);
   const status = useAgentSettingsStore((state) => state.status);
   const refreshDefaultAgentMarkdown = useAgentSettingsStore((state) => state.refreshDefaultAgentMarkdown);
   const toggleTool = useAgentSettingsStore((state) => state.toggleTool);
@@ -169,7 +172,10 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
         config={modelDraft}
         isDirty={modelDirty}
         isSaving={isSavingModel}
+        providerPresets={providerPresets}
+        onAddProviderPreset={addProviderPreset}
         onChange={handleModelDraftChange}
+        onDeleteProviderPreset={deleteProviderPreset}
         onReset={handleResetModel}
         onSave={handleSaveModel}
       />

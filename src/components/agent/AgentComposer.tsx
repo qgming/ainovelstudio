@@ -9,6 +9,7 @@ import {
   Square,
   SquareSlash,
   X,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ type SelectableResource = {
 
 type AgentComposerProps = {
   input: string;
+  onCoach: () => Promise<void>;
   onInputChange: (value: string) => void;
   onStop: () => void;
   onSubmit: (selection: ManualTurnContextSelection) => void;
@@ -69,6 +71,7 @@ const COMPOSER_MIN_ROWS = 2;
 
 export function AgentComposer({
   input,
+  onCoach,
   onInputChange,
   onStop,
   onSubmit,
@@ -78,6 +81,7 @@ export function AgentComposer({
   runStatus,
 }: AgentComposerProps) {
   const isRunning = runStatus === "running";
+  const [isCoaching, setIsCoaching] = useState(false);
   const showPlan = hasIncompleteItems(planningState.items);
   const hasStalePlan = planningState.roundsSinceUpdate >= 3;
   const completedCount = countCompletedItems(planningState.items);
@@ -351,6 +355,21 @@ export function AgentComposer({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          <Button
+            type="button"
+            aria-label="鞭策"
+            title="鞭策 — 终止当前活动并催促 AI 回到正轨"
+            disabled={isCoaching}
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+            onClick={() => {
+              setIsCoaching(true);
+              void onCoach().finally(() => setIsCoaching(false));
+            }}
+          >
+            <Zap className="h-4 w-4" />
+          </Button>
           <div
             aria-hidden="true"
             className="h-6 w-px shrink-0 bg-border"

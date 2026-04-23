@@ -7,6 +7,7 @@ describe("AgentComposer", () => {
     render(
       <AgentComposer
         input=""
+        onCoach={vi.fn()}
         onInputChange={vi.fn()}
         onStop={vi.fn()}
         onSubmit={vi.fn()}
@@ -34,6 +35,7 @@ describe("AgentComposer", () => {
     render(
       <AgentComposer
         input=""
+        onCoach={vi.fn()}
         onInputChange={vi.fn()}
         onStop={vi.fn()}
         onSubmit={vi.fn()}
@@ -58,6 +60,7 @@ describe("AgentComposer", () => {
     render(
       <AgentComposer
         input=""
+        onCoach={vi.fn()}
         onInputChange={vi.fn()}
         onStop={vi.fn()}
         onSubmit={vi.fn()}
@@ -76,6 +79,7 @@ describe("AgentComposer", () => {
     render(
       <AgentComposer
         input=""
+        onCoach={vi.fn()}
         onInputChange={vi.fn()}
         onStop={vi.fn()}
         onSubmit={vi.fn()}
@@ -99,6 +103,7 @@ describe("AgentComposer", () => {
     render(
       <AgentComposer
         input="继续处理"
+        onCoach={vi.fn()}
         onInputChange={vi.fn()}
         onStop={vi.fn()}
         onSubmit={handleSubmit}
@@ -122,6 +127,7 @@ describe("AgentComposer", () => {
     render(
       <AgentComposer
         input=""
+        onCoach={vi.fn()}
         onInputChange={vi.fn()}
         onStop={vi.fn()}
         onSubmit={vi.fn()}
