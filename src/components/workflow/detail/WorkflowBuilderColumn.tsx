@@ -194,6 +194,11 @@ export function WorkflowBuilderColumn({
               <Button
                 type="button"
                 aria-label={stepBusy === selectedStep.id ? "节点保存中" : "保存当前节点"}
+                title={
+                  stepBusy === selectedStep.id
+                    ? "节点保存中 — 正在保存当前节点的配置和提示词"
+                    : "保存当前节点 — 保存当前节点的配置和提示词"
+                }
                 size="icon-sm"
                 variant="ghost"
                 className={cn(

@@ -393,6 +393,11 @@ export function ModelProviderCard({
               <Button
                 type="button"
                 aria-label={isApiKeyVisible ? "隐藏 API Key" : "显示 API Key"}
+                title={
+                  isApiKeyVisible
+                    ? "隐藏 API Key — 隐藏当前输入的密钥内容"
+                    : "显示 API Key — 查看当前输入的密钥内容"
+                }
                 variant="ghost"
                 size="icon-sm"
                 onClick={() => setIsApiKeyVisible((current) => !current)}
@@ -469,6 +474,7 @@ export function ModelProviderCard({
                               <Button
                                 type="button"
                                 aria-label={`${preset.name} 更多操作`}
+                                title={`${preset.name} 更多操作 — 打开该预存供应商的操作菜单`}
                                 variant="outline"
                                 size="icon-sm"
                                 onClick={(e) => e.stopPropagation()}
@@ -565,6 +571,7 @@ export function ModelProviderCard({
                         <Button
                           type="button"
                           aria-label={`查看 ${recommendation.name} 详情`}
+                          title={`查看 ${recommendation.name} 详情 — 打开该供应商的官方网站`}
                           variant="outline"
                           size="icon-sm"
                           onClick={(event) => {

@@ -11,7 +11,13 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -197,6 +203,11 @@ export function AgentComposer({
               type="button"
               aria-expanded={isPlanExpanded}
               aria-label={isPlanExpanded ? "收起待办计划" : "展开待办计划"}
+              title={
+                isPlanExpanded
+                  ? "收起待办计划 — 收起 agent 当前拆分出的执行步骤"
+                  : "展开待办计划 — 查看 agent 当前拆分出的执行步骤"
+              }
               onClick={() => setIsPlanExpanded((current) => !current)}
               variant="ghost"
               size="icon-sm"
@@ -251,7 +262,9 @@ export function AgentComposer({
                 </div>
                 {hasStalePlan ? (
                   <div className="mt-3 rounded-md border border-border bg-panel px-3 py-2 text-xs leading-5 text-muted-foreground">
-                    <span className="font-medium">{planningState.roundsSinceUpdate} 轮未更新</span>
+                    <span className="font-medium">
+                      {planningState.roundsSinceUpdate} 轮未更新
+                    </span>
                     ，连续几轮没有刷新计划，建议让 agent 同步一下最新进展。
                   </div>
                 ) : null}
@@ -275,6 +288,7 @@ export function AgentComposer({
               <Button
                 type="button"
                 aria-label={`移除 ${item.label}`}
+                title={`移除 ${item.label} — 从本次消息上下文中移除这项内容`}
                 onClick={() => handleRemoveSelected(item)}
                 variant="ghost"
                 size="icon-xs"
@@ -306,12 +320,13 @@ export function AgentComposer({
                 <Button
                   type="button"
                   aria-label="选择技能或子 Agent"
+                  title="选择技能或子 Agent — 为本次消息附加技能或委派对象"
                   disabled={isRunning}
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon"
                   className="text-muted-foreground"
                 >
-                  <SquareSlash className="h-4 w-4" />
+                  <SquareSlash className="size-5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -333,12 +348,13 @@ export function AgentComposer({
                 <Button
                   type="button"
                   aria-label="选择工作区文件"
+                  title="选择工作区文件 — 将工作区文件作为本次消息的上下文"
                   disabled={isRunning}
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon"
                   className="text-muted-foreground"
                 >
-                  <AtSign className="h-4 w-4" />
+                  <AtSign className="size-5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -361,22 +377,24 @@ export function AgentComposer({
             title="鞭策 — 终止当前活动并催促 AI 回到正轨"
             disabled={isCoaching}
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             className="text-muted-foreground"
             onClick={() => {
               setIsCoaching(true);
               void onCoach().finally(() => setIsCoaching(false));
             }}
           >
-            <Zap className="h-4 w-4" />
+            <Zap className="size-5" />
           </Button>
-          <div
-            aria-hidden="true"
-            className="h-6 w-px shrink-0 bg-border"
-          />
+          <div aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
           <Button
             type="button"
             aria-label={isRunning ? "停止输出" : "发送消息"}
+            title={
+              isRunning
+                ? "停止输出 — 终止当前输出并保留已生成内容"
+                : "发送消息 — 将当前输入发送给 agent 开始处理"
+            }
             onClick={isRunning ? onStop : handleSubmit}
             disabled={!isRunning && !input.trim()}
             variant={isRunning ? "secondary" : "default"}

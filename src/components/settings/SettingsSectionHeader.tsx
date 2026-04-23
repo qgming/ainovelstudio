@@ -83,6 +83,7 @@ export function SettingsHeaderResponsiveButton({
       size={size ?? (isMobile ? "icon-sm" : "sm")}
       variant={variant}
       aria-label={label}
+      title={label}
       className={cn("bg-transparent text-foreground", className)}
       {...props}
     >

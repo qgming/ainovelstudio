@@ -102,6 +102,11 @@ export function WorkflowRunsColumn({
                     variant="ghost"
                     className="text-muted-foreground hover:text-foreground"
                     aria-label={isPromptExpanded ? "收起输入提示词" : "展开输入提示词"}
+                    title={
+                      isPromptExpanded
+                        ? "收起输入提示词 — 收起当前步骤的长提示词内容"
+                        : "展开输入提示词 — 查看该步骤的完整输入提示词"
+                    }
                     onClick={onTogglePromptExpanded}
                   >
                     {isPromptExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}

@@ -342,7 +342,8 @@ describe("ModelProviderCard", () => {
     const presetCard = screen.getByText("gpt-4.1").closest("article");
     expect(presetCard).toHaveClass("editor-block-tile", "aspect-square");
     expect(presetCard).not.toHaveClass("bg-background");
-    expect(screen.getByRole("button", { name: "使用 OpenAI 地址" })).not.toHaveClass("bg-accent/35");
+    const presetButton = presetCard?.querySelector('[role="button"][aria-label="使用 OpenAI 地址"]');
+    expect(presetButton).not.toHaveClass("bg-accent/35");
   });
 
   it("点击推荐供应商卡片时回填 Base URL 并保存到预存供应商库", () => {

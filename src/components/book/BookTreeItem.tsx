@@ -105,6 +105,7 @@ export function BookTreeItem({
             <Button
               type="button"
               aria-label={`${node.name} 更多操作`}
+              title={`${node.name} 更多操作 — 打开这个文件或文件夹的操作菜单`}
               variant="ghost"
               size="icon-sm"
               className={cn(

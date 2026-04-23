@@ -24,6 +24,7 @@ export function DialogShell({ children, onClose, title }: DialogShellProps) {
             <Button
               type="button"
               aria-label="关闭弹窗"
+              title="关闭弹窗 — 关闭当前窗口并返回上一层"
               onClick={onClose}
               variant="ghost"
               size="icon-sm"

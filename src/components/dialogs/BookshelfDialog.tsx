@@ -34,6 +34,7 @@ export function BookshelfDialog({
           <Button
             type="button"
             aria-label="刷新书库列表"
+            title="刷新书库列表 — 重新读取 SQLite 书库中的书籍列表"
             variant="ghost"
             size="icon-sm"
             disabled={busy}

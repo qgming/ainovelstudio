@@ -75,6 +75,11 @@ export function WorkflowSettingsColumn({
             <Button
               type="button"
               aria-label={saveBusy ? "基本设置保存中" : "保存基本设置"}
+              title={
+                saveBusy
+                  ? "基本设置保存中 — 正在保存当前工作流的名称、绑定书籍和提示词"
+                  : "保存基本设置 — 保存当前工作流的名称、绑定书籍和提示词"
+              }
               size="icon-sm"
               variant="ghost"
               className={cn(
@@ -116,6 +121,11 @@ export function WorkflowSettingsColumn({
               <Button
                 type="button"
                 aria-label={draftWorkspaceBinding ? "更换绑定书籍" : "绑定书籍"}
+                title={
+                  draftWorkspaceBinding
+                    ? "更换绑定书籍 — 重新选择当前工作流绑定的书籍"
+                    : "绑定书籍 — 为当前工作流关联一本书作为上下文"
+                }
                 variant="ghost"
                 size="icon-sm"
                 className="shrink-0 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
@@ -180,6 +190,7 @@ export function WorkflowSettingsColumn({
                   <Button
                     type="button"
                     aria-label={`添加代理 ${agent.name}`}
+                    title={`添加代理 ${agent.name} — 将该代理加入当前工作流`}
                     variant="ghost"
                     size="icon-sm"
                     className="shrink-0 border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"

@@ -52,6 +52,7 @@ export function PageShell({
               <Button
                 key={label}
                 aria-label={label}
+                title={label}
                 disabled={disabled}
                 onClick={onClick}
                 size={isMobile ? "icon-sm" : "sm"}

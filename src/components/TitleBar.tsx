@@ -98,6 +98,15 @@ function WindowButton({ ariaLabel, children, danger = false, onClick }: WindowBu
     <button
       type="button"
       aria-label={ariaLabel}
+      title={
+        ariaLabel === "最小化窗口"
+          ? "最小化窗口 — 将应用收起到任务栏"
+          : ariaLabel === "最大化窗口"
+            ? "最大化窗口 — 让应用占满当前屏幕"
+            : ariaLabel === "还原窗口"
+              ? "还原窗口 — 恢复到非最大化尺寸"
+              : "关闭窗口 — 退出当前应用窗口"
+      }
       onClick={onClick}
       className={[
         "flex w-10 items-center justify-center text-muted-foreground transition-colors duration-150",

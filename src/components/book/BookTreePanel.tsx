@@ -44,6 +44,17 @@ function ToolbarButton({
     <Button
       type="button"
       aria-label={ariaLabel}
+      title={
+        ariaLabel === "刷新当前书籍"
+          ? "刷新当前书籍 — 重新读取当前书籍的文件结构"
+          : ariaLabel === "折叠全部文件夹"
+            ? "折叠全部文件夹 — 一次收起当前书籍中的全部目录"
+            : ariaLabel === "展开全部文件夹"
+              ? "展开全部文件夹 — 一次展开当前书籍中的全部目录"
+              : ariaLabel === "在书籍根目录中新建文件夹"
+                ? "在书籍根目录中新建文件夹 — 在当前书籍根目录创建新文件夹"
+                : "在书籍根目录中新建文件 — 在当前书籍根目录创建新文件"
+      }
       disabled={busy}
       onClick={onClick}
       variant="ghost"
@@ -68,6 +79,7 @@ function WorkspaceButton({
     <Button
       type="button"
       aria-label="返回首页"
+      title="返回首页 — 回到书架主页"
       disabled={busy}
       onClick={onClick}
       variant="ghost"

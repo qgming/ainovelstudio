@@ -60,6 +60,11 @@ export function BookEditorPanel({
             <Button
               type="button"
               aria-label={isMarkdownPreview ? "切换到文本编辑" : "切换到 Markdown 预览"}
+              title={
+                isMarkdownPreview
+                  ? "切换到文本编辑 — 返回原始文本编辑模式"
+                  : "切换到 Markdown 预览 — 查看当前文件的渲染效果"
+              }
               aria-pressed={isMarkdownPreview}
               disabled={busy}
               onClick={() => setIsMarkdownPreview((current) => !current)}
@@ -73,6 +78,7 @@ export function BookEditorPanel({
           <Button
             type="button"
             aria-label="复制当前内容"
+            title="复制当前内容 — 将当前文件内容复制到剪贴板"
             disabled={busy}
             onClick={() => void copyContent()}
             variant="ghost"
@@ -84,6 +90,11 @@ export function BookEditorPanel({
           <Button
             type="button"
             aria-label={busy ? "保存中" : "保存当前文件"}
+            title={
+              busy
+                ? "保存中 — 正在将修改写入书籍工作区"
+                : "保存当前文件 — 将修改写入书籍工作区"
+            }
             disabled={busy}
             onClick={onSave}
             variant="ghost"

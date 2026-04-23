@@ -244,6 +244,7 @@ export function WorkflowsPage() {
                             <Button
                               type="button"
                               aria-label={`更多操作 ${workflow.name}`}
+                              title={`更多操作 ${workflow.name} — 打开这个工作流的操作菜单`}
                               disabled={hasPendingWorkflowAction}
                               onClick={(event) => event.stopPropagation()}
                               variant="ghost"

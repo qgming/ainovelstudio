@@ -33,6 +33,15 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
         ref={ref}
         type="button"
         aria-label={ariaLabel}
+        title={
+          ariaLabel === "打开工作区上下文"
+            ? "打开工作区上下文 — 查看当前书籍、技能和子 Agent 上下文"
+            : ariaLabel === "打开历史记录"
+              ? "打开历史记录 — 查看当前书籍下的历史会话"
+              : ariaLabel === "收起历史记录"
+                ? "收起历史记录 — 收起历史会话列表"
+                : "开始新对话 — 新建一个独立的 Agent 会话"
+        }
         variant="ghost"
         size="icon-sm"
         className={cn("text-muted-foreground", className)}

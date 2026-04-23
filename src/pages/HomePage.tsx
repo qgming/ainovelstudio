@@ -254,6 +254,7 @@ export function HomePage() {
                                 <Button
                                   type="button"
                                   aria-label={`更多操作 ${book.name}`}
+                                  title={`更多操作 ${book.name} — 打开这本书的操作菜单`}
                                   disabled={hasPendingBookAction}
                                   onClick={(event) => event.stopPropagation()}
                                   variant="ghost"

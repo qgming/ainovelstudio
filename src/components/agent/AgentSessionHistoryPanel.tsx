@@ -82,6 +82,7 @@ export function AgentSessionHistoryPanel({
               <button
                 type="button"
                 aria-label={`删除会话 ${session.title}`}
+                title={`删除会话 ${session.title} — 从历史记录中移除这段对话`}
                 disabled={disabled || isActive}
                 onClick={() => onDelete(session.id)}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-[#94a3b8] transition hover:bg-[#fee2e2] hover:text-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#35191c] dark:hover:text-[#fca5a5]"
