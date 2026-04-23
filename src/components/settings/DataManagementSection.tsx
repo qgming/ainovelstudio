@@ -25,6 +25,7 @@ import { useDataManagementStore } from "../../stores/dataManagementStore";
 import { useSkillsStore } from "../../stores/skillsStore";
 import { useSubAgentStore } from "../../stores/subAgentStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
+import { BackupScopeCard } from "./BackupScopeCard";
 import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 
 type ResetTarget = "skills" | "agents" | "workflows";
@@ -164,6 +165,8 @@ function SyncCard({
           {downloading ? "下载中..." : "下载云备份"}
         </Button>
       </div>
+
+      <BackupScopeCard variant="cloud" className="mt-5" />
     </section>
   );
 }
@@ -221,7 +224,9 @@ export function DataManagementSection() {
     try {
       const archiveBytes = Array.from(new Uint8Array(await file.arrayBuffer()));
       const result = await importBackup(file.name, archiveBytes);
-      toast.success("备份已导入", { description: "应用将刷新为导入后的完整数据。" });
+      toast.success("备份已导入", {
+        description: "应用将刷新为导入后的完整数据，模型配置也会一并恢复。",
+      });
       applyAppClientStateAndReload(result.clientState);
     } catch (error) {
       toast.error("导入失败", {
@@ -249,7 +254,9 @@ export function DataManagementSection() {
       setCloudAction("download");
       const result = await downloadCloudBackup();
       setDownloadConfirmOpen(false);
-      toast.success("云备份已下载", { description: "应用将刷新为云端备份内容。" });
+      toast.success("云备份已下载", {
+        description: "应用将刷新为云端备份内容，模型配置也会一并恢复。",
+      });
       applyAppClientStateAndReload(result.clientState);
     } catch (error) {
       toast.error("下载失败", {
@@ -426,6 +433,7 @@ export function DataManagementSection() {
                 void handleImport(file);
               }}
             />
+            <BackupScopeCard variant="local" className="mt-4" />
           </section>
           <section className="px-4 py-5">
             <div className="flex flex-col gap-3">
@@ -480,7 +488,7 @@ export function DataManagementSection() {
           <AlertDialogHeader>
             <AlertDialogTitle>下载云备份</AlertDialogTitle>
             <AlertDialogDescription>
-              下载后会用云端备份覆盖当前本地数据，并在完成后刷新应用。请确认本地数据已经完成备份。
+              下载后会用云端备份覆盖当前本地数据，包括模型配置与页面偏好，并在完成后刷新应用。请确认本地数据已经完成备份。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

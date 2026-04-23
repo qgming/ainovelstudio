@@ -17,7 +17,7 @@ import {
   createWorkspaceToolset,
 } from "../agent/tools";
 import { parseWorkflowMessagePayload } from "./api";
-import { buildWorkflowDeltaMemory } from "./contextMemory";
+import { buildStepPrompt } from "./stepPrompt";
 import type {
   WorkflowDecisionResult,
   WorkflowDecisionStepDefinition,
@@ -69,97 +69,6 @@ type WorkflowCursor = {
 };
 
 type ChapterWriteMode = "new_chapter" | "rework_current_chapter";
-
-function buildStepPrompt(params: {
-  basePrompt?: string | null;
-  workflowName: string;
-  teamMember: WorkflowTeamMember;
-  step: WorkflowStepDefinition;
-  loopIndex: number;
-  attemptIndex: number;
-  previousResult?: string | null;
-  reviewResult?: WorkflowReviewResult | null;
-  incomingMessages?: Array<{ type: string; payload: WorkflowMessagePayload }>;
-  chapterWriteMode?: ChapterWriteMode;
-}) {
-  const {
-    basePrompt,
-    workflowName,
-    teamMember,
-    step,
-    loopIndex,
-    attemptIndex,
-    previousResult,
-    reviewResult,
-    incomingMessages = [],
-    chapterWriteMode,
-  } = params;
-  const deltaMemory = buildWorkflowDeltaMemory({
-    incomingMessages,
-    previousResult,
-    reviewResult,
-  });
-
-  const sections = [
-    `你正在执行工作流《${workflowName}》中的步骤。`,
-    basePrompt ? `工作流基础消息：\n${basePrompt}` : null,
-    [
-      "执行规则：",
-      "- 当前步骤处理的数据事实以已绑定书籍工作区中的文件为准。",
-      "- 开始前先使用 browse / search / read 等工具定位并读取相关文件，再继续处理。",
-      "- 如需产出或修订内容，使用工作区工具直接写回对应文件。",
-      "- 节点消息只用于传递当前轮次的结构化协作上下文，不能替代你对工作区文件的核对。",
-      "- 步骤之间的流转、修订和循环由程序控制，你只负责完成当前步骤，不要自行决定跳过、改序或结束流程。",
-    ].join("\n"),
-    `当前团队成员：${teamMember.name}`,
-    `成员职责：${teamMember.roleLabel}`,
-    teamMember.responsibilityPrompt ? `职责补充：${teamMember.responsibilityPrompt}` : null,
-    `循环次数：${loopIndex}`,
-    `当前章节尝试次数：${attemptIndex}`,
-    chapterWriteMode
-      ? chapterWriteMode === "new_chapter"
-        ? "当前写作模式：new_chapter（生成下一章，允许创建新的章节文件）。"
-        : "当前写作模式：rework_current_chapter（只修订本轮当前章节，禁止创建下一章或新的章节文件）。"
-      : null,
-    `步骤名称：${step.name}`,
-    chapterWriteMode === "rework_current_chapter"
-      ? "返工要求：必须基于最近一次审查结论和 revision_brief 修订当前章节；不要继续写下一章。"
-      : null,
-    chapterWriteMode === "new_chapter"
-      ? "写作要求：本轮目标是推进到下一章；完成当前章节正文并写回工作区。"
-      : null,
-    reviewResult?.revision_brief?.trim()
-      ? `当前章节修订摘要：${reviewResult.revision_brief}`
-      : null,
-    chapterWriteMode === "rework_current_chapter"
-      ? "硬性约束：不得新建下一章，不得把当前返工误处理成继续连载。"
-      : null,
-    step.type === "agent_task" ? `步骤提示词：${step.promptTemplate}` : null,
-    step.type === "decision"
-      ? [
-          `判断提示词：${step.promptTemplate}`,
-          "判断节点执行规则：",
-          `- 审查完成后，调用 ${WORKFLOW_DECISION_TOOL_ID} 工具提交最终结构化判定。`,
-          "- pass=true 表示通过并进入成功分支。",
-          "- pass=false 表示存在问题并进入失败分支。",
-          "- reason 必须说明这次程序分支判断的原因。",
-          "- issues 必须提交结构化问题列表，可为空数组。",
-          "- revision_brief 必须提交给章节写作节点直接执行的修订摘要，可为空字符串。",
-          "- 正文不需要再输出严格 JSON。",
-          `- 正文保持简短结论，程序分支只读取 ${WORKFLOW_DECISION_TOOL_ID} 工具结果。`,
-        ].join("\n")
-      : null,
-    deltaMemory.text
-      ? [
-          "以下是程序按预算裁剪后的 workflow delta memory。",
-          "它只保留继续当前步骤最需要的增量信息；涉及事实仍以工作区文件为准。",
-          deltaMemory.text,
-        ].join("\n")
-      : null,
-  ].filter(Boolean);
-
-  return sections.join("\n\n");
-}
 
 function getStepById(detail: WorkflowDetail, stepId: string | null) {
   if (!stepId) {
@@ -367,6 +276,14 @@ function hasRemainingLoops(maxLoops: number | null, nextLoopIndex: number) {
   return maxLoops === null || nextLoopIndex <= maxLoops;
 }
 
+export function resetRuntimeForNextLoop(runtime: WorkflowRuntimeState) {
+  runtime.attemptIndex = 1;
+  runtime.latestStepRunsByStepId.clear();
+  runtime.latestMessageByType.clear();
+  runtime.lastReviewResult = null;
+  runtime.lastDecision = null;
+}
+
 function updateRuntimeFromStepRun(runtime: WorkflowRuntimeState, stepRun: WorkflowStepRun) {
   runtime.latestStepRunsByStepId.set(stepRun.stepId, stepRun);
   runtime.lastDecision = stepRun.decision;
@@ -478,8 +395,8 @@ function inferNextStepFromCompletedRun(
         break;
       }
       runtime.loopIndex = nextLoopIndex;
-      runtime.attemptIndex = 1;
-      runtime.lastReviewResult = null;
+      resetRuntimeForNextLoop(runtime);
+      previousAgentStepRun = null;
       currentStep = getStepById(detail, step.loopTargetStepId);
     }
   }
@@ -528,7 +445,7 @@ async function executeConfiguredStep(params: {
   outputMode: "text" | "review_json";
   step: Extract<WorkflowStepDefinition, { type: "agent_task" | "decision" }>;
   runtime: WorkflowRuntimeState;
-  previousResult?: string | null;
+  previousStepRun?: WorkflowStepRun | null;
   reviewResult?: WorkflowReviewResult | null;
   chapterWriteMode?: ChapterWriteMode;
   abortSignal: AbortSignal;
@@ -539,7 +456,7 @@ async function executeConfiguredStep(params: {
     step,
     outputMode,
     runtime,
-    previousResult,
+    previousStepRun,
     reviewResult,
     chapterWriteMode,
     abortSignal,
@@ -559,9 +476,8 @@ async function executeConfiguredStep(params: {
     workflowName: detail.workflow.name,
     teamMember: member,
     step,
-    loopIndex: runtime.loopIndex,
     attemptIndex: runtime.attemptIndex,
-    previousResult,
+    previousStepRun,
     reviewResult,
     incomingMessages: getIncomingMessages(runtime),
     chapterWriteMode,
@@ -912,7 +828,7 @@ async function runWorkflowFromCursor(params: {
           chapterWriteMode,
           detail,
           outputMode: currentStep.outputMode,
-          previousResult: previousAgentStepRun?.resultText ?? null,
+          previousStepRun: previousAgentStepRun,
           reviewResult: runtime.lastReviewResult,
           run,
           runtime,
@@ -938,7 +854,7 @@ async function runWorkflowFromCursor(params: {
           abortSignal: abortController.signal,
           detail,
           outputMode: "review_json",
-          previousResult: sourceStepRun.resultText ?? null,
+          previousStepRun: sourceStepRun,
           reviewResult: runtime.lastReviewResult,
           run,
           runtime,
@@ -1015,8 +931,8 @@ async function runWorkflowFromCursor(params: {
 
         if (shouldContinue) {
           runtime.loopIndex += 1;
-          runtime.attemptIndex = 1;
-          runtime.lastReviewResult = null;
+          resetRuntimeForNextLoop(runtime);
+          previousAgentStepRun = null;
           currentStep = getStepById(detail, currentStep.loopTargetStepId);
           continue;
         }

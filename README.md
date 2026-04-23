@@ -16,7 +16,7 @@
   <a href="https://github.com/qgming/ainovelstudio">
     <img src="https://img.shields.io/github/stars/qgming/ainovelstudio?style=for-the-badge&logo=github&label=Stars" alt="GitHub Stars" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.1.9-111827?style=for-the-badge" alt="Version 0.1.9" />
+  <img src="https://img.shields.io/badge/Version-0.2.0-111827?style=for-the-badge" alt="Version 0.2.0" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 
@@ -73,7 +73,7 @@
 - 代理库：支持内置代理、ZIP 导入、自建代理模板，以及代理启停管理。
 - 工作流引擎：把书籍、代理和步骤编排成可重复运行的多节点流程，支持运行、暂停、继续、查看历史与节点执行结果。
 - 模型设置：配置任意 OpenAI-compatible 接口，内置常见供应商地址推荐与连接测试。
-- 数据管理：支持本地备份导入导出、WebDAV 云备份、重写内置技能、代理与工作流初始化数据。
+- 数据管理：支持完整备份导入导出与 WebDAV 云备份，覆盖书籍、技能、代理、工作流、模型配置、主代理 AGENTS 与数据同步设置。
 - 用量统计：记录请求数、Token 和模型维度的使用日志。
 - 工具库：按工具维度控制 Agent 会话可用能力。
 
@@ -231,5 +231,5 @@ npm run build:android
 ## 数据说明
 
 - 书籍、技能、代理、工作流和应用状态由本地数据库与资源目录共同管理。
-- 应用支持导出完整备份 ZIP，并恢复为完整客户端状态。
-- WebDAV 云备份以完整数据包为单位进行上传和下载。
+- 应用支持导出完整备份 ZIP，并恢复为完整客户端状态，包含模型配置、主代理 AGENTS、工具开关和页面偏好。
+- WebDAV 云备份以完整数据包为单位进行上传和下载，跨设备恢复时沿用同一份备份范围。

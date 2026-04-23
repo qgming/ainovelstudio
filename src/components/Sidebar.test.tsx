@@ -80,18 +80,18 @@ describe("Sidebar", () => {
       initialized: true,
       status: "available",
       updateSummary: {
-        currentVersion: "0.1.9",
-        downloadUrl: "https://example.com/ainovelstudio_0.1.9_windows_x64.exe",
+        currentVersion: "0.2.0",
+        downloadUrl: "https://example.com/ainovelstudio_0.2.1_windows_x64.exe",
         notes: "修复更新流程",
         packageKind: "exe",
         publishedAt: "2026-04-22T06:30:00Z",
-        version: "0.1.9",
+        version: "0.2.1",
       },
     });
 
     renderSidebar();
 
-    const updateButton = screen.getByRole("button", { name: "查看 0.1.9 更新" });
+    const updateButton = screen.getByRole("button", { name: "查看 0.2.1 更新" });
     const themeButton = screen.getByRole("button", { name: "主题切换" });
 
     expect(updateButton).toBeInTheDocument();

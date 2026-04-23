@@ -129,6 +129,15 @@ describe("DataManagementSection", () => {
     expect(screen.getByRole("button", { name: "下载云备份" })).toBeInTheDocument();
   });
 
+  it("展示完整备份范围并明确包含模型配置", () => {
+    render(<DataManagementSection />);
+
+    expect(screen.getAllByText("完整备份范围")).toHaveLength(2);
+    expect(screen.getAllByText("模型配置")).toHaveLength(2);
+    expect(screen.getAllByText("主代理 AGENTS.md")).toHaveLength(2);
+    expect(screen.getAllByText("WebDAV 配置")).toHaveLength(2);
+  });
+
   it("确认后会下载云备份并提示刷新", async () => {
     useDataManagementStore.setState((state) => ({
       ...state,
@@ -143,13 +152,13 @@ describe("DataManagementSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "下载云备份" }));
 
     const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText("下载后会用云端备份覆盖当前本地数据，并在完成后刷新应用。请确认本地数据已经完成备份。")).toBeInTheDocument();
+    expect(within(dialog).getByText("下载后会用云端备份覆盖当前本地数据，包括模型配置与页面偏好，并在完成后刷新应用。请确认本地数据已经完成备份。")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "覆盖并下载" }));
 
     await waitFor(() => {
       expect(downloadCloudBackupMock).toHaveBeenCalledTimes(1);
       expect(toastMock.success).toHaveBeenCalledWith("云备份已下载", {
-        description: "应用将刷新为云端备份内容。",
+        description: "应用将刷新为云端备份内容，模型配置也会一并恢复。",
       });
       expect(applyAppClientStateAndReloadMock).toHaveBeenCalledWith({ entries: {}, updatedAt: 123 });
     });

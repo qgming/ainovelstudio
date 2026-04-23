@@ -575,7 +575,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
     expect(screen.getByText("版本")).toBeInTheDocument();
-    expect(screen.getByText("0.1.9")).toBeInTheDocument();
+    expect(screen.getByText("0.2.0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");

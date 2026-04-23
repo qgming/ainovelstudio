@@ -9,7 +9,7 @@ const REVIEW_RESULT_BUDGET = 900;
 const MESSAGE_TOTAL_BUDGET = 1_100;
 const MESSAGE_ITEM_BUDGET = 320;
 
-type WorkflowMemoryMessage = {
+export type WorkflowMemoryMessage = {
   payload: WorkflowMessagePayload;
   type: string;
 };
@@ -43,6 +43,22 @@ function compactJson(value: unknown, maxChars: number) {
   } catch {
     return "";
   }
+}
+
+function formatPreviousContext(params: {
+  previousMessage?: WorkflowMemoryMessage | null;
+  previousResult?: string | null;
+}) {
+  const { previousMessage, previousResult } = params;
+  if (previousMessage) {
+    return `## 上一步交接\n- ${previousMessage.type}: ${compactJson(previousMessage.payload, PREVIOUS_RESULT_BUDGET)}`;
+  }
+
+  if (!previousResult?.trim()) {
+    return "";
+  }
+
+  return `## 上一步交接\n${truncateMiddle(previousResult, PREVIOUS_RESULT_BUDGET)}`;
 }
 
 function formatReviewResult(reviewResult: WorkflowReviewResult, maxChars: number) {
@@ -93,27 +109,67 @@ function fitSection(remainingBudget: number, content: string) {
   return truncateMiddle(content, remainingBudget);
 }
 
+function serializeMessage(message: WorkflowMemoryMessage) {
+  try {
+    return `${message.type}:${JSON.stringify(message.payload)}`;
+  } catch {
+    return `${message.type}:__unserializable__`;
+  }
+}
+
+function dedupeIncomingMessages(params: {
+  incomingMessages: WorkflowMemoryMessage[];
+  previousMessage?: WorkflowMemoryMessage | null;
+  reviewResult?: WorkflowReviewResult | null;
+}) {
+  const { incomingMessages, previousMessage, reviewResult } = params;
+  const previousSignature = previousMessage ? serializeMessage(previousMessage) : null;
+  const seen = new Set<string>();
+
+  return incomingMessages.filter((message) => {
+    if (reviewResult && (message.type === "review_result" || message.type === "revision_brief")) {
+      return false;
+    }
+
+    const signature = serializeMessage(message);
+    if (previousSignature && signature === previousSignature) {
+      return false;
+    }
+    if (seen.has(signature)) {
+      return false;
+    }
+
+    seen.add(signature);
+    return true;
+  });
+}
+
 export function buildWorkflowDeltaMemory(params: {
   incomingMessages?: WorkflowMemoryMessage[];
   maxChars?: number;
+  previousMessage?: WorkflowMemoryMessage | null;
   previousResult?: string | null;
   reviewResult?: WorkflowReviewResult | null;
 }) {
   const {
     incomingMessages = [],
     maxChars = DEFAULT_WORKFLOW_CONTEXT_BUDGET,
+    previousMessage,
     previousResult,
     reviewResult,
   } = params;
 
   const sections: string[] = [];
   let remainingBudget = Math.max(maxChars, 600);
+  const filteredMessages = dedupeIncomingMessages({
+    incomingMessages,
+    previousMessage,
+    reviewResult,
+  });
 
   const previousBlock = fitSection(
     Math.min(remainingBudget, PREVIOUS_RESULT_BUDGET),
-    previousResult?.trim()
-      ? `## 上一步增量记忆\n${truncateMiddle(previousResult, PREVIOUS_RESULT_BUDGET)}`
-      : "",
+    formatPreviousContext({ previousMessage, previousResult }),
   );
   if (previousBlock) {
     sections.push(previousBlock);
@@ -131,7 +187,7 @@ export function buildWorkflowDeltaMemory(params: {
     remainingBudget -= reviewBlock.length;
   }
 
-  const structuredMessages = formatIncomingMessages(prioritizeMessages(incomingMessages));
+  const structuredMessages = formatIncomingMessages(prioritizeMessages(filteredMessages));
   const messageBlock = structuredMessages
     ? fitSection(
         Math.min(remainingBudget, MESSAGE_TOTAL_BUDGET),

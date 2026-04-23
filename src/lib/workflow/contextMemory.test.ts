@@ -31,7 +31,7 @@ describe("workflow context memory", () => {
     });
 
     expect(memory.usedChars).toBeLessThanOrEqual(3200);
-    expect(memory.text).toContain("## 上一步增量记忆");
+    expect(memory.text).toContain("## 上一步交接");
     expect(memory.text).toContain("## 返修与审查增量");
     expect(memory.text).toContain("## 结构化协作增量");
     expect(memory.text).toContain("revision_brief");
@@ -52,5 +52,30 @@ describe("workflow context memory", () => {
     expect(revisionIndex).toBeGreaterThanOrEqual(0);
     expect(miscIndex).toBeGreaterThanOrEqual(0);
     expect(revisionIndex).toBeLessThan(miscIndex);
+  });
+
+  it("有 reviewResult 和上一步结构化交接时会过滤重复消息", () => {
+    const memory = buildWorkflowDeltaMemory({
+      incomingMessages: [
+        { type: "review_result", payload: { pass: false, issues: [{ type: "hook" }] } },
+        { type: "revision_brief", payload: { revision_brief: "补强章末钩子" } },
+        { type: "scene_plan", payload: { beats: ["冲突升级"] } },
+      ],
+      previousMessage: {
+        type: "scene_plan",
+        payload: { beats: ["冲突升级"] },
+      },
+      reviewResult: {
+        pass: false,
+        issues: [{ message: "章末钩子弱", severity: "high", type: "hook" }],
+        revision_brief: "补强章末钩子",
+      },
+    });
+
+    expect(memory.text).toContain("## 上一步交接");
+    expect(memory.text).toContain("scene_plan");
+    expect(memory.text).not.toContain("## 结构化协作增量");
+    expect(memory.text).not.toContain("- review_result:");
+    expect(memory.text.match(/revision_brief/g)?.length ?? 0).toBe(1);
   });
 });
