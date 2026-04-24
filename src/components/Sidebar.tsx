@@ -1,4 +1,4 @@
-import { Download, FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
+import { Download, Feather, FileText, Settings, Sun, Moon, Sparkles, Users, GitBranch, type LucideIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { NavLink, useLocation, useMatch, useResolvedPath } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ const DESKTOP_SIDEBAR_ICON_CLASS = "size-5";
 const primaryItems: NavItem[] = [
   { to: "/", label: "首页", Icon: FileText, end: true },
   { to: "/workflows", label: "工作流", Icon: GitBranch },
+  { to: "/expansions", label: "扩写", Icon: Feather },
   { to: "/skills", label: "技能", Icon: Sparkles },
   { to: "/agents", label: "代理", Icon: Users },
 ];
@@ -112,7 +113,9 @@ export function Sidebar() {
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const hasAvailableUpdate = status === "available" && updateSummary;
   const shouldHideMobileNav =
-    location.pathname.startsWith("/books/") || location.pathname.startsWith("/workflows/");
+    location.pathname.startsWith("/books/") ||
+    location.pathname.startsWith("/workflows/") ||
+    /^\/expansions\/[^/]+/.test(location.pathname);
 
   if (isMobile && shouldHideMobileNav) {
     return null;

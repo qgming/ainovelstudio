@@ -20,6 +20,12 @@ const AgentsPage = lazy(() =>
 const BookWorkspacePage = lazy(() =>
   import("./pages/BookWorkspacePage").then((module) => ({ default: module.BookWorkspacePage })),
 );
+const ExpansionsPage = lazy(() =>
+  import("./pages/ExpansionsPage").then((module) => ({ default: module.ExpansionsPage })),
+);
+const ExpansionDetailPage = lazy(() =>
+  import("./pages/ExpansionDetailPage").then((module) => ({ default: module.ExpansionDetailPage })),
+);
 const SettingPage = lazy(() =>
   import("./pages/SettingPage").then((module) => ({ default: module.SettingPage })),
 );
@@ -104,6 +110,8 @@ function AppShell() {
                 <Route path="/agents/:agentId" element={<AgentDetailPage />} />
                 <Route path="/workflows" element={<WorkflowsPage />} />
                 <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
+                <Route path="/expansions" element={<ExpansionsPage />} />
+                <Route path="/expansions/:workspaceId" element={<ExpansionDetailPage />} />
                 <Route path="/setting" element={<SettingPage />} />
                 <Route path="/setting/:sectionKey" element={<SettingPage />} />
               </Routes>

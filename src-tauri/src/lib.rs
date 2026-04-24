@@ -10,7 +10,6 @@ mod skills;
 mod usage;
 mod workflows;
 mod workspace;
-mod workspace_db;
 
 use crate::app_control::terminate_application;
 use std::{collections::HashSet, sync::Mutex};
@@ -168,6 +167,17 @@ pub fn run() {
             workspace::rename_workspace_entry,
             workspace::move_workspace_entry,
             workspace::delete_workspace_entry,
+            workspace::expansion::list_expansion_workspaces,
+            workspace::expansion::create_expansion_workspace,
+            workspace::expansion::delete_expansion_workspace,
+            workspace::expansion::get_expansion_workspace_detail,
+            workspace::expansion::read_expansion_entry,
+            workspace::expansion::write_expansion_entry,
+            workspace::expansion::create_expansion_entry,
+            workspace::expansion::delete_expansion_entry,
+            workspace::expansion::rename_expansion_entry,
+            workspace::expansion::export_expansion_zip,
+            workspace::expansion::import_expansion_zip,
             skills::scan_installed_skills,
             skills::initialize_builtin_skills,
             skills::reset_builtin_skills,
