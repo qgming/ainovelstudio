@@ -22,18 +22,22 @@ type ExpansionSemanticToolsetInput = {
 
 type ChapterDraftInput = {
   content?: string;
-  linkedSettingIds?: string[];
   name: string;
-  notes?: string;
   outline?: string;
   volumeId?: string;
 };
 
 type SettingDraftInput = {
+  category?: string;
   content?: string;
-  linkedChapterIds?: string[];
   name: string;
-  notes?: string;
+};
+
+type ChapterFieldUpdate = {
+  field: "content" | "outline";
+  mode?: "append" | "replace";
+  separator?: string;
+  value: string;
 };
 
 function normalizeDraftName(name: string) {
@@ -46,11 +50,16 @@ function normalizeDraftName(name: string) {
 }
 
 function getEntryId(path: string) {
-  return path.split("-")[0] ?? "";
+  const baseName = path.includes("/") ? (path.split("/").at(-1) ?? path) : path;
+  return baseName.split("-")[0] ?? "";
 }
 
 function getChapterVolumeId(path: string) {
   return path.includes("/") ? path.split("/")[0] ?? "001" : "001";
+}
+
+function getSettingCategory(path: string) {
+  return path.includes("/") ? path.split("/")[0] ?? "其他" : "其他";
 }
 
 function normalizeChapterDraft(draft: ChapterDraftInput, fallbackId: string): ChapterJson {
@@ -61,15 +70,15 @@ function normalizeChapterDraft(draft: ChapterDraftInput, fallbackId: string): Ch
     name: normalizedName,
     outline: draft.outline ?? "",
     content: draft.content ?? "",
-    notes: draft.notes ?? "",
-    linkedSettingIds: draft.linkedSettingIds ?? [],
   };
 }
 
 function mergeChapter(current: ChapterJson, patch: Partial<ChapterJson>) {
   return {
     ...current,
-    ...patch,
+    ...Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined),
+    ),
   };
 }
 
@@ -80,21 +89,77 @@ function normalizeSettingDraft(draft: SettingDraftInput, fallbackId: string): Se
     ...setting,
     name: normalizedName,
     content: draft.content ?? "",
-    notes: draft.notes ?? "",
-    linkedChapterIds: draft.linkedChapterIds ?? [],
   };
-}
-
-function mergeUniqueStrings(current: string[], next?: string[]) {
-  return Array.from(new Set([...(current ?? []), ...(next ?? [])].filter(Boolean)));
 }
 
 function mergeSetting(current: SettingJson, patch: Partial<SettingJson>) {
   return {
     ...current,
-    ...patch,
-    linkedChapterIds: mergeUniqueStrings(current.linkedChapterIds, patch.linkedChapterIds),
+    ...Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined),
+    ),
   };
+}
+
+function normalizeSettingPatch(draft: SettingDraftInput): Partial<SettingJson> {
+  return {
+    content: typeof draft.content === "string" ? draft.content : undefined,
+    name: normalizeDraftName(draft.name),
+  };
+}
+
+function applyMarkdownFieldUpdate(currentValue: string, update: ChapterFieldUpdate) {
+  if (update.mode === "append") {
+    if (!currentValue) {
+      return update.value;
+    }
+    const separator = typeof update.separator === "string" ? update.separator : "\n\n";
+    return `${currentValue}${separator}${update.value}`;
+  }
+  return update.value;
+}
+
+function normalizeChapterFieldUpdates(input: Record<string, unknown>) {
+  const updates: ChapterFieldUpdate[] = [];
+  if (Array.isArray(input.updates)) {
+    for (const [index, item] of input.updates.entries()) {
+      if (!item || typeof item !== "object") {
+        throw new Error(`updates[${index}] 必须是对象。`);
+      }
+      const record = item as Record<string, unknown>;
+      const field = record.field === "outline" ? "outline" : "content";
+      const value = ensureString(record.value, `updates[${index}].value`);
+      const mode = record.mode === "append" ? "append" : "replace";
+      updates.push({
+        field,
+        mode,
+        separator: typeof record.separator === "string" ? record.separator : undefined,
+        value,
+      });
+    }
+  }
+
+  if (typeof input.content === "string" && input.content.trim()) {
+    updates.push({
+      field: input.field === "outline" ? "outline" : "content",
+      mode: input.mode === "append" ? "append" : "replace",
+      separator: typeof input.separator === "string" ? input.separator : undefined,
+      value: ensureString(input.content, "content"),
+    });
+  }
+
+  if (typeof input.outline === "string" && input.outline.trim()) {
+    updates.push({
+      field: "outline",
+      mode: "replace",
+      value: ensureString(input.outline, "outline"),
+    });
+  }
+
+  if (updates.length === 0) {
+    throw new Error("至少需要提供 content、outline 或 updates。");
+  }
+  return updates;
 }
 
 function inferOutlineEntries(content: string) {
@@ -148,11 +213,15 @@ async function ensureChapterEntry(
 async function ensureSettingEntry(workspaceId: string, draft: SettingDraftInput) {
   const detail = await getExpansionWorkspaceDetail(workspaceId);
   const normalizedName = normalizeDraftName(draft.name);
-  const existing = detail.settingEntries.find((entry) => entry.name === normalizedName);
+  const targetCategory =
+    typeof draft.category === "string" && draft.category.trim() ? draft.category.trim() : "其他";
+  const existing = detail.settingEntries.find(
+    (entry) => entry.name === normalizedName && getSettingCategory(entry.path) === targetCategory,
+  );
   if (existing) {
     return existing;
   }
-  return createExpansionEntry(workspaceId, "settings", normalizedName);
+  return createExpansionEntry(workspaceId, "settings", normalizedName, targetCategory);
 }
 
 async function listChapterDocs(workspaceId: string) {
@@ -167,11 +236,6 @@ async function listChapterDocs(workspaceId: string) {
       ),
     })),
   );
-}
-
-async function listSettingEntries(workspaceId: string) {
-  const detail = await getExpansionWorkspaceDetail(workspaceId);
-  return detail.settingEntries;
 }
 
 export function createExpansionSemanticToolset({
@@ -190,10 +254,8 @@ export function createExpansionSemanticToolset({
           ? (input.chapters as ChapterDraftInput[])
           : inferOutlineEntries(await readProjectOutline(workspaceId)).map<ChapterDraftInput>((name) => ({
               name,
-              outline: `${name}的章节细纲待完善。`,
+              outline: `## 情节点\n\n- ${name}的章节细纲待完善。`,
               content: "",
-              notes: "",
-              linkedSettingIds: [],
             }));
 
         const createdPaths: string[] = [];
@@ -219,7 +281,7 @@ export function createExpansionSemanticToolset({
       },
     },
     expansion_chapter_write_content: {
-      description: "回写章节正文与关联设定。",
+      description: "回写章节正文。",
       execute: async (input) => {
         const chapterRef = ensureString(input.chapterId ?? input.chapterPath, "chapterId");
         const detail = await getExpansionWorkspaceDetail(workspaceId);
@@ -235,18 +297,18 @@ export function createExpansionSemanticToolset({
           entry.entryId ?? "",
           entry.name,
         );
-        const next = mergeChapter(current, {
-          content: ensureString(input.content, "content"),
-          linkedSettingIds: Array.isArray(input.linkedSettingIds)
-            ? (input.linkedSettingIds as string[])
-            : undefined,
-          notes: typeof input.notes === "string" ? input.notes : undefined,
-          outline: typeof input.outline === "string" ? input.outline : undefined,
-        });
+        const updates = normalizeChapterFieldUpdates(input);
+        const next = updates.reduce((chapter, update) => {
+          const currentValue = update.field === "outline" ? chapter.outline : chapter.content;
+          return mergeChapter(chapter, {
+            [update.field]: applyMarkdownFieldUpdate(currentValue, update),
+          } as Partial<ChapterJson>);
+        }, current);
         await writeExpansionEntry(workspaceId, "chapters", entry.path, serializeJson(next));
         await onWorkspaceMutated?.();
         return ok(`已写入章节 ${entry.path}。`, {
           chapterPath: entry.path,
+          updatedFields: Array.from(new Set(updates.map((item) => item.field))),
         });
       },
     },
@@ -273,7 +335,7 @@ export function createExpansionSemanticToolset({
       },
     },
     expansion_setting_update_from_chapter: {
-      description: "根据章节推进结果更新设定。",
+      description: "根据章节推进结果更新设定内容。",
       execute: async (input) => {
         const updates = Array.isArray(input.updates)
           ? (input.updates as Array<SettingDraftInput & { id?: string; path?: string }>)
@@ -289,9 +351,21 @@ export function createExpansionSemanticToolset({
             (patch.id
               ? detail.settingEntries.find((entry) => getEntryId(entry.path) === patch.id)
               : null) ??
-            detail.settingEntries.find((entry) => entry.name === patch.name);
+            detail.settingEntries.find(
+              (entry) =>
+                entry.name === patch.name &&
+                getSettingCategory(entry.path) ===
+                  (typeof patch.category === "string" && patch.category.trim() ? patch.category.trim() : "其他"),
+            );
 
-          const entry = matched ?? (await createExpansionEntry(workspaceId, "settings", patch.name));
+          const entry =
+            matched ??
+            (await createExpansionEntry(
+              workspaceId,
+              "settings",
+              patch.name,
+              typeof patch.category === "string" && patch.category.trim() ? patch.category.trim() : "其他",
+            ));
           const current = matched
             ? parseSettingJson(
                 await readExpansionEntry(workspaceId, "settings", entry.path),
@@ -299,7 +373,7 @@ export function createExpansionSemanticToolset({
                 entry.name,
               )
             : createDefaultSetting(getEntryId(entry.path), patch.name);
-          const next = mergeSetting(current, normalizeSettingDraft(patch, current.id));
+          const next = mergeSetting(current, normalizeSettingPatch(patch));
           await writeExpansionEntry(workspaceId, "settings", entry.path, serializeJson(next));
           writtenPaths.push(entry.path);
         }
@@ -309,11 +383,9 @@ export function createExpansionSemanticToolset({
       },
     },
     expansion_continuity_scan: {
-      description: "扫描章节和设定之间的关联缺失。",
+      description: "扫描章节编号冲突。",
       execute: async () => {
         const chapters = await listChapterDocs(workspaceId);
-        const settingEntries = await listSettingEntries(workspaceId);
-        const settingIds = new Set(settingEntries.map((entry) => entry.entryId ?? getEntryId(entry.path)));
         const issues: Array<{ message: string; severity: "low" | "medium" | "high"; type: string }> = [];
 
         const seenIds = new Map<string, string>();
@@ -326,16 +398,6 @@ export function createExpansionSemanticToolset({
             });
           } else {
             seenIds.set(chapter.id, entry.path);
-          }
-
-          for (const settingId of chapter.linkedSettingIds) {
-            if (!settingIds.has(settingId)) {
-              issues.push({
-                type: "setting_reference",
-                severity: "medium",
-                message: `章节 ${entry.path} 引用了不存在的设定 ${settingId}。`,
-              });
-            }
           }
         }
 

@@ -24,6 +24,8 @@ type CommandResult<T> = Result<T, String>;
 
 const INVALID_NAME_CHARS: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
 const SECTIONS: [&str; 3] = ["project", "settings", "chapters"];
+const DEFAULT_SETTING_CATEGORIES: [&str; 6] = ["人物", "势力", "地点", "世界观", "道具", "其他"];
+const DEFAULT_SETTING_CATEGORY: &str = "其他";
 const MAX_ARCHIVE_ENTRIES: usize = 5_000;
 const MAX_ARCHIVE_FILE_SIZE: u64 = 10 * 1024 * 1024;
 const MAX_ARCHIVE_TOTAL_SIZE: u64 = 256 * 1024 * 1024;
@@ -142,7 +144,7 @@ pub(crate) fn run_expansion_migrations(connection: &Connection) -> CommandResult
 
 fn create_agents_template(book_name: &str) -> String {
     format!(
-        "# {book_name} · 扩写项目 AGENTS\n\n本项目面向**扩写模式**：AI 读取大纲/细纲/正文之间的链路，逐级自动生成。\n\n## 整体要求\n- 题材：待补充\n- 目标篇幅：待补充\n- 叙事视角：待补充\n- 写作风格：待补充\n- 禁写约束：待补充\n\n## AI 协作约定\n1. 读取本文件和 outline.md 获取全局约束。\n2. 写细纲前先读取本章关联的设定 JSON。\n3. 写正文前先读取本章细纲。\n4. 所有生成内容回写对应的 JSON 字段，不直接修改编号与名称。\n"
+        "# {book_name} · 扩写项目 AGENTS\n\n本项目面向**扩写模式**：AI 读取大纲/细纲/正文之间的链路，逐级自动生成。\n\n## 整体要求\n- 题材：待补充\n- 目标篇幅：待补充\n- 叙事视角：待补充\n- 写作风格：待补充\n- 禁写约束：待补充\n\n## AI 协作约定\n1. 读取本文件和 outline.md 获取全局约束。\n2. 写细纲前先读取本章关联的设定 JSON。\n3. 写正文前先读取本章细纲。\n4. settings.content、chapters.outline、chapters.content 都使用 Markdown 文本。\n5. 所有生成内容回写对应的 JSON 字段，不直接修改编号与名称，也不要把 Markdown 内容包在代码块里。\n"
     )
 }
 
@@ -156,11 +158,21 @@ fn create_chapter_meta_template() -> String {
     "{\n  \"volumes\": []\n}\n".to_string()
 }
 
+fn create_setting_meta_template() -> String {
+    let categories = DEFAULT_SETTING_CATEGORIES
+        .iter()
+        .map(|item| format!("    \"{item}\""))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    format!("{{\n  \"categories\": [\n{categories}\n  ]\n}}\n")
+}
+
 fn build_project_template(book_name: &str) -> Vec<(&'static str, String)> {
     vec![
         ("AGENTS.md", create_agents_template(book_name)),
         ("outline.md", create_outline_template(book_name)),
         ("chapters.meta.json", create_chapter_meta_template()),
+        ("settings.meta.json", create_setting_meta_template()),
     ]
 }
 
@@ -231,6 +243,27 @@ fn list_entries(
         .map_err(error_to_string)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(error_to_string)?;
+    if section == "settings" {
+        rows.sort_by(|left, right| {
+            let left_category = get_setting_category_from_path(&left.path);
+            let right_category = get_setting_category_from_path(&right.path);
+            let left_id = left
+                .entry_id
+                .as_deref()
+                .and_then(parse_numeric_id)
+                .unwrap_or(u32::MAX);
+            let right_id = right
+                .entry_id
+                .as_deref()
+                .and_then(parse_numeric_id)
+                .unwrap_or(u32::MAX);
+            left_category
+                .cmp(&right_category)
+                .then_with(|| left_id.cmp(&right_id))
+                .then_with(|| left.name.cmp(&right.name))
+                .then_with(|| left.path.cmp(&right.path))
+        });
+    }
     if section == "chapters" {
         rows.sort_by(|left, right| {
             let left_id = left
@@ -396,13 +429,16 @@ fn write_entry_content(
             )
             .map_err(error_to_string)?,
     };
-    if affected == 0 && section == "project" && path == "chapters.meta.json" {
+    if affected == 0
+        && section == "project"
+        && (path == "chapters.meta.json" || path == "settings.meta.json")
+    {
         insert_entry(
             transaction,
             workspace_id,
             section,
             path,
-            name_override.unwrap_or("chapters.meta.json"),
+            name_override.unwrap_or(path),
             content,
             timestamp,
         )?;
@@ -457,6 +493,25 @@ fn parse_numeric_id(value: &str) -> Option<u32> {
     })
 }
 
+fn get_setting_category_from_path(path: &str) -> String {
+    path.split_once('/')
+        .map(|(category, _)| category.trim().to_string())
+        .filter(|category| !category.is_empty())
+        .unwrap_or_else(|| DEFAULT_SETTING_CATEGORY.to_string())
+}
+
+fn normalize_setting_category(value: &str) -> CommandResult<String> {
+    let validated = validate_name(value)?;
+    if DEFAULT_SETTING_CATEGORIES
+        .iter()
+        .any(|item| *item == validated.as_str())
+    {
+        Ok(validated)
+    } else {
+        Err("设定分类不受支持。".into())
+    }
+}
+
 fn extract_json_string_field(content: &[u8], field: &str) -> Option<String> {
     let value = serde_json::from_slice::<Value>(content).ok()?;
     let text = value.get(field)?.as_str()?.trim();
@@ -471,7 +526,8 @@ fn extract_entry_id(section: &str, path: &str, content: &[u8]) -> Option<String>
         .filter(|value| value.chars().all(|character| character.is_ascii_digit()))
         .or_else(|| {
             if section == "settings" {
-                let head: String = path.chars().take_while(|c| c.is_ascii_digit()).collect();
+                let file_name = path.rsplit('/').next().unwrap_or(path);
+                let head: String = file_name.chars().take_while(|c| c.is_ascii_digit()).collect();
                 if head.is_empty() {
                     None
                 } else {
@@ -494,18 +550,22 @@ fn rewrite_json_name_field(content: &[u8], next_name: &str) -> Option<Vec<u8>> {
 
 fn default_setting_template(id: &str, name: &str) -> String {
     format!(
-        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"content\": \"\",\n  \"notes\": \"\",\n  \"linkedChapterIds\": []\n}}\n"
+        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"content\": \"\"\n}}\n"
     )
 }
 
 fn default_chapter_template(id: &str, name: &str) -> String {
     format!(
-        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"outline\": \"\",\n  \"content\": \"\",\n  \"notes\": \"\",\n  \"linkedSettingIds\": []\n}}\n"
+        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"outline\": \"\",\n  \"content\": \"\"\n}}\n"
     )
 }
 
-fn build_setting_entry_path(numeric_id: &str, name: &str) -> String {
-    format!("{numeric_id}-{name}")
+fn build_setting_entry_path(parent_path: Option<&str>, numeric_id: &str, name: &str) -> String {
+    let category = parent_path
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_SETTING_CATEGORY);
+    format!("{category}/{numeric_id}-{name}")
 }
 
 fn build_chapter_entry_path(parent_path: Option<&str>, name: &str) -> String {
@@ -640,6 +700,14 @@ pub fn create_expansion_entry(
         return Err("project 分区的条目为固定模板，不能新建。".into());
     }
     let validated_name = validate_name(&name)?;
+    let setting_parent = if section == "settings" {
+        parentPath
+            .as_deref()
+            .map(normalize_setting_category)
+            .transpose()?
+    } else {
+        None
+    };
     let chapter_parent = if section == "chapters" {
         parentPath
             .map(|value| value.trim().to_string())
@@ -660,7 +728,7 @@ pub fn create_expansion_entry(
         let _ = load_workspace_by_id(transaction, &workspaceId)?;
         let numeric_id = allocate_next_numeric_id(transaction, &workspaceId, &section)?;
         let path = if section == "settings" {
-            build_setting_entry_path(&numeric_id, &validated_name)
+            build_setting_entry_path(setting_parent.as_deref(), &numeric_id, &validated_name)
         } else {
             build_chapter_entry_path(chapter_parent.as_deref(), &validated_name)
         };
@@ -740,7 +808,8 @@ pub fn rename_expansion_entry(
             let numeric_id = entry_id
                 .clone()
                 .ok_or_else(|| "路径格式异常，无法解析编号。".to_string())?;
-            build_setting_entry_path(&numeric_id, &validated)
+            let parent = path.split_once('/').map(|(prefix, _)| prefix.to_string());
+            build_setting_entry_path(parent.as_deref(), &numeric_id, &validated)
         } else {
             let parent = path.rsplit_once('/').map(|(prefix, _)| prefix.to_string());
             build_chapter_entry_path(parent.as_deref(), &validated)
@@ -835,6 +904,37 @@ fn collect_volume_directories(all_entries: &[(String, String, Vec<u8>)]) -> Vec<
     result
 }
 
+fn collect_setting_directories(all_entries: &[(String, String, Vec<u8>)]) -> Vec<String> {
+    let mut categories = HashSet::<String>::new();
+    for (section, path, content) in all_entries {
+        if section == "settings" {
+            if let Some((category, _)) = path.split_once('/') {
+                if !category.trim().is_empty() {
+                    categories.insert(category.trim().to_string());
+                }
+            }
+            continue;
+        }
+        if section == "project" && path == "settings.meta.json" {
+            if let Ok(value) = serde_json::from_slice::<Value>(content) {
+                if let Some(items) = value.get("categories").and_then(|categories| categories.as_array()) {
+                    for item in items {
+                        if let Some(category) = item.as_str() {
+                            let trimmed = category.trim();
+                            if !trimmed.is_empty() {
+                                categories.insert(trimmed.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut result = categories.into_iter().collect::<Vec<_>>();
+    result.sort();
+    result
+}
+
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn export_expansion_zip(
@@ -876,6 +976,11 @@ pub async fn export_expansion_zip(
         for volume_id in collect_volume_directories(&all_entries) {
             archive
                 .add_directory(format!("{}/chapters/{}/", record.name, volume_id), options)
+                .map_err(error_to_string)?;
+        }
+        for category in collect_setting_directories(&all_entries) {
+            archive
+                .add_directory(format!("{}/settings/{}/", record.name, category), options)
                 .map_err(error_to_string)?;
         }
         for (section, path, content) in all_entries {
@@ -1031,6 +1136,7 @@ pub fn import_expansion_zip(
                 if file_name != "AGENTS.md"
                     && file_name != "outline.md"
                     && file_name != "chapters.meta.json"
+                    && file_name != "settings.meta.json"
                 {
                     continue;
                 }

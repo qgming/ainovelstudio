@@ -9,7 +9,8 @@ export type JsonAction =
   | "history_append"
   | "merge"
   | "patch"
-  | "set";
+  | "set"
+  | "text_append";
 
 export type JsonPatchOperation = {
   from?: string;
@@ -30,7 +31,8 @@ export function normalizeJsonAction(value: unknown): JsonAction {
     value === "history_append" ||
     value === "merge" ||
     value === "patch" ||
-    value === "set"
+    value === "set" ||
+    value === "text_append"
   ) {
     return value;
   }
@@ -273,6 +275,31 @@ export function appendJsonValueAtPointer(
 
   target.push(cloneJsonValue(value));
   return nextRoot;
+}
+
+export function appendJsonTextAtPointer(
+  root: unknown,
+  segments: string[],
+  value: unknown,
+  options?: {
+    separator?: string;
+  },
+) {
+  if (typeof value !== "string") {
+    throw new Error("json.text_append 需要 string 类型的 value。");
+  }
+
+  const separator = typeof options?.separator === "string" ? options.separator : "";
+  const currentValue = readOptionalJsonValue(root, segments);
+  if (currentValue === undefined) {
+    return setJsonValueAtPointer(root, segments, value);
+  }
+  if (typeof currentValue !== "string") {
+    throw new Error("json.text_append 目标节点必须是字符串。");
+  }
+
+  const nextValue = currentValue ? `${currentValue}${separator}${value}` : value;
+  return setJsonValueAtPointer(root, segments, nextValue);
 }
 
 export function appendJsonHistoryAtPointer(

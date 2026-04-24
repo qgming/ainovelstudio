@@ -22,7 +22,7 @@ const DESKTOP_SIDEBAR_ICON_CLASS = "size-5";
 const primaryItems: NavItem[] = [
   { to: "/", label: "首页", Icon: FileText, end: true },
   { to: "/workflows", label: "工作流", Icon: GitBranch },
-  { to: "/expansions", label: "扩写", Icon: Feather },
+  { to: "/expansions", label: "创作台", Icon: Feather },
   { to: "/skills", label: "技能", Icon: Sparkles },
   { to: "/agents", label: "代理", Icon: Users },
 ];

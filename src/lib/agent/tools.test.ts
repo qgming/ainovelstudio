@@ -888,6 +888,56 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
+  it("json 支持向字符串属性追加文本而不重写整个对象", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      [
+        "{",
+        '  "chapter": {',
+        '    "outline": "## 情节点\\n\\n- 旧细纲",',
+        '    "content": "第一段正文"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await toolset.json.execute({
+      action: "text_append",
+      path: "正文/第一章.json",
+      pointer: "/chapter/content",
+      separator: "\n\n",
+      value: "第二段正文",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "正文/第一章.json",
+      [
+        "{",
+        '  "chapter": {',
+        '    "outline": "## 情节点\\n\\n- 旧细纲",',
+        '    "content": "第一段正文\\n\\n第二段正文"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary: "已更新 正文/第一章.json 中 /chapter/content 的 JSON 数据。",
+      data: {
+        action: "text_append",
+        path: "正文/第一章.json",
+        pointer: "/chapter/content",
+        value: "第一段正文\n\n第二段正文",
+      },
+    });
+  });
+
   it("json 支持通过 patch 执行标准 JSON 补丁操作", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";

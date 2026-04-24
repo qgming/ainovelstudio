@@ -6,6 +6,7 @@ import type { AgentTool } from "../runtime";
 import {
   applyJsonPatch,
   appendJsonValueAtPointer,
+  appendJsonTextAtPointer,
   appendJsonHistoryAtPointer,
   cloneJsonValue,
   deleteJsonValueAtPointer,
@@ -336,6 +337,11 @@ export function createWorkspaceTextTools({
           nextJson = mergeJsonValueAtPointer(nextJson, segments, input.value);
         } else if (action === "append") {
           nextJson = appendJsonValueAtPointer(nextJson, segments, input.value);
+        } else if (action === "text_append") {
+          nextJson = appendJsonTextAtPointer(nextJson, segments, input.value, {
+            separator:
+              typeof input.separator === "string" ? input.separator : undefined,
+          });
         } else {
           nextJson = deleteJsonValueAtPointer(nextJson, segments);
         }

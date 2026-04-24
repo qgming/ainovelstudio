@@ -9,6 +9,26 @@ import {
 import type { ExpansionSection } from "./types";
 import type { AgentTool } from "../agent/runtime";
 import { ok, ensureString } from "../agent/tools/shared";
+import {
+  applyJsonPatch,
+  appendJsonHistoryAtPointer,
+  appendJsonTextAtPointer,
+  appendJsonValueAtPointer,
+  cloneJsonValue,
+  deleteJsonValueAtPointer,
+  ensureJsonTemplateAtPointer,
+  getJsonValueAtPointer,
+  mergeJsonValueAtPointer,
+  normalizeJsonAction,
+  parseJsonDocument,
+  parseJsonPointer,
+  serializeJsonWithStyle,
+  setJsonValueAtPointer,
+} from "../agent/tools/json";
+import {
+  applyJsonOperations,
+  normalizeJsonBatchOperation,
+} from "../agent/tools/jsonBatch";
 
 type ExpansionAgentToolsetInput = {
   onWorkspaceMutated?: () => Promise<void>;
@@ -63,6 +83,14 @@ async function findEntry(path: string) {
 }
 
 function buildTree(detail: Awaited<ReturnType<typeof getExpansionWorkspaceDetail>>) {
+  const settingGroups = new Map<string, typeof detail.settingEntries>();
+  for (const entry of detail.settingEntries) {
+    const category = entry.path.includes("/") ? entry.path.split("/")[0] ?? "其他" : "其他";
+    const current = settingGroups.get(category) ?? [];
+    current.push(entry);
+    settingGroups.set(category, current);
+  }
+
   return {
     kind: "directory",
     name: "expansion",
@@ -82,10 +110,15 @@ function buildTree(detail: Awaited<ReturnType<typeof getExpansionWorkspaceDetail
         kind: "directory",
         name: "settings",
         path: "settings",
-        children: detail.settingEntries.map((entry) => ({
-          kind: "file",
-          name: entry.path,
-          path: `settings/${entry.path}`,
+        children: Array.from(settingGroups.entries()).map(([category, entries]) => ({
+          kind: "directory",
+          name: category,
+          path: `settings/${category}`,
+          children: entries.map((entry) => ({
+            kind: "file",
+            name: entry.name,
+            path: `settings/${entry.path}`,
+          })),
         })),
       },
       {
@@ -255,16 +288,129 @@ export function createExpansionAgentToolset({
         return ok(`已写入 ${section}/${entryPath}`);
       },
     },
+    json: {
+      description: "读取或局部更新扩写工作区中的 JSON 文件",
+      execute: async (input) => {
+        const action = normalizeJsonAction(input.action);
+        const { entryPath, section } = await findEntry(String(input.path ?? ""));
+        const currentContents = await readExpansionEntry(workspaceId, section, entryPath);
+        const currentJson = parseJsonDocument(currentContents, `${section}/${entryPath}`);
+
+        if (action === "batch") {
+          if (!Array.isArray(input.operations) || input.operations.length === 0) {
+            throw new Error("json.batch 需要提供非空 operations。");
+          }
+          const operations = input.operations.map(normalizeJsonBatchOperation);
+          const { results, root: nextJson } = applyJsonOperations(cloneJsonValue(currentJson), operations);
+          await writeExpansionEntry(workspaceId, section, entryPath, serializeJsonWithStyle(nextJson, currentContents));
+          await onWorkspaceMutated?.();
+          return ok(`已批量更新 ${section}/${entryPath} 中 ${results.length} 个 JSON 操作。`, {
+            action,
+            operations: results,
+            operationsApplied: results.length,
+            path: `${section}/${entryPath}`,
+          });
+        }
+
+        if (action === "patch") {
+          if (!Array.isArray(input.patch) || input.patch.length === 0) {
+            throw new Error("json.patch 需要提供非空 patch。");
+          }
+          const { operations, root: nextJson } = applyJsonPatch(
+            cloneJsonValue(currentJson),
+            input.patch as Parameters<typeof applyJsonPatch>[1],
+          );
+          await writeExpansionEntry(workspaceId, section, entryPath, serializeJsonWithStyle(nextJson, currentContents));
+          await onWorkspaceMutated?.();
+          return ok(`已按 patch 更新 ${section}/${entryPath} 中 ${operations.length} 个 JSON 操作。`, {
+            action,
+            operations,
+            operationsApplied: operations.length,
+            path: `${section}/${entryPath}`,
+          });
+        }
+
+        const pointer = String(input.pointer ?? "");
+        const segments = parseJsonPointer(pointer);
+        if (action === "get") {
+          return ok(`已读取 ${section}/${entryPath} 中 ${pointer || "/"} 的 JSON 数据。`, getJsonValueAtPointer(currentJson, segments));
+        }
+
+        if (input.value === undefined && action !== "delete") {
+          throw new Error(`json.${action} 需要提供 value。`);
+        }
+
+        let nextJson = cloneJsonValue(currentJson);
+        if (action === "set") {
+          nextJson = setJsonValueAtPointer(nextJson, segments, input.value);
+        } else if (action === "ensure_template") {
+          nextJson = ensureJsonTemplateAtPointer(nextJson, segments, input.value);
+        } else if (action === "history_append") {
+          nextJson = appendJsonHistoryAtPointer(nextJson, segments, input.value, {
+            limit: typeof input.limit === "number" ? input.limit : undefined,
+            timestamp: typeof input.timestamp === "string" ? input.timestamp : undefined,
+            timestampField: typeof input.timestampField === "string" ? input.timestampField : undefined,
+          });
+        } else if (action === "merge") {
+          nextJson = mergeJsonValueAtPointer(nextJson, segments, input.value);
+        } else if (action === "append") {
+          nextJson = appendJsonValueAtPointer(nextJson, segments, input.value);
+        } else if (action === "text_append") {
+          nextJson = appendJsonTextAtPointer(nextJson, segments, input.value, {
+            separator: typeof input.separator === "string" ? input.separator : undefined,
+          });
+        } else {
+          nextJson = deleteJsonValueAtPointer(nextJson, segments);
+        }
+
+        await writeExpansionEntry(workspaceId, section, entryPath, serializeJsonWithStyle(nextJson, currentContents));
+        await onWorkspaceMutated?.();
+
+        if (action === "delete") {
+          return ok(`已删除 ${section}/${entryPath} 中 ${pointer || "/"} 的 JSON 节点。`, {
+            action,
+            deleted: true,
+            path: `${section}/${entryPath}`,
+            pointer: pointer || "/",
+          });
+        }
+
+        const summary =
+          action === "history_append"
+            ? `已向 ${section}/${entryPath} 中 ${pointer || "/"} 追加一条历史记录。`
+            : action === "ensure_template"
+              ? `已按模板补齐 ${section}/${entryPath} 中 ${pointer || "/"} 的 JSON 数据。`
+              : `已更新 ${section}/${entryPath} 中 ${pointer || "/"} 的 JSON 数据。`;
+        return ok(summary, {
+          action,
+          path: `${section}/${entryPath}`,
+          pointer: pointer || "/",
+          value:
+            action === "history_append"
+              ? (() => {
+                  const target = getJsonValueAtPointer(nextJson, segments);
+                  return Array.isArray(target) ? target[target.length - 1] : target;
+                })()
+              : getJsonValueAtPointer(nextJson, segments),
+        });
+      },
+    },
     path: {
       description: "处理扩写工作区结构变更",
       execute: async (input) => {
         const action = ensureString(input.action, "path.action");
         if (action === "create_file") {
           const parentPath = normalizeVirtualPath(String(input.parentPath ?? ""));
-          if (parentPath !== "settings" && parentPath !== "chapters") {
+          const [section, ...rest] = parentPath.split("/");
+          if (section !== "settings" && section !== "chapters") {
             throw new Error("扩写模式只支持在 settings 或 chapters 下创建文件。");
           }
-          const created = await createExpansionEntry(workspaceId, parentPath, ensureString(input.name, "path.name"));
+          const created = await createExpansionEntry(
+            workspaceId,
+            section,
+            ensureString(input.name, "path.name"),
+            rest.length > 0 ? rest.join("/") : undefined,
+          );
           await onWorkspaceMutated?.();
           return ok(`已创建 ${created.section}/${created.path}`);
         }

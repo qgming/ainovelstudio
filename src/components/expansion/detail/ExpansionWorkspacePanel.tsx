@@ -20,7 +20,8 @@ export type ExpansionWorkspaceActionId =
   | "project-batch-settings"
   | "setting-update"
   | "chapter-write"
-  | "chapter-setting-update";
+  | "chapter-setting-update"
+  | "free-input";
 
 export type ExpansionWorkspaceTask = {
   actionId: ExpansionWorkspaceActionId;
@@ -44,6 +45,7 @@ type ExpansionWorkspacePanelProps = {
   availableActions: ExpansionWorkspaceActionButton[];
   currentFileName: string | null;
   executionPrompt: string;
+  isMobile?: boolean;
   onClearLogs: () => void;
   runStatus: AgentRunStatus;
   targetLabel: string | null;
@@ -67,6 +69,9 @@ function getActionIcon(actionId: ExpansionWorkspaceActionId): ComponentType<{ cl
     return RefreshCcw;
   }
   if (actionId === "chapter-write") {
+    return PenLine;
+  }
+  if (actionId === "free-input") {
     return PenLine;
   }
   return TextSearch;
@@ -100,6 +105,7 @@ export function ExpansionWorkspacePanel({
   availableActions,
   currentFileName,
   executionPrompt,
+  isMobile = false,
   onClearLogs,
   runStatus,
   targetLabel,
@@ -107,7 +113,12 @@ export function ExpansionWorkspacePanel({
   const [isPromptExpanded, setIsPromptExpanded] = useState(true);
 
   return (
-    <aside className="h-full min-h-[360px] w-full shrink-0 overflow-y-auto border-t border-border bg-app lg:min-h-0 lg:w-[340px] lg:border-t-0 lg:border-l">
+    <aside
+      className={cn(
+        "w-full shrink-0 border-t border-border bg-app lg:min-h-0 lg:w-[340px] lg:border-t-0 lg:border-l",
+        isMobile ? "h-auto min-h-0 overflow-visible" : "h-full min-h-[360px] overflow-y-auto",
+      )}
+    >
       <div className="flex flex-col">
         <WorkflowDetailSection
           title="工作区操作"

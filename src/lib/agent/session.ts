@@ -819,6 +819,7 @@ function buildAiSdkTools(
               "merge",
               "patch",
               "set",
+              "text_append",
             ])
             .default("get"),
           patch: z
@@ -841,7 +842,7 @@ function buildAiSdkTools(
             .array(
               z.object({
                 action: z
-                  .enum(["append", "delete", "merge", "set"])
+                  .enum(["append", "delete", "merge", "set", "text_append"])
                   .describe("batch 中的单步动作。"),
                 pointer: z
                   .string()
@@ -853,6 +854,10 @@ function buildAiSdkTools(
                   .unknown()
                   .optional()
                   .describe("append / merge / set 时要写入的新值。"),
+                separator: z
+                  .string()
+                  .optional()
+                  .describe("仅在 batch 的 text_append 时使用。追加文本前插入的分隔符。"),
               }),
             )
             .optional()
@@ -870,6 +875,10 @@ function buildAiSdkTools(
             .describe(
               "JSON Pointer。空字符串表示根节点，例如 /stage、/chapters/0/title。",
             ),
+          separator: z
+            .string()
+            .optional()
+            .describe("仅在 action=text_append 时使用。追加文本前插入的分隔符。"),
           timestamp: z
             .string()
             .optional()
@@ -881,7 +890,7 @@ function buildAiSdkTools(
           value: z
             .unknown()
             .optional()
-            .describe("set / merge / append / ensure_template / history_append 时需要的新值。"),
+            .describe("set / merge / append / text_append / ensure_template / history_append 时需要的新值。"),
         }),
         execute: async (input) => {
           const result = await runTool(
@@ -1046,21 +1055,19 @@ function buildAiSdkTools(
     expansion_chapter_batch_outline: (toolName, tool) =>
       defineTool({
         description:
-          "根据大纲批量创建章节 JSON，写入最小章节字段。",
+          "根据大纲批量创建章节 JSON，写入最小章节字段，其中 outline 和后续 content 都使用 Markdown 字符串。",
         inputSchema: z.object({
           chapters: z
             .array(
               z.object({
-                content: z.string().optional(),
-                linkedSettingIds: z.array(z.string()).optional(),
+                content: z.string().optional().describe("章节正文，使用 Markdown 字符串。"),
                 name: z.string().min(1),
-                notes: z.string().optional(),
-                outline: z.string().optional(),
+                outline: z.string().optional().describe("章节细纲，使用 Markdown 字符串。"),
                 volumeId: z.string().optional(),
               }),
             )
             .optional()
-            .describe("可选。显式传入要创建的章节草稿数组；不传时工具会尝试从项目大纲推断。"),
+            .describe("可选。显式传入要创建的章节草稿数组；其中 outline/content 都应为 Markdown；不传时工具会尝试从项目大纲推断。"),
           volumeId: z.string().optional().describe("目标分卷编号，如 001；未传时默认写入 001 卷。"),
         }),
         execute: async (input) => {
@@ -1071,14 +1078,26 @@ function buildAiSdkTools(
     expansion_chapter_write_content: (toolName, tool) =>
       defineTool({
         description:
-          "将已生成的正文回写到章节 JSON。",
+          "按字段替换或追加章节 JSON 中的 Markdown 正文/细纲，未传入的字段会保持不变。",
         inputSchema: z.object({
           chapterId: z.string().optional().describe("章节编号，如 4。"),
           chapterPath: z.string().optional().describe("章节路径，如 001/雨夜追踪。"),
-          content: z.string().min(1).describe("要回写的正文全文。"),
-          linkedSettingIds: z.array(z.string()).optional(),
-          notes: z.string().optional(),
-          outline: z.string().optional(),
+          content: z.string().min(1).optional().describe("兼容单字段写法。默认写入 content；使用 Markdown 字符串。"),
+          field: z.enum(["content", "outline"]).optional().describe("兼容单字段写法时的目标字段，默认 content。"),
+          mode: z.enum(["append", "replace"]).optional().describe("兼容单字段写法时的更新方式，默认 replace。"),
+          outline: z.string().optional().describe("可选。直接替换 outline，使用 Markdown 字符串。"),
+          separator: z.string().optional().describe("append 时插入在旧内容与新内容之间的分隔符，默认两个换行。"),
+          updates: z
+            .array(
+              z.object({
+                field: z.enum(["content", "outline"]).describe("要更新的章节字段。"),
+                mode: z.enum(["append", "replace"]).optional().describe("replace 全量替换，append 追加 Markdown。"),
+                separator: z.string().optional().describe("append 时使用的分隔符，默认两个换行。"),
+                value: z.string().min(1).describe("要写入的 Markdown 内容。"),
+              }),
+            )
+            .optional()
+            .describe("推荐。可一次更新多个字段，并分别指定 replace / append。"),
         }),
         execute: async (input) => {
           const result = await runTool(toolName, tool, input as Record<string, unknown>);
@@ -1088,14 +1107,13 @@ function buildAiSdkTools(
     expansion_setting_batch_generate: (toolName, tool) =>
       defineTool({
         description:
-          "批量创建设定 JSON，写入最小设定字段。",
+          "批量创建设定 JSON，写入最小设定字段，其中 content 使用 Markdown 字符串。",
         inputSchema: z.object({
           settings: z.array(
             z.object({
-              content: z.string().optional(),
-              linkedChapterIds: z.array(z.string()).optional(),
+              category: z.string().optional(),
+              content: z.string().optional().describe("设定正文，使用 Markdown 字符串。"),
               name: z.string().min(1),
-              notes: z.string().optional(),
             }),
           ),
         }),
@@ -1107,15 +1125,14 @@ function buildAiSdkTools(
     expansion_setting_update_from_chapter: (toolName, tool) =>
       defineTool({
         description:
-          "根据章节推进后的分析结果更新设定，可创建缺失设定。",
+          "根据章节推进后的分析结果更新 Markdown 格式的设定内容，可创建缺失设定。",
         inputSchema: z.object({
           updates: z.array(
             z.object({
-              content: z.string().optional(),
+              category: z.string().optional(),
+              content: z.string().optional().describe("更新后的设定内容，使用 Markdown 字符串。"),
               id: z.string().optional(),
-              linkedChapterIds: z.array(z.string()).optional(),
               name: z.string().min(1),
-              notes: z.string().optional(),
               path: z.string().optional(),
             }),
           ),
@@ -1128,7 +1145,7 @@ function buildAiSdkTools(
     expansion_continuity_scan: (toolName, tool) =>
       defineTool({
         description:
-          "扫描扩写项目中的章节顺序、章节引用和设定引用问题，返回结构化结果。",
+          "扫描扩写项目中的章节编号冲突，返回结构化结果。",
         inputSchema: z.object({}),
         execute: async (input) => {
           const result = await runTool(toolName, tool, input as Record<string, unknown>);

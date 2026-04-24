@@ -1,5 +1,6 @@
 import {
   appendJsonValueAtPointer,
+  appendJsonTextAtPointer,
   cloneJsonValue,
   deleteJsonValueAtPointer,
   getJsonValueAtPointer,
@@ -13,6 +14,7 @@ import {
 export type JsonBatchOperation = {
   action: Exclude<JsonAction, "batch" | "get">;
   pointer?: string;
+  separator?: string;
   value?: unknown;
 };
 
@@ -37,16 +39,19 @@ export function normalizeJsonBatchOperation(
     action !== "append" &&
     action !== "delete" &&
     action !== "merge" &&
-    action !== "set"
+    action !== "set" &&
+    action !== "text_append"
   ) {
     throw new Error(
-      `json.batch 第 ${index + 1} 项 action 仅支持 set / merge / append / delete。`,
+      `json.batch 第 ${index + 1} 项 action 仅支持 set / merge / append / text_append / delete。`,
     );
   }
 
   return {
     action,
     pointer: "pointer" in record ? String(record.pointer ?? "") : undefined,
+    separator:
+      "separator" in record ? String(record.separator ?? "") : undefined,
     value: record.value,
   };
 }
@@ -94,6 +99,16 @@ export function applyJsonOperation(
 
   if (operation.action === "append") {
     const nextRoot = appendJsonValueAtPointer(root, segments, operation.value);
+    return {
+      result: createValueResult(operation.action, normalizedPointer, nextRoot, segments),
+      root: nextRoot,
+    };
+  }
+
+  if (operation.action === "text_append") {
+    const nextRoot = appendJsonTextAtPointer(root, segments, operation.value, {
+      separator: operation.separator,
+    });
     return {
       result: createValueResult(operation.action, normalizedPointer, nextRoot, segments),
       root: nextRoot,

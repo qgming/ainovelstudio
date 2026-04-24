@@ -160,20 +160,20 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   word_count: "校对字符数、中文字符数、英文词数、段落数、行数。",
   edit: "小范围改（≤30%）；先 read 再 edit；action：replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中范围；改连续行段优先用 replace_lines；改锚点附近或 Markdown 标题块优先用对应 range 动作。",
   write: "整份覆盖写入；只有已准备好完整新内容时再用，缺失目录会自动创建。",
-  json: "按 JSON Pointer 局部读写字段/对象/数组；action：get/set/merge/append/delete/batch/ensure_template/history_append/patch；初始化补结构优先 ensure_template，写日志优先 history_append，多步变更优先 batch 或 patch，一次写回。",
+  json: "按 JSON Pointer 局部读写字段/对象/数组/字符串；action：get/set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；改单个字符串字段优先 text_append 或 set，初始化补结构优先 ensure_template，写日志优先 history_append，多步变更优先 batch 或 patch，一次写回。",
   path: "只动结构：create_file / create_folder / rename / move / delete；不写入正文。",
   skill: '读/管理本地 skill。先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；writes 改 skill 内文件。',
   agent: 'action：list/read/write/create/delete；读写 agent 内文件（manifest.json / AGENTS.md）；执行子任务请用 task，不是 agent。',
   expansion_chapter_batch_outline:
-    "扩写模式批量建章工具；可用 volumeId 指定目标分卷，输入 chapters 数组可直接批量写 chapters/<volumeId>/*.json，章节字段只使用 id、name、outline、content、notes、linkedSettingIds；缺省时会尝试从项目大纲推断章节标题。",
+    "扩写模式批量建章工具；可用 volumeId 指定目标分卷，输入 chapters 数组可直接批量写 chapters/<volumeId>/*.json，章节字段只使用 id、name、outline、content；outline 和后续 content 都应写成 Markdown 字符串，缺省时会尝试从项目大纲推断章节标题。",
   expansion_chapter_write_content:
-    "扩写模式正文写回工具；按 chapterId 或 chapterPath 定位章节，写入 content，并可同步补充 outline、notes、linkedSettingIds。",
+    "扩写模式章节字段写回工具；按 chapterId 或 chapterPath 定位章节，默认只更新 Markdown 格式的 content，未传字段会保留；可通过 updates 对 content / outline 分别做 replace 或 append。",
   expansion_setting_batch_generate:
-    "扩写模式批量建设定工具；传 settings 数组批量生成 settings/*.json，设定字段只使用 id、name、content、notes、linkedChapterIds。",
+    "扩写模式批量建设定工具；传 settings 数组批量生成 settings/<分类>/*.json，可选 category 指定人物/势力/地点/世界观/道具/其他，设定字段只使用 id、name、content，content 应写成 Markdown 字符串。",
   expansion_setting_update_from_chapter:
-    "扩写模式设定更新工具；根据章节推进结果批量更新设定 content、notes、linkedChapterIds，并支持顺手创建新设定。",
+    "扩写模式设定更新工具；根据章节推进结果批量更新 Markdown 格式的设定 content，并支持顺手创建新设定，可选 category 指定设定分类。",
   expansion_continuity_scan:
-    "扩写模式连续性检查工具；扫描章节 id、章节引用和设定引用，输出结构化 issues 列表，适合写作前后做一致性校验。",
+    "扩写模式连续性检查工具；扫描章节 id 冲突，输出结构化 issues 列表，适合写作前后做基础校验。",
   workflow_decision:
     "工作流判断节点专用；提交 approve / reject / retry 等结构化结果和理由，让工作流程序据此流转到下一分支。",
 };

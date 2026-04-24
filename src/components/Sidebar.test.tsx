@@ -58,7 +58,7 @@ describe("Sidebar", () => {
       .map((link) => link.getAttribute("aria-label"))
       .filter(Boolean);
 
-    expect(labels.slice(0, 4)).toEqual(["首页", "工作流", "技能", "代理"]);
+    expect(labels.slice(0, 5)).toEqual(["首页", "工作流", "创作台", "技能", "代理"]);
   });
 
   it("桌面侧边栏只保留主题按钮和导航入口", () => {

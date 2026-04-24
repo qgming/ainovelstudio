@@ -5,8 +5,6 @@ export function createDefaultSetting(id: string, name: string): SettingJson {
     id,
     name,
     content: "",
-    notes: "",
-    linkedChapterIds: [],
   };
 }
 
@@ -16,8 +14,6 @@ export function createDefaultChapter(id: string, name: string): ChapterJson {
     name,
     outline: "",
     content: "",
-    notes: "",
-    linkedSettingIds: [],
   };
 }
 
@@ -56,11 +52,6 @@ function asNumericString(value: unknown, fallback = ""): string {
   return fallback;
 }
 
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
-
 export function parseSettingJson(
   raw: string,
   fallbackId: string,
@@ -77,8 +68,6 @@ export function parseSettingJson(
     id: asNumericString(parsed.id, fallbackId),
     name: asString(parsed.name, fallbackName),
     content: asString(parsed.content),
-    notes: asString(parsed.notes),
-    linkedChapterIds: asStringArray(parsed.linkedChapterIds),
   };
 }
 
@@ -99,8 +88,6 @@ export function parseChapterJson(
     name: asString(parsed.name, fallbackName),
     outline: asString(parsed.outline),
     content: asString(parsed.content),
-    notes: asString(parsed.notes),
-    linkedSettingIds: asStringArray(parsed.linkedSettingIds),
   };
 }
 

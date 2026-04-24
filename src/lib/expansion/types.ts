@@ -12,7 +12,7 @@ export type ExpansionEntryItem = {
   section: ExpansionSection;
   name: string;
   // project 段：文件相对路径（如 "AGENTS.md"）
-  // settings 段：<编号>-<名称>，如 "001-林风"
+  // settings 段：<分类>/<编号>-<名称>，如 "人物/001-林风"
   // chapters 段：<分卷>/<名称>，如 "001/第一章"；导出时会写成 <分卷>/<名称>.json
   path: string;
   entryId?: string | null;
@@ -34,8 +34,6 @@ export type SettingJson = {
   id: string;
   name: string;
   content: string;
-  notes: string;
-  linkedChapterIds: string[];
 };
 
 export type ChapterJson = {
@@ -43,6 +41,4 @@ export type ChapterJson = {
   name: string;
   outline: string;
   content: string;
-  notes: string;
-  linkedSettingIds: string[];
 };

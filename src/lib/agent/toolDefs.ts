@@ -74,7 +74,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "json",
     name: "JSON 数据",
     description:
-      "按 JSON Pointer 读取或局部更新 JSON 内容；适合改字段、补齐模板、追加历史、执行 patch 和维护状态数组。",
+      "按 JSON Pointer 读取或局部更新 JSON 内容；适合改字段、补齐模板、向字符串或数组追加内容、执行 patch 和维护状态数组。",
   },
   {
     id: "path",
@@ -108,7 +108,7 @@ export const EXPANSION_MODE_TOOLS: ToolDef[] = [
     id: "expansion_chapter_write_content",
     name: "章节正文写入",
     description:
-      "按章节 ID 或路径回写正文，并同步刷新字数、设定事实和更新时间。",
+      "按章节 ID 或路径按字段替换或追加正文/细纲，未传入的字段保持原值。",
     scope: "expansion",
   },
   {
@@ -125,13 +125,13 @@ export const EXPANSION_MODE_TOOLS: ToolDef[] = [
       "根据章节推进结果更新设定的当前状态、关系、公开信息、秘密和来源章节。",
     scope: "expansion",
   },
-  {
-    id: "expansion_continuity_scan",
-    name: "连续性扫描",
-    description:
-      "扫描章节和设定之间的缺失引用、顺序冲突和关联设定缺口，输出结构化问题列表。",
-    scope: "expansion",
-  },
+    {
+      id: "expansion_continuity_scan",
+      name: "连续性扫描",
+      description:
+        "扫描章节编号冲突，输出结构化问题列表。",
+      scope: "expansion",
+    },
 ];
 
 export const WORKFLOW_MODE_TOOLS: ToolDef[] = [

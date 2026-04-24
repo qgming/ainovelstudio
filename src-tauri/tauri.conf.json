@@ -15,7 +15,7 @@
         "title": "神笔写作",
         "width": 1200,
         "height": 800,
-        "minWidth": 390,
+        "minWidth": 360,
         "minHeight": 800,
         "center": true,
         "decorations": false,

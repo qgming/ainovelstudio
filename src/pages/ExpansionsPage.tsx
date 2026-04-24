@@ -158,21 +158,21 @@ export function ExpansionsPage() {
       <PageShell
         title={
           <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
-            扩写工坊
+            创作台
           </div>
         }
         actions={[
           { icon: RefreshCw, label: "刷新列表", tone: "default", onClick: () => void refresh() },
           {
             icon: Upload,
-            label: importBusy ? "导入中..." : "导入扩写书籍",
+            label: importBusy ? "导入中..." : "导入创作项目",
             tone: "default",
             onClick: () => {
               if (importBusy) return;
               importInputRef.current?.click();
             },
           },
-          { icon: Plus, label: "新建扩写书籍", tone: "primary", onClick: () => setCreateOpen(true) },
+          { icon: Plus, label: "新建创作项目", tone: "primary", onClick: () => setCreateOpen(true) },
         ]}
       >
         <input
@@ -192,7 +192,7 @@ export function ExpansionsPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {status === "loading" ? (
-              <div className="editor-empty-state border-solid bg-panel">正在加载扩写书架...</div>
+              <div className="editor-empty-state border-solid bg-panel">正在加载创作台...</div>
             ) : items.length > 0 ? (
               <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {items.map((item) => {
@@ -243,7 +243,7 @@ export function ExpansionsPage() {
                                 onSelect={() => void handleExport(item)}
                               >
                                 <Download className="h-4 w-4" />
-                                {exportBusyId === item.id ? "导出中..." : "导出扩写"}
+                                {exportBusyId === item.id ? "导出中..." : "导出项目"}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 variant="destructive"
@@ -251,7 +251,7 @@ export function ExpansionsPage() {
                                 onSelect={() => setDeleteTarget(item)}
                               >
                                 <Trash2 className="h-4 w-4" />
-                                {deleteBusyId === item.id ? "删除中..." : "删除扩写"}
+                                {deleteBusyId === item.id ? "删除中..." : "删除项目"}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -268,10 +268,10 @@ export function ExpansionsPage() {
                     <Feather className="h-7 w-7" />
                   </div>
                   <h2 className="mt-5 text-[28px] font-semibold tracking-[-0.05em] text-foreground">
-                    新建一本扩写书籍开始 AI 自动扩写。
+                    新建一个创作项目开始 AI 创作。
                   </h2>
                   <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                    扩写模式由 JSON + 程序驱动：大纲驱动细纲，细纲驱动正文，正文回写设定，全过程由 AI 自动完成。
+                    创作台由 JSON + 程序驱动：大纲驱动细纲，细纲驱动正文，正文回写设定，全过程由 AI 自动完成。
                   </p>
                   <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                     <Button
@@ -281,11 +281,11 @@ export function ExpansionsPage() {
                       onClick={() => importInputRef.current?.click()}
                     >
                       <Upload className="h-4 w-4" />
-                      导入扩写 ZIP
+                      导入创作项目 ZIP
                     </Button>
                     <Button type="button" onClick={() => setCreateOpen(true)}>
                       <Plus className="h-4 w-4" />
-                      新建扩写书籍
+                      新建创作项目
                     </Button>
                   </div>
                 </div>
@@ -298,16 +298,16 @@ export function ExpansionsPage() {
       {createOpen ? (
         <PromptDialog
           busy={createBusy}
-          confirmLabel="创建书籍"
-          description="输入扩写书籍名称，将在 SQLite 中初始化 project / settings / chapters 三段。"
-          label="书名"
+          confirmLabel="创建项目"
+          description="输入创作项目名称，将在 SQLite 中初始化 project / settings / chapters 三段。"
+          label="项目名称"
           onCancel={() => {
             if (createBusy) return;
             setCreateOpen(false);
           }}
           onChange={setDraftName}
           onConfirm={() => void handleCreate()}
-          title="新建扩写书籍"
+          title="新建创作项目"
           value={draftName}
         />
       ) : null}
@@ -315,14 +315,14 @@ export function ExpansionsPage() {
       {deleteTarget ? (
         <ConfirmDialog
           busy={deleteBusyId === deleteTarget.id}
-          confirmLabel="删除扩写"
+          confirmLabel="删除项目"
           description={`将《${deleteTarget.name}》及其所有 JSON 数据从 SQLite 中永久删除。`}
           onCancel={() => {
             if (deleteBusyId) return;
             setDeleteTarget(null);
           }}
           onConfirm={() => void handleDelete()}
-          title="删除扩写书籍"
+          title="删除创作项目"
         />
       ) : null}
 
