@@ -6,6 +6,8 @@ export type ToolDef = {
   name: string;
   /** 设置页和 prompt 使用的简短描述 */
   description: string;
+  /** 归属场景 */
+  scope?: "global" | "expansion" | "workflow";
 };
 
 export const BUILTIN_TOOLS: ToolDef[] = [
@@ -92,6 +94,60 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     description:
       "列出、读取、创建、更新或删除本地 agent 文件；优先先列出再读写具体文件。",
   },
+];
+
+export const EXPANSION_MODE_TOOLS: ToolDef[] = [
+  {
+    id: "expansion_chapter_batch_outline",
+    name: "批量生成章节结构",
+    description:
+      "根据项目大纲批量创建章节 JSON，并写入摘要、细纲、场景节拍、开篇状态和结尾状态。",
+    scope: "expansion",
+  },
+  {
+    id: "expansion_chapter_write_content",
+    name: "章节正文写入",
+    description:
+      "按章节 ID 或路径回写正文，并同步刷新字数、设定事实和更新时间。",
+    scope: "expansion",
+  },
+  {
+    id: "expansion_setting_batch_generate",
+    name: "批量生成设定",
+    description:
+      "批量创建设定 JSON，并维护核心档案、当前状态、公开信息、秘密和约束规则。",
+    scope: "expansion",
+  },
+  {
+    id: "expansion_setting_update_from_chapter",
+    name: "按章节更新设定",
+    description:
+      "根据章节推进结果更新设定的当前状态、关系、公开信息、秘密和来源章节。",
+    scope: "expansion",
+  },
+  {
+    id: "expansion_continuity_scan",
+    name: "连续性扫描",
+    description:
+      "扫描章节和设定之间的缺失引用、顺序冲突和关联设定缺口，输出结构化问题列表。",
+    scope: "expansion",
+  },
+];
+
+export const WORKFLOW_MODE_TOOLS: ToolDef[] = [
+  {
+    id: "workflow_decision",
+    name: "工作流判断提交",
+    description:
+      "向工作流判断节点提交结构化判定结果，程序会依据该结果选择通过或返工分支。",
+    scope: "workflow",
+  },
+];
+
+export const ALL_TOOL_DEFS: ToolDef[] = [
+  ...BUILTIN_TOOLS,
+  ...EXPANSION_MODE_TOOLS,
+  ...WORKFLOW_MODE_TOOLS,
 ];
 
 const LEGACY_TOOL_ID_MAP: Record<string, string> = {

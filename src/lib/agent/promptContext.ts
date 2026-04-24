@@ -7,7 +7,7 @@ import {
   type PlanningIntervention,
   type PlanningState,
 } from "./planning";
-import { BUILTIN_TOOLS, normalizeSuggestedToolIds } from "./toolDefs";
+import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "./toolDefs";
 
 // 最小后备文本，正常流程会从 AGENTS.md 文件加载完整人设
 export const DEFAULT_MAIN_AGENT_MARKDOWN = [
@@ -164,10 +164,22 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   path: "只动结构：create_file / create_folder / rename / move / delete；不写入正文。",
   skill: '读/管理本地 skill。先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；writes 改 skill 内文件。',
   agent: 'action：list/read/write/create/delete；读写 agent 内文件（manifest.json / AGENTS.md）；执行子任务请用 task，不是 agent。',
+  expansion_chapter_batch_outline:
+    "扩写模式批量建章工具；可用 volumeId 指定目标分卷，输入 chapters 数组可直接批量写 chapters/<volumeId>/*.json，章节字段只使用 id、name、outline、content、notes、linkedSettingIds；缺省时会尝试从项目大纲推断章节标题。",
+  expansion_chapter_write_content:
+    "扩写模式正文写回工具；按 chapterId 或 chapterPath 定位章节，写入 content，并可同步补充 outline、notes、linkedSettingIds。",
+  expansion_setting_batch_generate:
+    "扩写模式批量建设定工具；传 settings 数组批量生成 settings/*.json，设定字段只使用 id、name、content、notes、linkedChapterIds。",
+  expansion_setting_update_from_chapter:
+    "扩写模式设定更新工具；根据章节推进结果批量更新设定 content、notes、linkedChapterIds，并支持顺手创建新设定。",
+  expansion_continuity_scan:
+    "扩写模式连续性检查工具；扫描章节 id、章节引用和设定引用，输出结构化 issues 列表，适合写作前后做一致性校验。",
+  workflow_decision:
+    "工作流判断节点专用；提交 approve / reject / retry 等结构化结果和理由，让工作流程序据此流转到下一分支。",
 };
 
 function buildToolPromptBlock(enabledToolIds: string[]) {
-  const enabledTools = BUILTIN_TOOLS.filter((tool) =>
+  const enabledTools = ALL_TOOL_DEFS.filter((tool) =>
     enabledToolIds.includes(tool.id),
   );
 

@@ -8,6 +8,7 @@
 use crate::db::open_database;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::Serialize;
+use serde_json::Value;
 use std::{
     collections::HashSet,
     io::{Cursor, Read, Write},
@@ -40,8 +41,11 @@ pub struct ExpansionWorkspaceSummary {
 pub struct ExpansionEntryItem {
     section: String,
     name: String,
-    // 对 project 段是文件相对路径（如 "AGENTS.md"），对 settings/chapters 段是 <编号>-<名称>
+    // 对 project 段是文件相对路径（如 "AGENTS.md"）
+    // 对 settings 段是 <编号>-<名称>
+    // 对 chapters 段是 <名称>（导出时会写成 <名称>.json）
     path: String,
+    entry_id: Option<String>,
     updated_at: u64,
 }
 
@@ -148,10 +152,15 @@ fn create_outline_template(book_name: &str) -> String {
     )
 }
 
+fn create_chapter_meta_template() -> String {
+    "{\n  \"volumes\": []\n}\n".to_string()
+}
+
 fn build_project_template(book_name: &str) -> Vec<(&'static str, String)> {
     vec![
         ("AGENTS.md", create_agents_template(book_name)),
         ("outline.md", create_outline_template(book_name)),
+        ("chapters.meta.json", create_chapter_meta_template()),
     ]
 }
 
@@ -199,7 +208,7 @@ fn list_entries(
     let mut statement = connection
         .prepare(
             r#"
-            SELECT section, name, path, updated_at
+            SELECT section, name, path, updated_at, content_bytes
             FROM expansion_entries
             WHERE workspace_id = ?1 AND section = ?2
             ORDER BY path ASC
@@ -207,18 +216,39 @@ fn list_entries(
         )
         .map_err(error_to_string)?;
 
-    let rows = statement
+    let mut rows = statement
         .query_map(params![workspace_id, section], |row| {
+            let path = row.get::<_, String>(2)?;
+            let content_bytes = row.get::<_, Vec<u8>>(4)?;
             Ok(ExpansionEntryItem {
                 section: row.get(0)?,
                 name: row.get(1)?,
-                path: row.get(2)?,
+                path: path.clone(),
+                entry_id: extract_entry_id(section, &path, &content_bytes),
                 updated_at: row.get::<_, i64>(3)? as u64,
             })
         })
         .map_err(error_to_string)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(error_to_string)?;
+    if section == "chapters" {
+        rows.sort_by(|left, right| {
+            let left_id = left
+                .entry_id
+                .as_deref()
+                .and_then(parse_numeric_id)
+                .unwrap_or(u32::MAX);
+            let right_id = right
+                .entry_id
+                .as_deref()
+                .and_then(parse_numeric_id)
+                .unwrap_or(u32::MAX);
+            left_id
+                .cmp(&right_id)
+                .then_with(|| left.name.cmp(&right.name))
+                .then_with(|| left.path.cmp(&right.path))
+        });
+    }
     Ok(rows)
 }
 
@@ -366,6 +396,19 @@ fn write_entry_content(
             )
             .map_err(error_to_string)?,
     };
+    if affected == 0 && section == "project" && path == "chapters.meta.json" {
+        insert_entry(
+            transaction,
+            workspace_id,
+            section,
+            path,
+            name_override.unwrap_or("chapters.meta.json"),
+            content,
+            timestamp,
+        )?;
+        touch_workspace(transaction, workspace_id, timestamp)?;
+        return Ok(());
+    }
     if affected == 0 {
         return Err("目标条目不存在。".into());
     }
@@ -380,20 +423,23 @@ fn allocate_next_numeric_id(
 ) -> CommandResult<String> {
     let mut statement = connection
         .prepare(
-            "SELECT path FROM expansion_entries WHERE workspace_id = ?1 AND section = ?2",
+            "SELECT path, content_bytes FROM expansion_entries WHERE workspace_id = ?1 AND section = ?2",
         )
         .map_err(error_to_string)?;
-    let paths = statement
-        .query_map(params![workspace_id, section], |row| row.get::<_, String>(0))
+    let entries = statement
+        .query_map(params![workspace_id, section], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
+        })
         .map_err(error_to_string)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(error_to_string)?;
 
     let mut used = HashSet::<u32>::new();
-    for path in paths {
-        // path 形如 "001-林风"；提取前导数字
-        let head: String = path.chars().take_while(|c| c.is_ascii_digit()).collect();
-        if let Ok(value) = head.parse::<u32>() {
+    for (path, content) in entries {
+        if let Some(value) = extract_entry_id(section, &path, &content)
+            .as_deref()
+            .and_then(parse_numeric_id)
+        {
             used.insert(value);
         }
     }
@@ -401,24 +447,74 @@ fn allocate_next_numeric_id(
     while used.contains(&next) {
         next += 1;
     }
-    Ok(format!("{:03}", next))
+    Ok(next.to_string())
 }
 
-fn default_setting_template(id: &str, name: &str, timestamp: u64) -> String {
+fn parse_numeric_id(value: &str) -> Option<u32> {
+    value.trim().parse::<u32>().ok().or_else(|| {
+        let head: String = value.chars().take_while(|c| c.is_ascii_digit()).collect();
+        head.parse::<u32>().ok()
+    })
+}
+
+fn extract_json_string_field(content: &[u8], field: &str) -> Option<String> {
+    let value = serde_json::from_slice::<Value>(content).ok()?;
+    let text = value.get(field)?.as_str()?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    Some(text.to_string())
+}
+
+fn extract_entry_id(section: &str, path: &str, content: &[u8]) -> Option<String> {
+    extract_json_string_field(content, "id")
+        .filter(|value| value.chars().all(|character| character.is_ascii_digit()))
+        .or_else(|| {
+            if section == "settings" {
+                let head: String = path.chars().take_while(|c| c.is_ascii_digit()).collect();
+                if head.is_empty() {
+                    None
+                } else {
+                    Some(head)
+                }
+            } else {
+                None
+            }
+        })
+}
+
+fn rewrite_json_name_field(content: &[u8], next_name: &str) -> Option<Vec<u8>> {
+    let mut value = serde_json::from_slice::<Value>(content).ok()?;
+    let object = value.as_object_mut()?;
+    object.insert("name".to_string(), Value::String(next_name.to_string()));
+    let mut bytes = serde_json::to_vec_pretty(&value).ok()?;
+    bytes.push(b'\n');
+    Some(bytes)
+}
+
+fn default_setting_template(id: &str, name: &str) -> String {
     format!(
-        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"type\": \"人物\",\n  \"aliases\": [],\n  \"tags\": [],\n  \"summary\": \"\",\n  \"description\": \"\",\n  \"attributes\": {{}},\n  \"relations\": [],\n  \"appearChapters\": [],\n  \"notes\": \"\",\n  \"createdAt\": {timestamp},\n  \"updatedAt\": {timestamp}\n}}\n"
+        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"content\": \"\",\n  \"notes\": \"\",\n  \"linkedChapterIds\": []\n}}\n"
     )
 }
 
-fn default_chapter_template(id: &str, name: &str, timestamp: u64) -> String {
+fn default_chapter_template(id: &str, name: &str) -> String {
     format!(
-        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"order\": {order},\n  \"status\": \"draft\",\n  \"summary\": \"\",\n  \"linkedSettingIds\": [],\n  \"outline\": \"\",\n  \"content\": \"\",\n  \"charCount\": 0,\n  \"wordCount\": 0,\n  \"pov\": \"\",\n  \"location\": \"\",\n  \"timeline\": \"\",\n  \"events\": [],\n  \"foreshadowing\": [],\n  \"notes\": \"\",\n  \"createdAt\": {timestamp},\n  \"updatedAt\": {timestamp}\n}}\n",
-        order = id.trim_start_matches('0').parse::<u32>().unwrap_or(1)
+        "{{\n  \"id\": \"{id}\",\n  \"name\": \"{name}\",\n  \"outline\": \"\",\n  \"content\": \"\",\n  \"notes\": \"\",\n  \"linkedSettingIds\": []\n}}\n"
     )
 }
 
-fn build_entry_path(numeric_id: &str, name: &str) -> String {
+fn build_setting_entry_path(numeric_id: &str, name: &str) -> String {
     format!("{numeric_id}-{name}")
+}
+
+fn build_chapter_entry_path(parent_path: Option<&str>, name: &str) -> String {
+    match parent_path {
+        Some(parent) if !parent.trim().is_empty() => {
+            format!("{}/{}", parent.trim_matches('/'), name)
+        }
+        _ => name.to_string(),
+    }
 }
 
 // ---- 命令入口 ----
@@ -537,22 +633,42 @@ pub fn create_expansion_entry(
     workspaceId: String,
     section: String,
     name: String,
+    parentPath: Option<String>,
 ) -> CommandResult<ExpansionEntryItem> {
     validate_section(&section)?;
     if section == "project" {
         return Err("project 分区的条目为固定模板，不能新建。".into());
     }
     let validated_name = validate_name(&name)?;
+    let chapter_parent = if section == "chapters" {
+        parentPath
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                if value.chars().all(|character| character.is_ascii_digit()) {
+                    Ok(value)
+                } else {
+                    Err("分卷目录只能使用纯数字名称。".to_string())
+                }
+            })
+            .transpose()?
+    } else {
+        None
+    };
 
     with_transaction(&app, |transaction| {
         let _ = load_workspace_by_id(transaction, &workspaceId)?;
         let numeric_id = allocate_next_numeric_id(transaction, &workspaceId, &section)?;
-        let path = build_entry_path(&numeric_id, &validated_name);
+        let path = if section == "settings" {
+            build_setting_entry_path(&numeric_id, &validated_name)
+        } else {
+            build_chapter_entry_path(chapter_parent.as_deref(), &validated_name)
+        };
         let timestamp = now_timestamp();
         let content = if section == "settings" {
-            default_setting_template(&numeric_id, &validated_name, timestamp)
+            default_setting_template(&numeric_id, &validated_name)
         } else {
-            default_chapter_template(&numeric_id, &validated_name, timestamp)
+            default_chapter_template(&numeric_id, &validated_name)
         };
 
         insert_entry(
@@ -570,6 +686,7 @@ pub fn create_expansion_entry(
             section: section.clone(),
             name: validated_name,
             path,
+            entry_id: Some(numeric_id),
             updated_at: timestamp,
         })
     })
@@ -617,15 +734,17 @@ pub fn rename_expansion_entry(
     }
     let validated = validate_name(&nextName)?;
     with_transaction(&app, |transaction| {
-        // 取出 numeric_id
-        let numeric_id: String = path
-            .chars()
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
-        if numeric_id.is_empty() {
-            return Err("路径格式异常，无法解析编号。".into());
-        }
-        let new_path = build_entry_path(&numeric_id, &validated);
+        let existing_content = load_entry_content(transaction, &workspaceId, &section, &path)?;
+        let entry_id = extract_entry_id(&section, &path, &existing_content);
+        let new_path = if section == "settings" {
+            let numeric_id = entry_id
+                .clone()
+                .ok_or_else(|| "路径格式异常，无法解析编号。".to_string())?;
+            build_setting_entry_path(&numeric_id, &validated)
+        } else {
+            let parent = path.rsplit_once('/').map(|(prefix, _)| prefix.to_string());
+            build_chapter_entry_path(parent.as_deref(), &validated)
+        };
         if new_path != path {
             // 检查冲突
             let exists = transaction
@@ -642,14 +761,24 @@ pub fn rename_expansion_entry(
         }
 
         let timestamp = now_timestamp();
+        let rewritten_content =
+            rewrite_json_name_field(&existing_content, &validated).unwrap_or(existing_content);
         transaction
             .execute(
                 r#"
                 UPDATE expansion_entries
-                SET path = ?1, name = ?2, updated_at = ?3
-                WHERE workspace_id = ?4 AND section = ?5 AND path = ?6
+                SET path = ?1, name = ?2, content_bytes = ?3, updated_at = ?4
+                WHERE workspace_id = ?5 AND section = ?6 AND path = ?7
                 "#,
-                params![new_path, validated, timestamp as i64, workspaceId, section, path],
+                params![
+                    new_path,
+                    validated,
+                    rewritten_content,
+                    timestamp as i64,
+                    workspaceId,
+                    section,
+                    path
+                ],
             )
             .map_err(error_to_string)?;
         touch_workspace(transaction, &workspaceId, timestamp)?;
@@ -658,6 +787,7 @@ pub fn rename_expansion_entry(
             section: section.clone(),
             name: validated,
             path: new_path,
+            entry_id: entry_id.clone(),
             updated_at: timestamp,
         })
     })
@@ -672,6 +802,37 @@ fn is_ignored_archive_path(path: &str) -> bool {
 
 fn normalize_archive_path(value: &str) -> String {
     value.replace('\\', "/").trim_end_matches('/').to_string()
+}
+
+fn collect_volume_directories(all_entries: &[(String, String, Vec<u8>)]) -> Vec<String> {
+    let mut volumes = HashSet::<String>::new();
+    for (section, path, content) in all_entries {
+        if section == "chapters" {
+            if let Some((volume, _)) = path.split_once('/') {
+                if !volume.trim().is_empty() {
+                    volumes.insert(volume.trim().to_string());
+                }
+            }
+            continue;
+        }
+        if section == "project" && path == "chapters.meta.json" {
+            if let Ok(value) = serde_json::from_slice::<Value>(content) {
+                if let Some(items) = value.get("volumes").and_then(|volumes| volumes.as_array()) {
+                    for item in items {
+                        if let Some(volume) = item.as_str() {
+                            let trimmed = volume.trim();
+                            if !trimmed.is_empty() {
+                                volumes.insert(trimmed.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut result = volumes.into_iter().collect::<Vec<_>>();
+    result.sort();
+    result
 }
 
 #[tauri::command]
@@ -710,6 +871,11 @@ pub async fn export_expansion_zip(
         for section in SECTIONS.iter() {
             archive
                 .add_directory(format!("{}/{}/", record.name, section), options)
+                .map_err(error_to_string)?;
+        }
+        for volume_id in collect_volume_directories(&all_entries) {
+            archive
+                .add_directory(format!("{}/chapters/{}/", record.name, volume_id), options)
                 .map_err(error_to_string)?;
         }
         for (section, path, content) in all_entries {
@@ -842,23 +1008,30 @@ pub fn import_expansion_zip(
                 continue;
             }
 
-            // 期望格式：<root>/<section>/<rest>
+            // 期望格式：<root>/<section>/<rest...>
             let parts: Vec<&str> = raw.split('/').collect();
             if parts.len() < 3 {
                 continue;
             }
-            let section = parts[parts.len() - 2];
+            let section = parts[1];
             if !SECTIONS.contains(&section) {
                 continue;
             }
-            let file_name = parts[parts.len() - 1];
+            let relative_parts = &parts[2..];
+            if relative_parts.is_empty() {
+                continue;
+            }
+            let file_name = relative_parts[relative_parts.len() - 1];
 
             let mut buffer = Vec::new();
             entry.read_to_end(&mut buffer).map_err(error_to_string)?;
 
             if section == "project" {
-                // 只接受 AGENTS.md / outline.md
-                if file_name != "AGENTS.md" && file_name != "outline.md" {
+                // 只接受固定 project 文件
+                if file_name != "AGENTS.md"
+                    && file_name != "outline.md"
+                    && file_name != "chapters.meta.json"
+                {
                     continue;
                 }
                 insert_entry(
@@ -877,13 +1050,26 @@ pub fn import_expansion_zip(
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or(file_name);
-                // 抽取 name（去掉编号前缀）
-                let name_part = stem.splitn(2, '-').nth(1).unwrap_or(stem).to_string();
+                let relative_parent = if relative_parts.len() > 1 {
+                    relative_parts[..relative_parts.len() - 1].join("/")
+                } else {
+                    String::new()
+                };
+                let entry_path = if relative_parent.is_empty() {
+                    stem.to_string()
+                } else {
+                    format!("{relative_parent}/{stem}")
+                };
+                let name_part = if section == "settings" {
+                    stem.splitn(2, '-').nth(1).unwrap_or(stem).to_string()
+                } else {
+                    stem.to_string()
+                };
                 insert_entry(
                     transaction,
                     &record.id,
                     section,
-                    stem,
+                    &entry_path,
                     &name_part,
                     &buffer,
                     timestamp,

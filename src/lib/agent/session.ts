@@ -1043,6 +1043,98 @@ function buildAiSdkTools(
           return result.data ?? result.summary;
         },
       }),
+    expansion_chapter_batch_outline: (toolName, tool) =>
+      defineTool({
+        description:
+          "根据大纲批量创建章节 JSON，写入最小章节字段。",
+        inputSchema: z.object({
+          chapters: z
+            .array(
+              z.object({
+                content: z.string().optional(),
+                linkedSettingIds: z.array(z.string()).optional(),
+                name: z.string().min(1),
+                notes: z.string().optional(),
+                outline: z.string().optional(),
+                volumeId: z.string().optional(),
+              }),
+            )
+            .optional()
+            .describe("可选。显式传入要创建的章节草稿数组；不传时工具会尝试从项目大纲推断。"),
+          volumeId: z.string().optional().describe("目标分卷编号，如 001；未传时默认写入 001 卷。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(toolName, tool, input as Record<string, unknown>);
+          return result.data ?? result.summary;
+        },
+      }),
+    expansion_chapter_write_content: (toolName, tool) =>
+      defineTool({
+        description:
+          "将已生成的正文回写到章节 JSON。",
+        inputSchema: z.object({
+          chapterId: z.string().optional().describe("章节编号，如 4。"),
+          chapterPath: z.string().optional().describe("章节路径，如 001/雨夜追踪。"),
+          content: z.string().min(1).describe("要回写的正文全文。"),
+          linkedSettingIds: z.array(z.string()).optional(),
+          notes: z.string().optional(),
+          outline: z.string().optional(),
+        }),
+        execute: async (input) => {
+          const result = await runTool(toolName, tool, input as Record<string, unknown>);
+          return result.data ?? result.summary;
+        },
+      }),
+    expansion_setting_batch_generate: (toolName, tool) =>
+      defineTool({
+        description:
+          "批量创建设定 JSON，写入最小设定字段。",
+        inputSchema: z.object({
+          settings: z.array(
+            z.object({
+              content: z.string().optional(),
+              linkedChapterIds: z.array(z.string()).optional(),
+              name: z.string().min(1),
+              notes: z.string().optional(),
+            }),
+          ),
+        }),
+        execute: async (input) => {
+          const result = await runTool(toolName, tool, input as Record<string, unknown>);
+          return result.data ?? result.summary;
+        },
+      }),
+    expansion_setting_update_from_chapter: (toolName, tool) =>
+      defineTool({
+        description:
+          "根据章节推进后的分析结果更新设定，可创建缺失设定。",
+        inputSchema: z.object({
+          updates: z.array(
+            z.object({
+              content: z.string().optional(),
+              id: z.string().optional(),
+              linkedChapterIds: z.array(z.string()).optional(),
+              name: z.string().min(1),
+              notes: z.string().optional(),
+              path: z.string().optional(),
+            }),
+          ),
+        }),
+        execute: async (input) => {
+          const result = await runTool(toolName, tool, input as Record<string, unknown>);
+          return result.data ?? result.summary;
+        },
+      }),
+    expansion_continuity_scan: (toolName, tool) =>
+      defineTool({
+        description:
+          "扫描扩写项目中的章节顺序、章节引用和设定引用问题，返回结构化结果。",
+        inputSchema: z.object({}),
+        execute: async (input) => {
+          const result = await runTool(toolName, tool, input as Record<string, unknown>);
+          return result.data ?? result.summary;
+        },
+      }),
   };
 
   for (const toolId of enabledToolIds) {

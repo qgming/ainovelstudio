@@ -1,11 +1,13 @@
 import {
+  AlertCircle,
+  CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Download,
-  FileText,
+  LoaderCircle,
   Pencil,
   Plus,
   Save,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -14,16 +16,26 @@ import { PageShell } from "../components/PageShell";
 import { Toast, type ToastTone } from "../components/common/Toast";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
-import { Button } from "../components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu";
-import { Input } from "../components/ui/input";
-import { Textarea } from "../components/ui/textarea";
+  ChapterEditor,
+  ProjectEditor,
+  SettingEditor,
+} from "../components/expansion/detail/ExpansionEditors";
+import {
+  ExpansionWorkspacePanel,
+  type ExpansionWorkspaceActionButton,
+  type ExpansionWorkspaceActionId,
+  type ExpansionWorkspaceTask,
+} from "../components/expansion/detail/ExpansionWorkspacePanel";
+import { DialogShell } from "../components/dialogs/DialogShell";
+import { Button } from "../components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
+import { runAgentTurn } from "../lib/agent/session";
+import { createGlobalToolset, createLocalResourceToolset } from "../lib/agent/tools";
+import type { AgentPart, AgentRunStatus } from "../lib/agent/types";
+import { mergePart } from "../lib/chat/sessionRuntime";
+import { createExpansionAgentToolset } from "../lib/expansion/agentToolset";
+import { createExpansionSemanticToolset } from "../lib/expansion/semanticToolset";
 import {
   createExpansionEntry,
   deleteExpansionEntry,
@@ -35,9 +47,6 @@ import {
   writeExpansionEntry,
 } from "../lib/expansion/api";
 import {
-  CHAPTER_STATUS_LABEL,
-  countChineseChars,
-  countWords,
   parseChapterJson,
   parseSettingJson,
   serializeJson,
@@ -45,23 +54,156 @@ import {
 import { buildExpansionListRoute } from "../lib/expansion/routes";
 import type {
   ChapterJson,
-  ChapterStatus,
   ExpansionSection,
   ExpansionWorkspaceDetail,
   SettingJson,
-  SettingType,
 } from "../lib/expansion/types";
 import { cn } from "../lib/utils";
+import { useAgentSettingsStore } from "../stores/agentSettingsStore";
+import { getEnabledSkills, useSkillsStore } from "../stores/skillsStore";
+import { getEnabledAgents, useSubAgentStore } from "../stores/subAgentStore";
 
 type ToastState = { description?: string; title: string; tone: ToastTone };
 type SelectedKey = { section: ExpansionSection; path: string } | null;
 type LoadStatus = "loading" | "ready" | "error";
+type ChapterVolumeGroup = {
+  entries: ExpansionWorkspaceDetail["chapterEntries"];
+  volumeId: string;
+};
 
-const SETTING_TYPE_OPTIONS: SettingType[] = ["人物", "物品", "地点", "势力", "概念"];
-const CHAPTER_STATUS_OPTIONS: ChapterStatus[] = ["draft", "outlined", "drafted", "revised", "done"];
+const HIDDEN_CHAPTER_META_PATH = "chapters.meta.json";
 
 function getReadableError(error: unknown) {
   return error instanceof Error ? error.message : "操作失败，请重试。";
+}
+
+function getProjectEntryLabel(path: string) {
+  if (path === "AGENTS.md") {
+    return "代理规则 · AGENTS.md";
+  }
+  if (/outline/i.test(path) || /大纲/.test(path)) {
+    return `故事大纲 · ${path}`;
+  }
+  return path;
+}
+
+function normalizeNumericId(value: string) {
+  return value.replace(/\D+/g, "");
+}
+
+function normalizeVolumeId(value: string) {
+  const digits = normalizeNumericId(value);
+  return digits ? digits.padStart(3, "0") : "";
+}
+
+function normalizeLinkedIds(values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .map((item) => normalizeNumericId(item.trim()))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function sanitizeSettingJson(value: SettingJson): SettingJson {
+  return {
+    id: normalizeNumericId(value.id),
+    name: value.name.trim(),
+    content: value.content,
+    notes: value.notes,
+    linkedChapterIds: normalizeLinkedIds(value.linkedChapterIds),
+  };
+}
+
+function sanitizeChapterJson(value: ChapterJson): ChapterJson {
+  return {
+    id: normalizeNumericId(value.id),
+    name: value.name.trim(),
+    outline: value.outline,
+    content: value.content,
+    notes: value.notes,
+    linkedSettingIds: normalizeLinkedIds(value.linkedSettingIds),
+  };
+}
+
+function buildChapterTargetLabel(chapter: ChapterJson | null, fallbackName: string | null) {
+  const name = chapter?.name?.trim() || fallbackName?.trim() || "未命名章节";
+  const id = chapter?.id?.trim() ?? "";
+  return id ? `第 ${id} 章 · ${name}` : name;
+}
+
+function buildChapterEntryLabel(entryId: string | null | undefined, name: string) {
+  const normalizedName = name.trim() || "未命名章节";
+  const normalizedId = entryId?.trim() ?? "";
+  return normalizedId ? `第 ${normalizedId} 章 · ${normalizedName}` : normalizedName;
+}
+
+function getChapterVolumeId(path: string) {
+  return path.includes("/") ? normalizeVolumeId(path.split("/")[0] ?? "") : "001";
+}
+
+function parseChapterMeta(raw: string) {
+  try {
+    const parsed = JSON.parse(raw) as { volumes?: unknown };
+    if (!Array.isArray(parsed.volumes)) {
+      return [];
+    }
+    return Array.from(
+      new Set(
+        parsed.volumes
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => normalizeVolumeId(item))
+          .filter(Boolean),
+      ),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function buildVolumeMetaContent(volumeIds: string[]) {
+  return serializeJson({
+    volumes: Array.from(new Set(volumeIds.map((item) => normalizeVolumeId(item)).filter(Boolean))).sort(),
+  });
+}
+
+function toChineseNumber(value: number) {
+  const digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  const units = ["", "十", "百", "千"];
+  const raw = String(value);
+  let result = "";
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const digit = Number(raw[index]);
+    const unitIndex = raw.length - index - 1;
+    if (digit === 0) {
+      if (result && !result.endsWith("零") && raw.slice(index + 1).split("").some((char) => char !== "0")) {
+        result += "零";
+      }
+      continue;
+    }
+    if (digit === 1 && unitIndex === 1 && result === "") {
+      result += units[unitIndex];
+      continue;
+    }
+    result += `${digits[digit]}${units[unitIndex] ?? ""}`;
+  }
+
+  return result || digits[0];
+}
+
+function formatVolumeLabel(volumeId: string) {
+  const numeric = Number.parseInt(volumeId, 10);
+  return Number.isFinite(numeric) && numeric > 0 ? `第${toChineseNumber(numeric)}卷` : `${volumeId}卷`;
+}
+
+function getNextVolumeId(volumeIds: string[]) {
+  const maxValue = volumeIds.reduce((currentMax, volumeId) => {
+    const numeric = Number.parseInt(volumeId, 10);
+    return Number.isFinite(numeric) ? Math.max(currentMax, numeric) : currentMax;
+  }, 0);
+  return String(maxValue + 1).padStart(3, "0");
 }
 
 function DetailTitle({ name }: { name: string }) {
@@ -78,18 +220,18 @@ function DetailTitle({ name }: { name: string }) {
 
 function EntryButton({
   active,
+  canModify,
   label,
   onClick,
-  onRename,
   onDelete,
-  canModify,
+  onRename,
 }: {
   active: boolean;
+  canModify: boolean;
   label: string;
   onClick: () => void;
-  onRename?: () => void;
   onDelete?: () => void;
-  canModify: boolean;
+  onRename?: () => void;
 }) {
   return (
     <div
@@ -98,11 +240,7 @@ function EntryButton({
         active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex flex-1 min-w-0 items-center px-3 py-2 text-left"
-      >
+      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center px-3 py-2 text-left">
         <span className="block min-w-0 truncate text-sm font-medium">{label}</span>
       </button>
       {canModify ? (
@@ -174,6 +312,64 @@ function SectionHeader({
   );
 }
 
+function BatchOutlineVolumeDialog({
+  busy,
+  onCancel,
+  onChange,
+  onConfirm,
+  value,
+  volumeIds,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+  value: string;
+  volumeIds: string[];
+}) {
+  return (
+    <DialogShell title="批量生成细纲" onClose={onCancel}>
+      <div className="flex flex-1 flex-col gap-5">
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">选择已有分卷</p>
+          <div className="flex flex-wrap gap-2">
+            {volumeIds.length > 0 ? (
+              volumeIds.map((volumeId) => {
+                const active = normalizeVolumeId(value) === volumeId;
+                return (
+                  <Button
+                    key={volumeId}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    onClick={() => onChange(volumeId)}
+                    className="h-9 gap-1.5"
+                  >
+                    <span>{formatVolumeLabel(volumeId)}</span>
+                  </Button>
+                );
+              })
+            ) : (
+              <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                当前还没有分卷，先点击左侧分卷区域右上角创建分卷。
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onCancel}>
+            取消
+          </Button>
+          <Button type="button" size="sm" disabled={busy || volumeIds.length === 0} onClick={onConfirm}>
+            {busy ? "处理中..." : "开始生成"}
+          </Button>
+        </div>
+      </div>
+    </DialogShell>
+  );
+}
+
 export function ExpansionDetailPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
@@ -181,54 +377,108 @@ export function ExpansionDetailPage() {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedKey>(null);
-  const [rawContent, setRawContent] = useState<string>("");
+  const [rawContent, setRawContent] = useState("");
   const [isDirty, setIsDirty] = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [toastState, setToastState] = useState<ToastState | null>(null);
-
-  // 创建条目
-  const [createSection, setCreateSection] = useState<"settings" | "chapters" | null>(null);
-  const [createName, setCreateName] = useState("");
-  const [createBusy, setCreateBusy] = useState(false);
-
-  // 重命名
+  const [activeWorkspaceTask, setActiveWorkspaceTask] = useState<ExpansionWorkspaceTask | null>(null);
+  const [workspaceAgentParts, setWorkspaceAgentParts] = useState<AgentPart[]>([]);
+  const [workspaceExecutionPrompt, setWorkspaceExecutionPrompt] = useState("");
+  const [workspaceRunStatus, setWorkspaceRunStatus] = useState<AgentRunStatus>("idle");
+  const [volumeIds, setVolumeIds] = useState<string[]>([]);
+  const [volumeExpanded, setVolumeExpanded] = useState<Record<string, boolean>>({});
+  const [createSettingOpen, setCreateSettingOpen] = useState(false);
+  const [createSettingName, setCreateSettingName] = useState("");
+  const [createSettingBusy, setCreateSettingBusy] = useState(false);
+  const [createVolumeBusy, setCreateVolumeBusy] = useState(false);
+  const [batchOutlineVolumeOpen, setBatchOutlineVolumeOpen] = useState(false);
+  const [batchOutlineVolumeValue, setBatchOutlineVolumeValue] = useState("");
+  const [createChapterVolumeId, setCreateChapterVolumeId] = useState<string | null>(null);
+  const [createChapterName, setCreateChapterName] = useState("");
+  const [createChapterBusy, setCreateChapterBusy] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ section: "settings" | "chapters"; path: string; current: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
-
-  // 删除条目
   const [deleteTarget, setDeleteTarget] = useState<{ section: "settings" | "chapters"; path: string; name: string } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-
-  // 删除整本
   const [deleteWorkspaceOpen, setDeleteWorkspaceOpen] = useState(false);
   const [deleteWorkspaceBusy, setDeleteWorkspaceBusy] = useState(false);
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      return;
+    }
     void loadDetail();
   }, [workspaceId]);
 
+  useEffect(() => {
+    setActiveWorkspaceTask(null);
+    setWorkspaceAgentParts([]);
+    setWorkspaceExecutionPrompt("");
+    setWorkspaceRunStatus("idle");
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !detail) {
+      return;
+    }
+    let cancelled = false;
+    const derivedVolumeIds = detail.chapterEntries.map((entry) => getChapterVolumeId(entry.path));
+    void readExpansionEntry(workspaceId, "project", HIDDEN_CHAPTER_META_PATH)
+      .then((value) => {
+        if (cancelled) {
+          return;
+        }
+        setVolumeIds(Array.from(new Set([...parseChapterMeta(value), ...derivedVolumeIds])).sort());
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVolumeIds(Array.from(new Set(derivedVolumeIds)).sort());
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail, workspaceId]);
+
   async function loadDetail() {
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      return;
+    }
     setStatus("loading");
     try {
       const next = await getExpansionWorkspaceDetail(workspaceId);
       setDetail(next);
       setStatus("ready");
-      // 默认选中 AGENTS.md
-      if (!selected && next.projectEntries.length > 0) {
-        const agents = next.projectEntries.find((entry) => entry.path === "AGENTS.md") ?? next.projectEntries[0];
-        setSelected({ section: "project", path: agents.path });
-      }
+      setSelected((current) => {
+        if (current) {
+          return current;
+        }
+        const projectEntries = next.projectEntries.filter((entry) => entry.path !== HIDDEN_CHAPTER_META_PATH);
+        const defaultEntry =
+          projectEntries.find((entry) => entry.path === "AGENTS.md") ?? projectEntries[0] ?? null;
+        return defaultEntry ? { section: "project", path: defaultEntry.path } : null;
+      });
     } catch (error) {
       setErrorMessage(getReadableError(error));
       setStatus("error");
     }
   }
 
-  // 加载选中条目内容
+  async function refreshSelectedEntry(nextSelected = selected) {
+    if (!workspaceId || !nextSelected) {
+      return;
+    }
+    try {
+      const value = await readExpansionEntry(workspaceId, nextSelected.section, nextSelected.path);
+      setRawContent(value);
+      setIsDirty(false);
+    } catch {
+      // 保留当前编辑内容
+    }
+  }
+
   useEffect(() => {
     if (!workspaceId || !selected) {
       setRawContent("");
@@ -239,63 +489,561 @@ export function ExpansionDetailPage() {
     setIsDirty(false);
     void readExpansionEntry(workspaceId, selected.section, selected.path)
       .then((value) => {
-        if (cancelled) return;
-        setRawContent(value);
+        if (!cancelled) {
+          setRawContent(value);
+        }
       })
       .catch((error) => {
-        if (cancelled) return;
-        setToastState({ title: getReadableError(error), tone: "error" });
-        setRawContent("");
+        if (!cancelled) {
+          setToastState({ title: getReadableError(error), tone: "error" });
+          setRawContent("");
+        }
       })
       .finally(() => {
-        if (!cancelled) setContentLoading(false);
+        if (!cancelled) {
+          setContentLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, selected?.section, selected?.path]);
+  }, [selected?.path, selected?.section, workspaceId]);
 
-  const parsedSetting = useMemo<SettingJson | null>(() => {
-    if (!selected || selected.section !== "settings") return null;
-    const numericId = selected.path.split("-")[0] ?? "";
-    const fallbackName = selected.path.split("-").slice(1).join("-") || selected.path;
-    return parseSettingJson(rawContent, numericId, fallbackName);
-  }, [rawContent, selected?.section, selected?.path]);
+  const selectedSettingEntry = useMemo(() => {
+    if (!detail || selected?.section !== "settings") {
+      return null;
+    }
+    return detail.settingEntries.find((entry) => entry.path === selected.path) ?? null;
+  }, [detail, selected]);
 
-  const parsedChapter = useMemo<ChapterJson | null>(() => {
-    if (!selected || selected.section !== "chapters") return null;
-    const numericId = selected.path.split("-")[0] ?? "";
-    const fallbackName = selected.path.split("-").slice(1).join("-") || selected.path;
-    return parseChapterJson(rawContent, numericId, fallbackName);
-  }, [rawContent, selected?.section, selected?.path]);
+  const selectedChapterEntry = useMemo(() => {
+    if (!detail || selected?.section !== "chapters") {
+      return null;
+    }
+    return detail.chapterEntries.find((entry) => entry.path === selected.path) ?? null;
+  }, [detail, selected]);
+
+  const parsedSetting = useMemo(() => {
+    if (selected?.section !== "settings") {
+      return null;
+    }
+    const fallbackId = selectedSettingEntry?.entryId ?? selected.path.split("-")[0] ?? "";
+    const fallbackName =
+      selectedSettingEntry?.name ?? (selected.path.split("-").slice(1).join("-") || selected.path);
+    return parseSettingJson(rawContent, fallbackId, fallbackName);
+  }, [rawContent, selected, selectedSettingEntry]);
+
+  const parsedChapter = useMemo(() => {
+    if (selected?.section !== "chapters") {
+      return null;
+    }
+    return parseChapterJson(rawContent, selectedChapterEntry?.entryId ?? "", selectedChapterEntry?.name ?? selected.path);
+  }, [rawContent, selected, selectedChapterEntry]);
+
+  const visibleProjectEntries = useMemo(
+    () => detail?.projectEntries.filter((entry) => entry.path !== HIDDEN_CHAPTER_META_PATH) ?? [],
+    [detail?.projectEntries],
+  );
+
+  const chapterVolumes = useMemo<ChapterVolumeGroup[]>(() => {
+    if (!detail) {
+      return [];
+    }
+    const groups = new Map<string, ExpansionWorkspaceDetail["chapterEntries"]>();
+    for (const volumeId of volumeIds) {
+      groups.set(volumeId, []);
+    }
+    for (const entry of detail.chapterEntries) {
+      const volumeId = getChapterVolumeId(entry.path);
+      const current = groups.get(volumeId) ?? [];
+      current.push(entry);
+      groups.set(volumeId, current);
+    }
+    return Array.from(groups.entries())
+      .sort(([left], [right]) => Number.parseInt(left, 10) - Number.parseInt(right, 10))
+      .map(([volumeId, entries]) => ({ volumeId, entries }));
+  }, [detail, volumeIds]);
+
+  useEffect(() => {
+    if (chapterVolumes.length === 0) {
+      return;
+    }
+    setVolumeExpanded((current) => {
+      const next = { ...current };
+      for (const group of chapterVolumes) {
+        if (!(group.volumeId in next)) {
+          next[group.volumeId] = true;
+        }
+      }
+      return next;
+    });
+  }, [chapterVolumes]);
+
+  const currentFilePath = selected ? `${selected.section}/${selected.path}` : null;
+
+  const currentFileName = useMemo(() => {
+    if (!selected) {
+      return null;
+    }
+    if (selected.section === "project") {
+      return selected.path;
+    }
+    if (selected.section === "settings") {
+      return parsedSetting?.name ?? selectedSettingEntry?.name ?? selected.path;
+    }
+    return parsedChapter?.name ?? selectedChapterEntry?.name ?? selected.path;
+  }, [parsedChapter?.name, parsedSetting?.name, selected, selectedChapterEntry?.name, selectedSettingEntry?.name]);
+
+  const currentSelectionLabel = useMemo(() => {
+    if (!selected) {
+      return null;
+    }
+    if (selected.section === "project") {
+      return selected.path;
+    }
+    if (selected.section === "settings") {
+      return parsedSetting?.name ?? selectedSettingEntry?.name ?? "设定";
+    }
+    return buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null);
+  }, [parsedChapter, parsedSetting?.name, selected, selectedChapterEntry?.name, selectedSettingEntry?.name]);
+
+  const workspaceStatusButton = useMemo(() => {
+    if (workspaceRunStatus === "running") {
+      return {
+        className: "text-amber-700",
+        icon: LoaderCircle,
+        iconClassName: "animate-spin",
+        label: activeWorkspaceTask ? `${activeWorkspaceTask.actionLabel} · 运行中` : "运行中",
+      };
+    }
+    if (workspaceRunStatus === "failed") {
+      return {
+        className: "text-destructive",
+        icon: AlertCircle,
+        iconClassName: "",
+        label: activeWorkspaceTask ? `${activeWorkspaceTask.actionLabel} · 失败` : "失败",
+      };
+    }
+    if (activeWorkspaceTask) {
+      return {
+        className: "text-emerald-700",
+        icon: CheckCircle2,
+        iconClassName: "",
+        label: `${activeWorkspaceTask.actionLabel} · ${activeWorkspaceTask.statusLabel}`,
+      };
+    }
+    return {
+      className: "text-muted-foreground",
+      icon: CheckCircle2,
+      iconClassName: "",
+      label: "空闲",
+    };
+  }, [activeWorkspaceTask, workspaceRunStatus]);
+  const WorkspaceStatusIcon = workspaceStatusButton.icon;
 
   function applySetting(next: SettingJson) {
-    setRawContent(serializeJson({ ...next, updatedAt: Math.floor(Date.now() / 1000) }));
+    setRawContent(serializeJson(sanitizeSettingJson(next)));
     setIsDirty(true);
   }
 
   function applyChapter(next: ChapterJson) {
-    const charCount = countChineseChars(next.content);
-    const wordCount = countWords(next.content);
-    setRawContent(
-      serializeJson({
-        ...next,
-        charCount,
-        wordCount,
-        updatedAt: Math.floor(Date.now() / 1000),
-      }),
-    );
+    setRawContent(serializeJson(sanitizeChapterJson(next)));
     setIsDirty(true);
   }
 
+  async function saveVolumeMeta(nextVolumeIds: string[]) {
+    if (!workspaceId) {
+      return;
+    }
+    await writeExpansionEntry(
+      workspaceId,
+      "project",
+      HIDDEN_CHAPTER_META_PATH,
+      buildVolumeMetaContent(nextVolumeIds),
+    );
+  }
+
+  async function runWorkspaceAgentAction(params: {
+    actionId: ExpansionWorkspaceActionId;
+    actionLabel: string;
+    description: string;
+    prompt: string;
+    targetLabel: string;
+  }) {
+    if (!workspaceId || !detail) {
+      return;
+    }
+
+    setActiveWorkspaceTask({
+      actionId: params.actionId,
+      actionLabel: params.actionLabel,
+      createdAt: Date.now(),
+      description: params.description,
+      statusLabel: "运行中",
+      targetLabel: params.targetLabel,
+    });
+    setWorkspaceAgentParts([]);
+    setWorkspaceExecutionPrompt(params.prompt);
+    setWorkspaceRunStatus("running");
+
+    try {
+      const agentSettings = useAgentSettingsStore.getState();
+      if (agentSettings.status !== "ready") {
+        await agentSettings.initialize();
+      }
+      const skillsStore = useSkillsStore.getState();
+      if (skillsStore.status === "idle") {
+        await skillsStore.initialize();
+      }
+      const agentStore = useSubAgentStore.getState();
+      if (agentStore.status === "idle") {
+        await agentStore.initialize();
+      }
+
+      const providerConfig = useAgentSettingsStore.getState().config;
+      const defaultAgentMarkdown = useAgentSettingsStore.getState().defaultAgentMarkdown;
+      const enabledSkills = getEnabledSkills(useSkillsStore.getState());
+      const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
+      const projectFiles = await Promise.all(
+        visibleProjectEntries.map(async (entry) => ({
+          content: await readExpansionEntry(workspaceId, "project", entry.path),
+          name: entry.path,
+          path: `project/${entry.path}`,
+        })),
+      );
+
+      const stream = runAgentTurn({
+        activeFilePath: currentFilePath,
+        conversationHistory: [],
+        defaultAgentMarkdown,
+        enabledAgents,
+        enabledSkills,
+        enabledToolIds: [
+          "todo",
+          "task",
+          "browse",
+          "search",
+          "read",
+          "write",
+          "path",
+          "skill",
+          "agent",
+          "web_search",
+          "web_fetch",
+          "expansion_chapter_batch_outline",
+          "expansion_chapter_write_content",
+          "expansion_setting_batch_generate",
+          "expansion_setting_update_from_chapter",
+          "expansion_continuity_scan",
+        ],
+        manualContext: null,
+        planningState: { items: [], roundsSinceUpdate: 0 },
+        projectContext: {
+          source: "扩写项目默认上下文",
+          files: projectFiles,
+        },
+        prompt: params.prompt,
+        providerConfig,
+        workspaceRootPath: `expansion://${workspaceId}`,
+        workspaceTools: {
+          ...createGlobalToolset(),
+          ...createLocalResourceToolset({
+            refreshAgents: async () => {
+              await useSubAgentStore.getState().refresh();
+            },
+            refreshSkills: async () => {
+              await useSkillsStore.getState().refresh();
+            },
+          }),
+          ...createExpansionAgentToolset({
+            workspaceId,
+            onWorkspaceMutated: async () => {
+              await loadDetail();
+              await refreshSelectedEntry();
+            },
+          }),
+          ...createExpansionSemanticToolset({
+            workspaceId,
+            onWorkspaceMutated: async () => {
+              await loadDetail();
+              await refreshSelectedEntry();
+            },
+          }),
+        },
+      });
+
+      let nextParts: AgentPart[] = [];
+      for await (const part of stream) {
+        nextParts = mergePart(nextParts, part as AgentPart);
+        setWorkspaceAgentParts(nextParts);
+      }
+
+      setWorkspaceRunStatus("completed");
+      setActiveWorkspaceTask((current) =>
+        current
+          ? {
+              ...current,
+              statusLabel: "已完成",
+            }
+          : current,
+      );
+      await loadDetail();
+      await refreshSelectedEntry();
+    } catch (error) {
+      setWorkspaceRunStatus("failed");
+      setWorkspaceAgentParts((current) => [
+        ...current,
+        {
+          type: "text",
+          text: error instanceof Error ? error.message : "扩写 Agent 执行失败。",
+        },
+      ]);
+      setActiveWorkspaceTask((current) =>
+        current
+          ? {
+              ...current,
+              statusLabel: "失败",
+            }
+          : current,
+      );
+      setToastState({
+        title: error instanceof Error ? error.message : "扩写 Agent 执行失败。",
+        tone: "error",
+      });
+    }
+  }
+
+  function requireActionTarget(targetLabel: string | null, errorTitle: string) {
+    if (targetLabel) {
+      return targetLabel;
+    }
+    setToastState({ title: errorTitle, tone: "error" });
+    return null;
+  }
+
+  function openBatchOutlineDialog() {
+    setBatchOutlineVolumeValue(volumeIds[0] ?? "001");
+    setBatchOutlineVolumeOpen(true);
+  }
+
+  async function handleWorkspaceBatchOutline() {
+    const targetLabel = requireActionTarget(currentSelectionLabel, "请先打开一个项目文件");
+    if (!targetLabel) {
+      return;
+    }
+    const targetVolumeId = normalizeVolumeId(batchOutlineVolumeValue || volumeIds[0] || "001");
+    const nextVolumeIds = Array.from(new Set([...volumeIds, targetVolumeId])).sort();
+    if (workspaceId && !volumeIds.includes(targetVolumeId)) {
+      await saveVolumeMeta(nextVolumeIds);
+      setVolumeIds(nextVolumeIds);
+      setVolumeExpanded((current) => ({ ...current, [targetVolumeId]: true }));
+    }
+    setBatchOutlineVolumeOpen(false);
+    void runWorkspaceAgentAction({
+      actionId: "project-batch-outline",
+      actionLabel: "批量生成细纲",
+      description: "根据大纲批量创建章节 JSON，并写入章节名与约 300 字细纲。",
+      prompt: [
+        "当前动作：批量生成细纲",
+        `当前目标：${targetLabel}`,
+        `当前文件：${currentFilePath ?? "project/outline.md"}`,
+        `目标分卷：${targetVolumeId}（${formatVolumeLabel(targetVolumeId)}）`,
+        "要求：",
+        "- 必须先读取 project/AGENTS.md 和 project/outline.md。",
+        "- 通过 expansion_chapter_batch_outline 工具批量创建 chapters 区域 JSON。",
+        `- 所有新章节默认写入 ${targetVolumeId} 分卷；调用工具时必须传 volumeId=${targetVolumeId}。`,
+        "- 章节 JSON 只允许包含 id、name、outline、content、notes、linkedSettingIds。",
+        "- outline 写成约 300 字、按情节点组织的细纲。",
+        "- content 初始留空；已有章节不要覆盖已写正文。",
+        "- 实际创建或写入必须通过工具完成。",
+      ].join("\n"),
+      targetLabel,
+    });
+  }
+
+  function handleWorkspaceBatchSettings() {
+    const targetLabel = requireActionTarget(currentSelectionLabel, "请先打开一个项目文件");
+    if (!targetLabel) {
+      return;
+    }
+    void runWorkspaceAgentAction({
+      actionId: "project-batch-settings",
+      actionLabel: "批量生成设定",
+      description: "根据大纲和 AGENTS 相关内容批量生成设定 JSON。",
+      prompt: [
+        "当前动作：批量生成设定",
+        `当前目标：${targetLabel}`,
+        `当前文件：${currentFilePath ?? "project/AGENTS.md"}`,
+        "要求：",
+        "- 必须先读取 project/AGENTS.md 和 project/outline.md。",
+        "- 批量创建 settings 区域 JSON。",
+        "- 设定 JSON 只允许包含 id、name、content、notes、linkedChapterIds。",
+        "- content 写入基础设定信息；notes 可补充待确认事项。",
+        "- 实际创建或写入必须通过工具完成。",
+      ].join("\n"),
+      targetLabel,
+    });
+  }
+
+  function handleWorkspaceSettingUpdate() {
+    const targetLabel = requireActionTarget(parsedSetting?.name ?? selectedSettingEntry?.name ?? null, "请先打开一个设定文件");
+    if (!targetLabel) {
+      return;
+    }
+    void runWorkspaceAgentAction({
+      actionId: "setting-update",
+      actionLabel: "更新设定",
+      description: "根据最新章节梗概、正文和全书大纲更新当前设定。",
+      prompt: [
+        "当前动作：更新设定",
+        `当前目标：${targetLabel}`,
+        `当前文件：${currentFilePath}`,
+        "要求：",
+        "- 必须先读取当前设定 JSON。",
+        "- 读取最新章节正文、章节细纲与 project/outline.md。",
+        "- 更新当前设定的 content、notes、linkedChapterIds。",
+        "- 如果剧情产生新设定，创建新的 settings JSON。",
+        "- 所有变更通过工具真实写回。",
+      ].join("\n"),
+      targetLabel,
+    });
+  }
+
+  function handleWorkspaceChapterWrite() {
+    const targetLabel = requireActionTarget(buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null), "请先打开一个章节");
+    if (!targetLabel) {
+      return;
+    }
+    void runWorkspaceAgentAction({
+      actionId: "chapter-write",
+      actionLabel: "章节写作",
+      description: "根据本章细纲、相关设定和前后文章写本章正文。",
+      prompt: [
+        "当前动作：章节写作",
+        `当前目标：${targetLabel}`,
+        `当前文件：${currentFilePath}`,
+        "要求：",
+        "- 必须先读取当前章节 JSON，重点读取 outline、content、notes、linkedSettingIds。",
+        "- 根据 linkedSettingIds 读取相关设定。",
+        "- 读取前后章节的细纲与正文，保证剧情、人物状态和时间线连续。",
+        "- 在遵守当前章节细纲的前提下生成并写回本章 content。",
+        "- 可同步补充 notes 与 linkedSettingIds。",
+        "- 所有写回必须通过工具完成。",
+      ].join("\n"),
+      targetLabel,
+    });
+  }
+
+  function handleWorkspaceChapterSettingUpdate() {
+    const targetLabel = requireActionTarget(buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null), "请先打开一个章节");
+    if (!targetLabel) {
+      return;
+    }
+    void runWorkspaceAgentAction({
+      actionId: "chapter-setting-update",
+      actionLabel: "设定更新",
+      description: "分析本章正文涉及的内容，更新相关设定并补充新增设定。",
+      prompt: [
+        "当前动作：设定更新",
+        `当前目标：${targetLabel}`,
+        `当前文件：${currentFilePath}`,
+        "要求：",
+        "- 必须先读取当前章节 JSON，重点读取 outline、content、notes、linkedSettingIds。",
+        "- 分析本章正文涉及的人物、地点、物品、势力、概念和关系变化。",
+        "- 更新已有关联设定的 content、notes、linkedChapterIds。",
+        "- 如果发现新实体，创建新的 settings JSON。",
+        "- 所有变更通过工具真实写回。",
+      ].join("\n"),
+      targetLabel,
+    });
+  }
+
+  function handleClearWorkspaceLogs() {
+    setActiveWorkspaceTask(null);
+    setWorkspaceAgentParts([]);
+    setWorkspaceExecutionPrompt("");
+    setWorkspaceRunStatus("idle");
+  }
+
+  const availableWorkspaceActions: ExpansionWorkspaceActionButton[] =
+    selected?.section === "project"
+      ? [
+          {
+            description: "",
+            id: "project-batch-outline",
+            label: "批量生成细纲",
+            onClick: openBatchOutlineDialog,
+          },
+          {
+            description: "",
+            id: "project-batch-settings",
+            label: "批量生成设定",
+            onClick: handleWorkspaceBatchSettings,
+          },
+        ]
+      : selected?.section === "settings"
+        ? [
+            {
+              description: "",
+              id: "setting-update",
+              label: "更新设定",
+              onClick: handleWorkspaceSettingUpdate,
+            },
+          ]
+        : selected?.section === "chapters"
+          ? [
+              {
+                description: "",
+                id: "chapter-write",
+                label: "章节写作",
+                onClick: handleWorkspaceChapterWrite,
+              },
+              {
+                description: "",
+                id: "chapter-setting-update",
+                label: "设定更新",
+                onClick: handleWorkspaceChapterSettingUpdate,
+              },
+            ]
+          : [];
+
   async function handleSave() {
-    if (!workspaceId || !selected || !isDirty || saveBusy) return;
+    if (!workspaceId || !selected || !isDirty || saveBusy) {
+      return;
+    }
     setSaveBusy(true);
     try {
-      await writeExpansionEntry(workspaceId, selected.section, selected.path, rawContent);
+      let nextSelected = selected;
+      let nextContent = rawContent;
+
+      if (selected.section === "settings" && parsedSetting && detail) {
+        const sanitized = sanitizeSettingJson(parsedSetting);
+        const currentEntry = detail.settingEntries.find((entry) => entry.path === selected.path);
+        if (currentEntry && sanitized.name && sanitized.name !== currentEntry.name) {
+          const renamed = await renameExpansionEntry(workspaceId, "settings", selected.path, sanitized.name);
+          nextSelected = { section: renamed.section, path: renamed.path };
+          setSelected(nextSelected);
+        }
+        nextContent = serializeJson(sanitized);
+      }
+
+      if (selected.section === "chapters" && parsedChapter && detail) {
+        const sanitized = sanitizeChapterJson(parsedChapter);
+        const currentEntry = detail.chapterEntries.find((entry) => entry.path === selected.path);
+        if (currentEntry && sanitized.name && sanitized.name !== currentEntry.name) {
+          const renamed = await renameExpansionEntry(workspaceId, "chapters", selected.path, sanitized.name);
+          nextSelected = { section: renamed.section, path: renamed.path };
+          setSelected(nextSelected);
+        }
+        nextContent = serializeJson(sanitized);
+      }
+
+      await writeExpansionEntry(workspaceId, nextSelected.section, nextSelected.path, nextContent);
+      setRawContent(nextContent);
       setIsDirty(false);
       setToastState({ title: "已保存", tone: "success" });
-      void loadDetail();
+      await loadDetail();
+      await refreshSelectedEntry(nextSelected);
     } catch (error) {
       setToastState({ title: getReadableError(error), tone: "error" });
     } finally {
@@ -303,37 +1051,89 @@ export function ExpansionDetailPage() {
     }
   }
 
-  async function handleCreateEntry() {
-    if (!workspaceId || !createSection || createBusy) return;
-    const name = createName.trim();
+  async function handleCreateSetting() {
+    if (!workspaceId || createSettingBusy) {
+      return;
+    }
+    const name = createSettingName.trim();
     if (!name) {
       setToastState({ title: "名称不能为空", tone: "error" });
       return;
     }
-    setCreateBusy(true);
+    setCreateSettingBusy(true);
     try {
-      const created = await createExpansionEntry(workspaceId, createSection, name);
-      setCreateSection(null);
-      setCreateName("");
+      const created = await createExpansionEntry(workspaceId, "settings", name);
+      setCreateSettingOpen(false);
+      setCreateSettingName("");
       await loadDetail();
       setSelected({ section: created.section, path: created.path });
     } catch (error) {
       setToastState({ title: getReadableError(error), tone: "error" });
     } finally {
-      setCreateBusy(false);
+      setCreateSettingBusy(false);
+    }
+  }
+
+  async function handleCreateVolume() {
+    if (!workspaceId || createVolumeBusy) {
+      return;
+    }
+    const nextVolumeId = getNextVolumeId(volumeIds);
+    setCreateVolumeBusy(true);
+    try {
+      const nextVolumeIds = Array.from(new Set([...volumeIds, nextVolumeId])).sort();
+      await saveVolumeMeta(nextVolumeIds);
+      setVolumeIds(nextVolumeIds);
+      setVolumeExpanded((current) => ({ ...current, [nextVolumeId]: true }));
+      setToastState({ title: `已创建 ${formatVolumeLabel(nextVolumeId)}`, tone: "success" });
+      await loadDetail();
+    } catch (error) {
+      setToastState({ title: getReadableError(error), tone: "error" });
+    } finally {
+      setCreateVolumeBusy(false);
+    }
+  }
+
+  async function handleCreateChapter() {
+    if (!workspaceId || !createChapterVolumeId || createChapterBusy) {
+      return;
+    }
+    const name = createChapterName.trim();
+    if (!name) {
+      setToastState({ title: "章节名称不能为空", tone: "error" });
+      return;
+    }
+    setCreateChapterBusy(true);
+    try {
+      const volumeId = normalizeVolumeId(createChapterVolumeId);
+      const nextVolumeIds = Array.from(new Set([...volumeIds, volumeId])).sort();
+      await saveVolumeMeta(nextVolumeIds);
+      const created = await createExpansionEntry(workspaceId, "chapters", name, volumeId);
+      setVolumeIds(nextVolumeIds);
+      setVolumeExpanded((current) => ({ ...current, [volumeId]: true }));
+      setCreateChapterVolumeId(null);
+      setCreateChapterName("");
+      await loadDetail();
+      setSelected({ section: created.section, path: created.path });
+    } catch (error) {
+      setToastState({ title: getReadableError(error), tone: "error" });
+    } finally {
+      setCreateChapterBusy(false);
     }
   }
 
   async function handleRename() {
-    if (!workspaceId || !renameTarget || renameBusy) return;
-    const next = renameValue.trim();
-    if (!next) {
+    if (!workspaceId || !renameTarget || renameBusy) {
+      return;
+    }
+    const nextName = renameValue.trim();
+    if (!nextName) {
       setToastState({ title: "名称不能为空", tone: "error" });
       return;
     }
     setRenameBusy(true);
     try {
-      const updated = await renameExpansionEntry(workspaceId, renameTarget.section, renameTarget.path, next);
+      const updated = await renameExpansionEntry(workspaceId, renameTarget.section, renameTarget.path, nextName);
       setRenameTarget(null);
       setRenameValue("");
       await loadDetail();
@@ -346,7 +1146,9 @@ export function ExpansionDetailPage() {
   }
 
   async function handleDeleteEntry() {
-    if (!workspaceId || !deleteTarget || deleteBusy) return;
+    if (!workspaceId || !deleteTarget || deleteBusy) {
+      return;
+    }
     setDeleteBusy(true);
     try {
       await deleteExpansionEntry(workspaceId, deleteTarget.section, deleteTarget.path);
@@ -364,7 +1166,9 @@ export function ExpansionDetailPage() {
   }
 
   async function handleDeleteWorkspace() {
-    if (!workspaceId || deleteWorkspaceBusy) return;
+    if (!workspaceId || deleteWorkspaceBusy) {
+      return;
+    }
     setDeleteWorkspaceBusy(true);
     try {
       await deleteExpansionWorkspace(workspaceId);
@@ -376,7 +1180,9 @@ export function ExpansionDetailPage() {
   }
 
   async function handleExport() {
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      return;
+    }
     try {
       const exported = await exportExpansionZip(workspaceId);
       if (exported) {
@@ -418,20 +1224,15 @@ export function ExpansionDetailPage() {
         contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
         headerRight={
           <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" size="sm" variant="outline">
-                  <Sparkles className="h-4 w-4" />
-                  AI 触发
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled>由大纲生成章节细纲（待接入）</DropdownMenuItem>
-                <DropdownMenuItem disabled>由细纲生成章节正文（待接入）</DropdownMenuItem>
-                <DropdownMenuItem disabled>由正文反向更新设定（待接入）</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("pointer-events-none gap-2", workspaceStatusButton.className)}
+            >
+              <WorkspaceStatusIcon className={cn("h-4 w-4", workspaceStatusButton.iconClassName)} />
+              {workspaceStatusButton.label}
+            </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => void handleExport()}>
               <Download className="h-4 w-4" />
               导出
@@ -442,18 +1243,17 @@ export function ExpansionDetailPage() {
           </div>
         }
       >
-        <div className="flex h-full min-h-0 flex-col gap-0 lg:flex-row">
-          {/* 左栏 */}
+        <div className="flex h-full min-h-0 flex-col lg:flex-row">
           <aside className="w-full shrink-0 overflow-y-auto border-b border-border bg-app lg:w-[260px] lg:border-r lg:border-b-0">
-            <SectionHeader label="项目" />
+            <SectionHeader label="上下文" />
             <div>
-              {detail.projectEntries.map((entry) => (
+              {visibleProjectEntries.map((entry) => (
                 <EntryButton
                   key={`project-${entry.path}`}
                   active={selected?.section === "project" && selected.path === entry.path}
-                  label={entry.path}
-                  onClick={() => setSelected({ section: "project", path: entry.path })}
                   canModify={false}
+                  label={getProjectEntryLabel(entry.path)}
+                  onClick={() => setSelected({ section: "project", path: entry.path })}
                 />
               ))}
             </div>
@@ -461,8 +1261,8 @@ export function ExpansionDetailPage() {
             <SectionHeader
               label="设定"
               onAdd={() => {
-                setCreateSection("settings");
-                setCreateName("");
+                setCreateSettingOpen(true);
+                setCreateSettingName("");
               }}
             />
             <div>
@@ -471,127 +1271,210 @@ export function ExpansionDetailPage() {
               ) : (
                 detail.settingEntries.map((entry) => (
                   <EntryButton
-                    key={`settings-${entry.path}`}
+                    key={`setting-${entry.path}`}
                     active={selected?.section === "settings" && selected.path === entry.path}
-                    label={`${entry.path.split("-")[0]} · ${entry.name}`}
+                    canModify
+                    label={entry.name}
                     onClick={() => setSelected({ section: "settings", path: entry.path })}
+                    onDelete={() => setDeleteTarget({ section: "settings", path: entry.path, name: entry.name })}
                     onRename={() => {
                       setRenameTarget({ section: "settings", path: entry.path, current: entry.name });
                       setRenameValue(entry.name);
                     }}
-                    onDelete={() =>
-                      setDeleteTarget({ section: "settings", path: entry.path, name: entry.name })
-                    }
-                    canModify
                   />
                 ))
               )}
             </div>
 
             <SectionHeader
-              label="章节"
+              label="正文分卷"
               onAdd={() => {
-                setCreateSection("chapters");
-                setCreateName("");
+                void handleCreateVolume();
               }}
             />
             <div>
-              {detail.chapterEntries.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-muted-foreground">暂无章节，点击右上角 + 新建。</div>
+              {chapterVolumes.length === 0 ? (
+                <div className="px-3 py-3 text-xs text-muted-foreground">暂无分卷，点击右上角 + 新建。</div>
               ) : (
-                detail.chapterEntries.map((entry) => (
-                  <EntryButton
-                    key={`chapters-${entry.path}`}
-                    active={selected?.section === "chapters" && selected.path === entry.path}
-                    label={`第 ${entry.path.split("-")[0]} 章 · ${entry.name}`}
-                    onClick={() => setSelected({ section: "chapters", path: entry.path })}
-                    onRename={() => {
-                      setRenameTarget({ section: "chapters", path: entry.path, current: entry.name });
-                      setRenameValue(entry.name);
-                    }}
-                    onDelete={() =>
-                      setDeleteTarget({ section: "chapters", path: entry.path, name: entry.name })
-                    }
-                    canModify
-                  />
-                ))
+                chapterVolumes.map((group) => {
+                  const isExpanded = volumeExpanded[group.volumeId] ?? true;
+                  return (
+                    <div key={`volume-${group.volumeId}`} className="border-b border-border">
+                      <div className="flex items-center gap-1 px-2 py-1.5">
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={isExpanded ? `收起${formatVolumeLabel(group.volumeId)}` : `展开${formatVolumeLabel(group.volumeId)}`}
+                          onClick={() =>
+                            setVolumeExpanded((current) => ({
+                              ...current,
+                              [group.volumeId]: !isExpanded,
+                            }))
+                          }
+                          className="text-muted-foreground"
+                        >
+                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </Button>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-foreground">{formatVolumeLabel(group.volumeId)}</div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`在${formatVolumeLabel(group.volumeId)}内新建章节`}
+                          onClick={() => {
+                            setCreateChapterVolumeId(group.volumeId);
+                            setCreateChapterName("");
+                          }}
+                          className="text-muted-foreground"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {isExpanded ? (
+                        <div>
+                          {group.entries.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-muted-foreground">当前分卷暂无章节。</div>
+                          ) : (
+                            group.entries.map((entry) => (
+                              <EntryButton
+                                key={`chapter-${entry.path}`}
+                                active={selected?.section === "chapters" && selected.path === entry.path}
+                                canModify
+                                label={buildChapterEntryLabel(entry.entryId, entry.name)}
+                                onClick={() => setSelected({ section: "chapters", path: entry.path })}
+                                onDelete={() => setDeleteTarget({ section: "chapters", path: entry.path, name: entry.name })}
+                                onRename={() => {
+                                  setRenameTarget({ section: "chapters", path: entry.path, current: entry.name });
+                                  setRenameValue(entry.name);
+                                }}
+                              />
+                            ))
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })
               )}
             </div>
           </aside>
 
-          {/* 右栏 */}
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-panel-subtle">
-            <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-1">
-              <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
-                {selected
-                  ? selected.section === "project"
-                    ? selected.path
-                    : selected.section === "settings"
-                      ? `设定 · ${parsedSetting?.id ?? ""} ${parsedSetting?.name ?? ""}`
-                      : `第 ${parsedChapter?.id ?? ""} 章 · ${parsedChapter?.name ?? ""}`
-                  : "未选择"}
-              </h2>
-              <div className="flex items-center gap-1.5">
-                {isDirty ? <span className="editor-status-chip" data-tone="warning">未保存</span> : null}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      aria-label={saveBusy ? "保存中" : "保存"}
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={saveBusy || !isDirty}
-                      onClick={() => void handleSave()}
-                      className="text-muted-foreground"
-                    >
-                      <Save className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>保存</TooltipContent>
-                </Tooltip>
-              </div>
-            </header>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {!selected ? (
-                <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">
-                  从左侧选择一个条目开始编辑。
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-panel-subtle">
+              <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-1">
+                <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
+                  {currentSelectionLabel ?? "未选择"}
+                </h2>
+                <div className="flex items-center gap-1.5">
+                  {isDirty ? <span className="editor-status-chip" data-tone="warning">未保存</span> : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        aria-label={saveBusy ? "保存中" : "保存"}
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={saveBusy || !isDirty}
+                        onClick={() => void handleSave()}
+                        className="text-muted-foreground"
+                      >
+                        <Save className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>保存</TooltipContent>
+                  </Tooltip>
                 </div>
-              ) : contentLoading ? (
-                <div className="flex h-full items-center px-3 py-2 text-sm text-muted-foreground">正在读取内容…</div>
-              ) : selected.section === "project" ? (
-                <ProjectEditor
-                  value={rawContent}
-                  onChange={(next) => {
-                    setRawContent(next);
-                    setIsDirty(true);
-                  }}
-                  disabled={saveBusy}
-                />
-              ) : selected.section === "settings" && parsedSetting ? (
-                <SettingEditor value={parsedSetting} onChange={applySetting} disabled={saveBusy} />
-              ) : selected.section === "chapters" && parsedChapter ? (
-                <ChapterEditor value={parsedChapter} onChange={applyChapter} disabled={saveBusy} />
-              ) : null}
-            </div>
-          </section>
+              </header>
+
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {!selected ? (
+                  <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">
+                    从左侧选择一个条目开始编辑。
+                  </div>
+                ) : contentLoading ? (
+                  <div className="flex h-full items-center px-3 py-2 text-sm text-muted-foreground">正在读取内容…</div>
+                ) : selected.section === "project" ? (
+                  <ProjectEditor
+                    value={rawContent}
+                    onChange={(next) => {
+                      setRawContent(next);
+                      setIsDirty(true);
+                    }}
+                    disabled={saveBusy}
+                  />
+                ) : selected.section === "settings" && parsedSetting ? (
+                  <SettingEditor value={parsedSetting} onChange={applySetting} disabled={saveBusy} />
+                ) : selected.section === "chapters" && parsedChapter ? (
+                  <ChapterEditor value={parsedChapter} onChange={applyChapter} disabled={saveBusy} />
+                ) : null}
+              </div>
+            </section>
+
+            <ExpansionWorkspacePanel
+              activeTask={activeWorkspaceTask}
+              agentParts={workspaceAgentParts}
+              availableActions={availableWorkspaceActions}
+              currentFileName={currentFileName}
+              executionPrompt={workspaceExecutionPrompt}
+              onClearLogs={handleClearWorkspaceLogs}
+              runStatus={workspaceRunStatus}
+              targetLabel={currentSelectionLabel}
+            />
+          </div>
         </div>
       </PageShell>
 
-      {createSection ? (
+      {createSettingOpen ? (
         <PromptDialog
-          busy={createBusy}
+          busy={createSettingBusy}
           confirmLabel="创建"
-          description={createSection === "settings" ? "新建设定 JSON，编号会按现有最大值 +1 自动分配。" : "新建章节 JSON，编号会按现有最大值 +1 自动分配。"}
-          label={createSection === "settings" ? "设定名称" : "章节名称"}
-          title={createSection === "settings" ? "新建设定" : "新建章节"}
-          value={createName}
+          description="新建设定 JSON，id 会按当前顺序自动分配纯数字。"
+          label="设定名称"
+          title="新建设定"
+          value={createSettingName}
           onCancel={() => {
-            if (createBusy) return;
-            setCreateSection(null);
+            if (!createSettingBusy) {
+              setCreateSettingOpen(false);
+            }
           }}
-          onChange={setCreateName}
-          onConfirm={() => void handleCreateEntry()}
+          onChange={setCreateSettingName}
+          onConfirm={() => void handleCreateSetting()}
+        />
+      ) : null}
+
+      {batchOutlineVolumeOpen ? (
+        <BatchOutlineVolumeDialog
+          busy={workspaceRunStatus === "running"}
+          volumeIds={volumeIds}
+          value={batchOutlineVolumeValue}
+          onCancel={() => {
+            if (workspaceRunStatus !== "running") {
+              setBatchOutlineVolumeOpen(false);
+            }
+          }}
+          onChange={setBatchOutlineVolumeValue}
+          onConfirm={() => void handleWorkspaceBatchOutline()}
+        />
+      ) : null}
+
+      {createChapterVolumeId ? (
+        <PromptDialog
+          busy={createChapterBusy}
+          confirmLabel="创建"
+          description={`在 ${formatVolumeLabel(createChapterVolumeId)} 内新建章节，文件会写入 chapters/${createChapterVolumeId}/。`}
+          label="章节名称"
+          title="新建章节"
+          value={createChapterName}
+          onCancel={() => {
+            if (!createChapterBusy) {
+              setCreateChapterVolumeId(null);
+            }
+          }}
+          onChange={setCreateChapterName}
+          onConfirm={() => void handleCreateChapter()}
         />
       ) : null}
 
@@ -599,13 +1482,14 @@ export function ExpansionDetailPage() {
         <PromptDialog
           busy={renameBusy}
           confirmLabel="重命名"
-          description="仅修改名称，编号保持不变。"
+          description="仅修改名称，id 保持不变。"
           label="新名称"
           title="重命名"
           value={renameValue}
           onCancel={() => {
-            if (renameBusy) return;
-            setRenameTarget(null);
+            if (!renameBusy) {
+              setRenameTarget(null);
+            }
           }}
           onChange={setRenameValue}
           onConfirm={() => void handleRename()}
@@ -618,8 +1502,9 @@ export function ExpansionDetailPage() {
           confirmLabel="删除"
           description={`将《${deleteTarget.name}》及其 JSON 数据永久删除。`}
           onCancel={() => {
-            if (deleteBusy) return;
-            setDeleteTarget(null);
+            if (!deleteBusy) {
+              setDeleteTarget(null);
+            }
           }}
           onConfirm={() => void handleDeleteEntry()}
           title="删除条目"
@@ -632,8 +1517,9 @@ export function ExpansionDetailPage() {
           confirmLabel="删除整本"
           description={`将整本《${detail.name}》从 SQLite 中永久删除。`}
           onCancel={() => {
-            if (deleteWorkspaceBusy) return;
-            setDeleteWorkspaceOpen(false);
+            if (!deleteWorkspaceBusy) {
+              setDeleteWorkspaceOpen(false);
+            }
           }}
           onConfirm={() => void handleDeleteWorkspace()}
           title="删除扩写书籍"
@@ -648,605 +1534,5 @@ export function ExpansionDetailPage() {
         onClose={() => setToastState(null)}
       />
     </>
-  );
-}
-
-// ===== 项目段（Markdown）编辑器 =====
-function ProjectEditor({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <Textarea
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      disabled={disabled}
-      spellCheck={false}
-      className="h-full min-h-0 w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent px-3 py-2 text-[15px] leading-8 text-foreground focus-visible:ring-0 dark:bg-transparent"
-    />
-  );
-}
-
-// ===== 设定 JSON 表单编辑器 =====
-function SettingEditor({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: SettingJson;
-  onChange: (next: SettingJson) => void;
-  disabled: boolean;
-}) {
-  function update<K extends keyof SettingJson>(key: K, next: SettingJson[K]) {
-    onChange({ ...value, [key]: next });
-  }
-
-  function updateAttr(key: string, val: string) {
-    onChange({ ...value, attributes: { ...value.attributes, [key]: val } });
-  }
-
-  function removeAttr(key: string) {
-    const next = { ...value.attributes };
-    delete next[key];
-    onChange({ ...value, attributes: next });
-  }
-
-  function renameAttrKey(oldKey: string, newKey: string) {
-    if (!newKey || oldKey === newKey) return;
-    const next: Record<string, string> = {};
-    for (const [k, v] of Object.entries(value.attributes)) {
-      next[k === oldKey ? newKey : k] = v;
-    }
-    onChange({ ...value, attributes: next });
-  }
-
-  const attrEntries = Object.entries(value.attributes);
-
-  return (
-    <div className="space-y-5 px-4 py-4">
-      <FormSection title="基础信息">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="编号">
-            <Input value={value.id} disabled className="bg-muted/50" />
-          </Field>
-          <Field label="名称">
-            <Input value={value.name} onChange={(event) => update("name", event.target.value)} disabled={disabled} />
-          </Field>
-          <Field label="类型">
-            <select
-              value={value.type}
-              onChange={(event) => update("type", event.target.value as SettingType)}
-              disabled={disabled}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
-            >
-              {SETTING_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="别名（逗号分隔）">
-            <Input
-              value={value.aliases.join(", ")}
-              onChange={(event) =>
-                update(
-                  "aliases",
-                  event.target.value
-                    .split(/[,，]/)
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                )
-              }
-              disabled={disabled}
-            />
-          </Field>
-          <Field label="标签（逗号分隔）" full>
-            <Input
-              value={value.tags.join(", ")}
-              onChange={(event) =>
-                update(
-                  "tags",
-                  event.target.value
-                    .split(/[,，]/)
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                )
-              }
-              disabled={disabled}
-            />
-          </Field>
-        </div>
-      </FormSection>
-
-      <FormSection title="一句话简介">
-        <Textarea
-          value={value.summary}
-          onChange={(event) => update("summary", event.target.value)}
-          disabled={disabled}
-          rows={2}
-          className="resize-none"
-        />
-      </FormSection>
-
-      <FormSection title="详细描述">
-        <Textarea
-          value={value.description}
-          onChange={(event) => update("description", event.target.value)}
-          disabled={disabled}
-          rows={6}
-          className="resize-y"
-        />
-      </FormSection>
-
-      <FormSection
-        title="属性"
-        action={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => {
-              let key = "新属性";
-              let counter = 1;
-              while (Object.prototype.hasOwnProperty.call(value.attributes, key)) {
-                counter += 1;
-                key = `新属性${counter}`;
-              }
-              updateAttr(key, "");
-            }}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            添加属性
-          </Button>
-        }
-      >
-        {attrEntries.length === 0 ? (
-          <p className="text-xs text-muted-foreground">暂无属性。</p>
-        ) : (
-          <div className="space-y-2">
-            {attrEntries.map(([key, val]) => (
-              <div key={key} className="flex items-center gap-2">
-                <Input
-                  value={key}
-                  onChange={(event) => renameAttrKey(key, event.target.value)}
-                  disabled={disabled}
-                  className="w-40"
-                />
-                <Input
-                  value={val}
-                  onChange={(event) => updateAttr(key, event.target.value)}
-                  disabled={disabled}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="删除属性"
-                  disabled={disabled}
-                  onClick={() => removeAttr(key)}
-                  className="text-muted-foreground"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </FormSection>
-
-      <FormSection
-        title="关系"
-        action={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={disabled}
-            onClick={() =>
-              onChange({
-                ...value,
-                relations: [...value.relations, { targetId: "", targetName: "", relation: "" }],
-              })
-            }
-          >
-            <Plus className="h-3.5 w-3.5" />
-            添加关系
-          </Button>
-        }
-      >
-        {value.relations.length === 0 ? (
-          <p className="text-xs text-muted-foreground">暂无关系。</p>
-        ) : (
-          <div className="space-y-2">
-            {value.relations.map((relation, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Input
-                  placeholder="对象编号"
-                  value={relation.targetId}
-                  onChange={(event) => {
-                    const next = [...value.relations];
-                    next[index] = { ...next[index], targetId: event.target.value };
-                    update("relations", next);
-                  }}
-                  disabled={disabled}
-                  className="w-28"
-                />
-                <Input
-                  placeholder="对象名称"
-                  value={relation.targetName}
-                  onChange={(event) => {
-                    const next = [...value.relations];
-                    next[index] = { ...next[index], targetName: event.target.value };
-                    update("relations", next);
-                  }}
-                  disabled={disabled}
-                  className="w-40"
-                />
-                <Input
-                  placeholder="关系描述"
-                  value={relation.relation}
-                  onChange={(event) => {
-                    const next = [...value.relations];
-                    next[index] = { ...next[index], relation: event.target.value };
-                    update("relations", next);
-                  }}
-                  disabled={disabled}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="删除关系"
-                  disabled={disabled}
-                  onClick={() =>
-                    update(
-                      "relations",
-                      value.relations.filter((_, idx) => idx !== index),
-                    )
-                  }
-                  className="text-muted-foreground"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </FormSection>
-
-      <FormSection title="备忘">
-        <Textarea
-          value={value.notes}
-          onChange={(event) => update("notes", event.target.value)}
-          disabled={disabled}
-          rows={3}
-          className="resize-none"
-        />
-      </FormSection>
-
-      {value.appearChapters.length > 0 ? (
-        <FormSection title="出现章节（自动维护）">
-          <p className="text-xs text-muted-foreground">{value.appearChapters.join("、")}</p>
-        </FormSection>
-      ) : null}
-    </div>
-  );
-}
-
-// ===== 章节 JSON 表单编辑器 =====
-function ChapterEditor({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: ChapterJson;
-  onChange: (next: ChapterJson) => void;
-  disabled: boolean;
-}) {
-  function update<K extends keyof ChapterJson>(key: K, next: ChapterJson[K]) {
-    onChange({ ...value, [key]: next });
-  }
-
-  return (
-    <div className="space-y-5 px-4 py-4">
-      <FormSection title="头部">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field label="章节编号">
-            <Input value={value.id} disabled className="bg-muted/50" />
-          </Field>
-          <Field label="章节名称">
-            <Input value={value.name} onChange={(event) => update("name", event.target.value)} disabled={disabled} />
-          </Field>
-          <Field label="状态">
-            <select
-              value={value.status}
-              onChange={(event) => update("status", event.target.value as ChapterStatus)}
-              disabled={disabled}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
-            >
-              {CHAPTER_STATUS_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {CHAPTER_STATUS_LABEL[option]}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-      </FormSection>
-
-      <FormSection title="元信息">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field label="视角">
-            <Input value={value.pov} onChange={(event) => update("pov", event.target.value)} disabled={disabled} />
-          </Field>
-          <Field label="地点">
-            <Input value={value.location} onChange={(event) => update("location", event.target.value)} disabled={disabled} />
-          </Field>
-          <Field label="时间线">
-            <Input value={value.timeline} onChange={(event) => update("timeline", event.target.value)} disabled={disabled} />
-          </Field>
-        </div>
-      </FormSection>
-
-      <FormSection title="关联设定（设定编号，逗号分隔）">
-        <Input
-          value={value.linkedSettingIds.join(", ")}
-          onChange={(event) =>
-            update(
-              "linkedSettingIds",
-              event.target.value
-                .split(/[,，]/)
-                .map((item) => item.trim())
-                .filter(Boolean),
-            )
-          }
-          disabled={disabled}
-        />
-      </FormSection>
-
-      <FormSection title="本章摘要">
-        <Textarea
-          value={value.summary}
-          onChange={(event) => update("summary", event.target.value)}
-          disabled={disabled}
-          rows={2}
-          className="resize-none"
-        />
-      </FormSection>
-
-      <FormSection title="章节细纲">
-        <Textarea
-          value={value.outline}
-          onChange={(event) => update("outline", event.target.value)}
-          disabled={disabled}
-          rows={6}
-          className="resize-y"
-        />
-      </FormSection>
-
-      <FormSection
-        title={`章节正文`}
-        action={
-          <span className="text-xs text-muted-foreground">
-            中文字符 {countChineseChars(value.content)} · 总字符 {countWords(value.content)}
-          </span>
-        }
-      >
-        <Textarea
-          value={value.content}
-          onChange={(event) => update("content", event.target.value)}
-          disabled={disabled}
-          rows={16}
-          className="resize-y font-mono text-[15px] leading-8"
-        />
-      </FormSection>
-
-      <FormSection
-        title="关键事件"
-        action={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => update("events", [...value.events, { title: "", detail: "" }])}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            添加事件
-          </Button>
-        }
-      >
-        {value.events.length === 0 ? (
-          <p className="text-xs text-muted-foreground">暂无事件。</p>
-        ) : (
-          <div className="space-y-2">
-            {value.events.map((event, index) => (
-              <div key={index} className="space-y-1 rounded-md border border-border p-2">
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="标题"
-                    value={event.title}
-                    onChange={(input) => {
-                      const next = [...value.events];
-                      next[index] = { ...next[index], title: input.target.value };
-                      update("events", next);
-                    }}
-                    disabled={disabled}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label="删除事件"
-                    disabled={disabled}
-                    onClick={() => update("events", value.events.filter((_, idx) => idx !== index))}
-                    className="text-muted-foreground"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <Textarea
-                  placeholder="详情"
-                  value={event.detail}
-                  onChange={(input) => {
-                    const next = [...value.events];
-                    next[index] = { ...next[index], detail: input.target.value };
-                    update("events", next);
-                  }}
-                  disabled={disabled}
-                  rows={2}
-                  className="resize-none"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </FormSection>
-
-      <FormSection
-        title="伏笔"
-        action={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={disabled}
-            onClick={() =>
-              update("foreshadowing", [
-                ...value.foreshadowing,
-                { title: "", detail: "", payoffChapterId: null },
-              ])
-            }
-          >
-            <Plus className="h-3.5 w-3.5" />
-            添加伏笔
-          </Button>
-        }
-      >
-        {value.foreshadowing.length === 0 ? (
-          <p className="text-xs text-muted-foreground">暂无伏笔。</p>
-        ) : (
-          <div className="space-y-2">
-            {value.foreshadowing.map((item, index) => (
-              <div key={index} className="space-y-1 rounded-md border border-border p-2">
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="伏笔标题"
-                    value={item.title}
-                    onChange={(input) => {
-                      const next = [...value.foreshadowing];
-                      next[index] = { ...next[index], title: input.target.value };
-                      update("foreshadowing", next);
-                    }}
-                    disabled={disabled}
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder="兑现章节编号"
-                    value={item.payoffChapterId ?? ""}
-                    onChange={(input) => {
-                      const next = [...value.foreshadowing];
-                      const v = input.target.value.trim();
-                      next[index] = { ...next[index], payoffChapterId: v ? v : null };
-                      update("foreshadowing", next);
-                    }}
-                    disabled={disabled}
-                    className="w-40"
-                  />
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label="删除伏笔"
-                    disabled={disabled}
-                    onClick={() =>
-                      update(
-                        "foreshadowing",
-                        value.foreshadowing.filter((_, idx) => idx !== index),
-                      )
-                    }
-                    className="text-muted-foreground"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <Textarea
-                  placeholder="伏笔详情"
-                  value={item.detail}
-                  onChange={(input) => {
-                    const next = [...value.foreshadowing];
-                    next[index] = { ...next[index], detail: input.target.value };
-                    update("foreshadowing", next);
-                  }}
-                  disabled={disabled}
-                  rows={2}
-                  className="resize-none"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </FormSection>
-
-      <FormSection title="作者备忘">
-        <Textarea
-          value={value.notes}
-          onChange={(event) => update("notes", event.target.value)}
-          disabled={disabled}
-          rows={3}
-          className="resize-none"
-        />
-      </FormSection>
-    </div>
-  );
-}
-
-function FormSection({
-  title,
-  children,
-  action,
-}: {
-  title: string;
-  children: React.ReactNode;
-  action?: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          <FileText className="h-3 w-3" />
-          {title}
-        </h3>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Field({
-  label,
-  children,
-  full,
-}: {
-  label: string;
-  children: React.ReactNode;
-  full?: boolean;
-}) {
-  return (
-    <div className={cn("space-y-1", full && "md:col-span-2")}>
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {children}
-    </div>
   );
 }

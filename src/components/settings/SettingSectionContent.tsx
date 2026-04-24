@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../../lib/agent/promptContext";
-import { BUILTIN_TOOLS } from "../../lib/agent/toolDefs";
+import { ALL_TOOL_DEFS } from "../../lib/agent/toolDefs";
 import { getDefaultAgentProviderConfig, useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { DefaultAgentSection } from "./DefaultAgentSection";
 import { ModelProviderCard } from "./ModelProviderCard";
@@ -23,6 +23,37 @@ function isSameProviderConfig(
   );
 }
 
+function ToolCard({
+  actions,
+  description,
+  id,
+  name,
+  scopeLabel,
+}: {
+  actions?: ReactNode;
+  description: string;
+  id: string;
+  name: string;
+  scopeLabel: string;
+}) {
+  return (
+    <article className="editor-block-tile">
+      <div className="editor-block-content overflow-hidden">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">{scopeLabel}</p>
+            <h3 className="mt-2 line-clamp-2 text-lg font-medium leading-6 text-foreground">{name}</h3>
+            <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-muted-foreground">{id}</p>
+          </div>
+          {actions}
+        </div>
+
+        <p className="line-clamp-4 text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+    </article>
+  );
+}
+
 function ToolLibrarySection({
   enabledCount,
   enabledTools,
@@ -32,6 +63,20 @@ function ToolLibrarySection({
   enabledTools: Record<string, boolean>;
   toggleTool: (toolId: string) => void;
 }) {
+  const toolCards = useMemo(
+    () =>
+      ALL_TOOL_DEFS.map((toolDef) => ({
+        ...toolDef,
+        scopeLabel:
+          toolDef.scope === "expansion"
+            ? "Expansion"
+            : toolDef.scope === "workflow"
+              ? "Workflow"
+              : "Tool",
+      })),
+    [],
+  );
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
       <SettingsSectionHeader
@@ -40,27 +85,26 @@ function ToolLibrarySection({
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-          {BUILTIN_TOOLS.map((toolDef) => {
+          {toolCards.map((toolDef) => {
             const enabled = enabledTools[toolDef.id] ?? true;
-            return (
-              <article key={toolDef.id} className="editor-block-tile">
-                <div className="editor-block-content overflow-hidden">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Tool</p>
-                      <h3 className="mt-2 line-clamp-2 text-lg font-medium leading-6 text-foreground">{toolDef.name}</h3>
-                      <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-muted-foreground">{toolDef.id}</p>
-                    </div>
-                    <Switch
-                      checked={enabled}
-                      label={enabled ? `禁用 ${toolDef.name}` : `启用 ${toolDef.name}`}
-                      onChange={() => toggleTool(toolDef.id)}
-                    />
-                  </div>
+            const actions =
+              toolDef.scope === "global" || !toolDef.scope ? (
+                <Switch
+                  checked={enabled}
+                  label={enabled ? `禁用 ${toolDef.name}` : `启用 ${toolDef.name}`}
+                  onChange={() => toggleTool(toolDef.id)}
+                />
+              ) : null;
 
-                  <p className="line-clamp-4 text-xs leading-5 text-muted-foreground">{toolDef.description}</p>
-                </div>
-              </article>
+            return (
+              <ToolCard
+                key={toolDef.id}
+                description={toolDef.description}
+                id={toolDef.id}
+                name={toolDef.name}
+                scopeLabel={toolDef.scopeLabel}
+                actions={actions}
+              />
             );
           })}
         </div>

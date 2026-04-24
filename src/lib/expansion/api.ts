@@ -56,11 +56,13 @@ export function createExpansionEntry(
   workspaceId: string,
   section: Exclude<ExpansionSection, "project">,
   name: string,
+  parentPath?: string,
 ) {
   return invoke<ExpansionEntryItem>("create_expansion_entry", {
     workspaceId,
     section,
     name,
+    parentPath,
   });
 }
 
