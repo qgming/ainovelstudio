@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../components/ui/tooltip";
-import { ExpansionDetailPage } from "./ExpansionDetailPage";
+import { buildBatchOutlinePrompt, ExpansionDetailPage } from "./ExpansionDetailPage";
 
 const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
@@ -177,6 +177,21 @@ describe("ExpansionDetailPage", () => {
     expect(await screen.findByText("选择已有分卷")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "第一卷" })).toBeInTheDocument();
     expect(screen.queryByLabelText("目标分卷编号")).not.toBeInTheDocument();
+  });
+
+  it("已有分卷时批量细纲提示词会要求增量更新而不是整卷重刷", () => {
+    const prompt = buildBatchOutlinePrompt({
+      currentFilePath: "project/outline.md",
+      targetLabel: "测试扩写",
+      targetVolumeEntries: detail.chapterEntries,
+      targetVolumeId: "001",
+    });
+
+    expect(prompt).toContain("默认走增量同步");
+    expect(prompt).toContain("不要重写");
+    expect(prompt).toContain("expansion_chapter_write_content");
+    expect(prompt).toContain("expansion_chapter_batch_outline");
+    expect(prompt).toContain("第1章｜第一章｜chapters/001/第一章");
   });
 
   it("自由输入按钮会打开提示词输入弹窗", async () => {

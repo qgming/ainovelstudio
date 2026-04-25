@@ -21,6 +21,7 @@ import {
   LoaderCircle,
   Plus,
   Save,
+  Square,
   SquarePen,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -111,6 +112,45 @@ type SettingCategoryGroup = {
   entries: ExpansionWorkspaceDetail["settingEntries"];
 };
 type MobileExpansionTab = "context" | "editor" | "workspace";
+
+export function buildBatchOutlinePrompt(params: {
+  currentFilePath: string | null;
+  targetLabel: string;
+  targetVolumeEntries: ExpansionWorkspaceDetail["chapterEntries"];
+  targetVolumeId: string;
+}) {
+  const targetVolumeSnapshot =
+    params.targetVolumeEntries.length > 0
+      ? params.targetVolumeEntries
+          .map(
+            (entry) =>
+              `- ${entry.entryId ? `第${entry.entryId}章` : entry.path}｜${entry.name}｜chapters/${entry.path}`,
+          )
+          .join("\n")
+      : "（当前分卷还没有现有细纲文件）";
+
+  return [
+    `当前目标：${params.targetLabel}`,
+    `当前文件：${params.currentFilePath ?? "project/outline.md"}`,
+    `目标分卷：${params.targetVolumeId}（${formatVolumeLabel(params.targetVolumeId)}）`,
+    "当前分卷已有细纲文件：",
+    targetVolumeSnapshot,
+    "先用 skill 工具读取技能：chapter-planner、outline-manager。",
+    "先读取 project/AGENTS.md、project/README.md 和 project/outline.md，确认规则、题材方向和剧情走向。",
+    "不要先回复计划说明，直接开始工具调用。",
+    "已有分卷时默认走增量同步：保留现有细纲，只处理大纲中发生变化的章节，以及当前分卷里缺失的细纲文件。",
+    "先对照当前分卷已有细纲文件和 project/outline.md：",
+    "1. 现有章节仍然有效且大纲无明显变化：不要重写。",
+    "2. 现有章节对应的大纲有变化：优先用 expansion_chapter_write_content 只更新该章节的 outline。",
+    `3. 大纲里应存在但当前分卷缺失的章节：调用 expansion_chapter_batch_outline 补建，且必须传 volumeId=${params.targetVolumeId}。`,
+    "4. 不要为了统一风格把整卷所有章节重新生成一遍。",
+    "如果本卷缺失章节较多，允许分批多次调用 expansion_chapter_batch_outline，每批最多 20 章，直到当前分卷补齐。",
+    "新章节 ID 不得与现有冲突，不确定时先用 expansion_continuity_scan 校验。",
+    "outline 约 300 字，必须包含：本章主爽点（升级/打脸/收编/扮猪吃虎等）、核心冲突、关键转折、章末钩子（悬念/战斗/反转/情绪）。",
+    "卷内节奏：起始章定调，中段递进，卷末高潮。单章 1 个核心冲突 + 1-2 个推进点，避免灌水。",
+    "所有增量修改和补建完成后，只输出一句简短完成说明。",
+  ].join("\n");
+}
 
 export function ExpansionDetailPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -269,6 +309,8 @@ export function ExpansionDetailPage() {
     runStatus: workspaceRunStatus,
     runAction,
     reset: resetWorkspaceAgent,
+    stopAction: stopWorkspaceAction,
+    stopRequested: workspaceStopRequested,
   } = useExpansionWorkspaceAgent({
     workspaceId,
     workspaceName: detail?.name ?? null,
@@ -440,6 +482,14 @@ export function ExpansionDetailPage() {
           : "运行中",
       };
     }
+    if (activeWorkspaceTask?.statusLabel === "已终止") {
+      return {
+        className: "text-muted-foreground",
+        icon: Square,
+        iconClassName: "",
+        label: `${activeWorkspaceTask.actionLabel} · 已终止`,
+      };
+    }
     if (workspaceRunStatus === "failed") {
       return {
         className: "text-destructive",
@@ -510,6 +560,8 @@ export function ExpansionDetailPage() {
     const targetLabel = requireActionTarget(currentSelectionLabel, "请先打开一个项目文件");
     if (!targetLabel) return;
     const targetVolumeId = normalizeVolumeId(batchOutlineVolumeValue || volumeIds[0] || "001");
+    const targetVolumeEntries =
+      chapterVolumes.find((group) => group.volumeId === targetVolumeId)?.entries ?? [];
     const nextVolumeIds = Array.from(new Set([...volumeIds, targetVolumeId])).sort();
     if (workspaceId && !volumeIds.includes(targetVolumeId)) {
       await saveVolumeMeta(nextVolumeIds);
@@ -521,17 +573,12 @@ export function ExpansionDetailPage() {
       actionId: "project-batch-outline",
       actionLabel: "批量生成细纲",
       description: "根据大纲批量创建章节 JSON，并写入章节名与约 300 字细纲。",
-      prompt: [
-        `当前目标：${targetLabel}`,
-        `当前文件：${currentFilePath ?? "project/outline.md"}`,
-        `目标分卷：${targetVolumeId}（${formatVolumeLabel(targetVolumeId)}）`,
-        "先用 skill 工具读取技能：chapter-planner、outline-manager。",
-        "先读取 project/AGENTS.md、project/README.md 和 project/outline.md，确认规则、题材方向和剧情走向。",
-        `调用 expansion_chapter_batch_outline 时必须传 volumeId=${targetVolumeId}。`,
-        "章节数量按全书规模与本卷定位自行推断；新章节 ID 不得与现有冲突，不确定时先用 expansion_continuity_scan 校验。",
-        "outline 约 300 字，必须包含：本章主爽点（升级/打脸/收编/扮猪吃虎等）、核心冲突、关键转折、章末钩子（悬念/战斗/反转/情绪）。",
-        "卷内节奏：起始章定调，中段递进，卷末高潮。单章 1 个核心冲突 + 1-2 个推进点，避免灌水。",
-      ].join("\n"),
+      prompt: buildBatchOutlinePrompt({
+        currentFilePath,
+        targetLabel,
+        targetVolumeEntries,
+        targetVolumeId,
+      }),
       targetLabel,
     });
   }
@@ -1287,6 +1334,25 @@ export function ExpansionDetailPage() {
               />
               {workspaceStatusButton.label}
             </Button>
+            {workspaceRunStatus === "running" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-label="终止运行"
+                title={
+                  workspaceStopRequested
+                    ? "正在终止当前运行"
+                    : "终止运行 — 立即停止当前创作台动作"
+                }
+                disabled={workspaceStopRequested}
+                onClick={stopWorkspaceAction}
+                className="gap-2 text-destructive hover:text-destructive"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+                {workspaceStopRequested ? "终止中" : "终止"}
+              </Button>
+            ) : null}
           </div>
         }
       >
