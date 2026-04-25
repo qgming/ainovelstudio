@@ -27,6 +27,7 @@ export function getReadableError(error: unknown): string {
 /** 项目条目用人类可读标签：识别常用名（AGENTS / 大纲）。 */
 export function getProjectEntryLabel(path: string): string {
   if (path === "AGENTS.md") return "代理规则 · AGENTS.md";
+  if (path === "README.md") return "项目说明 · README.md";
   if (/outline/i.test(path) || /大纲/.test(path)) return `故事大纲 · ${path}`;
   return path;
 }

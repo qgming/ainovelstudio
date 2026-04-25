@@ -117,7 +117,7 @@ describe("prompt context", () => {
     expect(prompt).toContain("- 当前系统日期：2026年4月18日");
   });
 
-  it("项目默认上下文会注入 .project/AGENTS.md 和状态 JSON", () => {
+  it("项目默认上下文会注入 .project/AGENTS.md、.project/README.md 和状态 JSON", () => {
     const projectContext: ProjectContextPayload = {
       source: "项目默认上下文",
       files: [
@@ -125,6 +125,11 @@ describe("prompt context", () => {
           content: "# 项目规则\n\n先看设定再动笔。",
           name: "AGENTS.md",
           path: ".project/AGENTS.md",
+        },
+        {
+          content: "# 项目说明\n\n核心冲突：逃出试炼场。",
+          name: "README.md",
+          path: ".project/README.md",
         },
         {
           content: '{"chapter": 12, "goal": "推进试炼"}',
@@ -143,7 +148,9 @@ describe("prompt context", () => {
 
     expect(prompt).toContain("## s14 项目默认上下文");
     expect(prompt).toContain(".project/AGENTS.md");
+    expect(prompt).toContain(".project/README.md");
     expect(prompt).toContain(".project/status/latest-plot.json");
     expect(prompt).toContain("先看设定再动笔");
+    expect(prompt).toContain("核心冲突：逃出试炼场");
   });
 });

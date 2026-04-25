@@ -163,12 +163,29 @@ function normalizeChapterFieldUpdates(input: Record<string, unknown>) {
 }
 
 function inferOutlineEntries(content: string) {
+  const chapterTitleCore =
+    "(?:第.+章(?:$|[\\s：:·\\-].*)|序章(?:$|[\\s：:·\\-].*)|终章(?:$|[\\s：:·\\-].*)|尾声(?:$|[\\s：:·\\-].*)|番外(?:$|[\\s：:·\\-].*))";
+  const chapterLikeHeadingPattern = new RegExp(`^#{1,6}\\s*${chapterTitleCore}`);
+  const chapterLikeListPattern = new RegExp(`^[-*]\\s*${chapterTitleCore}`);
+  const chapterLikeNumberedPattern = new RegExp(`^\\d+[.\\-、]\\s*${chapterTitleCore}`);
+
   return content
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => /^#{1,6}\s+/.test(line) || /^第.+章/.test(line) || /^\d+[.\-、]/.test(line))
-    .map((line) => line.replace(/^#{1,6}\s+/, "").replace(/^\d+[.\-、]\s*/, "").trim())
+    .filter((line) =>
+      chapterLikeHeadingPattern.test(line)
+      || chapterLikeListPattern.test(line)
+      || /^第.+章/.test(line)
+      || chapterLikeNumberedPattern.test(line),
+    )
+    .map((line) =>
+      line
+        .replace(/^#{1,6}\s+/, "")
+        .replace(/^[-*]\s*/, "")
+        .replace(/^\d+[.\-、]\s*/, "")
+        .trim(),
+    )
     .filter(Boolean);
 }
 
@@ -176,6 +193,7 @@ async function readProjectOutline(workspaceId: string) {
   const detail = await getExpansionWorkspaceDetail(workspaceId);
   const outlineEntry =
     detail.projectEntries.find((entry) => /outline|大纲/i.test(entry.path)) ??
+    detail.projectEntries.find((entry) => entry.path === "README.md") ??
     detail.projectEntries.find((entry) => entry.path === "AGENTS.md") ??
     detail.projectEntries[0];
 

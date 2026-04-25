@@ -89,6 +89,64 @@ describe("createExpansionSemanticToolset", () => {
     expect(apiMocks.writeExpansionEntry.mock.calls[0]?.[3]).toContain('"outline": "## 情节点');
   });
 
+  it("从分卷式大纲自动拆章时只提取章节条目，不把卷标题当章节", async () => {
+    apiMocks.getExpansionWorkspaceDetail.mockResolvedValue({
+      id: "workspace-1",
+      name: "测试项目",
+      updatedAt: 1710000000,
+      projectEntries: [
+        { section: "project", path: "outline.md", name: "outline.md", updatedAt: 1710000000 },
+      ],
+      settingEntries: [],
+      chapterEntries: [],
+    });
+    apiMocks.readExpansionEntry.mockResolvedValue(
+      [
+        "# 全书分卷大纲",
+        "",
+        "## 第一卷：雪夜出城",
+        "- 卷目标：逃出北境",
+        "### 第一卷章节拆分",
+        "- 第1章：雪地追杀",
+        "- 第2章：破庙夜谈",
+      ].join("\n"),
+    );
+    apiMocks.createExpansionEntry
+      .mockResolvedValueOnce({
+        section: "chapters",
+        path: "001/雪地追杀",
+        name: "雪地追杀",
+        entryId: "1",
+        updatedAt: 1710000001,
+      })
+      .mockResolvedValueOnce({
+        section: "chapters",
+        path: "001/破庙夜谈",
+        name: "破庙夜谈",
+        entryId: "2",
+        updatedAt: 1710000002,
+      });
+
+    const tools = createExpansionSemanticToolset({ workspaceId: "workspace-1" });
+    await tools.expansion_chapter_batch_outline.execute({});
+
+    expect(apiMocks.createExpansionEntry).toHaveBeenNthCalledWith(
+      1,
+      "workspace-1",
+      "chapters",
+      "雪地追杀",
+      "001",
+    );
+    expect(apiMocks.createExpansionEntry).toHaveBeenNthCalledWith(
+      2,
+      "workspace-1",
+      "chapters",
+      "破庙夜谈",
+      "001",
+    );
+    expect(apiMocks.createExpansionEntry).toHaveBeenCalledTimes(2);
+  });
+
   it("章节正文写入只更新 content 时会保留现有 outline", async () => {
     apiMocks.getExpansionWorkspaceDetail.mockResolvedValue({
       id: "workspace-1",

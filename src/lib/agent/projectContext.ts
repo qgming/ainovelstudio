@@ -1,4 +1,5 @@
 export const DEFAULT_PROJECT_AGENT_PATH = ".project/AGENTS.md";
+export const DEFAULT_PROJECT_README_PATH = ".project/README.md";
 export const DEFAULT_PROJECT_STATUS_PATH = ".project/status";
 const STATUS_FILE_LIMIT = 6;
 const STATUS_FILE_PRIORITIES = [
@@ -102,17 +103,28 @@ export async function loadProjectContext({
 
   try {
     const content = await readFile(workspaceRootPath, DEFAULT_PROJECT_AGENT_PATH);
-    if (!content.trim()) {
-      return null;
+    if (content.trim()) {
+      files.push({
+        content,
+        name: getBaseName(DEFAULT_PROJECT_AGENT_PATH),
+        path: DEFAULT_PROJECT_AGENT_PATH,
+      });
     }
-
-    files.push({
-      content,
-      name: getBaseName(DEFAULT_PROJECT_AGENT_PATH),
-      path: DEFAULT_PROJECT_AGENT_PATH,
-    });
   } catch {
     // ignore missing project agent file so status JSON 仍可作为默认真值层注入
+  }
+
+  try {
+    const content = await readFile(workspaceRootPath, DEFAULT_PROJECT_README_PATH);
+    if (content.trim()) {
+      files.push({
+        content,
+        name: getBaseName(DEFAULT_PROJECT_README_PATH),
+        path: DEFAULT_PROJECT_README_PATH,
+      });
+    }
+  } catch {
+    // ignore missing project readme file so other default context can continue loading
   }
 
   if (readTree) {

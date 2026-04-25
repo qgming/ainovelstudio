@@ -158,6 +158,7 @@ describe("metaCodec - meta 文件读写", () => {
 describe("metaCodec - 杂项", () => {
   it("getProjectEntryLabel 识别常见名称", () => {
     expect(getProjectEntryLabel("AGENTS.md")).toBe("代理规则 · AGENTS.md");
+    expect(getProjectEntryLabel("README.md")).toBe("项目说明 · README.md");
     expect(getProjectEntryLabel("outline.md")).toBe("故事大纲 · outline.md");
     expect(getProjectEntryLabel("其他.md")).toBe("其他.md");
   });

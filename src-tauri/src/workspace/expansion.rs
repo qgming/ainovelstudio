@@ -1,6 +1,6 @@
 // 扩写模式（expansion）后端：独立于图书工作区，同库不同表。
 // 结构：每本"扩写书籍"固定三段
-//   project/   -> AGENTS.md、outline.md（Markdown 文本）
+//   project/   -> AGENTS.md、README.md、outline.md（Markdown 文本）
 //   settings/  -> 多个设定 JSON
 //   chapters/  -> 多个章节 JSON
 // 数据落地到 expansion_workspaces + expansion_entries 两张表。
@@ -144,13 +144,19 @@ pub(crate) fn run_expansion_migrations(connection: &Connection) -> CommandResult
 
 fn create_agents_template(book_name: &str) -> String {
     format!(
-        "# {book_name} · 扩写项目 AGENTS\n\n本项目面向**扩写模式**：AI 读取大纲/细纲/正文之间的链路，逐级自动生成。\n\n## 整体要求\n- 题材：待补充\n- 目标篇幅：待补充\n- 叙事视角：待补充\n- 写作风格：待补充\n- 禁写约束：待补充\n\n## AI 协作约定\n1. 读取本文件和 outline.md 获取全局约束。\n2. 写细纲前先读取本章关联的设定 JSON。\n3. 写正文前先读取本章细纲。\n4. settings.content、chapters.outline、chapters.content 都使用 Markdown 文本。\n5. 所有生成内容回写对应的 JSON 字段，不直接修改编号与名称，也不要把 Markdown 内容包在代码块里。\n"
+        "# {book_name} · 扩写项目 AGENTS\n\n本文件用于说明扩写工作区的结构、工具约定、读写规则和回写要求。作品本身的题材、卖点、人物、风格、阶段目标和当前推进状态，统一写在 `README.md`；全书剧情大纲写在 `outline.md`。\n\n## 建议起手读取顺序\n1. `AGENTS.md`：理解扩写工作区结构、工具边界和写回规则。\n2. `README.md`：理解作品定位、核心卖点、人物关系、风格和当前重点。\n3. `outline.md`：理解全书主线、阶段划分、冲突升级和结局方向。\n4. 相关设定 JSON、章节细纲、章节正文：进入具体生成或修改。\n\n## 工作区说明\n- `project/AGENTS.md`：操作规则、工具约定、字段边界、回写要求。\n- `project/README.md`：作品说明；记录题材、卖点、风格、人物关系、当前阶段和推进重点。\n- `project/outline.md`：全书总纲；用于拆分分卷、章节细纲和校准剧情方向。\n- `settings/<分类>/*.json`：设定真值层；用于人物、地点、势力、世界观、道具等资料沉淀。\n- `chapters/<分卷>/*.json`：章节真值层；每章包含 `id`、`name`、`outline`、`content`。\n\n## AI 协作约定\n1. 进入任务后，先读取本文件，再按需读取 `README.md`、`outline.md` 和相关 JSON。\n2. 写细纲前先读取本章关联的设定 JSON、README 和 outline。\n3. 写正文前先读取本章细纲、相关设定和必要前文。\n4. `settings.content`、`chapters.outline`、`chapters.content` 都使用 Markdown 文本。\n5. 所有生成内容回写对应 JSON 字段，不直接修改编号与名称，也不要把 Markdown 内容包在代码块里。\n6. 作品定位、风格、人物关系、阶段重点变化后，主动更新 `README.md`；设定和剧情事实变化后，同步回写对应 JSON。\n"
+    )
+}
+
+fn create_readme_template(book_name: &str) -> String {
+    format!(
+        "# {book_name} · 扩写项目 README\n\n本文件用于记录这部作品本身的信息。扩写模式下，AI 会默认读取本文件来理解题材方向、剧情目标、人物关系、写作风格和当前推进重点。工作区规则查看 `AGENTS.md`，全书剧情总纲查看 `outline.md`。\n\n## 作品定位\n- 书名：`{book_name}`\n- 题材：待补充\n- 细分赛道：待补充\n- 目标读者：待补充\n- 目标篇幅：待补充\n- 核心卖点：待补充\n- 一句话 premise：待补充\n\n## 故事总览\n- 主角：待补充\n- 主角目标：待补充\n- 核心冲突：待补充\n- 主要对手 / 阻力：待补充\n- 阶段升级路径：待补充\n- 结局方向：待补充\n\n## 角色与风格\n- 关键人物关系：待补充\n- 叙事视角：待补充\n- 写作风格：待补充\n- 节奏要求：待补充\n- 禁写约束：待补充\n\n## 当前推进重点\n- 当前阶段：构思中\n- 当前卷 / 当前章节：待补充\n- 本轮优先事项：先补齐作品定位和全书大纲，再批量生成设定与细纲\n- 当前风险：待补充\n\n## 维护提醒\n- 题材方向、角色关系、风格基线和阶段目标变化后，及时更新本文件。\n- 更细的剧情拆分写入 `outline.md`，更细的设定与连续性事实写入 `settings/` 和 `chapters/` JSON。\n"
     )
 }
 
 fn create_outline_template(book_name: &str) -> String {
     format!(
-        "# {book_name} · 全书大纲\n\n（用于 AI 拆分细纲的总纲，请至少包含：主线、主角目标、核心冲突、阶段划分、结局方向。）\n\n## 主线\n待补充\n\n## 主角目标\n待补充\n\n## 核心冲突\n待补充\n\n## 阶段划分\n待补充\n\n## 结局方向\n待补充\n"
+        "# {book_name} · 全书分卷大纲\n\n本文件用于给扩写模式提供可拆分的分卷式总纲。建议先补齐全书主线，再按卷填写每卷目标、核心冲突、阶段推进和章节拆分。批量生成细纲前，优先把每卷的章节列表补到可直接拆章的程度。\n\n## 全书总览\n- 主线：待补充\n- 主角目标：待补充\n- 核心冲突：待补充\n- 长线悬念：待补充\n- 力量 / 关系 / 阵营升级主轴：待补充\n- 结局方向：待补充\n\n## 分卷规划总表\n- 预计卷数：3 卷起步，可按实际扩展\n- 第一卷定位：开局立钩子，完成主角起势和核心矛盾引爆\n- 第二卷定位：扩大冲突面，抬升对手层级和代价\n- 第三卷定位：进入阶段高潮，兑现前期伏笔并打开新局面\n\n## 第一卷：待补充卷名\n- 卷定位：开篇立世界规则、主角处境和第一阶段目标\n- 卷目标：待补充\n- 卷核心冲突：待补充\n- 卷内升级点：待补充\n- 卷末钩子 / 卷末爆点：待补充\n- 关键出场人物 / 势力 / 道具：待补充\n\n### 第一卷章节拆分\n- 第1章：待补充\n- 第2章：待补充\n- 第3章：待补充\n- 第4章：待补充\n- 第5章：待补充\n\n## 第二卷：待补充卷名\n- 卷定位：扩大地图、对手和资源争夺，推动主线进入中段\n- 卷目标：待补充\n- 卷核心冲突：待补充\n- 卷内升级点：待补充\n- 卷末钩子 / 卷末爆点：待补充\n- 关键新增人物 / 势力 / 设定：待补充\n\n### 第二卷章节拆分\n- 第1章：待补充\n- 第2章：待补充\n- 第3章：待补充\n- 第4章：待补充\n- 第5章：待补充\n\n## 第三卷：待补充卷名\n- 卷定位：进入阶段高潮，兑现旧伏笔并抬升后续主线天花板\n- 卷目标：待补充\n- 卷核心冲突：待补充\n- 卷内升级点：待补充\n- 卷末钩子 / 卷末爆点：待补充\n- 关键回收伏笔：待补充\n\n### 第三卷章节拆分\n- 第1章：待补充\n- 第2章：待补充\n- 第3章：待补充\n- 第4章：待补充\n- 第5章：待补充\n"
     )
 }
 
@@ -170,6 +176,7 @@ fn create_setting_meta_template() -> String {
 fn build_project_template(book_name: &str) -> Vec<(&'static str, String)> {
     vec![
         ("AGENTS.md", create_agents_template(book_name)),
+        ("README.md", create_readme_template(book_name)),
         ("outline.md", create_outline_template(book_name)),
         ("chapters.meta.json", create_chapter_meta_template()),
         ("settings.meta.json", create_setting_meta_template()),
@@ -1134,6 +1141,7 @@ pub fn import_expansion_zip(
             if section == "project" {
                 // 只接受固定 project 文件
                 if file_name != "AGENTS.md"
+                    && file_name != "README.md"
                     && file_name != "outline.md"
                     && file_name != "chapters.meta.json"
                     && file_name != "settings.meta.json"
@@ -1202,4 +1210,37 @@ pub fn import_expansion_zip(
         touch_workspace(transaction, &record.id, timestamp)?;
         Ok(build_summary(&record))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        create_workspace_internal, load_entry_content, run_expansion_migrations,
+    };
+    use rusqlite::Connection;
+
+    #[test]
+    fn create_workspace_internal_builds_volume_outline_template() {
+        let mut connection = Connection::open_in_memory().expect("in-memory db should open");
+        run_expansion_migrations(&connection).expect("expansion tables should migrate");
+
+        let transaction = connection.transaction().expect("transaction should open");
+        let workspace = create_workspace_internal(&transaction, "北境余烬")
+            .expect("workspace should create");
+        transaction.commit().expect("transaction should commit");
+
+        let outline = String::from_utf8(
+            load_entry_content(&connection, &workspace.id, "project", "outline.md")
+                .expect("outline should load"),
+        )
+        .expect("outline should be utf-8");
+
+        assert!(outline.contains("# 北境余烬 · 全书分卷大纲"));
+        assert!(outline.contains("## 分卷规划总表"));
+        assert!(outline.contains("## 第一卷：待补充卷名"));
+        assert!(outline.contains("### 第一卷章节拆分"));
+        assert!(outline.contains("## 第二卷：待补充卷名"));
+        assert!(outline.contains("## 第三卷：待补充卷名"));
+        assert!(outline.contains("- 第1章：待补充"));
+    }
 }

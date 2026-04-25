@@ -96,6 +96,11 @@ describe("agent session (streaming)", () => {
             path: ".project/AGENTS.md",
           },
           {
+            content: "# 项目说明\n\n主角目标：拿到神骨。",
+            name: "README.md",
+            path: ".project/README.md",
+          },
+          {
             content: '{"chapter": 12}',
             name: "latest-plot.json",
             path: ".project/status/latest-plot.json",
@@ -119,8 +124,10 @@ describe("agent session (streaming)", () => {
     const call = mockStreamFn.mock.calls[0]?.[0];
     expect(call?.messages?.[0]?.content).toContain("## s14 项目默认上下文");
     expect(call?.messages?.[0]?.content).toContain(".project/AGENTS.md");
+    expect(call?.messages?.[0]?.content).toContain(".project/README.md");
     expect(call?.messages?.[0]?.content).toContain(".project/status/latest-plot.json");
     expect(call?.messages?.[0]?.content).toContain("先读取设定");
+    expect(call?.messages?.[0]?.content).toContain("主角目标：拿到神骨");
   });
 
   it("传入 abortSignal 给流式调用", async () => {
@@ -617,7 +624,7 @@ describe("agent session (streaming)", () => {
 
     const request = mockStreamFn.mock.calls[0][0];
     expect(request.system).toContain("## s02 已启用工具");
-    expect(request.system).toContain("## s04 主代理人设");
+    expect(request.system).toContain("## s04b 主代理人设");
     expect(request.system).toContain("# 自定义主代理");
     expect(request.system).not.toContain(DEFAULT_MAIN_AGENT_MARKDOWN);
     expect(request.messages[0].content).toContain("# 当前轮上下文");

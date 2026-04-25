@@ -352,7 +352,10 @@ export function ExpansionDetailPage() {
             entry.path !== HIDDEN_CHAPTER_META_PATH && entry.path !== HIDDEN_SETTING_META_PATH,
         );
         const defaultEntry =
-          projectEntries.find((entry) => entry.path === "AGENTS.md") ?? projectEntries[0] ?? null;
+          projectEntries.find((entry) => entry.path === "README.md")
+          ?? projectEntries.find((entry) => entry.path === "AGENTS.md")
+          ?? projectEntries[0]
+          ?? null;
         return defaultEntry ? { section: "project", path: defaultEntry.path } : null;
       });
     } catch (error) {
@@ -523,6 +526,7 @@ export function ExpansionDetailPage() {
         `当前文件：${currentFilePath ?? "project/outline.md"}`,
         `目标分卷：${targetVolumeId}（${formatVolumeLabel(targetVolumeId)}）`,
         "先用 skill 工具读取技能：chapter-planner、outline-manager。",
+        "先读取 project/AGENTS.md、project/README.md 和 project/outline.md，确认规则、题材方向和剧情走向。",
         `调用 expansion_chapter_batch_outline 时必须传 volumeId=${targetVolumeId}。`,
         "章节数量按全书规模与本卷定位自行推断；新章节 ID 不得与现有冲突，不确定时先用 expansion_continuity_scan 校验。",
         "outline 约 300 字，必须包含：本章主爽点（升级/打脸/收编/扮猪吃虎等）、核心冲突、关键转折、章末钩子（悬念/战斗/反转/情绪）。",
@@ -538,11 +542,12 @@ export function ExpansionDetailPage() {
     void runAction({
       actionId: "project-batch-settings",
       actionLabel: "批量生成设定",
-      description: "根据大纲和 AGENTS 相关内容批量生成设定 JSON。",
+      description: "根据 README、大纲和工作区规则批量生成设定 JSON。",
       prompt: [
         `当前目标：${targetLabel}`,
-        `当前文件：${currentFilePath ?? "project/AGENTS.md"}`,
+        `当前文件：${currentFilePath ?? "project/README.md"}`,
         "先用 skill 工具读取技能：story-bible、plot-planner。",
+        "先读取 project/AGENTS.md、project/README.md 和 project/outline.md，再决定要建哪些设定。",
         "覆盖类别按需选择：人物 / 地点 / 势力 / 世界观 / 道具；主角与重要配角必须包含。",
         "主角设定必含：金手指、性格主标签、行事原则、社交模式。",
         "反派/对手设定必含：威胁层级、与主角差距、击败条件。",
@@ -568,7 +573,7 @@ export function ExpansionDetailPage() {
         `当前目标：${targetLabel}`,
         `当前文件：${currentFilePath}`,
         "先用 skill 工具读取技能：story-state、story-bible。",
-        "先读取当前设定 JSON，再读取最新章节正文、章节细纲与 project/outline.md。",
+        "先读取当前设定 JSON，再读取最新章节正文、章节细纲、project/README.md 与 project/outline.md。",
         "仅更新与最新剧情冲突或新增的部分，未变动内容保持原文。",
         "人物状态变化必标：等级 / 实力数值 / 资源 / 关系网；用「第X章：xxx」格式追加到 content 末尾，保留历史轨迹。",
         "区分「读者已知」与「读者未知」（POV 信息差），未揭示信息标注隐藏度。",
@@ -595,8 +600,8 @@ export function ExpansionDetailPage() {
         "当前章节细纲：",
         currentOutline,
         "先用 skill 工具读取技能：story-writer、humanizer、continuity-check。",
-        "按需读取相关设定文件、前后章节的细纲与正文，保证人物状态、视角、时态、时间线连续。",
-        "字数目标 2000-3000 字（如 .project/AGENTS.md 另有约定以其为准）。",
+        "按需读取 project/AGENTS.md、project/README.md、相关设定文件、前后章节的细纲与正文，保证人物状态、视角、时态、时间线连续。",
+        "字数目标 2000-3000 字（如 project/README.md 或 project/AGENTS.md 另有约定以其为准）。",
         "开篇 200 字内必须有具体场景或冲突，不要环境描写堆砌。",
         "对话占比 ≥ 30%，避免大段心理描写或旁白；严格保持人称视角，不中途漂移。",
         "每 500 字至少一个推进点（信息释放 / 情绪转折 / 冲突升级 / 实力变化）。",

@@ -39,13 +39,24 @@ fn create_book_workspace_db_builds_template_tree() {
         "books/北境余烬/.project/AGENTS.md",
     )
     .expect("project AGENTS should load");
-    assert!(project_agents.contains("# 北境余烬 项目说明"));
+    assert!(project_agents.contains("# 北境余烬 工作区 AGENTS"));
+    assert!(project_agents.contains(".project/README.md"));
     assert!(project_agents.contains(".project/status/project-state.json"));
-    assert!(project_agents.contains("剧情梗概（100 字左右）"));
-    assert!(project_agents.contains("## 写作风格"));
-    assert!(project_agents.contains("主角目标"));
+    assert!(project_agents.contains(".project/MEMORY/"));
+    assert!(project_agents.contains("## 文件分工与回写要求"));
     assert!(project_agents.contains("03_规划/"));
-    assert!(project_agents.contains("章节规划.md"));
+
+    let project_readme = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/北境余烬/.project/README.md",
+    )
+    .expect("project README should load");
+    assert!(project_readme.contains("# 北境余烬 项目 README"));
+    assert!(project_readme.contains("剧情梗概（100 字左右）"));
+    assert!(project_readme.contains("## 写作风格"));
+    assert!(project_readme.contains("主角目标"));
+    assert!(project_readme.contains("章节规划.md"));
 
     let project_status = read_text_file_db(
         &connection,
@@ -57,6 +68,7 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(project_status.contains("\"projectMemory\": \".project/MEMORY\""));
     assert!(project_status.contains("\"projectStatus\": \".project/status\""));
     assert!(project_status.contains("\"planning\": \"03_规划\""));
+    assert!(project_status.contains("\"projectReadme\": \".project/README.md\""));
     assert!(project_status.contains("\"latestPlot\": \".project/status/latest-plot.json\""));
     assert!(project_status.contains("\"characterState\": \".project/status/character-state.json\""));
     assert!(project_status.contains("\"plotSynopsis100\""));
@@ -101,7 +113,7 @@ fn create_book_workspace_db_builds_template_tree() {
         .iter()
         .map(|child| child.name.clone())
         .collect::<Vec<_>>();
-    assert_eq!(project_child_names, vec!["MEMORY", "status", "AGENTS.md"]);
+    assert_eq!(project_child_names, vec!["MEMORY", "status", "AGENTS.md", "README.md"]);
 
     let status_child_names = project_children
         .into_iter()
