@@ -6,6 +6,7 @@ export type PlanItem = {
   content: string;
   status: PlanItemStatus;
   activeForm: string;
+  phase?: string;
 };
 
 export type PlanningState = {
@@ -34,12 +35,17 @@ function normalizePlanItem(value: unknown): PlanItem | null {
   const content = typeof candidate.content === "string" ? candidate.content.trim() : "";
   const activeForm = typeof candidate.activeForm === "string" ? candidate.activeForm.trim() : "";
   const status = isPlanItemStatus(candidate.status) ? candidate.status : "pending";
+  const phaseRaw = typeof candidate.phase === "string" ? candidate.phase.trim() : "";
 
   if (!content) {
     return null;
   }
 
-  return { activeForm, content, status };
+  const item: PlanItem = { activeForm, content, status };
+  if (phaseRaw) {
+    item.phase = phaseRaw;
+  }
+  return item;
 }
 
 function parseTodoPayload(raw: string | undefined): PlanItem[] | null {
@@ -127,7 +133,8 @@ export function renderPlanItems(items: PlanItem[]) {
           : item.status === "in_progress"
             ? "[>]"
             : "[ ]";
-      return `${marker} ${item.content}`;
+      const phasePrefix = item.phase ? `(${item.phase}) ` : "";
+      return `${marker} ${phasePrefix}${item.content}`;
     })
     .join("\n");
 }

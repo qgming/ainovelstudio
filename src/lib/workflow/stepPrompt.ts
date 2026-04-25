@@ -27,8 +27,6 @@ type BuildStepPromptInput = {
   chapterWriteMode?: ChapterWriteMode;
 };
 
-const WORKFLOW_DECISION_TOOL_ID = "workflow_decision";
-
 function joinSections(sections: Array<string | null | undefined>) {
   return sections.filter((section): section is string => Boolean(section?.trim())).join("\n\n");
 }
@@ -115,39 +113,18 @@ function buildIdentitySection(params: {
     .join("\n");
 }
 
-function buildAgentTaskRules(chapterWriteMode?: ChapterWriteMode) {
-  return [
-    "- 开始前先用 browse / search / read 等工具定位并读取当前节点真正需要的工作区文件。",
-    "- 工作区文件是最终事实源；交接摘要和节点消息只提供线索，不替代文件核对。",
-    "- 只完成当前代理节点负责的产出，不要代替判断节点做通过 / 失败分支决定。",
-    chapterWriteMode === "new_chapter"
-      ? "- 当前处于正常推进模式，可以继续完成本轮目标内容。"
+// 节点契约规则已上提到 system prompt 的 modeRules（见 src/lib/agent/modeRules.ts），
+// user 侧只保留事实信息：身份、当前任务、交接上下文。
+function buildDecisionDispatchHint(step: WorkflowDecisionStepDefinition) {
+  const lines = [
+    step.falseNextStepId
+      ? `- 当前失败分支会跳转到步骤 ID：${step.falseNextStepId}。`
       : null,
-    chapterWriteMode === "rework_current_chapter"
-      ? "- 当前处于返工模式，先对照最近一次审查问题修订当前对象；不要推进下一章或新的项目。"
+    step.trueNextStepId
+      ? `- 当前通过分支会跳转到步骤 ID：${step.trueNextStepId}。`
       : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildDecisionRules(step: WorkflowDecisionStepDefinition) {
-  return [
-    "- 这是判断节点。你的职责是基于当前产物完成审查与分支判断。",
-    "- 开始前先读取被审对象、相关事实文件和必要上下文，再给结论。",
-    "- 不要代替上游代理重写正文；聚焦判断是否通过，以及指出高价值问题。",
-    `- 最终必须调用 ${WORKFLOW_DECISION_TOOL_ID} 提交结构化结果。`,
-    "- pass=true 表示通过并进入成功分支。",
-    "- pass=false 表示存在问题并进入失败分支。",
-    "- reason 说明这次程序分支判断的原因。",
-    "- issues 提交结构化问题列表，可为空数组。",
-    "- revision_brief 提交给返工节点直接执行的修订摘要，可为空字符串。",
-    `- 正文保持简短结论，程序分支只读取 ${WORKFLOW_DECISION_TOOL_ID} 的结果。`,
-    step.falseNextStepId ? `- 当前失败分支会跳转到步骤 ID：${step.falseNextStepId}。` : null,
-    step.trueNextStepId ? `- 当前通过分支会跳转到步骤 ID：${step.trueNextStepId}。` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].filter(Boolean);
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 function buildRoleAndTaskSections(step: PromptStep, teamMember: WorkflowTeamMember) {
@@ -217,7 +194,6 @@ function buildAgentTaskPrompt(input: BuildStepPromptInput) {
       "节点身份",
       buildIdentitySection({ attemptIndex, chapterWriteMode, step, teamMember }),
     ),
-    renderSection("执行边界", buildAgentTaskRules(chapterWriteMode)),
     ...buildRoleAndTaskSections(step, teamMember),
     buildDeltaSection({
       incomingMessages,
@@ -246,7 +222,10 @@ function buildDecisionPrompt(input: BuildStepPromptInput) {
       "节点身份",
       buildIdentitySection({ attemptIndex, step, teamMember }),
     ),
-    renderSection("判断契约", buildDecisionRules(step as WorkflowDecisionStepDefinition)),
+    renderSection(
+      "分支跳转表",
+      buildDecisionDispatchHint(step as WorkflowDecisionStepDefinition),
+    ),
     ...buildRoleAndTaskSections(step, teamMember),
     buildDeltaSection({
       incomingMessages,

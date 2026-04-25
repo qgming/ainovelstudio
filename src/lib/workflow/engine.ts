@@ -578,6 +578,15 @@ async function executeConfiguredStep(params: {
     enabledSkills,
     enabledToolIds,
     includeAgentCatalog: false,
+    mode: "workflow",
+    modeContext: {
+      nodeKind: step.type,
+      workflowName: detail.workflow.name,
+      stepName: step.name,
+      memberName: member.name,
+      memberRoleLabel: member.roleLabel,
+      isReworkMode: chapterWriteMode === "rework_current_chapter",
+    },
     manualContext: null,
     onUsage: (nextUsage) => {
       usage = nextUsage;

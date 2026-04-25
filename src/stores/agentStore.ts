@@ -532,6 +532,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         enabledAgents,
         enabledSkills,
         enabledToolIds,
+        mode: "book",
         manualContext,
         onUsage: attachUsageToAssistant,
         planningState,

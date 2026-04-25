@@ -31,11 +31,16 @@ export function normalizeTodoItems(items: unknown): PlanItem[] {
       throw new Error(`todo.items[${index}].content 不能为空。`);
     }
 
-    return {
+    const phase = String(item.phase ?? "").trim();
+    const result: PlanItem = {
       activeForm: String(item.activeForm ?? "").trim(),
       content,
       status: normalizePlanItemStatus(item.status),
     };
+    if (phase) {
+      result.phase = phase;
+    }
+    return result;
   });
 
   const inProgressCount = validated.filter(

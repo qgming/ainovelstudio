@@ -8,6 +8,11 @@ import {
   type PlanningState,
 } from "./planning";
 import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "./toolDefs";
+import {
+  buildModeRules,
+  type AgentMode,
+  type ModeContextMap,
+} from "./modeRules";
 
 // 最小后备文本，正常流程会从 AGENTS.md 文件加载完整人设
 export const DEFAULT_MAIN_AGENT_MARKDOWN = [
@@ -19,12 +24,18 @@ export const DEFAULT_MAIN_AGENT_MARKDOWN = [
   "先理解文件树结构；任务明显匹配技能时，主动调用 skill 获取专项规则和材料。",
 ].join("\n");
 
-type BuildSystemPromptInput = {
+type BuildSystemPromptInput<M extends AgentMode = AgentMode> = {
   defaultAgentMarkdown?: string;
   enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   enabledToolIds: string[];
   includeAgentCatalog?: boolean;
+  /** 当前调用模式；不传时按 book 模式渲染。 */
+  mode?: M;
+  /** 模式专属上下文，由调用方按 mode 提供。 */
+  modeContext?: ModeContextMap[M];
+  /** 是否注入技能目录 s03；工作流默认隐藏 */
+  includeSkillCatalog?: boolean;
 };
 
 type BuildUserTurnContentInput = {
@@ -150,14 +161,14 @@ function buildAgentCatalogBlock(agent: ResolvedAgent) {
 }
 
 const TOOL_USAGE_HINT: Record<string, string> = {
-  todo: "多步任务（≥3 步）开场写短计划；同一时间只保留一个 in_progress，允许整份重写。",
+  todo: "多步任务（≥3 步）开场写短计划；同一时间只保留一个 in_progress，允许整份重写；长链路任务建议传 phase 字段（plot/bible/outline/chapter/write/review/polish）方便跨轮承接。",
   task: "批量独立任务 ≥3 项或需隔离上下文时派发；prompt 写清输入范围与期望输出，可传 agentId 指定目标。",
   browse: "不知道路径时首选；mode：list（默认）看子项、stat 看路径概况、tree 拿裁剪后的目录树；list 可配 kind、extensions、sortBy、limit。",
   search: "找关键词/章节/角色/字段；scope：all / content / names；matchMode：phrase / all_terms / any_term；可用 extensions、caseSensitive、wholeWord、maxPerFile、beforeLines / afterLines、sortBy 精细控制。",
   web_search: "查平台规则、榜单、外部资料；可配 domains 限制站点范围；返回标题+摘要+链接，再用 web_fetch 展开正文。",
   web_fetch: "拿到外部链接后读正文；支持 full / anchor_range / heading_range；需要结构化信息时加 includeLinks / includeTables；maxChars 默认 8000，最大 20000。",
   read: "已知准确路径时使用；大文件优先 mode=head/tail/range；按锚点读局部用 anchor_range；按 Markdown 标题块读取用 heading_range。",
-  word_count: "校对字符数、中文字符数、英文词数、段落数、行数。",
+  word_count: "校对字数：单文件传 path；多文件传 paths 数组；按目录批量统计传 dir（默认匹配 md/markdown/txt/text/json，可用 extensions 覆盖）；批量结果含每文件统计 + 总和 + 中位字符数。",
   edit: "小范围改（≤30%）；先 read 再 edit；action：replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中范围；改连续行段优先用 replace_lines；改锚点附近或 Markdown 标题块优先用对应 range 动作。",
   write: "整份覆盖写入；只有已准备好完整新内容时再用，缺失目录会自动创建。",
   json: "按 JSON Pointer 局部读写字段/对象/数组/字符串；action：get/set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；改单个字符串字段优先 text_append 或 set，初始化补结构优先 ensure_template，写日志优先 history_append，多步变更优先 batch 或 patch，一次写回。",
@@ -430,13 +441,16 @@ function buildSubAgentManifestSummary(agent: ResolvedAgent) {
     .join("\n");
 }
 
-export function buildSystemPrompt({
+export function buildSystemPrompt<M extends AgentMode = AgentMode>({
   defaultAgentMarkdown,
   enabledAgents,
   enabledSkills,
   enabledToolIds,
   includeAgentCatalog = true,
-}: BuildSystemPromptInput) {
+  mode,
+  modeContext,
+  includeSkillCatalog,
+}: BuildSystemPromptInput<M>) {
   const normalizedDefaultAgent =
     defaultAgentMarkdown && defaultAgentMarkdown.trim()
       ? defaultAgentMarkdown.trim()
@@ -456,13 +470,41 @@ export function buildSystemPrompt({
       ? enabledAgents.map((agent) => buildAgentCatalogBlock(agent)).join("\n\n")
       : "- 当前没有可委派的子代理。";
 
+  const effectiveMode: AgentMode = mode ?? "book";
+  // 工作流默认隐藏技能目录与子代理目录；其他模式默认展示
+  const showSkillCatalog =
+    includeSkillCatalog ?? effectiveMode !== "workflow";
+  const showAgentCatalog =
+    effectiveMode === "workflow" ? false : includeAgentCatalog;
+
+  const modeRulesBody = (() => {
+    if (effectiveMode === "book") {
+      return buildModeRules("book", {} as ModeContextMap["book"]);
+    }
+    if (!modeContext) {
+      return null;
+    }
+    return buildModeRules(effectiveMode, modeContext as ModeContextMap[typeof effectiveMode]);
+  })();
+
+  const envBody = (() => {
+    switch (effectiveMode) {
+      case "workflow":
+        return "你正在神笔写作的【工作流】内作为某个节点运行。每个节点是独立 LLM 调用，节点之间通过工作区文件 + 交接上下文协作，不共享对话历史。";
+      case "expansion":
+        return "你正在神笔写作的【扩写创作台】内执行单次动作。本轮无对话历史，需在一轮内完成全部产出。";
+      default:
+        return "你正在神笔写作【图书项目编辑模式】运行，可与作者多轮协作，按需调用工具、技能和子代理。";
+    }
+  })();
+
   return joinSections([
     "# 主代理系统上下文",
     renderPromptSections([
       {
         key: "s01",
         title: "运行环境",
-        body: "你正在神笔写作应用中运行。以下是当前可用的工具、技能和子代理资源。",
+        body: envBody,
       },
       {
         key: "s02",
@@ -472,24 +514,23 @@ export function buildSystemPrompt({
       {
         key: "s03",
         title: "已启用技能",
-        body: skillBlock,
+        body: showSkillCatalog ? skillBlock : null,
       },
       {
-        key: "s04",
+        key: "s04a",
+        title: "模式规则",
+        body: modeRulesBody,
+      },
+      {
+        key: "s04b",
         title: "主代理人设",
         body: normalizedDefaultAgent,
       },
-      includeAgentCatalog
-        ? {
-            key: "s05",
-            title: "可委派子代理目录",
-            body: agentBlock,
-          }
-        : {
-            key: "s05",
-            title: "可委派子代理目录",
-            body: null,
-          },
+      {
+        key: "s05",
+        title: "可委派子代理目录",
+        body: showAgentCatalog ? agentBlock : null,
+      },
     ]),
   ]);
 }

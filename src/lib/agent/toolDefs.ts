@@ -15,7 +15,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "todo",
     name: "待办计划",
     description:
-      "更新当前会话的显式计划状态；同一时间最多保留一个进行中的步骤。",
+      "更新当前会话的显式计划状态；同一时间最多保留一个进行中的步骤；可选 phase 字段标记长链路阶段。",
   },
   {
     id: "task",
@@ -56,7 +56,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "word_count",
     name: "字数统计",
     description:
-      "读取指定文本文件并返回字符数、非空白字符数、中文字符数、英文单词数、数字数、段落数和行数。",
+      "统计文本文件字符/中文/英文/段落等指标。支持单文件 path、多文件 paths、目录递归 dir 三种模式；批量返回每文件统计 + 总和 + 中位字符数。",
   },
   {
     id: "edit",

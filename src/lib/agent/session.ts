@@ -18,6 +18,7 @@ import {
 import { getPlanningIntervention, type PlanningState } from "./planning";
 import { createToolResultPart, mergeToolResultPart } from "./toolParts";
 import type { AgentUsage } from "./types";
+import type { AgentMode, ModeContextMap } from "./modeRules";
 
 type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
@@ -31,6 +32,10 @@ type RunAgentTurnInput = {
   /** 启用的工具 ID 列表 */
   enabledToolIds: string[];
   includeAgentCatalog?: boolean;
+  /** 当前调用模式；不传时按 book 模式渲染 */
+  mode?: AgentMode;
+  /** 模式专属上下文 */
+  modeContext?: ModeContextMap[AgentMode];
   manualContext?: ManualTurnContextPayload | null;
   planningState?: PlanningState | null;
   projectContext?: ProjectContextPayload | null;
@@ -345,7 +350,7 @@ function buildAiSdkTools(
     todo: (toolName, tool) =>
       defineTool({
         description:
-          "更新当前会话里的短计划，并保持同一时间最多一个 in_progress。",
+          "更新当前会话里的短计划，并保持同一时间最多一个 in_progress。可选 phase 字段标记长链路阶段（如 plot/bible/outline/chapter/write/review/polish）。",
         inputSchema: z.object({
           items: z
             .array(
@@ -358,6 +363,12 @@ function buildAiSdkTools(
                 status: z
                   .enum(["pending", "in_progress", "completed"])
                   .default("pending"),
+                phase: z
+                  .string()
+                  .optional()
+                  .describe(
+                    "可选：所属阶段标签。建议网文链路使用 plot / bible / outline / chapter / write / review / polish 等短词。",
+                  ),
               }),
             )
             .describe("当前整份计划。允许整份重写。"),
@@ -683,11 +694,26 @@ function buildAiSdkTools(
     word_count: (toolName, tool) =>
       defineTool({
         description:
-          "统计指定文本文件的字符数、非空白字符数、中文字符数、英文单词数、数字数、行数和段落数。",
+          "统计文本文件字符数、中文字符数、段落数等。支持单文件（path）、多文件（paths 数组）或目录递归（dir + 可选 extensions）批量统计。批量返回每文件统计 + 总和 + 中位字符数。",
         inputSchema: z.object({
           path: z
             .string()
-            .describe("目标文本文件的相对工作区路径。"),
+            .optional()
+            .describe("单文件模式：目标文本文件的相对工作区路径。"),
+          paths: z
+            .array(z.string())
+            .optional()
+            .describe("多文件模式：要批量统计的相对路径列表。"),
+          dir: z
+            .string()
+            .optional()
+            .describe("目录模式：递归统计该目录下所有文本文件。"),
+          extensions: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "目录模式可选：扩展名过滤（如 ['.md','.txt']）；缺省时统计 md/markdown/txt/text/json。",
+            ),
         }),
         execute: async (input) => {
           const result = await runTool(
@@ -1226,6 +1252,8 @@ export async function* runAgentTurn({
   enabledSkills,
   enabledToolIds,
   includeAgentCatalog = true,
+  mode,
+  modeContext,
   manualContext,
   planningState,
   projectContext,
@@ -1293,6 +1321,8 @@ export async function* runAgentTurn({
     enabledSkills,
     enabledToolIds,
     includeAgentCatalog,
+    mode,
+    modeContext,
   });
 
   const planningIntervention = getPlanningIntervention(planningState, prompt);
