@@ -1,3 +1,17 @@
+/**
+ * 书籍工作区页面（BookPage）。
+ *
+ * 通过 BookWorkspacePage 的路由 `/books/:bookId` 进入。本页核心职责：
+ *   - 订阅 bookWorkspaceStore 的全部状态
+ *   - 协调初始化 / 路由切书 / 自动保存 / 移动端 tab 切换
+ *   - 桌面端三栏 + 拖拽调宽（拖拽实现已抽到 useBookPanelResize）
+ *   - 弹出对话框（重命名 / 创建 / 删除 / 书架）
+ *
+ * 阶段 7 拆出：
+ *   - lib/bookWorkspace/layoutMath.ts —— clamp / 占位 / 最大宽度计算
+ *   - hooks/book/useBookPanelResize.ts —— 拖拽指针逻辑与 ref/state
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Bot, FolderTree, SquarePen } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -12,30 +26,16 @@ import { BookshelfDialog } from "../components/dialogs/BookshelfDialog";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
 import { getStoredWorkspaceSnapshot } from "../lib/bookWorkspace/api";
-import {
-  AGENT_PANEL_COLLAPSE_THRESHOLD,
-  COLLAPSED_PANEL_TOGGLE_WIDTH,
-  DEFAULT_BOOK_PANEL_LAYOUT,
-  MAX_AGENT_PANEL_WIDTH,
-  MAX_TREE_PANEL_WIDTH,
-  MIN_AGENT_PANEL_WIDTH,
-  MIN_EDITOR_PANEL_WIDTH,
-  MIN_TREE_PANEL_WIDTH,
-  RESIZE_HANDLE_WIDTH,
-  TREE_PANEL_COLLAPSE_THRESHOLD,
-  getStoredBookPanelLayout,
-  setStoredBookPanelLayout,
-  type BookPanelLayout,
-} from "../lib/bookWorkspace/layout";
 import { getBaseName } from "../lib/bookWorkspace/paths";
 import type { TreeNode } from "../lib/bookWorkspace/types";
 import { useIsMobile } from "../hooks/use-mobile";
+import { useBookPanelResize } from "../hooks/book/useBookPanelResize";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const AUTO_SAVE_DELAY_MS = 800;
-type ResizeHandle = "left" | "right" | null;
 type MobileBookTab = "tree" | "editor" | "agent";
 
+/** 移动端顶部标题：书架 / 当前书名。 */
 function MobileWorkspaceTitle({
   currentLabel,
   onNavigateHome,
@@ -59,51 +59,6 @@ function MobileWorkspaceTitle({
   );
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function getLeftFootprint(layout: BookPanelLayout) {
-  return layout.leftCollapsed
-    ? COLLAPSED_PANEL_TOGGLE_WIDTH
-    : layout.leftPanelWidth + RESIZE_HANDLE_WIDTH;
-}
-
-function getRightFootprint(layout: BookPanelLayout) {
-  return layout.rightCollapsed
-    ? COLLAPSED_PANEL_TOGGLE_WIDTH
-    : layout.rightPanelWidth + RESIZE_HANDLE_WIDTH;
-}
-
-function getMaxLeftPanelWidth(layout: BookPanelLayout, containerWidth: number) {
-  return Math.min(
-    MAX_TREE_PANEL_WIDTH,
-    Math.max(
-      MIN_TREE_PANEL_WIDTH,
-      containerWidth -
-        getRightFootprint(layout) -
-        MIN_EDITOR_PANEL_WIDTH -
-        RESIZE_HANDLE_WIDTH,
-    ),
-  );
-}
-
-function getMaxRightPanelWidth(
-  layout: BookPanelLayout,
-  containerWidth: number,
-) {
-  return Math.min(
-    MAX_AGENT_PANEL_WIDTH,
-    Math.max(
-      MIN_AGENT_PANEL_WIDTH,
-      containerWidth -
-        getLeftFootprint(layout) -
-        MIN_EDITOR_PANEL_WIDTH -
-        RESIZE_HANDLE_WIDTH,
-    ),
-  );
-}
-
 type BookPageProps = {
   onWorkspaceBookChange?: (bookId: string) => void;
   onNavigateHome?: () => void;
@@ -116,15 +71,15 @@ export function BookPage({
   requestedBookId = null,
 }: BookPageProps = {}) {
   const isMobile = useIsMobile();
+
+  // —— bookWorkspaceStore 订阅（按 selector 切片以减少不必要的重渲染） ——
   const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
   const availableBooks = useBookWorkspaceStore((state) => state.availableBooks);
   const bookshelfError = useBookWorkspaceStore((state) => state.bookshelfError);
   const closeBookshelf = useBookWorkspaceStore((state) => state.closeBookshelf);
   const closeConfirm = useBookWorkspaceStore((state) => state.closeConfirm);
   const closePrompt = useBookWorkspaceStore((state) => state.closePrompt);
-  const toggleAllDirectories = useBookWorkspaceStore(
-    (state) => state.toggleAllDirectories,
-  );
+  const toggleAllDirectories = useBookWorkspaceStore((state) => state.toggleAllDirectories);
   const confirmDelete = useBookWorkspaceStore((state) => state.confirmDelete);
   const confirmState = useBookWorkspaceStore((state) => state.confirmState);
   const dismissError = useBookWorkspaceStore((state) => state.dismissError);
@@ -132,34 +87,20 @@ export function BookPage({
   const errorMessage = useBookWorkspaceStore((state) => state.errorMessage);
   const expandedPaths = useBookWorkspaceStore((state) => state.expandedPaths);
   const hasInitialized = useBookWorkspaceStore((state) => state.hasInitialized);
-  const initializeWorkspace = useBookWorkspaceStore(
-    (state) => state.initializeWorkspace,
-  );
+  const initializeWorkspace = useBookWorkspaceStore((state) => state.initializeWorkspace);
   const isBusy = useBookWorkspaceStore((state) => state.isBusy);
-  const isBookshelfOpen = useBookWorkspaceStore(
-    (state) => state.isBookshelfOpen,
-  );
+  const isBookshelfOpen = useBookWorkspaceStore((state) => state.isBookshelfOpen);
   const isDirty = useBookWorkspaceStore((state) => state.isDirty);
-  const openCreateBookDialog = useBookWorkspaceStore(
-    (state) => state.openCreateBookDialog,
-  );
-  const openCreateFileDialog = useBookWorkspaceStore(
-    (state) => state.openCreateFileDialog,
-  );
+  const openCreateBookDialog = useBookWorkspaceStore((state) => state.openCreateBookDialog);
+  const openCreateFileDialog = useBookWorkspaceStore((state) => state.openCreateFileDialog);
   const openCreateFolderDialog = useBookWorkspaceStore(
     (state) => state.openCreateFolderDialog,
   );
-  const openRenameDialog = useBookWorkspaceStore(
-    (state) => state.openRenameDialog,
-  );
+  const openRenameDialog = useBookWorkspaceStore((state) => state.openRenameDialog);
   const openWorkspace = useBookWorkspaceStore((state) => state.openWorkspace);
   const promptState = useBookWorkspaceStore((state) => state.promptState);
-  const refreshWorkspace = useBookWorkspaceStore(
-    (state) => state.refreshWorkspace,
-  );
-  const refreshWorkspaceList = useBookWorkspaceStore(
-    (state) => state.refreshWorkspaceList,
-  );
+  const refreshWorkspace = useBookWorkspaceStore((state) => state.refreshWorkspace);
+  const refreshWorkspaceList = useBookWorkspaceStore((state) => state.refreshWorkspaceList);
   const requestDelete = useBookWorkspaceStore((state) => state.requestDelete);
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
@@ -168,24 +109,26 @@ export function BookPage({
   const rootBookName = useBookWorkspaceStore((state) => state.rootBookName);
   const setPromptValue = useBookWorkspaceStore((state) => state.setPromptValue);
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
-  const toggleDirectory = useBookWorkspaceStore(
-    (state) => state.toggleDirectory,
-  );
+  const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
   const updateDraft = useBookWorkspaceStore((state) => state.updateDraft);
   const selectWorkspaceByBookId = useBookWorkspaceStore(
     (state) => state.selectWorkspaceByBookId,
   );
-  const [panelLayout, setPanelLayout] = useState<BookPanelLayout>(
-    () => getStoredBookPanelLayout() ?? DEFAULT_BOOK_PANEL_LAYOUT,
-  );
-  const [activeResizeHandle, setActiveResizeHandle] =
-    useState<ResizeHandle>(null);
-  const [mobileActiveTab, setMobileActiveTab] =
-    useState<MobileBookTab>("editor");
-  const panelLayoutRef = useRef(panelLayout);
-  const panelsRef = useRef<HTMLDivElement | null>(null);
-  const cleanupResizeRef = useRef<(() => void) | null>(null);
+
+  // —— 拖拽调宽逻辑（封装在 hook） ——
+  const {
+    panelLayout,
+    activeResizeHandle,
+    panelsRef,
+    expandLeftPanel,
+    expandRightPanel,
+    startResize,
+  } = useBookPanelResize();
+
+  const [mobileActiveTab, setMobileActiveTab] = useState<MobileBookTab>("editor");
   const routeLoadingBookIdRef = useRef<string | null>(null);
+
+  // —— 派生状态 ——
   const storedSnapshot = requestedBookId ? null : getStoredWorkspaceSnapshot();
   const shouldShowWorkspaceRestoreState =
     !requestedBookId && !hasInitialized && !rootNode && storedSnapshot !== null;
@@ -194,28 +137,17 @@ export function BookPage({
   );
   const shouldShowWorkspaceOpenState = Boolean(
     requestedBookId &&
-    !errorMessage &&
-    (!rootNode || !rootBookId || isSwitchingRequestedWorkspace),
+      !errorMessage &&
+      (!rootNode || !rootBookId || isSwitchingRequestedWorkspace),
   );
 
+  // —— 启动初始化（仅在没有路由请求 bookId 时使用 store 默认逻辑） ——
   useEffect(() => {
-    panelLayoutRef.current = panelLayout;
-  }, [panelLayout]);
-
-  useEffect(() => {
-    return () => {
-      cleanupResizeRef.current?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (requestedBookId) {
-      return;
-    }
-
+    if (requestedBookId) return;
     void initializeWorkspace();
   }, [initializeWorkspace, requestedBookId]);
 
+  // —— 路由切书：requestedBookId 变更时通知 store 切换 ——
   useEffect(() => {
     if (!requestedBookId || rootBookId === requestedBookId) {
       if (rootBookId === requestedBookId) {
@@ -223,227 +155,49 @@ export function BookPage({
       }
       return;
     }
-
     routeLoadingBookIdRef.current = requestedBookId;
     void selectWorkspaceByBookId(requestedBookId);
   }, [requestedBookId, rootBookId, selectWorkspaceByBookId]);
 
+  // —— 反向同步：用户切书后通知路由更新 URL ——
   useEffect(() => {
-    if (
-      !onWorkspaceBookChange ||
-      !rootBookId ||
-      rootBookId === requestedBookId
-    ) {
-      return;
-    }
-
-    if (routeLoadingBookIdRef.current === requestedBookId) {
-      return;
-    }
-
+    if (!onWorkspaceBookChange || !rootBookId || rootBookId === requestedBookId) return;
+    if (routeLoadingBookIdRef.current === requestedBookId) return;
     onWorkspaceBookChange(rootBookId);
   }, [onWorkspaceBookChange, requestedBookId, rootBookId]);
 
+  // —— 自动保存：800ms 节流保存当前文件 ——
   useEffect(() => {
-    if (!activeFilePath || !isDirty || isBusy) {
-      return;
-    }
-
+    if (!activeFilePath || !isDirty || isBusy) return;
     const timer = window.setTimeout(() => {
       void saveActiveFile();
     }, AUTO_SAVE_DELAY_MS);
-
     return () => window.clearTimeout(timer);
   }, [activeFilePath, draftContent, isBusy, isDirty, saveActiveFile]);
 
+  // —— 移动端：选中文件时自动切到编辑 tab ——
   useEffect(() => {
-    if (!isMobile) {
-      return;
-    }
-
-    if (activeFilePath) {
-      setMobileActiveTab("editor");
-    }
+    if (!isMobile) return;
+    if (activeFilePath) setMobileActiveTab("editor");
   }, [activeFilePath, isMobile]);
 
   const resolvedRootNode: TreeNode | null = rootNode
-    ? {
-        ...rootNode,
-        name: rootBookName || rootNode.name,
-      }
+    ? { ...rootNode, name: rootBookName || rootNode.name }
     : null;
 
-  function persistPanelLayout(nextLayout: BookPanelLayout) {
-    panelLayoutRef.current = nextLayout;
-    setStoredBookPanelLayout(nextLayout);
-  }
-
-  function expandLeftPanel() {
-    const panels = panelsRef.current;
-    const current = panelLayoutRef.current;
-    const containerWidth = panels?.getBoundingClientRect().width ?? 0;
-    const maxLeftWidth =
-      containerWidth > 0
-        ? getMaxLeftPanelWidth(
-            { ...current, leftCollapsed: false },
-            containerWidth,
-          )
-        : MAX_TREE_PANEL_WIDTH;
-    const nextLeftWidth = clamp(
-      current.lastExpandedLeftPanelWidth,
-      MIN_TREE_PANEL_WIDTH,
-      maxLeftWidth,
-    );
-    const nextLayout = {
-      ...current,
-      leftCollapsed: false,
-      leftPanelWidth: nextLeftWidth,
-      lastExpandedLeftPanelWidth: nextLeftWidth,
-    };
-    setPanelLayout(nextLayout);
-    persistPanelLayout(nextLayout);
-  }
-
-  function expandRightPanel() {
-    const panels = panelsRef.current;
-    const current = panelLayoutRef.current;
-    const containerWidth = panels?.getBoundingClientRect().width ?? 0;
-    const maxRightWidth =
-      containerWidth > 0
-        ? getMaxRightPanelWidth(
-            { ...current, rightCollapsed: false },
-            containerWidth,
-          )
-        : MAX_AGENT_PANEL_WIDTH;
-    const nextRightWidth = clamp(
-      current.lastExpandedRightPanelWidth,
-      MIN_AGENT_PANEL_WIDTH,
-      maxRightWidth,
-    );
-    const nextLayout = {
-      ...current,
-      rightCollapsed: false,
-      rightPanelWidth: nextRightWidth,
-      lastExpandedRightPanelWidth: nextRightWidth,
-    };
-    setPanelLayout(nextLayout);
-    persistPanelLayout(nextLayout);
-  }
-
-  function startResize(handle: Exclude<ResizeHandle, null>) {
-    return (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return;
-      }
-
-      const panels = panelsRef.current;
-      if (!panels) {
-        return;
-      }
-
-      cleanupResizeRef.current?.();
-
-      const rect = panels.getBoundingClientRect();
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
-
-      const handlePointerMove = (moveEvent: PointerEvent) => {
-        setPanelLayout((current) => {
-          if (handle === "left") {
-            const candidateWidth = moveEvent.clientX - rect.left;
-            if (candidateWidth <= TREE_PANEL_COLLAPSE_THRESHOLD) {
-              const nextLayout = { ...current, leftCollapsed: true };
-              panelLayoutRef.current = nextLayout;
-              return nextLayout;
-            }
-
-            const maxLeftWidth = getMaxLeftPanelWidth(current, rect.width);
-            const nextLeftWidth = clamp(
-              candidateWidth,
-              MIN_TREE_PANEL_WIDTH,
-              maxLeftWidth,
-            );
-            if (
-              nextLeftWidth === current.leftPanelWidth &&
-              current.leftCollapsed === false &&
-              nextLeftWidth === current.lastExpandedLeftPanelWidth
-            ) {
-              return current;
-            }
-
-            const nextLayout = {
-              ...current,
-              leftCollapsed: false,
-              leftPanelWidth: nextLeftWidth,
-              lastExpandedLeftPanelWidth: nextLeftWidth,
-            };
-            panelLayoutRef.current = nextLayout;
-            return nextLayout;
-          }
-
-          const candidateWidth = rect.right - moveEvent.clientX;
-          if (candidateWidth <= AGENT_PANEL_COLLAPSE_THRESHOLD) {
-            const nextLayout = { ...current, rightCollapsed: true };
-            panelLayoutRef.current = nextLayout;
-            return nextLayout;
-          }
-
-          const maxRightWidth = getMaxRightPanelWidth(current, rect.width);
-          const nextRightWidth = clamp(
-            candidateWidth,
-            MIN_AGENT_PANEL_WIDTH,
-            maxRightWidth,
-          );
-          if (
-            nextRightWidth === current.rightPanelWidth &&
-            current.rightCollapsed === false &&
-            nextRightWidth === current.lastExpandedRightPanelWidth
-          ) {
-            return current;
-          }
-
-          const nextLayout = {
-            ...current,
-            rightCollapsed: false,
-            rightPanelWidth: nextRightWidth,
-            lastExpandedRightPanelWidth: nextRightWidth,
-          };
-          panelLayoutRef.current = nextLayout;
-          return nextLayout;
-        });
-      };
-
-      const cleanup = () => {
-        window.removeEventListener("pointermove", handlePointerMove);
-        window.removeEventListener("pointerup", handlePointerUp);
-        window.removeEventListener("pointercancel", handlePointerUp);
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
-        cleanupResizeRef.current = null;
-        setActiveResizeHandle(null);
-        setStoredBookPanelLayout(panelLayoutRef.current);
-      };
-
-      const handlePointerUp = () => {
-        cleanup();
-      };
-
-      cleanupResizeRef.current = cleanup;
-      setActiveResizeHandle(handle);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      window.addEventListener("pointermove", handlePointerMove);
-      window.addEventListener("pointerup", handlePointerUp);
-      window.addEventListener("pointercancel", handlePointerUp);
-      event.preventDefault();
-    };
+  /** 没有 onNavigateHome 时回退到 hash 路由首页。 */
+  function navigateHome() {
+    if (onNavigateHome) {
+      onNavigateHome();
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.location.hash = "#/";
+    }
   }
 
   function renderDesktopWorkspace() {
-    if (!resolvedRootNode) {
-      return null;
-    }
-
+    if (!resolvedRootNode) return null;
     return (
       <div
         ref={panelsRef}
@@ -466,16 +220,7 @@ export function BookPage({
               onCreateFile={openCreateFileDialog}
               onCreateFolder={openCreateFolderDialog}
               onDelete={requestDelete}
-              onNavigateHome={() => {
-                if (onNavigateHome) {
-                  onNavigateHome();
-                  return;
-                }
-
-                if (typeof window !== "undefined") {
-                  window.location.hash = "#/";
-                }
-              }}
+              onNavigateHome={navigateHome}
               onRefresh={() => void refreshWorkspace()}
               onRename={openRenameDialog}
               onSelectFile={(path) => void selectFile(path)}
@@ -519,9 +264,7 @@ export function BookPage({
   }
 
   function renderMobileWorkspace() {
-    if (!resolvedRootNode) {
-      return null;
-    }
+    if (!resolvedRootNode) return null;
 
     const sharedTreeProps = {
       activeFilePath,
@@ -531,16 +274,7 @@ export function BookPage({
       onCreateFile: openCreateFileDialog,
       onCreateFolder: openCreateFolderDialog,
       onDelete: requestDelete,
-      onNavigateHome: () => {
-        if (onNavigateHome) {
-          onNavigateHome();
-          return;
-        }
-
-        if (typeof window !== "undefined") {
-          window.location.hash = "#/";
-        }
-      },
+      onNavigateHome: navigateHome,
       onRefresh: () => void refreshWorkspace(),
       onRename: openRenameDialog,
       onSelectFile: (path: string) => void selectFile(path),
@@ -555,16 +289,7 @@ export function BookPage({
           <div className="min-w-0 flex-1">
             <MobileWorkspaceTitle
               currentLabel={resolvedRootNode.name}
-              onNavigateHome={() => {
-                if (onNavigateHome) {
-                  onNavigateHome();
-                  return;
-                }
-
-                if (typeof window !== "undefined") {
-                  window.location.hash = "#/";
-                }
-              }}
+              onNavigateHome={navigateHome}
             />
           </div>
         </header>
@@ -575,9 +300,7 @@ export function BookPage({
             <BookAgentPanel width="100%" />
           ) : (
             <BookEditorPanel
-              activeFileName={
-                activeFilePath ? getBaseName(activeFilePath) : null
-              }
+              activeFileName={activeFilePath ? getBaseName(activeFilePath) : null}
               busy={isBusy}
               content={draftContent}
               isDirty={isDirty}
@@ -610,9 +333,7 @@ export function BookPage({
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" strokeWidth={2.1} />
-                <span className="text-[11px] font-medium leading-none">
-                  {label}
-                </span>
+                <span className="text-[11px] font-medium leading-none">{label}</span>
               </button>
             ))}
           </div>

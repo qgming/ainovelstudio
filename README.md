@@ -16,7 +16,7 @@
   <a href="https://github.com/qgming/ainovelstudio">
     <img src="https://img.shields.io/github/stars/qgming/ainovelstudio?style=for-the-badge&logo=github&label=Stars" alt="GitHub Stars" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.2.1-111827?style=for-the-badge" alt="Version 0.2.1" />
+  <img src="https://img.shields.io/badge/Version-0.2.2-111827?style=for-the-badge" alt="Version 0.2.2" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 
@@ -189,10 +189,11 @@ npm run build:android
 ```text
 .
 ├─ src/                     React 前端
-│  ├─ pages/                页面层
-│  ├─ components/           UI 组件
-│  ├─ stores/               Zustand 状态管理
-│  ├─ lib/                  Agent / Workflow / Workspace 等业务逻辑
+│  ├─ pages/                页面壳（路由参数解析 + 顶层组合）
+│  ├─ components/           UI 组件（按 feature 划分；common/ 收纳 LoadingBlock / ErrorBlock 等）
+│  ├─ hooks/                跨组件复用的状态与副作用（按 feature 划分子目录）
+│  ├─ stores/               Zustand 状态管理（仅状态 + actions，不构造 toolset）
+│  ├─ lib/                  业务规则与纯函数：agent / workflow / bookWorkspace / expansion / chat
 │  └─ test/                 前端测试初始化
 ├─ src-tauri/               Tauri + Rust 后端
 │  ├─ src/                  本地命令、数据库、工作流、数据管理
@@ -201,6 +202,19 @@ npm run build:android
 ├─ public/                  静态资源
 └─ README.md
 ```
+
+## 目录分层约定
+
+为了保持高内聚低耦合，前端代码按以下层级组织：
+
+- `pages/` —— 路由壳：解析路由参数、装载顶层容器；不放业务规则。
+- `components/<feature>/` —— 受控展示组件；通用块（加载、错误、Toast、BusyButton）放在 `components/common/` 与 `components/ui/`。
+- `hooks/<feature>/` —— 跨组件复用的状态与副作用；如 `useExpansionWorkspaceAgent` / `useBookPanelResize`。
+- `lib/<feature>/` —— 业务规则、纯函数、与 Tauri/AI SDK 的对接；纯函数优先放这里以便单测。
+- `stores/` —— Zustand store；仅持状态字段与 actions，不直接构造 agent toolset。
+
+Agent 工具集统一通过 `lib/agent/toolsets/factory.ts` 装配，写作模式（chatRunStore）、工作流引擎与扩写工作区共用同一组工厂，避免散落重复。
+
 
 ## 适合的使用场景
 

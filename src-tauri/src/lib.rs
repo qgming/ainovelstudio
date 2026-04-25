@@ -126,6 +126,7 @@ pub fn run() {
             data_management::upload_app_data_backup_via_webdav,
             data_management::download_app_data_backup_via_webdav,
             usage::read_usage_logs,
+            usage::record_expansion_usage,
             workflows::commands::initialize_builtin_workflows,
             workflows::commands::reset_builtin_workflows,
             workflows::commands::list_workflows,

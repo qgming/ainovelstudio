@@ -259,6 +259,20 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
                 root_path TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL
             );
+
+            -- 创作台（扩写）模式的 LLM 用量日志：每次 AI 动作完成后追加一条
+            CREATE TABLE IF NOT EXISTS expansion_usage_logs (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                workspace_name TEXT NOT NULL DEFAULT '',
+                action_id TEXT NOT NULL,
+                action_label TEXT NOT NULL DEFAULT '',
+                usage_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_expansion_usage_logs_created_at
+            ON expansion_usage_logs(created_at DESC);
             "#,
         )
         .map_err(error_to_string)?;

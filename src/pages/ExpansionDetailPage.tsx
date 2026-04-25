@@ -1,3 +1,16 @@
+/**
+ * 扩写工作区详情页（页面壳）。
+ *
+ * 该页面历史上承担了 ~1800 行职责：纯函数解析、JSON 编码、子组件、
+ * AI 工作区运行时、文件树 CRUD、对话框、移动端 tab 等都混在一起。
+ *
+ * 经阶段 5 拆分，本文件目标：
+ *   - 仅作为页面壳：路由参数、加载/错误分支、组合容器
+ *   - 业务逻辑分散到：lib/expansion/metaCodec、components/expansion/detail/*、hooks/expansion/*
+ *
+ * 当前仍保留较多组件状态（文件 CRUD 对话框、选中态等），未来可继续抽 useExpansionEntryMutations。
+ */
+
 import {
   AlertCircle,
   Bot,
@@ -6,16 +19,16 @@ import {
   ChevronRight,
   FolderTree,
   LoaderCircle,
-  Pencil,
   Plus,
   Save,
   SquarePen,
-  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { Toast, type ToastTone } from "../components/common/Toast";
+import { LoadingBlock } from "../components/common/LoadingBlock";
+import { ErrorBlock } from "../components/common/ErrorBlock";
 import { ConfirmDialog } from "../components/dialogs/ConfirmDialog";
 import { PromptDialog } from "../components/dialogs/PromptDialog";
 import {
@@ -26,20 +39,19 @@ import {
 import {
   ExpansionWorkspacePanel,
   type ExpansionWorkspaceActionButton,
-  type ExpansionWorkspaceActionId,
-  type ExpansionWorkspaceTask,
 } from "../components/expansion/detail/ExpansionWorkspacePanel";
+import { BatchOutlineVolumeDialog } from "../components/expansion/detail/BatchOutlineVolumeDialog";
+import {
+  DetailTitle,
+  EntryButton,
+  SectionHeader,
+} from "../components/expansion/detail/ExpansionDetailParts";
 import { DialogShell } from "../components/dialogs/DialogShell";
 import { Button } from "../components/ui/button";
+import { BusyButton } from "../components/ui/busy-button";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
-import { runAgentTurn } from "../lib/agent/session";
-import { createGlobalToolset, createLocalResourceToolset } from "../lib/agent/tools";
-import type { AgentPart, AgentRunStatus } from "../lib/agent/types";
-import { mergePart } from "../lib/chat/sessionRuntime";
-import { createExpansionAgentToolset } from "../lib/expansion/agentToolset";
-import { createExpansionSemanticToolset } from "../lib/expansion/semanticToolset";
 import {
   createExpansionEntry,
   deleteExpansionEntry,
@@ -53,6 +65,29 @@ import {
   parseSettingJson,
   serializeJson,
 } from "../lib/expansion/templates";
+import {
+  buildChapterEntryLabel,
+  buildChapterTargetLabel,
+  buildSettingMetaContent,
+  buildVolumeMetaContent,
+  DEFAULT_SETTING_CATEGORIES,
+  formatVolumeLabel,
+  getChapterVolumeId,
+  getNextVolumeId,
+  getProjectEntryLabel,
+  getReadableError,
+  getSettingCategory,
+  getSettingEntryId,
+  getSettingFallbackName,
+  HIDDEN_CHAPTER_META_PATH,
+  HIDDEN_SETTING_META_PATH,
+  normalizeVolumeId,
+  parseChapterMeta,
+  parseSettingMeta,
+  sanitizeChapterJson,
+  sanitizeSettingJson,
+  sortSettingCategories,
+} from "../lib/expansion/metaCodec";
 import { buildExpansionListRoute } from "../lib/expansion/routes";
 import type {
   ChapterJson,
@@ -61,10 +96,8 @@ import type {
   SettingJson,
 } from "../lib/expansion/types";
 import { useIsMobile } from "../hooks/use-mobile";
+import { useExpansionWorkspaceAgent } from "../hooks/expansion/useExpansionWorkspaceAgent";
 import { cn } from "../lib/utils";
-import { useAgentSettingsStore } from "../stores/agentSettingsStore";
-import { getEnabledSkills, useSkillsStore } from "../stores/skillsStore";
-import { getEnabledAgents, useSubAgentStore } from "../stores/subAgentStore";
 
 type ToastState = { description?: string; title: string; tone: ToastTone };
 type SelectedKey = { section: ExpansionSection; path: string } | null;
@@ -79,355 +112,12 @@ type SettingCategoryGroup = {
 };
 type MobileExpansionTab = "context" | "editor" | "workspace";
 
-const HIDDEN_CHAPTER_META_PATH = "chapters.meta.json";
-const HIDDEN_SETTING_META_PATH = "settings.meta.json";
-const DEFAULT_SETTING_CATEGORIES = ["人物", "势力", "地点", "世界观", "道具", "其他"];
-
-function getReadableError(error: unknown) {
-  return error instanceof Error ? error.message : "操作失败，请重试。";
-}
-
-function getProjectEntryLabel(path: string) {
-  if (path === "AGENTS.md") {
-    return "代理规则 · AGENTS.md";
-  }
-  if (/outline/i.test(path) || /大纲/.test(path)) {
-    return `故事大纲 · ${path}`;
-  }
-  return path;
-}
-
-function normalizeNumericId(value: string) {
-  return value.replace(/\D+/g, "");
-}
-
-function normalizeVolumeId(value: string) {
-  const digits = normalizeNumericId(value);
-  return digits ? digits.padStart(3, "0") : "";
-}
-
-function normalizeSettingCategory(value: string) {
-  return value.trim();
-}
-
-function sanitizeSettingJson(value: SettingJson): SettingJson {
-  return {
-    id: normalizeNumericId(value.id),
-    name: value.name.trim(),
-    content: value.content,
-  };
-}
-
-function sanitizeChapterJson(value: ChapterJson): ChapterJson {
-  return {
-    id: normalizeNumericId(value.id),
-    name: value.name.trim(),
-    outline: value.outline,
-    content: value.content,
-  };
-}
-
-function buildChapterTargetLabel(chapter: ChapterJson | null, fallbackName: string | null) {
-  const name = chapter?.name?.trim() || fallbackName?.trim() || "未命名章节";
-  const id = chapter?.id?.trim() ?? "";
-  return id ? `第 ${id} 章 · ${name}` : name;
-}
-
-function buildChapterEntryLabel(entryId: string | null | undefined, name: string) {
-  const normalizedName = name.trim() || "未命名章节";
-  const normalizedId = entryId?.trim() ?? "";
-  return normalizedId ? `第 ${normalizedId} 章 · ${normalizedName}` : normalizedName;
-}
-
-function getChapterVolumeId(path: string) {
-  return path.includes("/") ? normalizeVolumeId(path.split("/")[0] ?? "") : "001";
-}
-
-function getSettingCategory(path: string) {
-  const category = path.includes("/") ? path.split("/")[0] ?? "" : "";
-  return normalizeSettingCategory(category) || "其他";
-}
-
-function getSettingBaseName(path: string) {
-  return path.includes("/") ? (path.split("/").at(-1) ?? path) : path;
-}
-
-function getSettingEntryId(path: string) {
-  return getSettingBaseName(path).split("-")[0] ?? "";
-}
-
-function getSettingFallbackName(path: string) {
-  const baseName = getSettingBaseName(path);
-  const fallbackName = baseName.split("-").slice(1).join("-").trim();
-  return fallbackName || baseName;
-}
-
-function parseChapterMeta(raw: string) {
-  try {
-    const parsed = JSON.parse(raw) as { volumes?: unknown };
-    if (!Array.isArray(parsed.volumes)) {
-      return [];
-    }
-    return Array.from(
-      new Set(
-        parsed.volumes
-          .filter((item): item is string => typeof item === "string")
-          .map((item) => normalizeVolumeId(item))
-          .filter(Boolean),
-      ),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function parseSettingMeta(raw: string) {
-  try {
-    const parsed = JSON.parse(raw) as { categories?: unknown };
-    if (!Array.isArray(parsed.categories)) {
-      return [];
-    }
-    return parsed.categories
-      .filter((item): item is string => typeof item === "string")
-      .map((item) => normalizeSettingCategory(item))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function buildVolumeMetaContent(volumeIds: string[]) {
-  return serializeJson({
-    volumes: Array.from(new Set(volumeIds.map((item) => normalizeVolumeId(item)).filter(Boolean))).sort(),
-  });
-}
-
-function sortSettingCategories(categories: string[]) {
-  const unique = Array.from(new Set(categories.map((item) => normalizeSettingCategory(item)).filter(Boolean)));
-  return unique.sort((left, right) => {
-    const leftIndex = DEFAULT_SETTING_CATEGORIES.indexOf(left);
-    const rightIndex = DEFAULT_SETTING_CATEGORIES.indexOf(right);
-    if (leftIndex >= 0 || rightIndex >= 0) {
-      if (leftIndex < 0) return 1;
-      if (rightIndex < 0) return -1;
-      return leftIndex - rightIndex;
-    }
-    return left.localeCompare(right, "zh-Hans-CN");
-  });
-}
-
-function buildSettingMetaContent(categories: string[]) {
-  return serializeJson({
-    categories: sortSettingCategories([...DEFAULT_SETTING_CATEGORIES, ...categories]),
-  });
-}
-
-function toChineseNumber(value: number) {
-  const digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
-  const units = ["", "十", "百", "千"];
-  const raw = String(value);
-  let result = "";
-
-  for (let index = 0; index < raw.length; index += 1) {
-    const digit = Number(raw[index]);
-    const unitIndex = raw.length - index - 1;
-    if (digit === 0) {
-      if (result && !result.endsWith("零") && raw.slice(index + 1).split("").some((char) => char !== "0")) {
-        result += "零";
-      }
-      continue;
-    }
-    if (digit === 1 && unitIndex === 1 && result === "") {
-      result += units[unitIndex];
-      continue;
-    }
-    result += `${digits[digit]}${units[unitIndex] ?? ""}`;
-  }
-
-  return result || digits[0];
-}
-
-function formatVolumeLabel(volumeId: string) {
-  const numeric = Number.parseInt(volumeId, 10);
-  return Number.isFinite(numeric) && numeric > 0 ? `第${toChineseNumber(numeric)}卷` : `${volumeId}卷`;
-}
-
-function getNextVolumeId(volumeIds: string[]) {
-  const maxValue = volumeIds.reduce((currentMax, volumeId) => {
-    const numeric = Number.parseInt(volumeId, 10);
-    return Number.isFinite(numeric) ? Math.max(currentMax, numeric) : currentMax;
-  }, 0);
-  return String(maxValue + 1).padStart(3, "0");
-}
-
-function DetailTitle({ name }: { name: string }) {
-  return (
-    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
-      <Link to={buildExpansionListRoute()} className="text-muted-foreground transition-colors hover:text-foreground">
-        创作台
-      </Link>
-      <span className="px-1.5 text-muted-foreground">/</span>
-      <span>{name}</span>
-    </div>
-  );
-}
-
-function EntryButton({
-  active,
-  canModify,
-  label,
-  onClick,
-  onDelete,
-  onRename,
-}: {
-  active: boolean;
-  canModify: boolean;
-  label: string;
-  onClick: () => void;
-  onDelete?: () => void;
-  onRename?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group flex w-full items-center border-b border-border transition",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-      )}
-    >
-      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center px-3 py-2 text-left">
-        <span className="block min-w-0 truncate text-sm font-medium">{label}</span>
-      </button>
-      {canModify ? (
-        <div className="hidden shrink-0 items-center gap-0.5 pr-1 group-hover:flex">
-          {onRename ? (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label="重命名"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRename();
-              }}
-              className="text-muted-foreground"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-          ) : null}
-          {onDelete ? (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label="删除"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete();
-              }}
-              className="text-muted-foreground"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SectionHeader({
-  label,
-  onAdd,
-}: {
-  label: string;
-  onAdd?: () => void;
-}) {
-  return (
-    <div className="flex h-10 items-center justify-between gap-2 border-b border-border px-3">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      {onAdd ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              aria-label={`新建${label}`}
-              variant="ghost"
-              size="icon-sm"
-              onClick={onAdd}
-              className="text-muted-foreground"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{`新建${label}`}</TooltipContent>
-        </Tooltip>
-      ) : null}
-    </div>
-  );
-}
-
-function BatchOutlineVolumeDialog({
-  busy,
-  onCancel,
-  onChange,
-  onConfirm,
-  value,
-  volumeIds,
-}: {
-  busy: boolean;
-  onCancel: () => void;
-  onChange: (value: string) => void;
-  onConfirm: () => void;
-  value: string;
-  volumeIds: string[];
-}) {
-  return (
-    <DialogShell title="批量生成细纲" onClose={onCancel}>
-      <div className="flex flex-1 flex-col gap-5">
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">选择已有分卷</p>
-          <div className="flex flex-wrap gap-2">
-            {volumeIds.length > 0 ? (
-              volumeIds.map((volumeId) => {
-                const active = normalizeVolumeId(value) === volumeId;
-                return (
-                  <Button
-                    key={volumeId}
-                    type="button"
-                    size="sm"
-                    variant={active ? "default" : "outline"}
-                    onClick={() => onChange(volumeId)}
-                    className="h-9 gap-1.5"
-                  >
-                    <span>{formatVolumeLabel(volumeId)}</span>
-                  </Button>
-                );
-              })
-            ) : (
-              <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                当前还没有分卷，先点击左侧分卷区域右上角创建分卷。
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onCancel}>
-            取消
-          </Button>
-          <Button type="button" size="sm" disabled={busy || volumeIds.length === 0} onClick={onConfirm}>
-            {busy ? "处理中..." : "开始生成"}
-          </Button>
-        </div>
-      </div>
-    </DialogShell>
-  );
-}
-
 export function ExpansionDetailPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+
+  // —— 数据加载与选中态 ——
   const [detail, setDetail] = useState<ExpansionWorkspaceDetail | null>(null);
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -437,14 +127,15 @@ export function ExpansionDetailPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [toastState, setToastState] = useState<ToastState | null>(null);
-  const [activeWorkspaceTask, setActiveWorkspaceTask] = useState<ExpansionWorkspaceTask | null>(null);
-  const [workspaceAgentParts, setWorkspaceAgentParts] = useState<AgentPart[]>([]);
-  const [workspaceExecutionPrompt, setWorkspaceExecutionPrompt] = useState("");
-  const [workspaceRunStatus, setWorkspaceRunStatus] = useState<AgentRunStatus>("idle");
+
+  // —— 分卷 / 分类元数据 ——
   const [volumeIds, setVolumeIds] = useState<string[]>([]);
   const [volumeExpanded, setVolumeExpanded] = useState<Record<string, boolean>>({});
-  const [settingCategories, setSettingCategories] = useState<string[]>(DEFAULT_SETTING_CATEGORIES);
+  const [settingCategories, setSettingCategories] =
+    useState<string[]>(DEFAULT_SETTING_CATEGORIES);
   const [settingExpanded, setSettingExpanded] = useState<Record<string, boolean>>({});
+
+  // —— 创建 / 重命名 / 删除对话框 ——
   const [createSettingCategory, setCreateSettingCategory] = useState<string | null>(null);
   const [createSettingName, setCreateSettingName] = useState("");
   const [createSettingBusy, setCreateSettingBusy] = useState(false);
@@ -456,44 +147,164 @@ export function ExpansionDetailPage() {
   const [createChapterVolumeId, setCreateChapterVolumeId] = useState<string | null>(null);
   const [createChapterName, setCreateChapterName] = useState("");
   const [createChapterBusy, setCreateChapterBusy] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<{ section: "settings" | "chapters"; path: string; current: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{
+    section: "settings" | "chapters";
+    path: string;
+    current: string;
+  } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ section: "settings" | "chapters"; path: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    section: "settings" | "chapters";
+    path: string;
+    name: string;
+  } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [mobileActiveTab, setMobileActiveTab] = useState<MobileExpansionTab>("editor");
 
-  useEffect(() => {
-    if (!workspaceId) {
-      return;
+  // —— Memo selectors（基于 detail / selected / 内容） ——
+  const visibleProjectEntries = useMemo(
+    () =>
+      detail?.projectEntries.filter(
+        (entry) =>
+          entry.path !== HIDDEN_CHAPTER_META_PATH && entry.path !== HIDDEN_SETTING_META_PATH,
+      ) ?? [],
+    [detail?.projectEntries],
+  );
+
+  const selectedSettingEntry = useMemo(() => {
+    if (!detail || selected?.section !== "settings") return null;
+    return detail.settingEntries.find((entry) => entry.path === selected.path) ?? null;
+  }, [detail, selected]);
+
+  const selectedChapterEntry = useMemo(() => {
+    if (!detail || selected?.section !== "chapters") return null;
+    return detail.chapterEntries.find((entry) => entry.path === selected.path) ?? null;
+  }, [detail, selected]);
+
+  const parsedSetting = useMemo(() => {
+    if (selected?.section !== "settings") return null;
+    const fallbackId = selectedSettingEntry?.entryId ?? getSettingEntryId(selected.path);
+    const fallbackName = selectedSettingEntry?.name ?? getSettingFallbackName(selected.path);
+    return parseSettingJson(rawContent, fallbackId, fallbackName);
+  }, [rawContent, selected, selectedSettingEntry]);
+
+  const parsedChapter = useMemo(() => {
+    if (selected?.section !== "chapters") return null;
+    return parseChapterJson(
+      rawContent,
+      selectedChapterEntry?.entryId ?? "",
+      selectedChapterEntry?.name ?? selected.path,
+    );
+  }, [rawContent, selected, selectedChapterEntry]);
+
+  const settingGroups = useMemo<SettingCategoryGroup[]>(() => {
+    if (!detail) return [];
+    const groups = new Map<string, ExpansionWorkspaceDetail["settingEntries"]>();
+    for (const category of settingCategories) groups.set(category, []);
+    for (const entry of detail.settingEntries) {
+      const category = getSettingCategory(entry.path);
+      const current = groups.get(category) ?? [];
+      current.push(entry);
+      groups.set(category, current);
     }
+    return sortSettingCategories(Array.from(groups.keys())).map((category) => ({
+      category,
+      entries: groups.get(category) ?? [],
+    }));
+  }, [detail, settingCategories]);
+
+  const chapterVolumes = useMemo<ChapterVolumeGroup[]>(() => {
+    if (!detail) return [];
+    const groups = new Map<string, ExpansionWorkspaceDetail["chapterEntries"]>();
+    for (const volumeId of volumeIds) groups.set(volumeId, []);
+    for (const entry of detail.chapterEntries) {
+      const volumeId = getChapterVolumeId(entry.path);
+      const current = groups.get(volumeId) ?? [];
+      current.push(entry);
+      groups.set(volumeId, current);
+    }
+    return Array.from(groups.entries())
+      .sort(([left], [right]) => Number.parseInt(left, 10) - Number.parseInt(right, 10))
+      .map(([volumeId, entries]) => ({ volumeId, entries }));
+  }, [detail, volumeIds]);
+
+  const currentFilePath = selected ? `${selected.section}/${selected.path}` : null;
+
+  const currentFileName = useMemo(() => {
+    if (!selected) return null;
+    if (selected.section === "project") return selected.path;
+    if (selected.section === "settings") {
+      return parsedSetting?.name ?? selectedSettingEntry?.name ?? selected.path;
+    }
+    return parsedChapter?.name ?? selectedChapterEntry?.name ?? selected.path;
+  }, [
+    parsedChapter?.name,
+    parsedSetting?.name,
+    selected,
+    selectedChapterEntry?.name,
+    selectedSettingEntry?.name,
+  ]);
+
+  const currentSelectionLabel = useMemo(() => {
+    if (!selected) return null;
+    if (selected.section === "project") return selected.path;
+    if (selected.section === "settings") {
+      return parsedSetting?.name ?? selectedSettingEntry?.name ?? "设定";
+    }
+    return buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null);
+  }, [
+    parsedChapter,
+    parsedSetting?.name,
+    selected,
+    selectedChapterEntry?.name,
+    selectedSettingEntry?.name,
+  ]);
+
+  // —— 工作区 AI Hook ——
+  const {
+    activeTask: activeWorkspaceTask,
+    agentParts: workspaceAgentParts,
+    executionPrompt: workspaceExecutionPrompt,
+    runStatus: workspaceRunStatus,
+    runAction,
+    reset: resetWorkspaceAgent,
+  } = useExpansionWorkspaceAgent({
+    workspaceId,
+    workspaceName: detail?.name ?? null,
+    currentFilePath,
+    projectEntries: visibleProjectEntries,
+    onWorkspaceMutated: async () => {
+      await loadDetail();
+      await refreshSelectedEntry();
+    },
+    onError: (message) => setToastState({ title: message, tone: "error" }),
+  });
+
+  // —— Effects：加载详情、读元数据、内容获取、移动端 tab 同步 ——
+  useEffect(() => {
+    if (!workspaceId) return;
     void loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
   useEffect(() => {
-    setActiveWorkspaceTask(null);
-    setWorkspaceAgentParts([]);
-    setWorkspaceExecutionPrompt("");
-    setWorkspaceRunStatus("idle");
-  }, [workspaceId]);
+    resetWorkspaceAgent();
+  }, [workspaceId, resetWorkspaceAgent]);
 
   useEffect(() => {
-    if (!workspaceId || !detail) {
-      return;
-    }
+    if (!workspaceId || !detail) return;
     let cancelled = false;
     const derivedVolumeIds = detail.chapterEntries.map((entry) => getChapterVolumeId(entry.path));
     void readExpansionEntry(workspaceId, "project", HIDDEN_CHAPTER_META_PATH)
       .then((value) => {
-        if (cancelled) {
-          return;
-        }
-        setVolumeIds(Array.from(new Set([...parseChapterMeta(value), ...derivedVolumeIds])).sort());
+        if (cancelled) return;
+        setVolumeIds(
+          Array.from(new Set([...parseChapterMeta(value), ...derivedVolumeIds])).sort(),
+        );
       })
       .catch(() => {
-        if (!cancelled) {
-          setVolumeIds(Array.from(new Set(derivedVolumeIds)).sort());
-        }
+        if (!cancelled) setVolumeIds(Array.from(new Set(derivedVolumeIds)).sort());
       });
     return () => {
       cancelled = true;
@@ -501,23 +312,25 @@ export function ExpansionDetailPage() {
   }, [detail, workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !detail) {
-      return;
-    }
+    if (!workspaceId || !detail) return;
     let cancelled = false;
     const derivedCategories = detail.settingEntries.map((entry) => getSettingCategory(entry.path));
     void readExpansionEntry(workspaceId, "project", HIDDEN_SETTING_META_PATH)
       .then((value) => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
         setSettingCategories(
-          sortSettingCategories([...DEFAULT_SETTING_CATEGORIES, ...parseSettingMeta(value), ...derivedCategories]),
+          sortSettingCategories([
+            ...DEFAULT_SETTING_CATEGORIES,
+            ...parseSettingMeta(value),
+            ...derivedCategories,
+          ]),
         );
       })
       .catch(() => {
         if (!cancelled) {
-          setSettingCategories(sortSettingCategories([...DEFAULT_SETTING_CATEGORIES, ...derivedCategories]));
+          setSettingCategories(
+            sortSettingCategories([...DEFAULT_SETTING_CATEGORIES, ...derivedCategories]),
+          );
         }
       });
     return () => {
@@ -526,20 +339,17 @@ export function ExpansionDetailPage() {
   }, [detail, workspaceId]);
 
   async function loadDetail() {
-    if (!workspaceId) {
-      return;
-    }
+    if (!workspaceId) return;
     setStatus("loading");
     try {
       const next = await getExpansionWorkspaceDetail(workspaceId);
       setDetail(next);
       setStatus("ready");
       setSelected((current) => {
-        if (current) {
-          return current;
-        }
+        if (current) return current;
         const projectEntries = next.projectEntries.filter(
-          (entry) => entry.path !== HIDDEN_CHAPTER_META_PATH && entry.path !== HIDDEN_SETTING_META_PATH,
+          (entry) =>
+            entry.path !== HIDDEN_CHAPTER_META_PATH && entry.path !== HIDDEN_SETTING_META_PATH,
         );
         const defaultEntry =
           projectEntries.find((entry) => entry.path === "AGENTS.md") ?? projectEntries[0] ?? null;
@@ -552,9 +362,7 @@ export function ExpansionDetailPage() {
   }
 
   async function refreshSelectedEntry(nextSelected = selected) {
-    if (!workspaceId || !nextSelected) {
-      return;
-    }
+    if (!workspaceId || !nextSelected) return;
     try {
       const value = await readExpansionEntry(workspaceId, nextSelected.section, nextSelected.path);
       setRawContent(value);
@@ -574,9 +382,7 @@ export function ExpansionDetailPage() {
     setIsDirty(false);
     void readExpansionEntry(workspaceId, selected.section, selected.path)
       .then((value) => {
-        if (!cancelled) {
-          setRawContent(value);
-        }
+        if (!cancelled) setRawContent(value);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -585,9 +391,7 @@ export function ExpansionDetailPage() {
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setContentLoading(false);
-        }
+        if (!cancelled) setContentLoading(false);
       });
     return () => {
       cancelled = true;
@@ -595,154 +399,42 @@ export function ExpansionDetailPage() {
   }, [selected?.path, selected?.section, workspaceId]);
 
   useEffect(() => {
-    if (!isMobile || !selected) {
-      return;
-    }
+    if (!isMobile || !selected) return;
     setMobileActiveTab("editor");
   }, [isMobile, selected?.path, selected?.section]);
 
-  const selectedSettingEntry = useMemo(() => {
-    if (!detail || selected?.section !== "settings") {
-      return null;
-    }
-    return detail.settingEntries.find((entry) => entry.path === selected.path) ?? null;
-  }, [detail, selected]);
-
-  const selectedChapterEntry = useMemo(() => {
-    if (!detail || selected?.section !== "chapters") {
-      return null;
-    }
-    return detail.chapterEntries.find((entry) => entry.path === selected.path) ?? null;
-  }, [detail, selected]);
-
-  const parsedSetting = useMemo(() => {
-    if (selected?.section !== "settings") {
-      return null;
-    }
-    const fallbackId = selectedSettingEntry?.entryId ?? getSettingEntryId(selected.path);
-    const fallbackName = selectedSettingEntry?.name ?? getSettingFallbackName(selected.path);
-    return parseSettingJson(rawContent, fallbackId, fallbackName);
-  }, [rawContent, selected, selectedSettingEntry]);
-
-  const parsedChapter = useMemo(() => {
-    if (selected?.section !== "chapters") {
-      return null;
-    }
-    return parseChapterJson(rawContent, selectedChapterEntry?.entryId ?? "", selectedChapterEntry?.name ?? selected.path);
-  }, [rawContent, selected, selectedChapterEntry]);
-
-  const visibleProjectEntries = useMemo(
-    () =>
-      detail?.projectEntries.filter(
-        (entry) => entry.path !== HIDDEN_CHAPTER_META_PATH && entry.path !== HIDDEN_SETTING_META_PATH,
-      ) ?? [],
-    [detail?.projectEntries],
-  );
-
-  const settingGroups = useMemo<SettingCategoryGroup[]>(() => {
-    if (!detail) {
-      return [];
-    }
-    const groups = new Map<string, ExpansionWorkspaceDetail["settingEntries"]>();
-    for (const category of settingCategories) {
-      groups.set(category, []);
-    }
-    for (const entry of detail.settingEntries) {
-      const category = getSettingCategory(entry.path);
-      const current = groups.get(category) ?? [];
-      current.push(entry);
-      groups.set(category, current);
-    }
-    return sortSettingCategories(Array.from(groups.keys())).map((category) => ({
-      category,
-      entries: groups.get(category) ?? [],
-    }));
-  }, [detail, settingCategories]);
-
-  const chapterVolumes = useMemo<ChapterVolumeGroup[]>(() => {
-    if (!detail) {
-      return [];
-    }
-    const groups = new Map<string, ExpansionWorkspaceDetail["chapterEntries"]>();
-    for (const volumeId of volumeIds) {
-      groups.set(volumeId, []);
-    }
-    for (const entry of detail.chapterEntries) {
-      const volumeId = getChapterVolumeId(entry.path);
-      const current = groups.get(volumeId) ?? [];
-      current.push(entry);
-      groups.set(volumeId, current);
-    }
-    return Array.from(groups.entries())
-      .sort(([left], [right]) => Number.parseInt(left, 10) - Number.parseInt(right, 10))
-      .map(([volumeId, entries]) => ({ volumeId, entries }));
-  }, [detail, volumeIds]);
-
   useEffect(() => {
-    if (chapterVolumes.length === 0) {
-      return;
-    }
+    if (chapterVolumes.length === 0) return;
     setVolumeExpanded((current) => {
       const next = { ...current };
       for (const group of chapterVolumes) {
-        if (!(group.volumeId in next)) {
-          next[group.volumeId] = true;
-        }
+        if (!(group.volumeId in next)) next[group.volumeId] = true;
       }
       return next;
     });
   }, [chapterVolumes]);
 
   useEffect(() => {
-    if (settingGroups.length === 0) {
-      return;
-    }
+    if (settingGroups.length === 0) return;
     setSettingExpanded((current) => {
       const next = { ...current };
       for (const group of settingGroups) {
-        if (!(group.category in next)) {
-          next[group.category] = true;
-        }
+        if (!(group.category in next)) next[group.category] = true;
       }
       return next;
     });
   }, [settingGroups]);
 
-  const currentFilePath = selected ? `${selected.section}/${selected.path}` : null;
-
-  const currentFileName = useMemo(() => {
-    if (!selected) {
-      return null;
-    }
-    if (selected.section === "project") {
-      return selected.path;
-    }
-    if (selected.section === "settings") {
-      return parsedSetting?.name ?? selectedSettingEntry?.name ?? selected.path;
-    }
-    return parsedChapter?.name ?? selectedChapterEntry?.name ?? selected.path;
-  }, [parsedChapter?.name, parsedSetting?.name, selected, selectedChapterEntry?.name, selectedSettingEntry?.name]);
-
-  const currentSelectionLabel = useMemo(() => {
-    if (!selected) {
-      return null;
-    }
-    if (selected.section === "project") {
-      return selected.path;
-    }
-    if (selected.section === "settings") {
-      return parsedSetting?.name ?? selectedSettingEntry?.name ?? "设定";
-    }
-    return buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null);
-  }, [parsedChapter, parsedSetting?.name, selected, selectedChapterEntry?.name, selectedSettingEntry?.name]);
-
+  // —— 顶部状态按钮（运行中 / 失败 / 已完成 / 空闲） ——
   const workspaceStatusButton = useMemo(() => {
     if (workspaceRunStatus === "running") {
       return {
         className: "text-amber-700",
         icon: LoaderCircle,
         iconClassName: "animate-spin",
-        label: activeWorkspaceTask ? `${activeWorkspaceTask.actionLabel} · 运行中` : "运行中",
+        label: activeWorkspaceTask
+          ? `${activeWorkspaceTask.actionLabel} · 运行中`
+          : "运行中",
       };
     }
     if (workspaceRunStatus === "failed") {
@@ -781,9 +473,7 @@ export function ExpansionDetailPage() {
   }
 
   async function saveVolumeMeta(nextVolumeIds: string[]) {
-    if (!workspaceId) {
-      return;
-    }
+    if (!workspaceId) return;
     await writeExpansionEntry(
       workspaceId,
       "project",
@@ -793,9 +483,7 @@ export function ExpansionDetailPage() {
   }
 
   async function saveSettingMeta(nextCategories: string[]) {
-    if (!workspaceId) {
-      return;
-    }
+    if (!workspaceId) return;
     await writeExpansionEntry(
       workspaceId,
       "project",
@@ -804,165 +492,8 @@ export function ExpansionDetailPage() {
     );
   }
 
-  async function runWorkspaceAgentAction(params: {
-    actionId: ExpansionWorkspaceActionId;
-    actionLabel: string;
-    description: string;
-    prompt: string;
-    targetLabel: string;
-  }) {
-    if (!workspaceId || !detail) {
-      return;
-    }
-
-    setActiveWorkspaceTask({
-      actionId: params.actionId,
-      actionLabel: params.actionLabel,
-      createdAt: Date.now(),
-      description: params.description,
-      statusLabel: "运行中",
-      targetLabel: params.targetLabel,
-    });
-    setWorkspaceAgentParts([]);
-    setWorkspaceExecutionPrompt(params.prompt);
-    setWorkspaceRunStatus("running");
-
-    try {
-      const agentSettings = useAgentSettingsStore.getState();
-      if (agentSettings.status !== "ready") {
-        await agentSettings.initialize();
-      }
-      const skillsStore = useSkillsStore.getState();
-      if (skillsStore.status === "idle") {
-        await skillsStore.initialize();
-      }
-      const agentStore = useSubAgentStore.getState();
-      if (agentStore.status === "idle") {
-        await agentStore.initialize();
-      }
-
-      const providerConfig = useAgentSettingsStore.getState().config;
-      const defaultAgentMarkdown = useAgentSettingsStore.getState().defaultAgentMarkdown;
-      const enabledSkills = getEnabledSkills(useSkillsStore.getState());
-      const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
-      const projectFiles = await Promise.all(
-        visibleProjectEntries.map(async (entry) => ({
-          content: await readExpansionEntry(workspaceId, "project", entry.path),
-          name: entry.path,
-          path: `project/${entry.path}`,
-        })),
-      );
-
-      const stream = runAgentTurn({
-        activeFilePath: currentFilePath,
-        conversationHistory: [],
-        defaultAgentMarkdown,
-        enabledAgents,
-        enabledSkills,
-        enabledToolIds: [
-          "todo",
-          "task",
-          "browse",
-          "search",
-          "read",
-          "write",
-          "path",
-          "skill",
-          "agent",
-          "web_search",
-          "web_fetch",
-          "expansion_chapter_batch_outline",
-          "expansion_chapter_write_content",
-          "expansion_setting_batch_generate",
-          "expansion_setting_update_from_chapter",
-          "expansion_continuity_scan",
-        ],
-        mode: "expansion",
-        modeContext: {
-          actionId: params.actionId,
-          actionLabel: params.actionLabel,
-        },
-        manualContext: null,
-        planningState: { items: [], roundsSinceUpdate: 0 },
-        projectContext: {
-          source: "创作台默认上下文",
-          files: projectFiles,
-        },
-        prompt: params.prompt,
-        providerConfig,
-        workspaceRootPath: `expansion://${workspaceId}`,
-        workspaceTools: {
-          ...createGlobalToolset(),
-          ...createLocalResourceToolset({
-            refreshAgents: async () => {
-              await useSubAgentStore.getState().refresh();
-            },
-            refreshSkills: async () => {
-              await useSkillsStore.getState().refresh();
-            },
-          }),
-          ...createExpansionAgentToolset({
-            workspaceId,
-            onWorkspaceMutated: async () => {
-              await loadDetail();
-              await refreshSelectedEntry();
-            },
-          }),
-          ...createExpansionSemanticToolset({
-            workspaceId,
-            onWorkspaceMutated: async () => {
-              await loadDetail();
-              await refreshSelectedEntry();
-            },
-          }),
-        },
-      });
-
-      let nextParts: AgentPart[] = [];
-      for await (const part of stream) {
-        nextParts = mergePart(nextParts, part as AgentPart);
-        setWorkspaceAgentParts(nextParts);
-      }
-
-      setWorkspaceRunStatus("completed");
-      setActiveWorkspaceTask((current) =>
-        current
-          ? {
-              ...current,
-              statusLabel: "已完成",
-            }
-          : current,
-      );
-      await loadDetail();
-      await refreshSelectedEntry();
-    } catch (error) {
-      setWorkspaceRunStatus("failed");
-      setWorkspaceAgentParts((current) => [
-        ...current,
-        {
-          type: "text",
-          text: error instanceof Error ? error.message : "创作台 Agent 执行失败。",
-        },
-      ]);
-      setActiveWorkspaceTask((current) =>
-        current
-          ? {
-              ...current,
-              statusLabel: "失败",
-            }
-          : current,
-      );
-      setToastState({
-        title: error instanceof Error ? error.message : "创作台 Agent 执行失败。",
-        tone: "error",
-      });
-    }
-  }
-
   function requireActionTarget(targetLabel: string | null, errorTitle: string) {
-    if (targetLabel) {
-      return targetLabel;
-    }
+    if (targetLabel) return targetLabel;
     setToastState({ title: errorTitle, tone: "error" });
     return null;
   }
@@ -974,9 +505,7 @@ export function ExpansionDetailPage() {
 
   async function handleWorkspaceBatchOutline() {
     const targetLabel = requireActionTarget(currentSelectionLabel, "请先打开一个项目文件");
-    if (!targetLabel) {
-      return;
-    }
+    if (!targetLabel) return;
     const targetVolumeId = normalizeVolumeId(batchOutlineVolumeValue || volumeIds[0] || "001");
     const nextVolumeIds = Array.from(new Set([...volumeIds, targetVolumeId])).sort();
     if (workspaceId && !volumeIds.includes(targetVolumeId)) {
@@ -985,7 +514,7 @@ export function ExpansionDetailPage() {
       setVolumeExpanded((current) => ({ ...current, [targetVolumeId]: true }));
     }
     setBatchOutlineVolumeOpen(false);
-    void runWorkspaceAgentAction({
+    void runAction({
       actionId: "project-batch-outline",
       actionLabel: "批量生成细纲",
       description: "根据大纲批量创建章节 JSON，并写入章节名与约 300 字细纲。",
@@ -1005,10 +534,8 @@ export function ExpansionDetailPage() {
 
   function handleWorkspaceBatchSettings() {
     const targetLabel = requireActionTarget(currentSelectionLabel, "请先打开一个项目文件");
-    if (!targetLabel) {
-      return;
-    }
-    void runWorkspaceAgentAction({
+    if (!targetLabel) return;
+    void runAction({
       actionId: "project-batch-settings",
       actionLabel: "批量生成设定",
       description: "根据大纲和 AGENTS 相关内容批量生成设定 JSON。",
@@ -1028,11 +555,12 @@ export function ExpansionDetailPage() {
   }
 
   function handleWorkspaceSettingUpdate() {
-    const targetLabel = requireActionTarget(parsedSetting?.name ?? selectedSettingEntry?.name ?? null, "请先打开一个设定文件");
-    if (!targetLabel) {
-      return;
-    }
-    void runWorkspaceAgentAction({
+    const targetLabel = requireActionTarget(
+      parsedSetting?.name ?? selectedSettingEntry?.name ?? null,
+      "请先打开一个设定文件",
+    );
+    if (!targetLabel) return;
+    void runAction({
       actionId: "setting-update",
       actionLabel: "更新设定",
       description: "根据最新章节梗概、正文和全书大纲更新当前设定。",
@@ -1051,12 +579,13 @@ export function ExpansionDetailPage() {
   }
 
   function handleWorkspaceChapterWrite() {
-    const targetLabel = requireActionTarget(buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null), "请先打开一个章节");
-    if (!targetLabel) {
-      return;
-    }
+    const targetLabel = requireActionTarget(
+      buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null),
+      "请先打开一个章节",
+    );
+    if (!targetLabel) return;
     const currentOutline = parsedChapter?.outline?.trim() || "（当前章节细纲为空）";
-    void runWorkspaceAgentAction({
+    void runAction({
       actionId: "chapter-write",
       actionLabel: "章节写作",
       description: "根据本章细纲、相关设定和前后文章写本章正文。",
@@ -1080,11 +609,12 @@ export function ExpansionDetailPage() {
   }
 
   function handleWorkspaceChapterSettingUpdate() {
-    const targetLabel = requireActionTarget(buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null), "请先打开一个章节");
-    if (!targetLabel) {
-      return;
-    }
-    void runWorkspaceAgentAction({
+    const targetLabel = requireActionTarget(
+      buildChapterTargetLabel(parsedChapter, selectedChapterEntry?.name ?? null),
+      "请先打开一个章节",
+    );
+    if (!targetLabel) return;
+    void runAction({
       actionId: "chapter-setting-update",
       actionLabel: "设定更新",
       description: "分析本章正文涉及的内容，更新相关设定并补充新增设定。",
@@ -1113,10 +643,11 @@ export function ExpansionDetailPage() {
       setToastState({ title: "请输入要发给 AI 的提示词", tone: "error" });
       return;
     }
-    const targetLabel = currentSelectionLabel ?? currentFileName ?? detail?.name ?? "当前工作区";
+    const targetLabel =
+      currentSelectionLabel ?? currentFileName ?? detail?.name ?? "当前工作区";
     setFreeInputOpen(false);
     setFreeInputValue("");
-    void runWorkspaceAgentAction({
+    void runAction({
       actionId: "free-input",
       actionLabel: "自由输入",
       description: "根据自定义提示词在当前工作区内执行 AI 操作。",
@@ -1132,12 +663,10 @@ export function ExpansionDetailPage() {
   }
 
   function handleClearWorkspaceLogs() {
-    setActiveWorkspaceTask(null);
-    setWorkspaceAgentParts([]);
-    setWorkspaceExecutionPrompt("");
-    setWorkspaceRunStatus("idle");
+    resetWorkspaceAgent();
   }
 
+  // —— 上下文 / 选中 section 决定的可用动作 ——
   const contextualWorkspaceActions: ExpansionWorkspaceActionButton[] =
     selected?.section === "project"
       ? [
@@ -1189,10 +718,9 @@ export function ExpansionDetailPage() {
     },
   ];
 
+  // —— 文件 CRUD handlers ——
   async function handleSave() {
-    if (!workspaceId || !selected || !isDirty || saveBusy) {
-      return;
-    }
+    if (!workspaceId || !selected || !isDirty || saveBusy) return;
     setSaveBusy(true);
     try {
       let nextSelected = selected;
@@ -1202,7 +730,12 @@ export function ExpansionDetailPage() {
         const sanitized = sanitizeSettingJson(parsedSetting);
         const currentEntry = detail.settingEntries.find((entry) => entry.path === selected.path);
         if (currentEntry && sanitized.name && sanitized.name !== currentEntry.name) {
-          const renamed = await renameExpansionEntry(workspaceId, "settings", selected.path, sanitized.name);
+          const renamed = await renameExpansionEntry(
+            workspaceId,
+            "settings",
+            selected.path,
+            sanitized.name,
+          );
           nextSelected = { section: renamed.section, path: renamed.path };
           setSelected(nextSelected);
         }
@@ -1213,7 +746,12 @@ export function ExpansionDetailPage() {
         const sanitized = sanitizeChapterJson(parsedChapter);
         const currentEntry = detail.chapterEntries.find((entry) => entry.path === selected.path);
         if (currentEntry && sanitized.name && sanitized.name !== currentEntry.name) {
-          const renamed = await renameExpansionEntry(workspaceId, "chapters", selected.path, sanitized.name);
+          const renamed = await renameExpansionEntry(
+            workspaceId,
+            "chapters",
+            selected.path,
+            sanitized.name,
+          );
           nextSelected = { section: renamed.section, path: renamed.path };
           setSelected(nextSelected);
         }
@@ -1234,9 +772,7 @@ export function ExpansionDetailPage() {
   }
 
   async function handleCreateSetting() {
-    if (!workspaceId || !createSettingCategory || createSettingBusy) {
-      return;
-    }
+    if (!workspaceId || !createSettingCategory || createSettingBusy) return;
     const name = createSettingName.trim();
     if (!name) {
       setToastState({ title: "名称不能为空", tone: "error" });
@@ -1244,9 +780,17 @@ export function ExpansionDetailPage() {
     }
     setCreateSettingBusy(true);
     try {
-      const nextCategories = sortSettingCategories([...settingCategories, createSettingCategory]);
+      const nextCategories = sortSettingCategories([
+        ...settingCategories,
+        createSettingCategory,
+      ]);
       await saveSettingMeta(nextCategories);
-      const created = await createExpansionEntry(workspaceId, "settings", name, createSettingCategory);
+      const created = await createExpansionEntry(
+        workspaceId,
+        "settings",
+        name,
+        createSettingCategory,
+      );
       setSettingCategories(nextCategories);
       setCreateSettingCategory(null);
       setCreateSettingName("");
@@ -1260,9 +804,7 @@ export function ExpansionDetailPage() {
   }
 
   async function handleCreateVolume() {
-    if (!workspaceId || createVolumeBusy) {
-      return;
-    }
+    if (!workspaceId || createVolumeBusy) return;
     const nextVolumeId = getNextVolumeId(volumeIds);
     setCreateVolumeBusy(true);
     try {
@@ -1280,9 +822,7 @@ export function ExpansionDetailPage() {
   }
 
   async function handleCreateChapter() {
-    if (!workspaceId || !createChapterVolumeId || createChapterBusy) {
-      return;
-    }
+    if (!workspaceId || !createChapterVolumeId || createChapterBusy) return;
     const name = createChapterName.trim();
     if (!name) {
       setToastState({ title: "章节名称不能为空", tone: "error" });
@@ -1308,9 +848,7 @@ export function ExpansionDetailPage() {
   }
 
   async function handleRename() {
-    if (!workspaceId || !renameTarget || renameBusy) {
-      return;
-    }
+    if (!workspaceId || !renameTarget || renameBusy) return;
     const nextName = renameValue.trim();
     if (!nextName) {
       setToastState({ title: "名称不能为空", tone: "error" });
@@ -1318,7 +856,12 @@ export function ExpansionDetailPage() {
     }
     setRenameBusy(true);
     try {
-      const updated = await renameExpansionEntry(workspaceId, renameTarget.section, renameTarget.path, nextName);
+      const updated = await renameExpansionEntry(
+        workspaceId,
+        renameTarget.section,
+        renameTarget.path,
+        nextName,
+      );
       setRenameTarget(null);
       setRenameValue("");
       await loadDetail();
@@ -1331,13 +874,12 @@ export function ExpansionDetailPage() {
   }
 
   async function handleDeleteEntry() {
-    if (!workspaceId || !deleteTarget || deleteBusy) {
-      return;
-    }
+    if (!workspaceId || !deleteTarget || deleteBusy) return;
     setDeleteBusy(true);
     try {
       await deleteExpansionEntry(workspaceId, deleteTarget.section, deleteTarget.path);
-      const wasSelected = selected?.section === deleteTarget.section && selected.path === deleteTarget.path;
+      const wasSelected =
+        selected?.section === deleteTarget.section && selected.path === deleteTarget.path;
       setDeleteTarget(null);
       await loadDetail();
       if (wasSelected) {
@@ -1350,6 +892,7 @@ export function ExpansionDetailPage() {
     }
   }
 
+  // —— 三栏渲染 ——
   function renderContextColumn() {
     return (
       <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-border bg-app lg:w-[260px] lg:border-r lg:border-b-0">
@@ -1387,10 +930,16 @@ export function ExpansionDetailPage() {
                       }
                       className="text-muted-foreground"
                     >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
                     </Button>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">{group.category}</div>
+                      <div className="truncate text-sm font-medium text-foreground">
+                        {group.category}
+                      </div>
                     </div>
                     <Button
                       type="button"
@@ -1409,18 +958,34 @@ export function ExpansionDetailPage() {
                   {isExpanded ? (
                     <div>
                       {group.entries.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">当前分类暂无设定。</div>
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          当前分类暂无设定。
+                        </div>
                       ) : (
                         group.entries.map((entry) => (
                           <EntryButton
                             key={`setting-${entry.path}`}
-                            active={selected?.section === "settings" && selected.path === entry.path}
+                            active={
+                              selected?.section === "settings" && selected.path === entry.path
+                            }
                             canModify
                             label={entry.name}
-                            onClick={() => setSelected({ section: "settings", path: entry.path })}
-                            onDelete={() => setDeleteTarget({ section: "settings", path: entry.path, name: entry.name })}
+                            onClick={() =>
+                              setSelected({ section: "settings", path: entry.path })
+                            }
+                            onDelete={() =>
+                              setDeleteTarget({
+                                section: "settings",
+                                path: entry.path,
+                                name: entry.name,
+                              })
+                            }
                             onRename={() => {
-                              setRenameTarget({ section: "settings", path: entry.path, current: entry.name });
+                              setRenameTarget({
+                                section: "settings",
+                                path: entry.path,
+                                current: entry.name,
+                              });
                               setRenameValue(entry.name);
                             }}
                           />
@@ -1441,7 +1006,9 @@ export function ExpansionDetailPage() {
           />
           <div>
             {chapterVolumes.length === 0 ? (
-              <div className="px-3 py-3 text-xs text-muted-foreground">暂无分卷，点击右上角 + 新建。</div>
+              <div className="px-3 py-3 text-xs text-muted-foreground">
+                暂无分卷，点击右上角 + 新建。
+              </div>
             ) : (
               chapterVolumes.map((group) => {
                 const isExpanded = volumeExpanded[group.volumeId] ?? true;
@@ -1452,7 +1019,11 @@ export function ExpansionDetailPage() {
                         type="button"
                         size="icon-sm"
                         variant="ghost"
-                        aria-label={isExpanded ? `收起${formatVolumeLabel(group.volumeId)}` : `展开${formatVolumeLabel(group.volumeId)}`}
+                        aria-label={
+                          isExpanded
+                            ? `收起${formatVolumeLabel(group.volumeId)}`
+                            : `展开${formatVolumeLabel(group.volumeId)}`
+                        }
                         onClick={() =>
                           setVolumeExpanded((current) => ({
                             ...current,
@@ -1461,10 +1032,16 @@ export function ExpansionDetailPage() {
                         }
                         className="text-muted-foreground"
                       >
-                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
                       </Button>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-foreground">{formatVolumeLabel(group.volumeId)}</div>
+                        <div className="truncate text-sm font-medium text-foreground">
+                          {formatVolumeLabel(group.volumeId)}
+                        </div>
                       </div>
                       <Button
                         type="button"
@@ -1483,18 +1060,34 @@ export function ExpansionDetailPage() {
                     {isExpanded ? (
                       <div>
                         {group.entries.length === 0 ? (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">当前分卷暂无章节。</div>
+                          <div className="px-3 py-2 text-xs text-muted-foreground">
+                            当前分卷暂无章节。
+                          </div>
                         ) : (
                           group.entries.map((entry) => (
                             <EntryButton
                               key={`chapter-${entry.path}`}
-                              active={selected?.section === "chapters" && selected.path === entry.path}
+                              active={
+                                selected?.section === "chapters" && selected.path === entry.path
+                              }
                               canModify
                               label={buildChapterEntryLabel(entry.entryId, entry.name)}
-                              onClick={() => setSelected({ section: "chapters", path: entry.path })}
-                              onDelete={() => setDeleteTarget({ section: "chapters", path: entry.path, name: entry.name })}
+                              onClick={() =>
+                                setSelected({ section: "chapters", path: entry.path })
+                              }
+                              onDelete={() =>
+                                setDeleteTarget({
+                                  section: "chapters",
+                                  path: entry.path,
+                                  name: entry.name,
+                                })
+                              }
                               onRename={() => {
-                                setRenameTarget({ section: "chapters", path: entry.path, current: entry.name });
+                                setRenameTarget({
+                                  section: "chapters",
+                                  path: entry.path,
+                                  current: entry.name,
+                                });
                                 setRenameValue(entry.name);
                               }}
                             />
@@ -1525,12 +1118,17 @@ export function ExpansionDetailPage() {
             {currentSelectionLabel ?? "未选择"}
           </h2>
           <div className="flex items-center gap-1.5">
-            {isDirty ? <span className="editor-status-chip" data-tone="warning">未保存</span> : null}
+            {isDirty ? (
+              <span className="editor-status-chip" data-tone="warning">
+                未保存
+              </span>
+            ) : null}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   type="button"
                   aria-label={saveBusy ? "保存中" : "保存"}
+                  aria-busy={saveBusy}
                   variant="ghost"
                   size="icon-sm"
                   disabled={saveBusy || !isDirty}
@@ -1551,7 +1149,9 @@ export function ExpansionDetailPage() {
               从左侧选择一个条目开始编辑。
             </div>
           ) : contentLoading ? (
-            <div className="flex h-full items-center px-3 py-2 text-sm text-muted-foreground">正在读取内容…</div>
+            <div className="flex h-full items-center px-3 py-2 text-sm text-muted-foreground">
+              正在读取内容…
+            </div>
           ) : selected.section === "project" ? (
             <ProjectEditor
               value={rawContent}
@@ -1563,9 +1163,19 @@ export function ExpansionDetailPage() {
               disabled={saveBusy}
             />
           ) : selected.section === "settings" && parsedSetting ? (
-            <SettingEditor value={parsedSetting} onChange={applySetting} disabled={saveBusy} fitContainer={!isMobile} />
+            <SettingEditor
+              value={parsedSetting}
+              onChange={applySetting}
+              disabled={saveBusy}
+              fitContainer={!isMobile}
+            />
           ) : selected.section === "chapters" && parsedChapter ? (
-            <ChapterEditor value={parsedChapter} onChange={applyChapter} disabled={saveBusy} fitContainer={!isMobile} />
+            <ChapterEditor
+              value={parsedChapter}
+              onChange={applyChapter}
+              disabled={saveBusy}
+              fitContainer={!isMobile}
+            />
           ) : null}
         </div>
       </section>
@@ -1618,7 +1228,9 @@ export function ExpansionDetailPage() {
                 onClick={() => setMobileActiveTab(tab)}
                 className={cn(
                   "flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 transition-colors duration-150",
-                  mobileActiveTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                  mobileActiveTab === tab
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="h-5 w-5 shrink-0" strokeWidth={2.1} />
@@ -1634,7 +1246,7 @@ export function ExpansionDetailPage() {
   if (status === "loading") {
     return (
       <PageShell title={<DetailTitle name="加载中" />}>
-        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">正在加载创作项目...</div>
+        <LoadingBlock title="正在加载创作项目..." />
       </PageShell>
     );
   }
@@ -1642,15 +1254,12 @@ export function ExpansionDetailPage() {
   if (status === "error" || !detail) {
     return (
       <PageShell title={<DetailTitle name="未找到" />}>
-        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          <div className="space-y-3 text-center">
-            <h2 className="text-base font-semibold text-foreground">未找到该创作项目</h2>
-            <p>{errorMessage ?? "请返回列表重试。"}</p>
-            <Button type="button" variant="outline" onClick={() => navigate(buildExpansionListRoute())}>
-              返回创作台
-            </Button>
-          </div>
-        </div>
+        <ErrorBlock
+          title="未找到该创作项目"
+          description={errorMessage ?? "请返回列表重试。"}
+          actionLabel="返回创作台"
+          onAction={() => navigate(buildExpansionListRoute())}
+        />
       </PageShell>
     );
   }
@@ -1668,7 +1277,9 @@ export function ExpansionDetailPage() {
               variant="outline"
               className={cn("pointer-events-none gap-2", workspaceStatusButton.className)}
             >
-              <WorkspaceStatusIcon className={cn("h-4 w-4", workspaceStatusButton.iconClassName)} />
+              <WorkspaceStatusIcon
+                className={cn("h-4 w-4", workspaceStatusButton.iconClassName)}
+              />
               {workspaceStatusButton.label}
             </Button>
           </div>
@@ -1696,9 +1307,7 @@ export function ExpansionDetailPage() {
           title="新建设定"
           value={createSettingName}
           onCancel={() => {
-            if (!createSettingBusy) {
-              setCreateSettingCategory(null);
-            }
+            if (!createSettingBusy) setCreateSettingCategory(null);
           }}
           onChange={setCreateSettingName}
           onConfirm={() => void handleCreateSetting()}
@@ -1711,9 +1320,7 @@ export function ExpansionDetailPage() {
           volumeIds={volumeIds}
           value={batchOutlineVolumeValue}
           onCancel={() => {
-            if (workspaceRunStatus !== "running") {
-              setBatchOutlineVolumeOpen(false);
-            }
+            if (workspaceRunStatus !== "running") setBatchOutlineVolumeOpen(false);
           }}
           onChange={setBatchOutlineVolumeValue}
           onConfirm={() => void handleWorkspaceBatchOutline()}
@@ -1721,11 +1328,12 @@ export function ExpansionDetailPage() {
       ) : null}
 
       {freeInputOpen ? (
-        <DialogShell title="自由输入" onClose={() => {
-          if (workspaceRunStatus !== "running") {
-            setFreeInputOpen(false);
-          }
-        }}>
+        <DialogShell
+          title="自由输入"
+          onClose={() => {
+            if (workspaceRunStatus !== "running") setFreeInputOpen(false);
+          }}
+        >
           <div className="flex flex-1 flex-col justify-between gap-5">
             <div className="space-y-2">
               <Label htmlFor="expansion-free-input" className="text-xs text-muted-foreground">
@@ -1750,14 +1358,15 @@ export function ExpansionDetailPage() {
               >
                 取消
               </Button>
-              <Button
+              <BusyButton
                 type="button"
                 size="sm"
-                disabled={workspaceRunStatus === "running"}
+                busy={workspaceRunStatus === "running"}
+                busyLabel="发送中..."
                 onClick={handleWorkspaceFreeInput}
               >
                 发送给 AI
-              </Button>
+              </BusyButton>
             </div>
           </div>
         </DialogShell>
@@ -1772,9 +1381,7 @@ export function ExpansionDetailPage() {
           title="新建章节"
           value={createChapterName}
           onCancel={() => {
-            if (!createChapterBusy) {
-              setCreateChapterVolumeId(null);
-            }
+            if (!createChapterBusy) setCreateChapterVolumeId(null);
           }}
           onChange={setCreateChapterName}
           onConfirm={() => void handleCreateChapter()}
@@ -1790,9 +1397,7 @@ export function ExpansionDetailPage() {
           title="重命名"
           value={renameValue}
           onCancel={() => {
-            if (!renameBusy) {
-              setRenameTarget(null);
-            }
+            if (!renameBusy) setRenameTarget(null);
           }}
           onChange={setRenameValue}
           onConfirm={() => void handleRename()}
@@ -1805,9 +1410,7 @@ export function ExpansionDetailPage() {
           confirmLabel="删除"
           description={`将《${deleteTarget.name}》及其 JSON 数据永久删除。`}
           onCancel={() => {
-            if (!deleteBusy) {
-              setDeleteTarget(null);
-            }
+            if (!deleteBusy) setDeleteTarget(null);
           }}
           onConfirm={() => void handleDeleteEntry()}
           title="删除条目"

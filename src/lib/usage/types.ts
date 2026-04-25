@@ -1,8 +1,12 @@
+export type UsageSourceType = "chat" | "workflow" | "expansion";
+
 export type UsageLogEntry = {
   messageId: string;
   sessionId: string;
   sessionTitle: string;
-  sourceType: "chat" | "workflow";
+  /** 来源模式：图书 Agent / 工作流 / 创作台。 */
+  sourceType: UsageSourceType;
+  /** 来源名称：会话标题 / 工作流名 / 创作台动作名。 */
   sourceName: string;
   bookName: string;
   createdAt: string;
