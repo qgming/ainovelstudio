@@ -45,7 +45,9 @@ describe("agent settings store", () => {
       config: {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
+        enableReasoningEffort: true,
         model: "gpt-4o-mini",
+        reasoningEffort: "high",
         simulateOpencodeBeta: true,
       },
       enabledTools: {},
@@ -54,7 +56,9 @@ describe("agent settings store", () => {
     useAgentSettingsStore.getState().updateConfig({
       baseURL: "https://example.com/v1",
       apiKey: "test-key",
+      enableReasoningEffort: true,
       model: "gpt-4o-mini",
+      reasoningEffort: "high",
       simulateOpencodeBeta: true,
     });
     await Promise.resolve();
@@ -63,7 +67,9 @@ describe("agent settings store", () => {
       settings: expect.objectContaining({
         config: expect.objectContaining({
           baseURL: "https://example.com/v1",
+          enableReasoningEffort: true,
           model: "gpt-4o-mini",
+          reasoningEffort: "high",
           simulateOpencodeBeta: true,
         }),
       }),
@@ -109,7 +115,9 @@ describe("agent settings store", () => {
           config: {
             apiKey: "sqlite-key",
             baseURL: "https://example.com/v1",
+            enableReasoningEffort: true,
             model: "sqlite-model",
+            reasoningEffort: "high",
             simulateOpencodeBeta: true,
           },
           enabledTools: { read_file: false },
@@ -127,6 +135,8 @@ describe("agent settings store", () => {
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("sqlite-model");
+    expect(state.config.enableReasoningEffort).toBe(true);
+    expect(state.config.reasoningEffort).toBe("high");
     expect(state.config.simulateOpencodeBeta).toBe(true);
     expect(state.enabledTools.read).toBe(false);
     expect(state.enabledTools.write).toBe(true);
@@ -169,7 +179,59 @@ describe("agent settings store", () => {
     expect(state.config.apiKey).toBe("sqlite-key");
     expect(state.config.baseURL).toBe("https://example.com/v1");
     expect(state.config.model).toBe("sqlite-model");
+    expect(state.config.enableReasoningEffort).toBe(false);
+    expect(state.config.reasoningEffort).toBe("xhigh");
     expect(state.config.simulateOpencodeBeta).toBe(false);
+  });
+
+  it("initialize 会为旧版预存供应商补齐缺失的 apiKey", async () => {
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "initialize_default_agent_config") {
+        return Promise.resolve({
+          initializedFromBuiltin: true,
+          markdown: "# 文件主代理",
+          path: "C:/Program Files/ainovelstudio/resources/config/AGENTS.md",
+        });
+      }
+
+      if (command === "read_agent_settings") {
+        return Promise.resolve({
+          config: {
+            apiKey: "sqlite-key",
+            baseURL: "https://example.com/v1",
+            model: "sqlite-model",
+          },
+          providerPresets: [
+            {
+              id: "preset-1",
+              name: "OpenAI",
+              model: "gpt-4.1",
+              provider: "openai",
+              baseURL: "https://api.openai.com/v1",
+              createdAt: "2026-04-23T00:00:00.000Z",
+              updatedAt: "2026-04-23T00:00:00.000Z",
+            },
+          ],
+        });
+      }
+
+      if (command === "clear_agent_settings") {
+        return Promise.resolve();
+      }
+
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    await useAgentSettingsStore.getState().initialize();
+
+    expect(useAgentSettingsStore.getState().providerPresets).toEqual([
+      expect.objectContaining({
+        id: "preset-1",
+        apiKey: "",
+        baseURL: "https://api.openai.com/v1",
+        model: "gpt-4.1",
+      }),
+    ]);
   });
 
   it("initialize 在 SQLite 没有设置时保持默认值", async () => {
@@ -199,7 +261,9 @@ describe("agent settings store", () => {
     expect(state.config).toEqual({
       apiKey: "",
       baseURL: "",
+      enableReasoningEffort: false,
       model: "",
+      reasoningEffort: "xhigh",
       simulateOpencodeBeta: false,
     });
   });
@@ -288,7 +352,9 @@ describe("agent settings store", () => {
       config: {
         apiKey: "",
         baseURL: "",
+        enableReasoningEffort: false,
         model: "",
+        reasoningEffort: "xhigh",
         simulateOpencodeBeta: false,
       },
       enabledTools: {},
@@ -301,12 +367,16 @@ describe("agent settings store", () => {
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("");
+    expect(state.config.enableReasoningEffort).toBe(false);
+    expect(state.config.reasoningEffort).toBe("xhigh");
     expect(state.config.simulateOpencodeBeta).toBe(false);
     expect(state.defaultAgentMarkdown).toBe("# 文件主代理");
   });
 
   it("默认模型配置不注入 Base URL", () => {
     expect(useAgentSettingsStore.getState().config.baseURL).toBe("");
+    expect(useAgentSettingsStore.getState().config.enableReasoningEffort).toBe(false);
+    expect(useAgentSettingsStore.getState().config.reasoningEffort).toBe("xhigh");
     expect(useAgentSettingsStore.getState().config.simulateOpencodeBeta).toBe(false);
   });
 
@@ -325,6 +395,8 @@ describe("agent settings store", () => {
     const state = useAgentSettingsStore.getState();
     expect(state.enabledTools.write).toBe(true);
     expect(state.config.model).toBe("");
+    expect(state.config.enableReasoningEffort).toBe(false);
+    expect(state.config.reasoningEffort).toBe("xhigh");
     expect(state.config.simulateOpencodeBeta).toBe(false);
     expect(state.defaultAgentMarkdown).toBe("");
   });

@@ -1,7 +1,11 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "../../lib/agent/promptContext";
 import { ALL_TOOL_DEFS } from "../../lib/agent/toolDefs";
-import { getDefaultAgentProviderConfig, useAgentSettingsStore } from "../../stores/agentSettingsStore";
+import {
+  getDefaultAgentProviderConfig,
+  normalizeReasoningEffort,
+  useAgentSettingsStore,
+} from "../../stores/agentSettingsStore";
 import { DefaultAgentSection } from "./DefaultAgentSection";
 import { ModelProviderCard } from "./ModelProviderCard";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";
@@ -19,6 +23,9 @@ function isSameProviderConfig(
     left.apiKey === right.apiKey &&
     left.baseURL === right.baseURL &&
     left.model === right.model &&
+    Boolean(left.enableReasoningEffort) === Boolean(right.enableReasoningEffort) &&
+    normalizeReasoningEffort(left.reasoningEffort) ===
+      normalizeReasoningEffort(right.reasoningEffort) &&
     Boolean(left.simulateOpencodeBeta) === Boolean(right.simulateOpencodeBeta)
   );
 }

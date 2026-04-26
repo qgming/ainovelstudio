@@ -80,9 +80,31 @@ describe("ModelProviderCard", () => {
     expect(screen.getByPlaceholderText("https://example.com/v1")).toBeInTheDocument();
     expect(screen.getByText("API Key")).toBeInTheDocument();
     expect(screen.getByText("Model")).toBeInTheDocument();
+    expect(screen.getByText("思考模式 reasoning_effort")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
     expect(screen.queryByText("Temperature")).not.toBeInTheDocument();
     expect(screen.queryByText("Max Tokens")).not.toBeInTheDocument();
+  });
+
+  it("思考强度默认选中 xhigh", () => {
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+        }}
+        isDirty={false}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /xhigh/i })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("缺少必要配置时禁用测试连接按钮", () => {
@@ -316,6 +338,7 @@ describe("ModelProviderCard", () => {
           {
             id: "preset-1",
             name: "OpenAI",
+            apiKey: "sk-openai",
             model: "gpt-4.1",
             provider: "openai",
             baseURL: "https://api.openai.com/v1",
@@ -346,7 +369,7 @@ describe("ModelProviderCard", () => {
     expect(presetButton).not.toHaveClass("bg-accent/35");
   });
 
-  it("点击推荐供应商卡片时回填 Base URL 并保存到预存供应商库", () => {
+  it("点击推荐供应商卡片时只回填 Base URL", () => {
     const handleChange = vi.fn();
     const handleAddProviderPreset = vi.fn();
 
@@ -370,9 +393,101 @@ describe("ModelProviderCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "使用 OpenAI 地址" }));
 
     expect(handleChange).toHaveBeenCalledWith({ baseURL: "https://api.openai.com/v1" });
-    expect(handleAddProviderPreset).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "OpenAI", baseURL: "https://api.openai.com/v1" }),
+    expect(handleAddProviderPreset).not.toHaveBeenCalled();
+  });
+
+  it("预存配置需要完整填写 url、key 和 model", async () => {
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "",
+          baseURL: "https://api.openai.com/v1",
+          model: "gpt-4.1",
+        }}
+        isDirty={false}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "预存配置" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("保存失败：需要完整填写 Base URL、API Key 和 Model");
+  });
+
+  it("点击预存配置时保存 url、key 和 model", () => {
+    const handleAddProviderPreset = vi.fn();
+
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={handleAddProviderPreset}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-openai",
+          baseURL: "https://api.openai.com/v1",
+          model: "gpt-4.1",
+        }}
+        isDirty={false}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "预存配置" }));
+
+    expect(handleAddProviderPreset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "sk-openai",
+        baseURL: "https://api.openai.com/v1",
+        model: "gpt-4.1",
+      }),
+    );
+  });
+
+  it("点击预存供应商时回填 url、key 和 model", () => {
+    const handleChange = vi.fn();
+
+    render(
+      <ModelProviderCard
+        providerPresets={[
+          {
+            id: "preset-1",
+            name: "OpenAI",
+            apiKey: "sk-openai",
+            model: "gpt-4.1",
+            provider: "openai",
+            baseURL: "https://api.openai.com/v1",
+            createdAt: "2026-04-23T00:00:00.000Z",
+            updatedAt: "2026-04-23T00:00:00.000Z",
+          },
+        ]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "",
+          baseURL: "",
+          model: "",
+        }}
+        isDirty={false}
+        onChange={handleChange}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "使用 OpenAI 地址" })[0]);
+
+    expect(handleChange).toHaveBeenCalledWith({
+      apiKey: "sk-openai",
+      baseURL: "https://api.openai.com/v1",
+      model: "gpt-4.1",
+    });
   });
 
   it("点击保存按钮时触发保存回调", () => {
@@ -479,5 +594,59 @@ describe("ModelProviderCard", () => {
 
     expect(screen.getByText("模拟 OpenCode（beta）")).toBeInTheDocument();
     expect(handleChange).toHaveBeenCalledWith({ simulateOpencodeBeta: true });
+  });
+
+  it("支持切换思考模式开关", () => {
+    const handleChange = vi.fn();
+
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-secret",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+          enableReasoningEffort: false,
+          reasoningEffort: "xhigh",
+        }}
+        isDirty={false}
+        onChange={handleChange}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: "切换思考模式 reasoning_effort" }));
+
+    expect(handleChange).toHaveBeenCalledWith({ enableReasoningEffort: true });
+  });
+
+  it("支持切换 reasoning_effort 强度", () => {
+    const handleChange = vi.fn();
+
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-secret",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+          enableReasoningEffort: true,
+          reasoningEffort: "xhigh",
+        }}
+        isDirty={false}
+        onChange={handleChange}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /medium/i }));
+
+    expect(handleChange).toHaveBeenCalledWith({ reasoningEffort: "medium" });
   });
 });

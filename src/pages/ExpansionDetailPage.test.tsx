@@ -2,7 +2,15 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../components/ui/tooltip";
-import { buildBatchOutlinePrompt, ExpansionDetailPage } from "./ExpansionDetailPage";
+import {
+  buildBatchOutlinePrompt,
+  buildBatchSettingsPrompt,
+  buildChapterSettingUpdatePrompt,
+  buildChapterWritePrompt,
+  buildFreeInputPrompt,
+  buildSettingUpdatePrompt,
+  ExpansionDetailPage,
+} from "./ExpansionDetailPage";
 
 const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
@@ -191,7 +199,31 @@ describe("ExpansionDetailPage", () => {
     expect(prompt).toContain("不要重写");
     expect(prompt).toContain("expansion_chapter_write_content");
     expect(prompt).toContain("expansion_chapter_batch_outline");
+    expect(prompt).not.toContain("先用 skill 工具读取技能");
+    expect(prompt).toContain("本提示词已内联常用 skill 规则");
     expect(prompt).toContain("第1章｜第一章｜chapters/001/第一章");
+  });
+
+  it("批量生成设定提示词会内联设定规划规则", () => {
+    const prompt = buildBatchSettingsPrompt({
+      currentFilePath: "project/README.md",
+      targetLabel: "测试扩写",
+    });
+
+    expect(prompt).not.toContain("先用 skill 工具读取技能");
+    expect(prompt).toContain("区分已确认事实与待确认项");
+    expect(prompt).toContain("expansion_setting_batch_generate");
+  });
+
+  it("更新设定提示词会强调证据和长期 canon", () => {
+    const prompt = buildSettingUpdatePrompt({
+      currentFilePath: "settings/人物/1-主角",
+      targetLabel: "主角",
+    });
+
+    expect(prompt).not.toContain("先用 skill 工具读取技能");
+    expect(prompt).toContain("只更新有正文、大纲或现有设定证据支持的变化");
+    expect(prompt).toContain("长期 canon");
   });
 
   it("自由输入按钮会打开提示词输入弹窗", async () => {
@@ -219,10 +251,47 @@ describe("ExpansionDetailPage", () => {
         Boolean(
           element?.tagName.toLowerCase() === "pre" &&
           element?.textContent?.includes("当前章节细纲：") &&
-            element.textContent.includes("主角接到任务，决定启程。"),
+            element.textContent.includes("主角接到任务，决定启程。") &&
+            !element.textContent.includes("先用 skill 工具读取技能"),
         ),
       ),
     ).toBeInTheDocument();
+  });
+
+  it("章节写作提示词会内联连续性和 humanizer 规则", () => {
+    const prompt = buildChapterWritePrompt({
+      currentFilePath: "chapters/001/第一章",
+      currentOutline: "主角接到任务，决定启程。",
+      targetLabel: "第 1 章 · 第一章",
+    });
+
+    expect(prompt).not.toContain("先用 skill 工具读取技能");
+    expect(prompt).toContain("写前先确认上一章停点");
+    expect(prompt).toContain("正文优先用动作、对白、细节推进情绪");
+    expect(prompt).toContain("汉字 2500-3500");
+  });
+
+  it("章节设定更新提示词会内联状态同步规则", () => {
+    const prompt = buildChapterSettingUpdatePrompt({
+      currentFilePath: "chapters/001/第一章",
+      targetLabel: "第 1 章 · 第一章",
+    });
+
+    expect(prompt).not.toContain("先用 skill 工具读取技能");
+    expect(prompt).toContain("只记录有正文证据支撑的动态变化");
+    expect(prompt).toContain("逐个同步");
+  });
+
+  it("自由输入提示词会内联任务分流规则", () => {
+    const prompt = buildFreeInputPrompt({
+      currentFilePath: null,
+      targetLabel: "当前工作区",
+      userPrompt: "帮我续写这一章",
+    });
+
+    expect(prompt).not.toContain("按 skill 工具读取相关技能再执行");
+    expect(prompt).toContain("先判断目标是");
+    expect(prompt).toContain("如果是正文任务");
   });
 
   it("章节编辑区使用上下分栏同时显示细纲和正文", async () => {

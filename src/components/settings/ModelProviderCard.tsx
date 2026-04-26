@@ -27,7 +27,11 @@ import { ModelCatalogButton } from "./ModelCatalogButton";
 import { Toast, type ToastTone } from "../common/Toast";
 import { testAgentProviderConnection } from "../../lib/agent/modelGateway";
 import type { ProviderConnectionTestResult } from "../../lib/agent/modelGateway";
+import {
+  normalizeReasoningEffort,
+} from "../../stores/agentSettingsStore";
 import type {
+  AgentReasoningEffort,
   AgentProviderConfig,
   AgentProviderPreset,
 } from "../../stores/agentSettingsStore";
@@ -66,6 +70,17 @@ type ToastState = {
   title: string;
   tone: ToastTone;
 };
+
+const REASONING_EFFORT_OPTIONS: Array<{
+  description: string;
+  label: string;
+  value: AgentReasoningEffort;
+}> = [
+  { value: "xhigh", label: "极强", description: "最深度思考" },
+  { value: "high", label: "高", description: "偏重推理" },
+  { value: "medium", label: "中", description: "均衡输出" },
+  { value: "low", label: "低", description: "更快响应" },
+];
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -121,6 +136,12 @@ function extractHost(url: string) {
   } catch {
     return "";
   }
+}
+
+function hasRequiredPresetFields(config: AgentProviderConfig) {
+  return Boolean(
+    config.baseURL.trim() && config.apiKey.trim() && config.model.trim(),
+  );
 }
 
 function deriveProviderFromUrl(url: string) {
@@ -183,13 +204,21 @@ export function ModelProviderCard({
   const [isTesting, setIsTesting] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const normalizedBaseUrl = normalizeUrlForCompare(baseUrl);
+  const reasoningEffort = normalizeReasoningEffort(config.reasoningEffort);
   const canTestConnection =
     baseUrl.length > 0 && apiKey.length > 0 && model.length > 0 && !isTesting;
   const canSave = isDirty && !isSaving;
 
   useEffect(() => {
     setToast(null);
-  }, [baseUrl, apiKey, model, config.simulateOpencodeBeta]);
+  }, [
+    baseUrl,
+    apiKey,
+    model,
+    config.enableReasoningEffort,
+    config.reasoningEffort,
+    config.simulateOpencodeBeta,
+  ]);
 
   async function handleTestConnection() {
     if (!canTestConnection) {
@@ -225,10 +254,10 @@ export function ModelProviderCard({
   }
 
   function handleSaveCurrentAsProviderPreset() {
-    if (!baseUrl) {
+    if (!hasRequiredPresetFields(config)) {
       setToast({
         title: "保存失败",
-        description: "需要填写 Base URL",
+        description: "需要完整填写 Base URL、API Key 和 Model",
         tone: "error",
       });
       return;
@@ -248,6 +277,7 @@ export function ModelProviderCard({
     onAddProviderPreset({
       id: generateId(),
       name: extractHost(baseUrl) || baseUrl,
+      apiKey: config.apiKey,
       model,
       provider: deriveProviderFromUrl(baseUrl),
       baseURL: config.baseURL,
@@ -262,8 +292,11 @@ export function ModelProviderCard({
   }
 
   function handleApplyProviderPreset(preset: AgentProviderPreset) {
-    onChange({ baseURL: preset.baseURL });
-    void onSave();
+    onChange({
+      apiKey: preset.apiKey ?? "",
+      baseURL: preset.baseURL,
+      model: preset.model,
+    });
   }
 
   function handleApplyRecommendation(recommendation: {
@@ -273,24 +306,6 @@ export function ModelProviderCard({
     websiteUrl: string;
   }) {
     onChange({ baseURL: recommendation.baseURL });
-    const now = new Date().toISOString();
-    const alreadyExists = providerPresets.some(
-      (p) =>
-        normalizeUrlForCompare(p.baseURL) ===
-        normalizeUrlForCompare(recommendation.baseURL),
-    );
-    if (!alreadyExists) {
-      onAddProviderPreset({
-        id: generateId(),
-        name: recommendation.name,
-        model: model || recommendation.name,
-        provider: recommendation.provider,
-        baseURL: recommendation.baseURL,
-        websiteUrl: recommendation.websiteUrl,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
   }
 
   return (
@@ -419,6 +434,72 @@ export function ModelProviderCard({
               placeholder="gpt-4.1 / gpt-4o / 自定义模型名"
               value={config.model}
             />
+          </div>
+
+          <div className="lg:col-span-2 -mx-3">
+            <div className="space-y-3 border-t border-border px-3 pt-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 pr-4">
+                  <p className="text-sm font-medium text-foreground">
+                    思考模式 reasoning_effort
+                  </p>
+                </div>
+                <Switch
+                  checked={Boolean(config.enableReasoningEffort)}
+                  label="切换思考模式 reasoning_effort"
+                  onChange={(checked) =>
+                    onChange({ enableReasoningEffort: checked })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                    {reasoningEffort}
+                  </span>
+                </div>
+                <div
+                  role="group"
+                  aria-label="选择 reasoning_effort 强度"
+                  className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                >
+                  {REASONING_EFFORT_OPTIONS.map((option) => {
+                    const selected = reasoningEffort === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() =>
+                          onChange({ reasoningEffort: option.value })
+                        }
+                        className={cn(
+                          "rounded-lg border px-3 py-2 text-left transition-colors",
+                          selected
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border/70 bg-background hover:bg-accent/40",
+                        )}
+                      >
+                        <span className="block text-sm font-medium uppercase">
+                          {option.value}
+                        </span>
+                        <span
+                          className={cn(
+                            "mt-1 block text-[11px] leading-4",
+                            selected
+                              ? "text-background/80"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {option.label} · {option.description}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="lg:col-span-2 -mx-3">

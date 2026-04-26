@@ -1,6 +1,9 @@
 import { APICallError, generateText, isLoopFinished, stepCountIs, streamText, tool as defineTool } from "ai";
 import type { ModelMessage, ToolSet } from "ai";
-import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
+import {
+  normalizeReasoningEffort,
+  type AgentProviderConfig,
+} from "../../stores/agentSettingsStore";
 import type { AgentUsage } from "./types";
 import { createProvider } from "./providerRequest";
 import { probeProviderConnectionViaTauri } from "./providerApi";
@@ -67,15 +70,40 @@ type ProbeExecutionFailure = {
 
 /** 非流式文本生成（子代理等场景） */
 export async function generateAgentText({ prompt, providerConfig, system }: AgentTextGenerationInput) {
-  const provider = createProvider(providerConfig);
+  const normalizedConfig = normalizeProviderConfig(providerConfig);
+  const provider = createProvider(normalizedConfig);
 
   const { text } = await generateText({
-    model: provider(providerConfig.model),
+    model: provider(normalizedConfig.model),
     prompt,
+    providerOptions: buildProviderOptions(normalizedConfig),
     system,
   });
 
   return text;
+}
+
+function normalizeProviderConfig(providerConfig: AgentProviderConfig): AgentProviderConfig {
+  return {
+    apiKey: providerConfig.apiKey.trim(),
+    baseURL: providerConfig.baseURL.trim(),
+    model: providerConfig.model.trim(),
+    enableReasoningEffort: Boolean(providerConfig.enableReasoningEffort),
+    reasoningEffort: normalizeReasoningEffort(providerConfig.reasoningEffort),
+    simulateOpencodeBeta: Boolean(providerConfig.simulateOpencodeBeta),
+  };
+}
+
+function buildProviderOptions(providerConfig: AgentProviderConfig) {
+  if (!providerConfig.enableReasoningEffort) {
+    return undefined;
+  }
+
+  return {
+    ainovelstudioProvider: {
+      reasoningEffort: normalizeReasoningEffort(providerConfig.reasoningEffort),
+    },
+  };
 }
 
 function normalizeProbeReply(text: string) {
@@ -122,12 +150,7 @@ function extractResponseText(content?: ProbeContentPart[]) {
 }
 
 function validateProviderConfig(providerConfig: AgentProviderConfig): ProviderConfigValidationResult {
-  const normalizedConfig = {
-    apiKey: providerConfig.apiKey.trim(),
-    baseURL: providerConfig.baseURL.trim(),
-    model: providerConfig.model.trim(),
-    simulateOpencodeBeta: Boolean(providerConfig.simulateOpencodeBeta),
-  };
+  const normalizedConfig = normalizeProviderConfig(providerConfig);
 
   if (!normalizedConfig.baseURL) {
     return {
@@ -623,12 +646,14 @@ export function streamAgentText({
   system,
   tools,
 }: StreamAgentTextInput): StreamAgentTextResult {
-  const provider = createProvider(providerConfig);
+  const normalizedConfig = normalizeProviderConfig(providerConfig);
+  const provider = createProvider(normalizedConfig);
 
   const result = streamText({
     abortSignal,
-    model: provider(providerConfig.model),
+    model: provider(normalizedConfig.model),
     messages,
+    providerOptions: buildProviderOptions(normalizedConfig),
     system,
     tools,
     stopWhen: typeof maxSteps === "number" && maxSteps > 0 ? [isLoopFinished(), stepCountIs(maxSteps)] : isLoopFinished(),
@@ -637,7 +662,7 @@ export function streamAgentText({
   const usagePromise = createAbortAwareUsagePromise({
     abortSignal,
     finishReasonPromise: result.finishReason,
-    providerConfig,
+    providerConfig: normalizedConfig,
     responsePromise: result.response,
     totalUsagePromise: result.totalUsage,
   });

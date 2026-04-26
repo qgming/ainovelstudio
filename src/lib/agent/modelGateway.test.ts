@@ -110,7 +110,9 @@ describe("modelGateway", () => {
     expect(mockProbeProviderConnectionViaTauri).toHaveBeenCalledWith({
       apiKey: "sk-test",
       baseURL: "https://example.com/v1",
+      enableReasoningEffort: false,
       model: "gpt-4.1",
+      reasoningEffort: "xhigh",
       simulateOpencodeBeta: false,
     });
   });
@@ -141,6 +143,34 @@ describe("modelGateway", () => {
           "x-opencode-request": expect.stringMatching(/^msg_/),
           "x-opencode-session": expect.stringMatching(/^ses_/),
         }),
+      }),
+    );
+  });
+
+  it("启用思考模式时通过 providerOptions 注入 reasoning_effort", async () => {
+    mockGenerateText.mockResolvedValue({
+      text: "你好",
+    });
+
+    await generateAgentText({
+      prompt: "你好",
+      providerConfig: {
+        apiKey: "sk-test",
+        baseURL: "https://example.com/v1",
+        enableReasoningEffort: true,
+        model: "gpt-4.1",
+        reasoningEffort: "high",
+      },
+      system: "test-system",
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOptions: {
+          ainovelstudioProvider: {
+            reasoningEffort: "high",
+          },
+        },
       }),
     );
   });

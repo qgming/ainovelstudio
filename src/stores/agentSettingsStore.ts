@@ -17,10 +17,26 @@ import {
 
 let initializePromise: Promise<void> | null = null;
 
+export type AgentReasoningEffort = "low" | "medium" | "high" | "xhigh";
+
+export const DEFAULT_REASONING_EFFORT: AgentReasoningEffort = "xhigh";
+
+export function normalizeReasoningEffort(
+  value?: string,
+): AgentReasoningEffort {
+  if (value === "low" || value === "medium" || value === "high" || value === "xhigh") {
+    return value;
+  }
+
+  return DEFAULT_REASONING_EFFORT;
+}
+
 export type AgentProviderConfig = {
   apiKey: string;
   baseURL: string;
   model: string;
+  enableReasoningEffort?: boolean;
+  reasoningEffort?: AgentReasoningEffort;
   simulateOpencodeBeta?: boolean;
 };
 
@@ -59,6 +75,8 @@ function getDefaultConfig(): AgentProviderConfig {
     apiKey: "",
     baseURL: "",
     model: "",
+    enableReasoningEffort: false,
+    reasoningEffort: DEFAULT_REASONING_EFFORT,
     simulateOpencodeBeta: false,
   };
 }
@@ -84,6 +102,30 @@ function readState(): AgentSettingsState {
   return getDefaultState();
 }
 
+function normalizeProviderConfig(
+  config?: Partial<AgentProviderConfig>,
+): AgentProviderConfig {
+  return {
+    ...getDefaultConfig(),
+    ...config,
+    apiKey: config?.apiKey?.trim() ?? "",
+    baseURL: config?.baseURL?.trim() ?? "",
+    model: config?.model?.trim() ?? "",
+    enableReasoningEffort: Boolean(config?.enableReasoningEffort),
+    reasoningEffort: normalizeReasoningEffort(config?.reasoningEffort),
+    simulateOpencodeBeta: Boolean(config?.simulateOpencodeBeta),
+  };
+}
+
+function normalizeProviderPreset(preset: AgentProviderPreset): AgentProviderPreset {
+  return {
+    ...preset,
+    apiKey: preset.apiKey ?? "",
+    baseURL: preset.baseURL ?? "",
+    model: preset.model ?? "",
+  };
+}
+
 async function loadPersistedAgentSettings() {
   const persisted = await readAgentSettings();
   if (!persisted) {
@@ -92,9 +134,9 @@ async function loadPersistedAgentSettings() {
 
   const defaults = getDefaultState();
   return {
-    config: { ...defaults.config, ...persisted.config },
+    config: normalizeProviderConfig({ ...defaults.config, ...persisted.config }),
     enabledTools: migrateEnabledTools(persisted.enabledTools),
-    providerPresets: persisted.providerPresets ?? [],
+    providerPresets: (persisted.providerPresets ?? []).map(normalizeProviderPreset),
     modelConfigPresets: persisted.modelConfigPresets ?? [],
   };
 }
@@ -238,11 +280,12 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
     }),
   saveConfig: async (config) => {
     const s = get();
-    const nextState = { config, enabledTools: s.enabledTools, providerPresets: s.providerPresets, modelConfigPresets: s.modelConfigPresets };
+    const normalizedConfig = normalizeProviderConfig(config);
+    const nextState = { config: normalizedConfig, enabledTools: s.enabledTools, providerPresets: s.providerPresets, modelConfigPresets: s.modelConfigPresets };
     await persistAgentSettings(nextState);
     set((state) => ({
       ...state,
-      config,
+      config: normalizedConfig,
       errorMessage: null,
     }));
   },
@@ -260,7 +303,7 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
     }),
   updateConfig: (nextConfig) =>
     set((state) => {
-      const config = { ...state.config, ...nextConfig };
+      const config = normalizeProviderConfig({ ...state.config, ...nextConfig });
       const nextState = { config, enabledTools: state.enabledTools, providerPresets: state.providerPresets, modelConfigPresets: state.modelConfigPresets };
       persistAgentSettingsInBackground(nextState, (message) => {
         set((current) => ({ ...current, errorMessage: message }));
