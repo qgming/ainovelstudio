@@ -16,7 +16,7 @@
   <a href="https://github.com/qgming/ainovelstudio">
     <img src="https://img.shields.io/github/stars/qgming/ainovelstudio?style=for-the-badge&logo=github&label=Stars" alt="GitHub Stars" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.2.2-111827?style=for-the-badge" alt="Version 0.2.2" />
+  <img src="https://img.shields.io/badge/Version-0.2.3-111827?style=for-the-badge" alt="Version 0.2.3" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 

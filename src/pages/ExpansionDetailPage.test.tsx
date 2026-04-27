@@ -2,15 +2,89 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../components/ui/tooltip";
+import { ExpansionDetailPage } from "./ExpansionDetailPage";
 import {
-  buildBatchOutlinePrompt,
-  buildBatchSettingsPrompt,
-  buildChapterSettingUpdatePrompt,
-  buildChapterWritePrompt,
-  buildFreeInputPrompt,
-  buildSettingUpdatePrompt,
-  ExpansionDetailPage,
-} from "./ExpansionDetailPage";
+  composePrompt,
+  DEFAULT_PROMPT_BODIES,
+} from "../lib/expansion/promptTemplates";
+
+function buildBatchOutlinePrompt(params: {
+  currentFilePath: string | null;
+  targetLabel: string;
+  targetVolumeEntries: ReadonlyArray<{ entryId?: string | null; name: string; path: string }>;
+  targetVolumeId: string;
+}) {
+  const targetVolumeSnapshot =
+    params.targetVolumeEntries.length > 0
+      ? params.targetVolumeEntries
+          .map(
+            (entry) =>
+              `- ${entry.entryId ? `第${entry.entryId}章` : entry.path}｜${entry.name}｜chapters/${entry.path}`,
+          )
+          .join("\n")
+      : "（当前分卷还没有现有细纲文件）";
+  return composePrompt(
+    "project-batch-outline",
+    DEFAULT_PROMPT_BODIES["project-batch-outline"],
+    {
+      currentFilePath: params.currentFilePath,
+      targetLabel: params.targetLabel,
+      targetVolumeId: params.targetVolumeId,
+      targetVolumeLabel: `第${Number.parseInt(params.targetVolumeId, 10)}卷`,
+      targetVolumeSnapshot,
+    },
+  );
+}
+
+function buildBatchSettingsPrompt(params: { currentFilePath: string | null; targetLabel: string }) {
+  return composePrompt(
+    "project-batch-settings",
+    DEFAULT_PROMPT_BODIES["project-batch-settings"],
+    { currentFilePath: params.currentFilePath, targetLabel: params.targetLabel },
+  );
+}
+
+function buildSettingUpdatePrompt(params: { currentFilePath: string | null; targetLabel: string }) {
+  return composePrompt("setting-update", DEFAULT_PROMPT_BODIES["setting-update"], {
+    currentFilePath: params.currentFilePath,
+    targetLabel: params.targetLabel,
+  });
+}
+
+function buildChapterWritePrompt(params: {
+  currentFilePath: string | null;
+  currentOutline: string;
+  targetLabel: string;
+}) {
+  return composePrompt("chapter-write", DEFAULT_PROMPT_BODIES["chapter-write"], {
+    currentFilePath: params.currentFilePath,
+    currentOutline: params.currentOutline,
+    targetLabel: params.targetLabel,
+  });
+}
+
+function buildChapterSettingUpdatePrompt(params: {
+  currentFilePath: string | null;
+  targetLabel: string;
+}) {
+  return composePrompt(
+    "chapter-setting-update",
+    DEFAULT_PROMPT_BODIES["chapter-setting-update"],
+    { currentFilePath: params.currentFilePath, targetLabel: params.targetLabel },
+  );
+}
+
+function buildFreeInputPrompt(params: {
+  currentFilePath: string | null;
+  targetLabel: string;
+  userPrompt: string;
+}) {
+  return composePrompt("free-input", DEFAULT_PROMPT_BODIES["free-input"], {
+    currentFilePath: params.currentFilePath,
+    targetLabel: params.targetLabel,
+    userPrompt: params.userPrompt,
+  });
+}
 
 const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),

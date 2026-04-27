@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Eraser,
   GitBranch,
+  Pencil,
   PenLine,
   RefreshCcw,
   TextSearch,
@@ -37,6 +38,8 @@ export type ExpansionWorkspaceActionButton = {
   id: ExpansionWorkspaceActionId;
   label: string;
   onClick: () => void;
+  onEditTemplate?: () => void;
+  templateCustomized?: boolean;
 };
 
 type ExpansionWorkspacePanelProps = {
@@ -56,6 +59,8 @@ type WorkspaceActionButtonProps = {
   icon: ComponentType<{ className?: string }>;
   label: string;
   onClick: () => void;
+  onEditTemplate?: () => void;
+  templateCustomized?: boolean;
 };
 
 function getActionIcon(actionId: ExpansionWorkspaceActionId): ComponentType<{ className?: string }> {
@@ -82,20 +87,50 @@ function WorkspaceActionButton({
   icon: Icon,
   label,
   onClick,
+  onEditTemplate,
+  templateCustomized = false,
 }: WorkspaceActionButtonProps) {
   return (
-    <Button
-      type="button"
-      variant={active ? "default" : "outline"}
-      onClick={onClick}
-      className={cn(
-        "h-10 justify-start gap-2 rounded-md px-3 text-sm",
-        active ? "shadow-none" : "bg-background/80",
-      )}
-    >
-      <Icon className="h-4 w-4" />
-      <span>{label}</span>
-    </Button>
+    <div className="flex items-stretch gap-1.5">
+      <Button
+        type="button"
+        variant={active ? "default" : "outline"}
+        onClick={onClick}
+        className={cn(
+          "h-10 flex-1 justify-start gap-2 rounded-md px-3 text-sm",
+          active ? "shadow-none" : "bg-background/80",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+        <span>{label}</span>
+      </Button>
+      {onEditTemplate ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={onEditTemplate}
+          aria-label={`编辑「${label}」提示词模板`}
+          title={
+            templateCustomized
+              ? `编辑「${label}」提示词模板（已自定义）`
+              : `编辑「${label}」提示词模板`
+          }
+          className={cn(
+            "relative h-10 w-10 shrink-0 rounded-md bg-background/80 text-muted-foreground hover:text-foreground",
+            templateCustomized && "text-amber-600 hover:text-amber-700",
+          )}
+        >
+          <Pencil className="h-4 w-4" />
+          {templateCustomized ? (
+            <span
+              aria-hidden="true"
+              className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500"
+            />
+          ) : null}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -160,6 +195,8 @@ export function ExpansionWorkspacePanel({
                       icon={Icon}
                       label={action.label}
                       onClick={action.onClick}
+                      onEditTemplate={action.onEditTemplate}
+                      templateCustomized={action.templateCustomized}
                     />
                   );
                 })}

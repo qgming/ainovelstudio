@@ -102,3 +102,34 @@ export function importExpansionZip(fileName: string, archiveBytes: number[]) {
     archiveBytes,
   });
 }
+
+export type ExpansionPromptTemplateItem = {
+  actionId: string;
+  template: string;
+  updatedAt: number;
+};
+
+export function listExpansionPromptTemplates(workspaceId: string) {
+  return invoke<ExpansionPromptTemplateItem[]>("list_expansion_prompt_templates", {
+    workspaceId,
+  });
+}
+
+export function saveExpansionPromptTemplate(
+  workspaceId: string,
+  actionId: string,
+  template: string,
+) {
+  return invoke<ExpansionPromptTemplateItem>("save_expansion_prompt_template", {
+    workspaceId,
+    actionId,
+    template,
+  });
+}
+
+export function resetExpansionPromptTemplate(workspaceId: string, actionId: string) {
+  return invoke<void>("reset_expansion_prompt_template", {
+    workspaceId,
+    actionId,
+  });
+}

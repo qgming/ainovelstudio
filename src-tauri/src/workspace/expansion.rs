@@ -134,10 +134,29 @@ pub(crate) fn run_expansion_migrations(connection: &Connection) -> CommandResult
 
             CREATE INDEX IF NOT EXISTS idx_expansion_entries_section
             ON expansion_entries(workspace_id, section);
+
+            -- 扩写模式：每个工作区每个 action 的自定义提示词模板
+            -- 仅保存被用户改过的模板；未命中时前端使用代码内置默认值
+            CREATE TABLE IF NOT EXISTS expansion_prompt_templates (
+                workspace_id TEXT NOT NULL,
+                action_id TEXT NOT NULL,
+                template TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(workspace_id, action_id),
+                FOREIGN KEY(workspace_id) REFERENCES expansion_workspaces(id) ON DELETE CASCADE
+            );
             "#,
         )
         .map_err(error_to_string)?;
     Ok(())
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpansionPromptTemplateItem {
+    action_id: String,
+    template: String,
+    updated_at: u64,
 }
 
 // ---- project 默认模板 ----
@@ -1209,6 +1228,87 @@ pub fn import_expansion_zip(
 
         touch_workspace(transaction, &record.id, timestamp)?;
         Ok(build_summary(&record))
+    })
+}
+
+// ---- 提示词模板（按 workspaceId + actionId 隔离） ----
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn list_expansion_prompt_templates(
+    app: AppHandle,
+    workspaceId: String,
+) -> CommandResult<Vec<ExpansionPromptTemplateItem>> {
+    let connection = open_database(&app)?;
+    let mut statement = connection
+        .prepare(
+            "SELECT action_id, template, updated_at FROM expansion_prompt_templates WHERE workspace_id = ?1",
+        )
+        .map_err(error_to_string)?;
+    let rows = statement
+        .query_map(params![workspaceId], |row| {
+            Ok(ExpansionPromptTemplateItem {
+                action_id: row.get(0)?,
+                template: row.get(1)?,
+                updated_at: row.get::<_, i64>(2)? as u64,
+            })
+        })
+        .map_err(error_to_string)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(error_to_string)?;
+    Ok(rows)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn save_expansion_prompt_template(
+    app: AppHandle,
+    workspaceId: String,
+    actionId: String,
+    template: String,
+) -> CommandResult<ExpansionPromptTemplateItem> {
+    let trimmed_action = actionId.trim().to_string();
+    if trimmed_action.is_empty() {
+        return Err("actionId 不能为空。".into());
+    }
+    with_transaction(&app, |transaction| {
+        let _ = load_workspace_by_id(transaction, &workspaceId)?;
+        let timestamp = now_timestamp();
+        transaction
+            .execute(
+                r#"
+                INSERT INTO expansion_prompt_templates (workspace_id, action_id, template, updated_at)
+                VALUES (?1, ?2, ?3, ?4)
+                ON CONFLICT(workspace_id, action_id) DO UPDATE SET
+                    template = excluded.template,
+                    updated_at = excluded.updated_at
+                "#,
+                params![workspaceId, trimmed_action, template, timestamp as i64],
+            )
+            .map_err(error_to_string)?;
+        Ok(ExpansionPromptTemplateItem {
+            action_id: trimmed_action,
+            template,
+            updated_at: timestamp,
+        })
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn reset_expansion_prompt_template(
+    app: AppHandle,
+    workspaceId: String,
+    actionId: String,
+) -> CommandResult<()> {
+    with_transaction(&app, |transaction| {
+        transaction
+            .execute(
+                "DELETE FROM expansion_prompt_templates WHERE workspace_id = ?1 AND action_id = ?2",
+                params![workspaceId, actionId],
+            )
+            .map_err(error_to_string)?;
+        Ok(())
     })
 }
 
