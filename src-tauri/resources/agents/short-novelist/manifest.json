@@ -1,0 +1,11 @@
+{
+  "id": "short-novelist",
+  "name": "短篇作者",
+  "description": "短篇网文作者，负责短篇小说的题材锁定、故事蓝图、整本成稿，专注情绪拉扯与反转设计。",
+  "role": "短篇",
+  "dispatchHint": "当用户要求写短篇、写盐言故事、写番茄短篇、做短篇构思、设计反转、写女频情感短篇，或项目处于短篇创作阶段时优先委派。",
+  "tags": ["短篇作者", "盐言故事", "番茄短篇", "短篇构思", "反转设计", "情绪拉扯", "女频写作", "短篇成稿", "微小说", "情绪文"],
+  "suggestedTools": ["todo", "browse", "search", "read", "write", "edit", "path", "word_count", "json", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

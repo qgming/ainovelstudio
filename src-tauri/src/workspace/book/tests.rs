@@ -42,9 +42,13 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(project_agents.contains("# 北境余烬 工作区 AGENTS"));
     assert!(project_agents.contains(".project/README.md"));
     assert!(project_agents.contains(".project/status/project-state.json"));
-    assert!(project_agents.contains(".project/MEMORY/"));
-    assert!(project_agents.contains("## 文件分工与回写要求"));
-    assert!(project_agents.contains("03_规划/"));
+    assert!(project_agents.contains(".project/status/system-state.json"));
+    assert!(project_agents.contains(".project/status/continuity-index.json"));
+    assert!(project_agents.contains(".project/MEMORY/README.md"));
+    assert!(project_agents.contains("## 文件命名规则"));
+    assert!(project_agents.contains("正文/第001章_章名.md"));
+    assert!(project_agents.contains("大纲/细纲_第001章.md"));
+    assert!(project_agents.contains("设定/世界观/"));
 
     let project_readme = read_text_file_db(
         &connection,
@@ -56,7 +60,19 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(project_readme.contains("剧情梗概（100 字左右）"));
     assert!(project_readme.contains("## 写作风格"));
     assert!(project_readme.contains("主角目标"));
-    assert!(project_readme.contains("章节规划.md"));
+    assert!(project_readme.contains("大纲/细纲_第001章.md"));
+    assert!(project_readme.contains("正文/第001章_章名.md"));
+
+    let memory_readme = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/北境余烬/.project/MEMORY/README.md",
+    )
+    .expect("memory README should load");
+    assert!(memory_readme.contains("# 北境余烬 MEMORY 说明"));
+    assert!(memory_readme.contains("AI 自建记忆流程"));
+    assert!(memory_readme.contains("continuity.md"));
+    assert!(memory_readme.contains("当前记忆索引"));
 
     let project_status = read_text_file_db(
         &connection,
@@ -65,18 +81,30 @@ fn create_book_workspace_db_builds_template_tree() {
     )
     .expect("project status should load");
     assert!(project_status.contains("\"bookName\": \"北境余烬\""));
+    assert!(project_status.contains("\"workspaceVersion\": 2"));
     assert!(project_status.contains("\"projectMemory\": \".project/MEMORY\""));
     assert!(project_status.contains("\"projectStatus\": \".project/status\""));
-    assert!(project_status.contains("\"planning\": \"03_规划\""));
-    assert!(project_status.contains("\"projectReadme\": \".project/README.md\""));
-    assert!(project_status.contains("\"latestPlot\": \".project/status/latest-plot.json\""));
-    assert!(project_status.contains("\"characterState\": \".project/status/character-state.json\""));
-    assert!(project_status.contains("\"plotSynopsis100\""));
-    assert!(project_status.contains("\"protagonistGoal\""));
-    assert!(project_status.contains("\"writingStyle\""));
-    assert!(project_status.contains("\"chapterPlan\": \"03_规划/章节规划.md\""));
-    assert!(project_status.contains("latest-plot.json"));
-    assert!(project_status.contains("character-state.json"));
+    assert!(project_status.contains("\"outline\": \"大纲\""));
+    assert!(project_status.contains("\"draft\": \"正文\""));
+    assert!(project_status.contains("\"worldbuilding\": \"设定/世界观\""));
+    assert!(project_status.contains("\"characters\": \"设定/角色\""));
+    assert!(project_status.contains("\"factions\": \"设定/势力\""));
+    assert!(project_status.contains("\"systemState\": \".project/status/system-state.json\""));
+    assert!(project_status.contains("\"continuityIndex\": \".project/status/continuity-index.json\""));
+    assert!(project_status.contains("\"memoryGuide\": \".project/MEMORY/README.md\""));
+    assert!(project_status.contains("\"chapterDraft\": \"正文/第001章_章名.md\""));
+    assert!(project_status.contains("\"chapterPlan\": \"大纲/细纲_第001章.md\""));
+    assert!(project_status.contains("\"firstChapter\": \"正文/第001章_章名.md\""));
+
+    let system_state = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/北境余烬/.project/status/system-state.json",
+    )
+    .expect("system state should load");
+    assert!(system_state.contains("\"bookName\": \"北境余烬\""));
+    assert!(system_state.contains("\"currentPhase\": \"构思中\""));
+    assert!(system_state.contains("\"activeFiles\": []"));
 
     let latest_plot = read_text_file_db(
         &connection,
@@ -87,6 +115,7 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(latest_plot.contains("\"bookName\": \"北境余烬\""));
     assert!(latest_plot.contains("\"activeConflicts\": []"));
     assert!(latest_plot.contains("\"openThreads\": []"));
+    assert!(latest_plot.contains("\"recentChapters\": []"));
 
     let character_state = read_text_file_db(
         &connection,
@@ -97,39 +126,75 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(character_state.contains("\"bookName\": \"北境余烬\""));
     assert!(character_state.contains("\"characters\": {}"));
 
+    let continuity_index = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/北境余烬/.project/status/continuity-index.json",
+    )
+    .expect("continuity index should load");
+    assert!(continuity_index.contains("\"bookName\": \"北境余烬\""));
+    assert!(continuity_index.contains("\"foreshadowing\": []"));
+    assert!(continuity_index.contains("\"continuityRisks\": []"));
+    assert!(continuity_index.contains("\"canonRefs\""));
+
     let children = tree.children.expect("tree should contain children");
     let child_names = children
         .iter()
         .map(|child| child.name.clone())
         .collect::<Vec<_>>();
     let project_node = children
-        .into_iter()
+        .iter()
         .find(|child| child.name == ".project")
         .expect(".project should exist");
     let project_children = project_node
         .children
+        .clone()
         .expect(".project should contain children");
     let project_child_names = project_children
         .iter()
         .map(|child| child.name.clone())
         .collect::<Vec<_>>();
-    assert_eq!(project_child_names, vec!["MEMORY", "status", "AGENTS.md", "README.md"]);
+    assert_eq!(
+        project_child_names,
+        vec!["MEMORY", "status", "AGENTS.md", "README.md"]
+    );
 
     let status_child_names = project_children
-        .into_iter()
+        .iter()
         .find(|child| child.name == "status")
         .expect("status should exist")
         .children
+        .clone()
         .expect("status should contain children")
         .into_iter()
         .map(|child| child.name)
         .collect::<Vec<_>>();
     assert_eq!(
         status_child_names,
-        vec!["character-state.json", "latest-plot.json", "project-state.json"]
+        vec![
+            "character-state.json",
+            "continuity-index.json",
+            "latest-plot.json",
+            "project-state.json",
+            "system-state.json"
+        ]
     );
 
-    assert_eq!(child_names, vec![".project", "01_设定", "02_正文", "03_规划"]);
+    let memory_child_names = project_children
+        .into_iter()
+        .find(|child| child.name == "MEMORY")
+        .expect("MEMORY should exist")
+        .children
+        .expect("MEMORY should contain children")
+        .into_iter()
+        .map(|child| child.name)
+        .collect::<Vec<_>>();
+    assert_eq!(memory_child_names, vec!["README.md"]);
+
+    assert_eq!(
+        child_names,
+        vec![".project", "设定", "大纲", "正文"]
+    );
 }
 
 #[test]
@@ -158,16 +223,16 @@ fn workspace_operations_use_sqlite_storage() {
         &transaction,
         &book.root_path,
         "books/星河回声/草稿/序章.md",
-        "books/星河回声/02_正文",
+        "books/星河回声/正文",
     )
     .expect("file should move");
-    assert_eq!(final_path, "books/星河回声/02_正文/序章.md");
+    assert_eq!(final_path, "books/星河回声/正文/序章.md");
 
     delete_workspace_entry_db(&transaction, &book.root_path, "books/星河回声/草稿")
         .expect("empty draft directory should delete");
     transaction.commit().expect("transaction should commit");
 
-    let contents = read_text_file_db(&connection, &book.root_path, "books/星河回声/02_正文/序章.md")
+    let contents = read_text_file_db(&connection, &book.root_path, "books/星河回声/正文/序章.md")
         .expect("moved file should be readable");
     assert_eq!(contents, "第一行\n第二行");
 }
@@ -195,5 +260,5 @@ fn import_and_export_zip_roundtrip() {
         .into_iter()
         .map(|child| child.name)
         .collect::<Vec<_>>();
-    assert_eq!(child_names, vec![".project", "01_设定", "02_正文", "03_规划"]);
+    assert_eq!(child_names, vec![".project", "设定", "大纲", "正文"]);
 }

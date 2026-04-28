@@ -1,0 +1,11 @@
+{
+  "id": "story-analyst",
+  "name": "拆文分析",
+  "description": "拆文分析师，负责拆解爆款长短篇的黄金三章、节奏曲线、爽点设计、反转技巧，输出可复用的拆解报告。",
+  "role": "拆文",
+  "dispatchHint": "当用户要求拆书、拆爆款、分析对标书、研究黄金三章、剖析情绪曲线、做对标拆解、输出拆解报告，或项目处于学习参考阶段时优先委派。",
+  "tags": ["拆文分析", "拆爆款", "黄金三章", "情绪曲线", "对标书", "节奏分析", "反转拆解", "钩子拆解", "结构拆解", "学习参考"],
+  "suggestedTools": ["todo", "browse", "search", "read", "web_search", "web_fetch", "write", "path", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

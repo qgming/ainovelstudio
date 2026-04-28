@@ -1,0 +1,11 @@
+{
+  "id": "manuscript-polisher",
+  "name": "终稿编辑",
+  "description": "终稿编辑，负责章节质量检查、去 AI 味、文风统一、终稿润色与发布整理，兼任质检与润稿双职能。",
+  "role": "终稿",
+  "dispatchHint": "当用户要求审稿、检查章节质量、去 AI 味、统一文风、整理发布稿、写简介标签、整理工厂索引，或项目进入终稿与发布阶段时优先委派。",
+  "tags": ["终稿编辑", "审稿", "质量检查", "去AI味", "文风统一", "终稿润色", "发布整理", "简介标签", "工厂索引", "可发布质检"],
+  "suggestedTools": ["todo", "browse", "search", "read", "edit", "write", "json", "path", "word_count", "skill", "workflow_decision"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

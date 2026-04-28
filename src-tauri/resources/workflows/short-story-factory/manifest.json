@@ -1,0 +1,19 @@
+{
+  "id": "short-story-factory",
+  "name": "短篇集创作",
+  "description": "面向短篇集批量生产的模板，每轮生成一篇全新独立短篇并完成终审与发布整理。",
+  "version": "1.0.0",
+  "author": "builtin",
+  "tags": [
+    "工作流",
+    "短篇集",
+    "批量生产",
+    "番茄短篇",
+    "盐言故事",
+    "独立短篇",
+    "工厂模式",
+    "可发布"
+  ],
+  "entry": "WORKFLOW.json",
+  "schemaVersion": 1
+}

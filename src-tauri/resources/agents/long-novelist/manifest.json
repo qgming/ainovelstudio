@@ -1,0 +1,11 @@
+{
+  "id": "long-novelist",
+  "name": "长篇作者",
+  "description": "长篇网文作者，负责长篇小说的开书立项、卷纲细纲、人物世界观、章节落稿与连载推进，全流程闭环。",
+  "role": "长篇",
+  "dispatchHint": "当用户要求开书、写长篇、搭长篇大纲、做长篇人设、写长篇正文、续写章节、推进连载，或项目处于长篇创作阶段时优先委派。",
+  "tags": ["长篇作者", "开书", "写大纲", "卷纲", "细纲", "长篇人设", "长篇正文", "续写章节", "连载推进", "网文长篇"],
+  "suggestedTools": ["todo", "task", "browse", "search", "read", "write", "edit", "path", "word_count", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

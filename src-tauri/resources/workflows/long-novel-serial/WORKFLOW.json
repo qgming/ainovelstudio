@@ -1,0 +1,109 @@
+{
+  "templateKey": "builtin:long-novel-serial",
+  "name": "长篇连载续写",
+  "description": "面向 100 万字以上长篇网文连载的高频续写工作流，每轮自动推进一章：章节规划 → 正文成稿 → 质量检查 → 连续性回写 → 终稿润色。",
+  "basePrompt": "直接使用当前内置编辑链完成长篇网文连载续写。核心目标只有一个：持续把绑定书籍工作区中的长篇小说稳定往后写，而不是反复做重型前期准备。所有节点都以当前绑定书籍工作区中的文件为长期事实源，先读文件，再决定创建、更新、维护哪些文件。必须优先遵循用户在工作流里设置的主提示词，包括题材、受众、主卖点、情绪基调、平台风格、禁用元素和篇幅方向。每一轮默认只推进一个当前最该写的章节：先确定本轮目标，再做单章规划，随后成稿、质检，质检通过后做连续性回写与终稿润色。新章创作默认优先读取已有正文、必要设定和状态文件；旧章节规划缺失时只要不影响当前章承接，就直接继续，不要回头补历史材料。除非出现明显结构断链，否则不要把大量时间消耗在全书大纲重做、全量设定重抄或逐章精修上；优先保证可持续续写、稳定更新、章末钩子和平台追读节奏。",
+  "loopConfig": {
+    "maxLoops": 50
+  },
+  "teamMembers": [
+    {
+      "key": "novelist-plan",
+      "agentId": "long-novelist",
+      "name": "章节规划",
+      "roleLabel": "章节规划",
+      "responsibilityPrompt": "以长篇作者身份做单章规划。先读取主提示词、`.project/status/project-state.json`、`.project/MEMORY/` 中相关全书方向与卷纲、最近 2-4 章正文、最近一次审稿结论，再判断这一轮最该续写哪一章。然后围绕当前目标章节，优先读取上一章正文、最近相关正文、必要设定和 `.project/status/` 状态文件，把这一章整理成可直接落稿的章节规划。若项目里缺少旧章节规划或历史拆章记录，只要已有正文和设定足够支撑当前章承接，就直接继续，不要为了补历史规划而中断新章推进。重点输出本章作用、前情承接、本章核心冲突、关键场景顺序、升级点、情绪拉扯、信息释放、章末钩子和需要避开的逻辑坑。若当前章节依赖的小设定缺口会直接拖慢写作，请只补这一章真正需要的最小文件，不做重型建档。"
+    },
+    {
+      "key": "novelist-draft",
+      "agentId": "long-novelist",
+      "name": "正文续写",
+      "roleLabel": "正文续写",
+      "responsibilityPrompt": "以长篇作者身份完成本章正文。读取本轮章节规划、直接前文、必要设定、`.project/status/` 下最新状态文件和 revision_brief，完成当前章节正文。若历史章节规划缺失，以已有正文和设定事实为准继续当前章节，不要为了补旧规划而停下新内容创作。你的目标是稳定产出能继续连载的章节，不要误写下一章，不要在正文里夹带分析。优先强开头承接、持续冲突、明确爽点或情绪回报、自然信息释放和有追读驱动力的章末。返修时只处理当前章节及其直接相关文件。"
+    },
+    {
+      "key": "polisher-review",
+      "agentId": "manuscript-polisher",
+      "name": "质量检查",
+      "roleLabel": "质量检查",
+      "responsibilityPrompt": "以终稿编辑的质检角色工作（不要做润色）。读取最新章节、相关卷纲、必要设定、`.project/status/` 状态文件和直接前文，按长篇连载标准检查承接是否顺、冲突是否够、信息是否清、爽点或情绪点是否落地、章末钩子是否能拉追更。最终必须使用 workflow_decision 提交 pass、issues、revision_brief。revision_brief 必须具体到当前章节的返修动作，优先指出真正影响追读和连续性的高价值问题。"
+    },
+    {
+      "key": "continuity",
+      "agentId": "continuity-keeper",
+      "name": "连续性回写",
+      "roleLabel": "连续性回写",
+      "responsibilityPrompt": "读取已通过审稿的最新章节、必要设定文件、时间线和 `.project/status/` 动态状态文件，把本章新增事实同步回长期连续性资产。优先更新 `.project/status/` 下的 latest-plot、character-state、system-state、continuity-index，并把长线说明、时间线和索引补充到 `.project/MEMORY/continuity/`。只维护真正影响后续续写的文件，避免做与当前推进无关的大规模资料整理。"
+    },
+    {
+      "key": "polisher-final",
+      "agentId": "manuscript-polisher",
+      "name": "终稿润色",
+      "roleLabel": "终稿润色",
+      "responsibilityPrompt": "以终稿编辑的润色角色工作（不要再质检）。读取已通过质检的当前章节正文与主提示词，按 deslop 三遍法清理 AI 味、统一文风、修整冗余。严守作者风格，最小修改原则，只动当前章节，不顺手改其他文件。完成后简要汇报本轮改了哪些段落与典型 AI 味词。"
+    }
+  ],
+  "steps": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "开始",
+      "nextStepKey": "chapter-plan"
+    },
+    {
+      "key": "chapter-plan",
+      "type": "agent_task",
+      "name": "章节规划",
+      "memberKey": "novelist-plan",
+      "promptTemplate": "请先读取主提示词、`.project/status/project-state.json`、`.project/MEMORY/` 中相关全书方向与卷纲、最近 2-4 章正文、最近一次审稿结论，再判断这一轮最该推进哪一章。然后围绕这一章，优先读取上一章正文、最近相关正文、必要设定和 `.project/status/` 状态文件，整理成可直接落稿的章节规划。若项目里缺少旧章节规划或历史拆章记录，只要已有正文和设定足够支撑当前章承接，就直接继续，不要为了补历史规划而停下新章创作。重点写清本章作用、前情承接、核心冲突、关键场景顺序、升级点、信息释放、情绪节奏、章末钩子和需要避开的坑。若只缺一个会直接影响本章落稿的小文件，请顺手补齐。正文只需简短汇报本轮章节规划结果和主要改动文件，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "draft-chapter"
+    },
+    {
+      "key": "draft-chapter",
+      "type": "agent_task",
+      "name": "正文续写",
+      "memberKey": "novelist-draft",
+      "promptTemplate": "请读取当前章节规划、直接前文、必要设定、`.project/status/` 下最新状态文件和 revision_brief，完成当前章节正文。若历史章节规划缺失，以已有正文和设定事实为准继续当前章节，不要为了补旧规划而停下新内容创作。优先保证长篇的承接、冲突、爽点或情绪回报、节奏推进和章末追读驱动力。若收到 revision_brief，请只返修当前章节及其直接相关文件，不要推进下一章。正文只需简短说明本轮写了哪些文件、是否还有待注意风险，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "review-chapter"
+    },
+    {
+      "key": "review-chapter",
+      "type": "decision",
+      "name": "质量检查",
+      "memberKey": "polisher-review",
+      "promptTemplate": "请读取最新章节、相关卷纲、必要设定、`.project/status/` 状态文件和直接前文，按长篇连载标准检查承接、冲突密度、信息清晰度、人物一致性、连续性和章末钩子力度。最终使用 workflow_decision 提交 pass、reason、issues、revision_brief。若不通过，请把 revision_brief 写成当前章节可直接执行的返修单，优先列高价值问题。正文只需简短说明判断结论，不要严格输出 JSON。",
+      "sourceStepKey": "draft-chapter",
+      "trueNextStepKey": "update-continuity",
+      "falseNextStepKey": "draft-chapter"
+    },
+    {
+      "key": "update-continuity",
+      "type": "agent_task",
+      "name": "连续性回写",
+      "memberKey": "continuity",
+      "promptTemplate": "请读取已通过质检的最新章节、必要设定文件、时间线和 `.project/status/` 动态状态文件，把本章新增事实同步回长期连续性资产。优先更新 `.project/status/` 下的 latest-plot、character-state、system-state、continuity-index，并把时间线和直接影响后续续写的索引补充到 `.project/MEMORY/continuity/`。正文只需简短汇报本轮回写了哪些关键文件，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "polish-final"
+    },
+    {
+      "key": "polish-final",
+      "type": "agent_task",
+      "name": "终稿润色",
+      "memberKey": "polisher-final",
+      "promptTemplate": "请以润色角色对当前已通过质检的章节正文做最后一轮整理。读取当前章节正文与主提示词，按 deslop 三遍法清理 AI 味、统一文风、修整冗余。严守作者风格，最小修改原则，只动当前章节，不顺手改其他文件。正文只需简短说明本轮改了哪些段落与典型 AI 味词，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "success-end"
+    },
+    {
+      "key": "success-end",
+      "type": "end",
+      "name": "成功结束",
+      "stopReason": "completed",
+      "summaryTemplate": "本轮已完成一次长篇续写：目标章节经过章节规划、正文成稿、质量检查、连续性回写与终稿润色，工作流将按循环配置继续推进下一章。",
+      "loopBehavior": "continue_if_possible",
+      "loopTargetStepKey": "start"
+    }
+  ]
+}

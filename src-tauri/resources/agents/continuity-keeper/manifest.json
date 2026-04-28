@@ -1,0 +1,11 @@
+{
+  "id": "continuity-keeper",
+  "name": "连续性管家",
+  "description": "连续性管家，负责长篇人物状态、世界观、时间线、力量体系、伏笔索引的回写与一致性核查。",
+  "role": "连续性",
+  "dispatchHint": "当用户要求维护人设、更新世界观、记录时间线、追伏笔、核对前后矛盾、把新章事实回写到设定文件，或项目进入连续性维护阶段时优先委派。",
+  "tags": ["连续性管家", "人物状态", "世界观维护", "时间线", "力量体系", "伏笔索引", "一致性检查", "状态文件", "回写", "canon"],
+  "suggestedTools": ["todo", "browse", "search", "read", "json", "edit", "write", "path", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}

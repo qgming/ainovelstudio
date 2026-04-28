@@ -1,0 +1,10 @@
+{
+  "id": "market-research-cycle",
+  "name": "题材调研拆文",
+  "description": "面向选题前期的市场调研工作流：扫榜 → 拆爆款 → 输出可立项的选题简报，一次跑完一轮调研。",
+  "version": "1.0.0",
+  "author": "builtin",
+  "tags": ["工作流", "市场调研", "扫榜", "拆爆款", "选题立项", "对标书", "调研简报", "一次性循环"],
+  "entry": "WORKFLOW.json",
+  "schemaVersion": 1
+}

@@ -1,0 +1,75 @@
+{
+  "templateKey": "builtin:market-research-cycle",
+  "name": "题材调研拆文",
+  "description": "面向选题前期的市场调研工作流：扫榜锁定方向 → 拆解对标爆款 → 输出可立项的选题简报。一次循环完成一轮调研。",
+  "basePrompt": "直接使用当前内置市场调研链产出可立项的选题简报。当前绑定工作区视为'调研根目录'。每一轮的目标是：从市场扫描出发，锁定一个或几个可写题材方向，再对其中最值得追的方向拆 1-2 本对标爆款，最后整合成一份可以直接进入立项阶段的选题简报。所有节点都先读文件，再决定创建、更新、维护哪些文件。必须优先遵循用户在工作流里设置的主提示词，包括目标体裁（长篇 / 短篇）、目标平台、想要的卖点方向、禁写范围。本工作流默认只跑 1 轮：调研有阶段性结论后即收口，不要陷入无限拆解。",
+  "loopConfig": {
+    "maxLoops": 1
+  },
+  "teamMembers": [
+    {
+      "key": "scout",
+      "agentId": "market-scout",
+      "name": "市场扫描",
+      "roleLabel": "扫榜选材",
+      "responsibilityPrompt": "以市场侦察员身份做本轮扫榜。先读取主提示词、`.project/MEMORY/market/` 已有调研结果（若存在），按主提示词指定体裁锁定目标平台与读者群，给出当前平台风向摘要、可推荐题材方向（含平台 + 卖点 + 对标书候选）、不推荐方向与差异化建议。把本轮调研结果写入 `.project/MEMORY/market/scan-{时间戳或本轮编号}.md`。"
+    },
+    {
+      "key": "analyst",
+      "agentId": "story-analyst",
+      "name": "对标拆文",
+      "roleLabel": "对标拆文",
+      "responsibilityPrompt": "以拆文分析师身份对市场扫描推荐的最值得追的 1-2 本对标书做拆解。按体裁选择长篇拆文或短篇拆文路径，输出对标书档案、黄金三章 / 情绪曲线、整体结构 / 节奏、爽点与反转节奏、可借鉴模块清单与不要照抄部分。把每本拆解结果写入 `.project/MEMORY/analyses/{对标书}.md`。"
+    },
+    {
+      "key": "brief",
+      "agentId": "story-analyst",
+      "name": "选题简报",
+      "roleLabel": "选题简报",
+      "responsibilityPrompt": "以拆文分析师身份做整合。读取本轮 scan 结果与 analyses 拆解，整合成一份可直接进入立项阶段的选题简报：推荐题材、目标平台、目标读者、卖点骨架、对标书及可借鉴技法、差异化路径、风险与禁区。把简报写入 `.project/MEMORY/market/brief-{时间戳或本轮编号}.md`。"
+    }
+  ],
+  "steps": [
+    {
+      "key": "start",
+      "type": "start",
+      "name": "开始",
+      "nextStepKey": "scan-market"
+    },
+    {
+      "key": "scan-market",
+      "type": "agent_task",
+      "name": "市场扫描",
+      "memberKey": "scout",
+      "promptTemplate": "请按主提示词指定体裁与平台范围，扫一轮当前市场，给出风向摘要、可推荐题材方向（含平台 + 卖点 + 对标书候选）、不推荐方向与差异化建议，并把结果写入 `.project/MEMORY/market/` 下本轮扫描文件。正文只需简短汇报本轮扫描结论与对标书候选，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "analyze-benchmark"
+    },
+    {
+      "key": "analyze-benchmark",
+      "type": "agent_task",
+      "name": "对标拆文",
+      "memberKey": "analyst",
+      "promptTemplate": "请基于上一节点扫描出的对标书候选，挑选最值得追的 1-2 本进行拆解，按体裁走长篇或短篇拆文路径，并把拆解结果分别写入 `.project/MEMORY/analyses/` 下对应文件。正文只需简短汇报本轮拆了哪几本、最关键的可借鉴技法是什么，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "produce-brief"
+    },
+    {
+      "key": "produce-brief",
+      "type": "agent_task",
+      "name": "选题简报",
+      "memberKey": "brief",
+      "promptTemplate": "请整合本轮 scan 与 analyses，输出一份可直接进入立项阶段的选题简报，写入 `.project/MEMORY/market/` 下本轮简报文件。简报必须包含推荐题材、目标平台、目标读者、卖点骨架、对标书及可借鉴技法、差异化路径、风险与禁区。正文只需简短汇报简报核心结论与建议的下一步动作，不要严格输出 JSON。",
+      "outputMode": "text",
+      "nextStepKey": "success-end"
+    },
+    {
+      "key": "success-end",
+      "type": "end",
+      "name": "成功结束",
+      "stopReason": "completed",
+      "summaryTemplate": "本轮已完成一次市场调研：扫榜结果、对标拆解与选题简报已写入 `.project/MEMORY/market/` 与 `.project/MEMORY/analyses/`，可直接进入立项阶段。",
+      "loopBehavior": "finish"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "market-scout",
+  "name": "市场侦察",
+  "description": "市场侦察员，负责扫榜选材、平台风口监测、题材趋势分析、读者画像，输出可写题材建议。",
+  "role": "市场",
+  "dispatchHint": "当用户要求扫榜、找题材、看哪个平台火、判断市场风口、查读者画像、想换赛道、不知道写什么，或项目处于选题阶段时优先委派。",
+  "tags": ["市场侦察", "扫榜选材", "起点", "番茄", "晋江", "知乎盐言", "题材趋势", "平台风口", "读者画像", "选题"],
+  "suggestedTools": ["todo", "browse", "search", "read", "web_search", "web_fetch", "write", "path", "skill"],
+  "defaultEnabled": true,
+  "version": "1.0.0"
+}
