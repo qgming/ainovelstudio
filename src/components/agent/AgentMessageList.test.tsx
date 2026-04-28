@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BookAgentPanel } from "../book/BookAgentPanel";
 import { AgentMessageList } from "./AgentMessageList";
 import { useAgentStore } from "../../stores/agentStore";
+import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 import { useSkillsStore } from "../../stores/skillsStore";
 import { useSubAgentStore } from "../../stores/subAgentStore";
@@ -37,13 +38,25 @@ describe("BookAgentPanel", () => {
       preferences: { enabledById: {} },
       status: "idle",
     });
+    useAgentSettingsStore.setState({
+      config: {
+        apiKey: "",
+        baseURL: "",
+        model: "",
+        enableReasoningEffort: false,
+        reasoningEffort: "xhigh",
+        simulateOpencodeBeta: false,
+      },
+      errorMessage: null,
+      status: "idle",
+    });
   });
 
   it("初始状态下渲染新的顶部结构和输入框", () => {
     render(<BookAgentPanel width={420} />);
 
     expect(screen.getByRole("heading", { name: "Agent" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "打开工作区上下文" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开会话上下文" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "鞭策" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开历史记录" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始新对话" })).toBeInTheDocument();
@@ -57,63 +70,78 @@ describe("BookAgentPanel", () => {
     expect(screen.queryByText("read_file")).not.toBeInTheDocument();
   });
 
-  it("点击工作区上下文按钮后显示当前启用的技能和子代理信息", () => {
-    useBookWorkspaceStore.setState({
-      activeFilePath: "章节/第一章.md",
-      rootPath: "C:/books/北境余烬",
+  it("点击会话上下文按钮后显示当前会话与 token 占用", () => {
+    useAgentSettingsStore.setState({
+      config: {
+        apiKey: "",
+        baseURL: "https://example.com/v1",
+        model: "fallback-model",
+        enableReasoningEffort: false,
+        reasoningEffort: "xhigh",
+        simulateOpencodeBeta: false,
+      },
     });
-    useSkillsStore.setState({
-      manifests: [
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      run: {
+        id: "session-1",
+        status: "completed",
+        title: "北境收束",
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            author: "你",
+            parts: [{ type: "text", text: "继续优化这一段" }],
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            meta: {
+              usage: {
+                recordedAt: "1714557600",
+                provider: "ainovelstudio-provider",
+                modelId: "mimo-v2-pro-free",
+                finishReason: "stop",
+                inputTokens: 127,
+                outputTokens: 215,
+                totalTokens: 99_103,
+                noCacheTokens: 127,
+                cacheReadTokens: 98_752,
+                cacheWriteTokens: 0,
+                reasoningTokens: 9,
+              },
+            },
+            parts: [{ type: "text", text: "这里是优化后的段落。" }],
+          },
+        ],
+      },
+      sessions: [
         {
-          id: "plot-skill",
-          name: "剧情规划",
-          description: "拆解章节冲突与节奏。",
-          body: "",
-          discoveredAt: 1,
-          rawMarkdown: "",
-          isBuiltin: true,
-          references: [],
-          sourceKind: "builtin-package",
-          suggestedTools: [],
-          tags: ["plot"],
-          validation: { errors: [], isValid: true, warnings: [] },
-          defaultEnabled: true,
+          id: "session-1",
+          title: "北境收束",
+          summary: "这里是优化后的段落。",
+          status: "completed",
+          createdAt: "1714556400",
+          updatedAt: "1714557600",
+          lastMessageAt: "1714557600",
+          pinned: false,
+          archived: false,
         },
       ],
-      preferences: { enabledById: {} },
-    });
-    useSubAgentStore.setState({
-      manifests: [
-        {
-          id: "writer-agent",
-          name: "续写代理",
-          description: "负责续写章节。",
-          body: "",
-          discoveredAt: 1,
-          isBuiltin: true,
-          manifestFilePath: "agents/writer-agent/manifest.json",
-          role: "擅长续写与润色",
-          sourceKind: "builtin-package",
-          suggestedTools: [],
-          tags: ["writer"],
-          validation: { errors: [], isValid: true, warnings: [] },
-          defaultEnabled: true,
-        },
-      ],
-      preferences: { enabledById: {} },
     });
 
     render(<BookAgentPanel width={420} />);
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "打开工作区上下文" }), { button: 0 });
+    fireEvent.pointerDown(screen.getByRole("button", { name: "打开会话上下文" }), { button: 0 });
 
-    expect(screen.getByText("工作区")).toBeInTheDocument();
-    expect(screen.getByText("北境余烬")).toBeInTheDocument();
-    expect(screen.getByText("章节/第一章.md")).toBeInTheDocument();
-    expect(screen.getByText("剧情规划")).toBeInTheDocument();
-    expect(screen.getByText("续写代理")).toBeInTheDocument();
-    expect(screen.queryByText("这里汇总本轮会话可见的工作区信息、启用技能与子代理。")).not.toBeInTheDocument();
-    expect(screen.queryByText("上下文标签")).not.toBeInTheDocument();
+    expect(screen.getByText("北境收束")).toBeInTheDocument();
+    expect(screen.getByText("mimo-v2-pro-free")).toBeInTheDocument();
+    expect(screen.getAllByText("99,103")).toHaveLength(2);
+    expect(screen.getByText("98,752 / 0")).toBeInTheDocument();
+    expect(screen.getByText("上下文拆分")).toBeInTheDocument();
+    expect(screen.getByText(/缓存命中 99.6%/)).toBeInTheDocument();
   });
 
   it("支持打开技能和子 Agent 选择器", () => {

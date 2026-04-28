@@ -86,7 +86,7 @@ describe("ModelProviderCard", () => {
     expect(screen.queryByText("Max Tokens")).not.toBeInTheDocument();
   });
 
-  it("思考强度默认选中 xhigh", () => {
+  it("思考模式默认关闭，并禁用强度按钮", () => {
     render(
       <ModelProviderCard
         providerPresets={[]}
@@ -104,7 +104,9 @@ describe("ModelProviderCard", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /xhigh/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("switch", { name: "切换思考模式 reasoning_effort" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("已关闭")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /xhigh/i })).toBeDisabled();
   });
 
   it("缺少必要配置时禁用测试连接按钮", () => {
@@ -392,7 +394,10 @@ describe("ModelProviderCard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "使用 OpenAI 地址" }));
 
-    expect(handleChange).toHaveBeenCalledWith({ baseURL: "https://api.openai.com/v1" });
+    expect(handleChange).toHaveBeenCalledWith({
+      baseURL: "https://api.openai.com/v1",
+      enableReasoningEffort: false,
+    });
     expect(handleAddProviderPreset).not.toHaveBeenCalled();
   });
 
@@ -486,7 +491,40 @@ describe("ModelProviderCard", () => {
     expect(handleChange).toHaveBeenCalledWith({
       apiKey: "sk-openai",
       baseURL: "https://api.openai.com/v1",
+      enableReasoningEffort: false,
       model: "gpt-4.1",
+    });
+  });
+
+  it("切换模型时默认关闭思考模式", () => {
+    const handleChange = vi.fn();
+
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+          enableReasoningEffort: true,
+          reasoningEffort: "high",
+        }}
+        isDirty={true}
+        onChange={handleChange}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("gpt-4.1"), {
+      target: { value: "gpt-4o" },
+    });
+
+    expect(handleChange).toHaveBeenCalledWith({
+      enableReasoningEffort: false,
+      model: "gpt-4o",
     });
   });
 

@@ -1,4 +1,4 @@
-import { Blocks, ChevronRight, History, SquarePen } from "lucide-react";
+import { ChevronRight, Gauge, History, SquarePen } from "lucide-react";
 import { forwardRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import { AgentComposer } from "../agent/AgentComposer";
 import { AgentContextOverview } from "../agent/AgentContextOverview";
 import { AgentMessageList } from "../agent/AgentMessageList";
 import { selectIsAgentRunActive, useAgentStore } from "../../stores/agentStore";
+import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
@@ -34,8 +35,8 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
         type="button"
         aria-label={ariaLabel}
         title={
-          ariaLabel === "打开工作区上下文"
-            ? "打开工作区上下文 — 查看当前书籍、技能和子 Agent 上下文"
+          ariaLabel === "打开会话上下文"
+            ? "打开会话上下文 — 查看当前会话和最近一次模型调用的上下文占用"
             : ariaLabel === "打开历史记录"
               ? "打开历史记录 — 查看当前书籍下的历史会话"
               : ariaLabel === "收起历史记录"
@@ -65,7 +66,6 @@ function AgentHeaderButton() {
 }
 
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
-  const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
@@ -87,7 +87,6 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const submitAskAnswer = useAgentStore((state) => state.submitAskAnswer);
   const switchSession = useAgentStore((state) => state.switchSession);
   const initializeAgentHistory = useAgentStore((state) => state.initialize);
-  const rootPath = useBookWorkspaceStore((state) => state.rootPath);
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
@@ -97,12 +96,14 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const agentManifests = useSubAgentStore((state) => state.manifests);
   const agentPreferences = useSubAgentStore((state) => state.preferences);
   const agentsStatus = useSubAgentStore((state) => state.status);
+  const currentModel = useAgentSettingsStore((state) => state.config.model);
   const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
   const displayRunStatus = run.status === "awaiting_user"
     ? "awaiting_user"
     : isRunning
       ? "running"
       : run.status;
+  const activeSessionSummary = sessions.find((session) => session.id === activeSessionId) ?? null;
 
   useEffect(() => {
     if (skillsStatus === "idle") {
@@ -133,27 +134,20 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       <PanelHeader className="bg-transparent px-2">
         <AgentHeaderButton />
         <PanelToolbar className="gap-0.5">
-          {/* 工作区上下文：使用 DropdownMenu 承载块状内容（非菜单项） */}
+          {/* 会话上下文：使用 DropdownMenu 承载块状内容（非菜单项） */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <ToolbarButton ariaLabel="打开工作区上下文">
-                <Blocks className="h-4 w-4" />
+              <ToolbarButton ariaLabel="打开会话上下文">
+                <Gauge className="h-4 w-4" />
               </ToolbarButton>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 p-2">
+            <DropdownMenuContent align="end" className="w-[24rem] p-2">
               <AgentContextOverview
-                activeFilePath={activeFilePath}
-                enabledAgents={enabledAgents.map((agent) => ({
-                  description: agent.role || agent.description,
-                  id: agent.id,
-                  name: agent.name,
-                }))}
-                enabledSkills={enabledSkills.map((skill) => ({
-                  description: skill.description,
-                  id: skill.id,
-                  name: skill.name,
-                }))}
-                rootPath={rootPath}
+                currentModel={currentModel}
+                messages={run.messages}
+                sessionCreatedAt={activeSessionSummary?.createdAt ?? null}
+                sessionTitle={run.title}
+                sessionUpdatedAt={activeSessionSummary?.updatedAt ?? null}
               />
             </DropdownMenuContent>
           </DropdownMenu>

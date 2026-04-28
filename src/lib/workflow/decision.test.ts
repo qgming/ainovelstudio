@@ -94,4 +94,46 @@ describe("requireWorkflowDecisionResult", () => {
       /判断节点《质检》缺少结构化判定结果/,
     );
   });
+
+  it("工具结果缺失时回退解析正文中的 JSON", () => {
+    const parts: AgentPart[] = [
+      {
+        type: "text",
+        text: '```json\n{"pass":false,"reason":"人物动机不足","issues":[{"type":"logic","severity":"high","message":"主角转变过快"}],"revision_brief":"补一段心理递进。"}\n```',
+      } as AgentPart,
+    ];
+
+    expect(requireWorkflowDecisionResult(decisionStep, null, parts)).toMatchObject({
+      pass: false,
+      reason: "人物动机不足",
+      revision_brief: "补一段心理递进。",
+    });
+  });
+
+  it("工具结果缺失时回退解析标签式正文", () => {
+    const parts: AgentPart[] = [
+      {
+        type: "text",
+        text: [
+          "通过结论：不通过",
+          "判断原因：冲突建立不足，转折偏快。",
+          "问题列表：",
+          "- 开篇动机偏弱",
+          "- 结尾钩子不够明确",
+          "修订摘要：补强角色目标，并重写章末钩子。",
+        ].join("\n"),
+      } as AgentPart,
+    ];
+
+    expect(requireWorkflowDecisionResult(decisionStep, null, parts)).toEqual({
+      pass: false,
+      label: "no",
+      reason: "冲突建立不足，转折偏快。",
+      issues: [
+        { type: "review", severity: "medium", message: "开篇动机偏弱" },
+        { type: "review", severity: "medium", message: "结尾钩子不够明确" },
+      ],
+      revision_brief: "补强角色目标，并重写章末钩子。",
+    });
+  });
 });

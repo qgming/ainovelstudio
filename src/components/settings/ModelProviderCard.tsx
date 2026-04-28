@@ -205,6 +205,7 @@ export function ModelProviderCard({
   const [toast, setToast] = useState<ToastState | null>(null);
   const normalizedBaseUrl = normalizeUrlForCompare(baseUrl);
   const reasoningEffort = normalizeReasoningEffort(config.reasoningEffort);
+  const isReasoningEnabled = Boolean(config.enableReasoningEffort);
   const canTestConnection =
     baseUrl.length > 0 && apiKey.length > 0 && model.length > 0 && !isTesting;
   const canSave = isDirty && !isSaving;
@@ -295,6 +296,7 @@ export function ModelProviderCard({
     onChange({
       apiKey: preset.apiKey ?? "",
       baseURL: preset.baseURL,
+      enableReasoningEffort: false,
       model: preset.model,
     });
   }
@@ -305,7 +307,17 @@ export function ModelProviderCard({
     provider: string;
     websiteUrl: string;
   }) {
-    onChange({ baseURL: recommendation.baseURL });
+    onChange({
+      baseURL: recommendation.baseURL,
+      enableReasoningEffort: false,
+    });
+  }
+
+  function handleModelChange(nextModel: string) {
+    onChange({
+      enableReasoningEffort: nextModel.trim() === model ? config.enableReasoningEffort : false,
+      model: nextModel,
+    });
   }
 
   return (
@@ -333,7 +345,7 @@ export function ModelProviderCard({
             <ModelCatalogButton
               config={config}
               iconOnly={isMobile}
-              onSelectModel={(nextModel) => onChange({ model: nextModel })}
+              onSelectModel={handleModelChange}
               onError={handleCatalogError}
             />
             <SettingsHeaderResponsiveButton
@@ -430,7 +442,7 @@ export function ModelProviderCard({
             <Label className="text-xs text-muted-foreground">Model</Label>
             <Input
               className="h-9"
-              onChange={(event) => onChange({ model: event.target.value })}
+              onChange={(event) => handleModelChange(event.target.value)}
               placeholder="gpt-4.1 / gpt-4o / 自定义模型名"
               value={config.model}
             />
@@ -443,9 +455,12 @@ export function ModelProviderCard({
                   <p className="text-sm font-medium text-foreground">
                     思考模式 reasoning_effort
                   </p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    默认关闭。部分模型不支持该参数，请按模型能力手动开启。
+                  </p>
                 </div>
                 <Switch
-                  checked={Boolean(config.enableReasoningEffort)}
+                  checked={isReasoningEnabled}
                   label="切换思考模式 reasoning_effort"
                   onChange={(checked) =>
                     onChange({ enableReasoningEffort: checked })
@@ -455,8 +470,15 @@ export function ModelProviderCard({
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-                    {reasoningEffort}
+                  <span
+                    className={cn(
+                      "rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-[0.12em]",
+                      isReasoningEnabled
+                        ? "border-border text-muted-foreground uppercase"
+                        : "border-dashed border-border/70 text-muted-foreground/80",
+                    )}
+                  >
+                    {isReasoningEnabled ? reasoningEffort : "已关闭"}
                   </span>
                 </div>
                 <div
@@ -465,18 +487,21 @@ export function ModelProviderCard({
                   className="grid grid-cols-2 gap-2 sm:grid-cols-4"
                 >
                   {REASONING_EFFORT_OPTIONS.map((option) => {
-                    const selected = reasoningEffort === option.value;
+                    const selected = isReasoningEnabled && reasoningEffort === option.value;
                     return (
                       <button
                         key={option.value}
                         type="button"
                         aria-pressed={selected}
+                        disabled={!isReasoningEnabled}
                         onClick={() =>
                           onChange({ reasoningEffort: option.value })
                         }
                         className={cn(
                           "rounded-lg border px-3 py-2 text-left transition-colors",
-                          selected
+                          !isReasoningEnabled
+                            ? "cursor-not-allowed border-border/60 bg-muted/35 text-muted-foreground"
+                            : selected
                             ? "border-foreground bg-foreground text-background"
                             : "border-border/70 bg-background hover:bg-accent/40",
                         )}
@@ -487,7 +512,9 @@ export function ModelProviderCard({
                         <span
                           className={cn(
                             "mt-1 block text-[11px] leading-4",
-                            selected
+                            !isReasoningEnabled
+                              ? "text-muted-foreground/80"
+                              : selected
                               ? "text-background/80"
                               : "text-muted-foreground",
                           )}
