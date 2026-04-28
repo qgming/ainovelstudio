@@ -42,14 +42,15 @@ describe("BookAgentPanel", () => {
   it("初始状态下渲染新的顶部结构和输入框", () => {
     render(<BookAgentPanel width={420} />);
 
-    expect(screen.getByRole("button", { name: "Agent 面板" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Agent" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开工作区上下文" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "鞭策" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开历史记录" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始新对话" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择技能或子 Agent" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择工作区文件" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送消息" })).toBeInTheDocument();
-    expect(screen.getByText("Enter 发送，Shift + Enter 换行")).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 输入框")).toBeInTheDocument();
     expect(screen.queryByText("未配置模型")).not.toBeInTheDocument();
     expect(screen.queryByText("空闲")).not.toBeInTheDocument();
     expect(screen.queryByText("思考")).not.toBeInTheDocument();
@@ -115,7 +116,7 @@ describe("BookAgentPanel", () => {
     expect(screen.queryByText("上下文标签")).not.toBeInTheDocument();
   });
 
-  it("支持在底部操作栏选择技能、子 Agent 和工作区文件", () => {
+  it("支持打开技能和子 Agent 选择器", () => {
     useBookWorkspaceStore.setState({
       rootNode: {
         kind: "directory",
@@ -174,17 +175,10 @@ describe("BookAgentPanel", () => {
 
     render(<BookAgentPanel width={420} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "选择技能或子 Agent" }));
-    fireEvent.click(screen.getByRole("button", { name: /剧情规划/ }));
-    fireEvent.click(screen.getByRole("button", { name: /续写代理/ }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "选择技能或子 Agent" }), { button: 0 });
 
-    fireEvent.click(screen.getByRole("button", { name: "选择工作区文件" }));
-    fireEvent.click(screen.getByRole("button", { name: "章节" }));
-    fireEvent.click(screen.getByRole("button", { name: "第一章.md" }));
-
-    expect(screen.getByRole("button", { name: "移除 剧情规划" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "移除 续写代理" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "移除 第一章.md" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /剧情规划/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /续写代理/ })).toBeInTheDocument();
   });
 
   it("点击历史按钮后在触发位置弹出会话菜单", () => {

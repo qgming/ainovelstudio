@@ -84,4 +84,55 @@ describe("AgentPartRenderer", () => {
     fireEvent.click(screen.getAllByRole("button")[1]);
     expect(screen.queryByText("正在分析请求。")).not.toBeInTheDocument();
   });
+
+  it("ask 卡片在等待输入时显示题面，在完成后显示已提交摘要", () => {
+    const { rerender } = render(
+      <AgentPartRenderer
+        part={{
+          type: "ask-user",
+          toolName: "ask",
+          toolCallId: "ask-1",
+          status: "awaiting_user",
+          title: "你更想往哪个方向推进？",
+          description: "请选择一个方向。",
+          selectionMode: "single",
+          options: [
+            { id: "plot", label: "推进主线" },
+            { id: "__custom__", label: "用户输入" },
+          ],
+          customOptionId: "__custom__",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("询问用户")).toBeInTheDocument();
+    expect(screen.getByText("你更想往哪个方向推进？")).toBeInTheDocument();
+    expect(screen.getByLabelText("运行中")).toBeInTheDocument();
+
+    rerender(
+      <AgentPartRenderer
+        part={{
+          type: "ask-user",
+          toolName: "ask",
+          toolCallId: "ask-1",
+          status: "completed",
+          title: "你更想往哪个方向推进？",
+          selectionMode: "single",
+          options: [
+            { id: "plot", label: "推进主线" },
+            { id: "__custom__", label: "用户输入" },
+          ],
+          customOptionId: "__custom__",
+          answer: {
+            selectionMode: "single",
+            values: [{ type: "option", id: "plot", label: "推进主线", value: "推进主线" }],
+            usedCustomInput: false,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/已提交：推进主线/)).toBeInTheDocument();
+    expect(screen.getByLabelText("运行成功")).toBeInTheDocument();
+  });
 });

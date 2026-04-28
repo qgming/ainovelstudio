@@ -51,7 +51,10 @@ function resolveToolResultTarget(parts: AgentPart[], part: ToolResultPart) {
     return { toolCallId: normalizedToolCallId, validationError: TOOL_NAME_MISMATCH_ERROR };
   }
 
-  const runningMatches = matchedByName.filter(({ part: candidate }) => candidate.status === "running");
+  const runningMatches = matchedByName.filter(
+    ({ part: candidate }) =>
+      candidate.status === "running" || candidate.status === "awaiting_user",
+  );
   if (runningMatches.length === 0) {
     return { toolCallId: normalizedToolCallId, validationError: TOOL_CALL_NOT_RUNNING_ERROR };
   }

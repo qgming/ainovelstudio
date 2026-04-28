@@ -1427,6 +1427,71 @@ describe("createLocalResourceToolset", () => {
     ).rejects.toThrow("Only one item can be in_progress");
   });
 
+  it("ask 工具会自动追加用户输入选项并返回结构化答案", async () => {
+    const toolset = createLocalResourceToolset();
+    const askUser = vi.fn().mockResolvedValue({
+      selectionMode: "multiple",
+      values: [
+        { type: "option", id: "plot", label: "推进主线", value: "推进主线" },
+        { type: "custom", id: "__custom__", label: "用户输入", value: "再加强压迫感" },
+      ],
+      usedCustomInput: true,
+      customInput: "再加强压迫感",
+    });
+
+    const result = await toolset.ask.execute(
+      {
+        title: "你更想往哪个方向推进？",
+        selectionMode: "multiple",
+        options: [{ id: "plot", label: "推进主线" }],
+      },
+      {
+        toolCallId: "ask-call-1",
+        interactive: { askUser },
+      },
+    );
+
+    expect(askUser).toHaveBeenCalledWith({
+      title: "你更想往哪个方向推进？",
+      selectionMode: "multiple",
+      options: [
+        { id: "plot", label: "推进主线", description: undefined },
+        { id: "__custom__", label: "用户输入" },
+      ],
+      customOptionId: "__custom__",
+      description: undefined,
+      customPlaceholder: undefined,
+      minSelections: undefined,
+      maxSelections: undefined,
+      confirmLabel: undefined,
+    });
+    expect(result).toEqual({
+      ok: true,
+      summary: "已收到用户回答：推进主线；再加强压迫感",
+      data: {
+        selectionMode: "multiple",
+        values: [
+          { type: "option", id: "plot", label: "推进主线", value: "推进主线" },
+          { type: "custom", id: "__custom__", label: "用户输入", value: "再加强压迫感" },
+        ],
+        usedCustomInput: true,
+        customInput: "再加强压迫感",
+      },
+    });
+  });
+
+  it("ask 工具缺少交互上下文时会报错", async () => {
+    const toolset = createLocalResourceToolset();
+
+    await expect(
+      toolset.ask.execute({
+        title: "你更想往哪个方向推进？",
+        selectionMode: "single",
+        options: [{ id: "plot", label: "推进主线" }],
+      }),
+    ).rejects.toThrow("当前环境不支持 ask 交互");
+  });
+
   it("workflow_decision 工具会提交结构化判断结果", async () => {
     const onWorkflowDecision = vi.fn();
     const toolset = createLocalResourceToolset({ onWorkflowDecision });

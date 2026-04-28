@@ -1,6 +1,45 @@
-export type AgentRunStatus = "idle" | "running" | "completed" | "failed";
+export type AgentRunStatus =
+  | "idle"
+  | "running"
+  | "awaiting_user"
+  | "completed"
+  | "failed";
 
 export type StatusTone = "neutral" | "warning" | "success" | "danger";
+
+export type AskSelectionMode = "single" | "multiple";
+
+export type AskOption = {
+  id: string;
+  label: string;
+  description?: string;
+};
+
+export type AskToolAnswerValue = {
+  type: "option" | "custom";
+  id: string;
+  label: string;
+  value: string;
+};
+
+export type AskToolAnswer = {
+  selectionMode: AskSelectionMode;
+  values: AskToolAnswerValue[];
+  usedCustomInput: boolean;
+  customInput?: string;
+};
+
+export type AskUserRequest = {
+  title: string;
+  description?: string;
+  selectionMode: AskSelectionMode;
+  options: AskOption[];
+  customOptionId: string;
+  customPlaceholder?: string;
+  minSelections?: number;
+  maxSelections?: number;
+  confirmLabel?: string;
+};
 
 export type AgentUsage = {
   recordedAt: string;
@@ -41,6 +80,23 @@ export type AgentPart =
       validationError?: string;
     }
   | {
+      type: "ask-user";
+      toolName: "ask";
+      toolCallId: string;
+      status: "awaiting_user" | "completed" | "failed";
+      title: string;
+      description?: string;
+      selectionMode: AskSelectionMode;
+      options: AskOption[];
+      customOptionId: string;
+      customPlaceholder?: string;
+      minSelections?: number;
+      maxSelections?: number;
+      confirmLabel?: string;
+      answer?: AskToolAnswer;
+      errorMessage?: string;
+    }
+  | {
       type: "subagent";
       id: string;
       name: string;
@@ -76,7 +132,7 @@ export function isToolLikePart(part: AgentPart) {
 }
 
 export function getRunStatusTone(status: AgentRunStatus): StatusTone {
-  if (status === "running") {
+  if (status === "running" || status === "awaiting_user") {
     return "warning";
   }
 

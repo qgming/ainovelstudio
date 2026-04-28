@@ -9,6 +9,8 @@ import type {
   AgentMessage,
   AgentRun,
   AgentRunStatus,
+  AskToolAnswer,
+  AskUserRequest,
 } from "../../lib/agent/types";
 import { derivePlanningState, type PlanningState } from "../../lib/agent/planning";
 import {
@@ -27,10 +29,19 @@ import {
 } from "../agentSettingsStore";
 
 /** 用于推断当前是否仍有"运行中"语义。store 主体使用同名 selector。 */
+export type PendingAskState = {
+  messageId: string;
+  request: AskUserRequest;
+  resolve: (answer: AskToolAnswer) => void;
+  reject: (error?: unknown) => void;
+  toolCallId: string;
+};
+
 export type RunActivityState = {
   abortController: AbortController | null;
   activeRunRequestId: string | null;
   inflightToolRequestIds: string[];
+  pendingAsk: PendingAskState | null;
   run: AgentRun;
 };
 
@@ -39,7 +50,9 @@ export function selectIsAgentRunActive(state: RunActivityState): boolean {
     state.activeRunRequestId !== null ||
     state.abortController !== null ||
     state.inflightToolRequestIds.length > 0 ||
-    state.run.status === "running"
+    state.pendingAsk !== null ||
+    state.run.status === "running" ||
+    state.run.status === "awaiting_user"
   );
 }
 
@@ -50,6 +63,7 @@ export type ChatRunStoreState = {
   abortController: AbortController | null;
   activeRunRequestId: string | null;
   activeSessionId: string | null;
+  pendingAsk: PendingAskState | null;
   contextTags: string[];
   currentBookId: string | null;
   draftsBySession: Record<string, string>;
@@ -71,6 +85,7 @@ export function buildInitialState(): ChatRunStoreState {
     abortController: null,
     activeRunRequestId: null,
     activeSessionId: null,
+    pendingAsk: null,
     contextTags: ["工具: 文件工作区"],
     currentBookId: null,
     draftsBySession: {},
@@ -93,6 +108,9 @@ export function getPersistedSummaryStatus(
   summary: ChatSessionSummary,
 ): AgentRunStatus {
   if (state.activeSessionId === summary.id && selectIsAgentRunActive(state)) {
+    if (state.pendingAsk || state.run.status === "awaiting_user") {
+      return "awaiting_user";
+    }
     return "running";
   }
   return normalizeRecoveredStatus(summary.status);
@@ -155,6 +173,7 @@ export function applyBootstrap(
       ? (nextDraftsBySession[bootstrap.activeSessionId] ?? "")
       : "",
     inflightToolRequestIds: [],
+    pendingAsk: null,
     isHydrated: true,
     messagesBySession: nextMessagesBySession,
     planningState,

@@ -86,6 +86,17 @@ describe("createDefaultLocalResourceToolset", () => {
     createDefaultLocalResourceToolset({ onWorkflowDecision: decisionFn });
     expect(mockOnWorkflowDecisionCaptured.fn).toBe(decisionFn);
   });
+
+  it("includeAsk=false 时会从本地工具集中移除 ask", () => {
+    vi.doMock("../tools", () => ({
+      createGlobalToolset: () => ({ global_tool: mockGlobalTool }),
+      createLocalResourceToolset: () => ({ ask: { description: "ask", execute: vi.fn() }, local_tool: true }),
+      createWorkspaceToolset: (opts: { rootPath: string; onWorkspaceMutated: () => Promise<void> }) => {
+        mockWorkspaceMutated.mockImplementation(opts.onWorkspaceMutated);
+        return { workspace_tool: true, _rootPath: opts.rootPath };
+      },
+    }));
+  });
 });
 
 describe("createDefaultBookWorkspaceToolset", () => {

@@ -223,6 +223,8 @@ function serializeAgentPart(
       return serializeToolCall(part, toolLimit);
     case "tool-result":
       return serializeToolResult(part, toolLimit);
+    case "ask-user":
+      return null;
     case "subagent":
       return [
         `子任务（${part.name}）：${truncateText(part.summary, textLimit)}`,

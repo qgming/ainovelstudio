@@ -74,6 +74,14 @@ export function AgentMessageList({ messages, runStatus }: AgentMessageListProps)
   const scrollFrameRef = useRef<number | null>(null);
   const lastMessageId = messages.at(-1)?.id ?? null;
   const showThinkingTail = runStatus === "running";
+  const isAwaitingUser = runStatus === "awaiting_user";
+
+  const displayMessages = isAwaitingUser
+    ? messages.filter((message) =>
+        message.role !== "assistant"
+        || message.parts.some((part) => part.type !== "placeholder"),
+      )
+    : messages;
 
   useEffect(() => {
     return () => {
@@ -128,7 +136,7 @@ export function AgentMessageList({ messages, runStatus }: AgentMessageListProps)
   return (
     <div ref={scrollRef} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-app px-3 py-3">
       <div className="space-y-4">
-        {messages.map((message) => (
+        {displayMessages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
         <ThinkingTail visible={showThinkingTail} />

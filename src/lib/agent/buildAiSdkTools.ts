@@ -8,10 +8,15 @@
 import { z } from "zod";
 import type { ToolSet } from "ai";
 import { defineTool } from "./modelGateway";
-import type { AgentTool } from "./runtime";
+import type { AgentTool, AgentToolInteractiveContext } from "./runtime";
+import type { AskToolAnswer, AskUserRequest } from "./types";
 import { createToolRequestId, withAbort } from "./asyncUtils";
 
 type ToolBuilder = (toolName: string, tool: AgentTool) => ToolSet[string];
+
+type ToolExecutionOptions = {
+  toolCallId?: string;
+};
 
 type ToolRequestStateChangeHandler = (event: {
   requestId: string;
@@ -24,6 +29,9 @@ export function buildAiSdkTools(
   enabledToolIds: string[],
   abortSignal?: AbortSignal,
   onToolRequestStateChange?: ToolRequestStateChangeHandler,
+  interactive?: {
+    askUser?: (toolCallId: string | undefined, request: AskUserRequest) => Promise<AskToolAnswer>;
+  },
 ): ToolSet {
   const toolSet: ToolSet = {};
 
@@ -32,12 +40,23 @@ export function buildAiSdkTools(
     toolName: string,
     tool: AgentTool,
     input: Record<string, unknown>,
+    options?: ToolExecutionOptions,
   ) => {
     const requestId = createToolRequestId(toolName);
+    const interactiveContext: AgentToolInteractiveContext | undefined = interactive?.askUser
+      ? {
+          askUser: (request) => interactive.askUser!(options?.toolCallId, request),
+        }
+      : undefined;
     onToolRequestStateChange?.({ requestId, status: "start" });
     try {
       return await withAbort(abortSignal, () =>
-        tool.execute(input, { abortSignal, requestId }),
+        tool.execute(input, {
+          abortSignal,
+          requestId,
+          toolCallId: options?.toolCallId,
+          interactive: interactiveContext,
+        }),
       );
     } finally {
       onToolRequestStateChange?.({ requestId, status: "finish" });
@@ -45,6 +64,58 @@ export function buildAiSdkTools(
   };
 
   const builders: Record<string, ToolBuilder> = {
+    ask: (toolName, tool) =>
+      defineTool({
+        description:
+          "当需求不明确或存在多个合理方向时，向用户发起单选或多选问题；工具会自动补上最后一项“用户输入”。",
+        inputSchema: z.object({
+          title: z.string().min(1).describe("问题标题。"),
+          description: z.string().optional().describe("可选的问题说明。"),
+          selectionMode: z
+            .enum(["single", "multiple"])
+            .default("single")
+            .describe("single 为单选，multiple 为多选。"),
+          options: z
+            .array(
+              z.object({
+                id: z.string().min(1).describe("选项唯一标识。"),
+                label: z.string().min(1).describe("选项显示名称。"),
+                description: z.string().optional().describe("选项补充说明。"),
+              }),
+            )
+            .min(1)
+            .describe("预设选项列表，不要包含“用户输入”，系统会自动追加。"),
+          customPlaceholder: z
+            .string()
+            .optional()
+            .describe("选择“用户输入”后输入框的占位提示。"),
+          minSelections: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("多选时最少需要选择多少项。"),
+          maxSelections: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("多选时最多允许选择多少项。"),
+          confirmLabel: z
+            .string()
+            .optional()
+            .describe("确认按钮文案。"),
+        }),
+        execute: async (input, options) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+            { toolCallId: options?.toolCallId },
+          );
+          return result.data ?? result.summary;
+        },
+      }),
     todo: (toolName, tool) =>
       defineTool({
         description:

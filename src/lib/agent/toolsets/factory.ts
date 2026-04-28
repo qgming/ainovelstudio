@@ -35,8 +35,9 @@ export type AgentToolMap = Record<string, AgentTool>;
  */
 export function createDefaultLocalResourceToolset(options?: {
   onWorkflowDecision?: (decision: WorkflowDecisionResult) => void;
+  includeAsk?: boolean;
 }): AgentToolMap {
-  return createLocalResourceToolset({
+  const localTools = createLocalResourceToolset({
     refreshAgents: async () => {
       await useSubAgentStore.getState().refresh();
     },
@@ -45,6 +46,13 @@ export function createDefaultLocalResourceToolset(options?: {
     },
     onWorkflowDecision: options?.onWorkflowDecision,
   });
+
+  if (options?.includeAsk === false) {
+    const { ask: _ask, ...rest } = localTools;
+    return rest;
+  }
+
+  return localTools;
 }
 
 /**
@@ -85,6 +93,7 @@ export function buildBookWorkspaceTools(options: {
   rootPath: string | null;
   guardRootMatch?: boolean;
   onWorkflowDecision?: (decision: WorkflowDecisionResult) => void;
+  includeAsk?: boolean;
 }): AgentToolMap {
   return {
     ...createGlobalToolset(),
@@ -93,6 +102,7 @@ export function buildBookWorkspaceTools(options: {
       guardRootMatch: options.guardRootMatch,
     }),
     ...createDefaultLocalResourceToolset({
+      includeAsk: options.includeAsk,
       onWorkflowDecision: options.onWorkflowDecision,
     }),
   };
@@ -113,7 +123,7 @@ export function buildExpansionTools(options: {
   const { workspaceId, onWorkspaceMutated } = options;
   return {
     ...createGlobalToolset(),
-    ...createDefaultLocalResourceToolset(),
+    ...createDefaultLocalResourceToolset({ includeAsk: false }),
     ...createExpansionAgentToolset({
       workspaceId,
       onWorkspaceMutated,

@@ -2,7 +2,7 @@ import { useState, memo } from "react";
 import { ChevronDown, ChevronRight, Brain, Wrench, Check, X, LoaderCircle, Users, Circle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getRunStatusTone, type AgentPart } from "../../lib/agent/types";
+import { getRunStatusTone, type AgentPart, type AgentRunStatus } from "../../lib/agent/types";
 
 const statusClasses = {
   danger: "border-[#5d2626] bg-[#2b1719] text-[#f6b6b0] dark:border-[#6f2e2e] dark:bg-[#2b1719] dark:text-[#f6b6b0]",
@@ -205,6 +205,10 @@ function formatStructuredText(text: string) {
   }
 }
 
+function normalizeRenderableStatus(status: AgentRunStatus): "idle" | "running" | "completed" | "failed" {
+  return status === "awaiting_user" ? "running" : status;
+}
+
 function buildSubagentTimeline(parts: AgentPart[]) {
   const timeline: Array<{
     key: string;
@@ -229,7 +233,7 @@ function buildSubagentTimeline(parts: AgentPart[]) {
         key: `tool-${index}-${part.toolName}`,
         label: `调用工具：${part.toolName}`,
         preview: part.outputSummary ?? part.inputSummary,
-        status: part.status,
+        status: normalizeRenderableStatus(part.status),
       });
       continue;
     }
@@ -282,8 +286,8 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
         collapseOnContentClick
         icon={Wrench}
         label={part.toolName}
-        summary={part.status === "running" ? part.inputSummary : part.outputSummary ?? part.inputSummary}
-        status={part.status}
+        summary={part.status === "running" || part.status === "awaiting_user" ? part.inputSummary : part.outputSummary ?? part.inputSummary}
+        status={normalizeRenderableStatus(part.status)}
       >
         <div className="space-y-2 text-sm leading-6 text-foreground">
           <MarkdownText text={formattedInput} />
@@ -314,13 +318,67 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
         icon={Wrench}
         label={`${part.toolName} 结果异常`}
         summary={part.validationError}
-        status={part.status}
+        status={normalizeRenderableStatus(part.status)}
       >
         <div className="space-y-2 text-sm leading-6 text-foreground">
           <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
             {part.validationError}
           </div>
           {formattedOutput ? <MarkdownText text={formattedOutput} /> : null}
+        </div>
+      </AccordionCard>
+    );
+  }
+
+  if (part.type === "ask-user") {
+    const answerText = part.answer?.values.map((item) => item.value).filter(Boolean).join("；");
+    const summary = part.status === "awaiting_user"
+      ? part.title
+      : part.status === "completed"
+        ? `已提交：${answerText || "已收到用户回答。"}`
+        : part.errorMessage || "等待用户输入已中断。";
+
+    return (
+      <AccordionCard
+        icon={Wrench}
+        label="询问用户"
+        summary={summary}
+        status={part.status === "awaiting_user" ? "running" : part.status}
+      >
+        <div className="space-y-3 text-sm leading-6 text-foreground">
+          <div>
+            <div className="font-medium text-foreground">{part.title}</div>
+            {part.description ? (
+              <div className="mt-1 text-xs leading-5 text-muted-foreground">{part.description}</div>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            {part.options.map((option) => {
+              const answer = part.answer?.values.find((item) => item.id === option.id);
+              const selected = Boolean(answer);
+              return (
+                <div
+                  key={option.id}
+                  className={`rounded-md border px-3 py-2 ${
+                    selected ? "border-foreground/30 bg-accent" : "border-border bg-panel"
+                  }`}
+                >
+                  <div className="text-sm font-medium text-foreground">{option.label}</div>
+                  {option.description ? (
+                    <div className="text-xs leading-5 text-muted-foreground">{option.description}</div>
+                  ) : null}
+                  {answer ? (
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{answer.value}</div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          {part.status === "failed" && part.errorMessage ? (
+            <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
+              {part.errorMessage}
+            </div>
+          ) : null}
         </div>
       </AccordionCard>
     );
@@ -333,7 +391,7 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
   const timeline = buildSubagentTimeline(part.parts);
 
   return (
-    <AccordionCard icon={Users} label={part.name} summary={part.summary} status={part.status}>
+    <AccordionCard icon={Users} label={part.name} summary={part.summary} status={normalizeRenderableStatus(part.status)}>
       <div className="space-y-3">
         <div>
           <h3 className="text-sm font-medium leading-6 text-foreground">时间线</h3>

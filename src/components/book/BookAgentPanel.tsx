@@ -76,6 +76,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const openHistory = useAgentStore((state) => state.openHistory);
   const planningState = useAgentStore((state) => state.planningState);
   const closeHistory = useAgentStore((state) => state.closeHistory);
+  const pendingAsk = useAgentStore((state) => state.pendingAsk);
   const run = useAgentStore((state) => state.run);
   const isRunning = useAgentStore(selectIsAgentRunActive);
   const sendMessage = useAgentStore((state) => state.sendMessage);
@@ -83,6 +84,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const sessions = useAgentStore((state) => state.sessions);
   const setInput = useAgentStore((state) => state.setInput);
   const stopMessage = useAgentStore((state) => state.stopMessage);
+  const submitAskAnswer = useAgentStore((state) => state.submitAskAnswer);
   const switchSession = useAgentStore((state) => state.switchSession);
   const initializeAgentHistory = useAgentStore((state) => state.initialize);
   const rootPath = useBookWorkspaceStore((state) => state.rootPath);
@@ -96,7 +98,11 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const agentPreferences = useSubAgentStore((state) => state.preferences);
   const agentsStatus = useSubAgentStore((state) => state.status);
   const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
-  const displayRunStatus = isRunning ? "running" : run.status;
+  const displayRunStatus = run.status === "awaiting_user"
+    ? "awaiting_user"
+    : isRunning
+      ? "running"
+      : run.status;
 
   useEffect(() => {
     if (skillsStatus === "idle") {
@@ -197,6 +203,8 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         onCoach={coachMessage}
         onInputChange={setInput}
         onStop={stopMessage}
+        onSubmitAskAnswer={submitAskAnswer}
+        pendingAsk={pendingAsk}
         planningState={planningState}
         onSubmit={(selection) => {
           void sendMessage(selection);

@@ -15,12 +15,18 @@ import { z } from "zod";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import type { ResolvedAgent } from "../../stores/subAgentStore";
 import type { ResolvedSkill } from "../../stores/skillsStore";
-import type { AgentMessage, AgentPart, AgentUsage } from "./types";
 import type { AgentTool } from "./runtime";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
 import type { ProjectContextPayload } from "./projectContext";
 import type { AgentMode, ModeContextMap } from "./modeRules";
 import type { PlanningState } from "./planning";
+import type {
+  AgentMessage,
+  AgentPart,
+  AgentUsage,
+  AskToolAnswer,
+  AskUserRequest,
+} from "./types";
 import { generateAgentText, streamAgentText, defineTool } from "./modelGateway";
 import { buildConversationMessages } from "./messageContext";
 import {
@@ -29,7 +35,7 @@ import {
 } from "./promptContext";
 import { getPlanningIntervention } from "./planning";
 import { createToolResultPart } from "./toolParts";
-import { throwIfAborted } from "./asyncUtils";
+import { throwIfAborted, withAbort } from "./asyncUtils";
 import { logPromptDebug, normalizeDebugMessageContent, createSystemMessage } from "./debug";
 import { buildAiSdkTools } from "./buildAiSdkTools";
 import { runSubAgentTask } from "./runSubAgentTask";
@@ -57,6 +63,10 @@ export type RunAgentTurnInput = {
   providerConfig: AgentProviderConfig;
   /** workspace 工具集 */
   workspaceTools: Record<string, AgentTool>;
+  onAskUser?: (event: {
+    request: AskUserRequest;
+    toolCallId: string;
+  }) => Promise<AskToolAnswer>;
   onToolRequestStateChange?: (event: {
     requestId: string;
     status: "start" | "finish";
@@ -72,6 +82,150 @@ function hasProviderConfig(config: AgentProviderConfig): boolean {
   return Boolean(
     config.apiKey.trim() && config.baseURL.trim() && config.model.trim(),
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  return fallback;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function createPartQueue() {
+  const items: AgentPart[] = [];
+  let done = false;
+  let pendingError: unknown;
+  let waiter: (() => void) | null = null;
+
+  return {
+    close(error?: unknown) {
+      done = true;
+      pendingError = error;
+      waiter?.();
+      waiter = null;
+    },
+    push(part: AgentPart) {
+      items.push(part);
+      waiter?.();
+      waiter = null;
+    },
+    async *stream(): AsyncGenerator<AgentPart> {
+      while (true) {
+        while (items.length > 0) {
+          const next = items.shift();
+          if (next) {
+            yield next;
+          }
+        }
+
+        if (done) {
+          if (pendingError) {
+            throw pendingError;
+          }
+          return;
+        }
+
+        await new Promise<void>((resolve) => {
+          waiter = resolve;
+        });
+      }
+    },
+  };
+}
+
+function createScopedAskUser(params: {
+  abortSignal?: AbortSignal;
+  enqueuePart: (part: AgentPart) => void;
+  onAskUser?: RunAgentTurnInput["onAskUser"];
+}) {
+  const { abortSignal, enqueuePart, onAskUser } = params;
+  let pendingToolCallId: string | null = null;
+
+  return async function askUser(
+    toolCallId: string | undefined,
+    request: AskUserRequest,
+  ): Promise<AskToolAnswer> {
+    if (!toolCallId?.trim()) {
+      throw new Error("ask 工具缺少 toolCallId，无法建立交互。");
+    }
+    if (!onAskUser) {
+      throw new Error("当前运行环境不支持 ask 交互。");
+    }
+    if (pendingToolCallId && pendingToolCallId !== toolCallId) {
+      throw new Error("当前已有等待用户回答的 ask，暂不支持并发交互。");
+    }
+
+    pendingToolCallId = toolCallId;
+    enqueuePart({
+      type: "ask-user",
+      toolName: "ask",
+      toolCallId,
+      status: "awaiting_user",
+      title: request.title,
+      description: request.description,
+      selectionMode: request.selectionMode,
+      options: request.options,
+      customOptionId: request.customOptionId,
+      customPlaceholder: request.customPlaceholder,
+      minSelections: request.minSelections,
+      maxSelections: request.maxSelections,
+      confirmLabel: request.confirmLabel,
+    });
+
+    try {
+      const answer = await withAbort(abortSignal, () =>
+        onAskUser({ request, toolCallId }),
+      );
+      enqueuePart({
+        type: "ask-user",
+        toolName: "ask",
+        toolCallId,
+        status: "completed",
+        title: request.title,
+        description: request.description,
+        selectionMode: request.selectionMode,
+        options: request.options,
+        customOptionId: request.customOptionId,
+        customPlaceholder: request.customPlaceholder,
+        minSelections: request.minSelections,
+        maxSelections: request.maxSelections,
+        confirmLabel: request.confirmLabel,
+        answer,
+      });
+      return answer;
+    } catch (error) {
+      enqueuePart({
+        type: "ask-user",
+        toolName: "ask",
+        toolCallId,
+        status: "failed",
+        title: request.title,
+        description: request.description,
+        selectionMode: request.selectionMode,
+        options: request.options,
+        customOptionId: request.customOptionId,
+        customPlaceholder: request.customPlaceholder,
+        minSelections: request.minSelections,
+        maxSelections: request.maxSelections,
+        confirmLabel: request.confirmLabel,
+        errorMessage: isAbortError(error)
+          ? "等待用户输入的交互已中断，请重新发起。"
+          : getErrorMessage(error, "等待用户输入时发生未知错误。"),
+      });
+      throw error;
+    } finally {
+      if (pendingToolCallId === toolCallId) {
+        pendingToolCallId = null;
+      }
+    }
+  };
 }
 
 /**
@@ -97,12 +251,12 @@ export async function* runAgentTurn({
   prompt,
   providerConfig,
   workspaceTools,
+  onAskUser,
   onToolRequestStateChange,
   onUsage,
   _streamFn = streamAgentText,
   _subagentStreamFn = streamAgentText,
 }: RunAgentTurnInput): AsyncGenerator<AgentPart> {
-  // 子代理任务执行期间产生的 part 缓冲；由主流程在合适时机交错 yield。
   const progressQueue: AgentPart[] = [];
 
   if (!hasProviderConfig(providerConfig)) {
@@ -113,14 +267,25 @@ export async function* runAgentTurn({
     return;
   }
 
+  const partQueue = createPartQueue();
+  const askUser = createScopedAskUser({
+    abortSignal,
+    enqueuePart: (part) => {
+      partQueue.push(part);
+    },
+    onAskUser,
+  });
+
   const aiTools = buildAiSdkTools(
     workspaceTools,
     enabledToolIds,
     abortSignal,
     onToolRequestStateChange,
+    {
+      askUser,
+    },
   );
 
-  // 当 task 工具被启用且存在可用子代理时，向 ToolSet 注入 task 包装器。
   if (enabledToolIds.includes("task") && enabledAgents.length > 0) {
     aiTools.task = defineTool({
       description:
@@ -240,72 +405,73 @@ export async function* runAgentTurn({
     tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
   });
 
-  throwIfAborted(abortSignal);
-  for await (const part of result.fullStream) {
-    throwIfAborted(abortSignal);
-
-    // 子任务进度优先 yield，确保 UI 顺序与执行顺序一致。
+  const flushProgressQueue = () => {
     while (progressQueue.length > 0) {
       throwIfAborted(abortSignal);
       const snapshot = progressQueue.shift();
       if (snapshot) {
-        yield snapshot;
+        partQueue.push(snapshot);
       }
     }
+  };
 
-    switch (part.type) {
-      case "text-delta":
-        yield { type: "text-delta", delta: part.text };
-        break;
-      case "reasoning-delta":
-        yield {
-          type: "reasoning",
-          summary: "正在思考",
-          detail: part.text,
-        };
-        break;
-      case "tool-call":
-        yield {
-          type: "tool-call",
-          toolName: part.toolName,
-          toolCallId: part.toolCallId,
-          status: "running",
-          inputSummary: JSON.stringify(part.input),
-        };
-        break;
-      case "tool-result":
-        yield createToolResultPart({
-          toolName: part.toolName,
-          toolCallId: part.toolCallId,
-          output: part.output,
-        });
-        break;
-      default:
-        break;
-    }
-
-    while (progressQueue.length > 0) {
+  void (async () => {
+    try {
       throwIfAborted(abortSignal);
-      const snapshot = progressQueue.shift();
-      if (snapshot) {
-        yield snapshot;
+      for await (const part of result.fullStream) {
+        throwIfAborted(abortSignal);
+        flushProgressQueue();
+
+        switch (part.type) {
+          case "text-delta":
+            partQueue.push({ type: "text-delta", delta: part.text });
+            break;
+          case "reasoning-delta":
+            partQueue.push({
+              type: "reasoning",
+              summary: "正在思考",
+              detail: part.text,
+            });
+            break;
+          case "tool-call":
+            partQueue.push({
+              type: "tool-call",
+              toolName: part.toolName,
+              toolCallId: part.toolCallId,
+              status: "running",
+              inputSummary: JSON.stringify(part.input),
+            });
+            break;
+          case "tool-result":
+            partQueue.push(
+              createToolResultPart({
+                toolName: part.toolName,
+                toolCallId: part.toolCallId,
+                output: part.output,
+              }),
+            );
+            break;
+          default:
+            break;
+        }
+
+        flushProgressQueue();
       }
-    }
-  }
 
-  // 主流程结束后清空残留的子任务进度。
-  while (progressQueue.length > 0) {
-    throwIfAborted(abortSignal);
-    const snapshot = progressQueue.shift();
-    if (snapshot) {
-      yield snapshot;
+      flushProgressQueue();
+      throwIfAborted(abortSignal);
+      const usage = await result.usagePromise;
+      if (usage) {
+        onUsage?.(usage);
+      }
+      partQueue.close();
+    } catch (error) {
+      partQueue.close(error);
     }
-  }
+  })();
 
-  throwIfAborted(abortSignal);
-  const usage = await result.usagePromise;
-  if (usage) {
-    onUsage?.(usage);
+  for await (const part of partQueue.stream()) {
+    yield part;
   }
 }
 

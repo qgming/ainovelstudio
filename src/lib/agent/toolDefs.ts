@@ -12,6 +12,12 @@ export type ToolDef = {
 
 export const BUILTIN_TOOLS: ToolDef[] = [
   {
+    id: "ask",
+    name: "询问用户",
+    description:
+      "在运行过程中向用户发起单选或多选问题；工具会自动附带“用户输入”选项，并在用户确认后继续当前轮。",
+  },
+  {
     id: "todo",
     name: "待办计划",
     description:

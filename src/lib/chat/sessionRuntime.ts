@@ -57,7 +57,7 @@ export function buildRun(id: string, title: string, status: AgentRunStatus, mess
 }
 
 export function normalizeRecoveredStatus(status: AgentRunStatus): AgentRunStatus {
-  return status === "running" ? "idle" : status;
+  return status === "running" || status === "awaiting_user" ? "idle" : status;
 }
 
 function normalizeRecoveredPart(part: AgentPart): AgentPart | null {
@@ -65,11 +65,26 @@ function normalizeRecoveredPart(part: AgentPart): AgentPart | null {
     return null;
   }
 
-  if ((part.type === "tool-call" || part.type === "tool-result") && part.status === "running") {
+  if (
+    (part.type === "tool-call" || part.type === "tool-result")
+    && (part.status === "running" || part.status === "awaiting_user")
+  ) {
     return {
       ...part,
       status: "failed",
       outputSummary: part.outputSummary ?? "已中断",
+    };
+  }
+
+  if (part.type === "ask-user") {
+    if (part.status !== "awaiting_user") {
+      return part;
+    }
+
+    return {
+      ...part,
+      status: "failed",
+      errorMessage: part.errorMessage ?? "等待用户输入的交互已中断，请重新发起。",
     };
   }
 
@@ -166,6 +181,38 @@ export function mergePart(parts: AgentPart[], part: AgentPart): AgentPart[] {
       return nextParts.map((candidate, index) => (index === existingIndex ? { ...candidate, ...part } : candidate));
     }
     return [...nextParts, part];
+  }
+
+  if (part.type === "ask-user") {
+    const withUpdatedToolCalls = nextParts.map((candidate) => {
+      if (
+        candidate.type !== "tool-call"
+        || candidate.toolCallId !== part.toolCallId
+        || candidate.toolName !== part.toolName
+      ) {
+        return candidate;
+      }
+
+      return {
+        ...candidate,
+        status:
+          part.status === "awaiting_user"
+            ? "awaiting_user"
+            : candidate.status,
+      };
+    });
+    const existingIndex = withUpdatedToolCalls.findIndex(
+      (candidate) =>
+        candidate.type === "ask-user"
+        && candidate.toolCallId === part.toolCallId
+        && candidate.toolName === part.toolName,
+    );
+    if (existingIndex >= 0) {
+      return withUpdatedToolCalls.map((candidate, index) =>
+        index === existingIndex ? { ...candidate, ...part } : candidate,
+      );
+    }
+    return [...withUpdatedToolCalls, part];
   }
 
   if (part.type === "tool-result") {

@@ -41,7 +41,13 @@ import { formatProviderError } from "../lib/agent/errorFormatting";
 import { derivePlanningState } from "../lib/agent/planning";
 import { runAgentTurn } from "../lib/agent/session";
 import { buildBookWorkspaceTools } from "../lib/agent/toolsets/factory";
-import type { AgentRunStatus, AgentPart, AgentUsage } from "../lib/agent/types";
+import type {
+  AgentRunStatus,
+  AgentPart,
+  AgentUsage,
+  AskToolAnswer,
+  AskUserRequest,
+} from "../lib/agent/types";
 import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 import { getEnabledSkills, useSkillsStore } from "./skillsStore";
 import { getEnabledAgents, useSubAgentStore } from "./subAgentStore";
@@ -59,6 +65,7 @@ import {
   selectIsAgentRunActive,
   trackInflightToolRequest,
   type ChatRunStoreState,
+  type PendingAskState,
 } from "./chatRun/helpers";
 
 type RunInterruptReason = "manual_stop" | "app_close" | "restart" | "reset" | "coach";
@@ -75,6 +82,7 @@ type ChatRunStoreActions = {
   sendMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
   setInput: (value: string) => void;
   stopMessage: () => void;
+  submitAskAnswer: (answer: AskToolAnswer) => void;
   switchSession: (sessionId: string) => Promise<void>;
 };
 
@@ -130,6 +138,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     const abortController = new AbortController();
     const runRequestId = buildRunRequestId();
     const optimisticSessionId = get().activeSessionId;
+    let pendingAsk: PendingAskState | null = null;
     const conversationHistory = optimisticSessionId
       ? (get().messagesBySession[optimisticSessionId] ?? [])
       : [];
@@ -155,6 +164,14 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       }
     };
 
+    const resolveActiveRunStatus = (): AgentRunStatus => {
+      const state = get();
+      if (state.pendingAsk || state.run.status === "awaiting_user") {
+        return "awaiting_user";
+      }
+      return "running";
+    };
+
     const flushAssistant = async (status: AgentRunStatus) => {
       if (!sessionId) return;
       const assistant = latestMessages[latestMessages.length - 1];
@@ -176,7 +193,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       if (persistTimer) return;
       persistTimer = setTimeout(() => {
         persistTimer = null;
-        persistChain = persistChain.then(() => flushAssistant("running"));
+        persistChain = persistChain.then(() => flushAssistant(resolveActiveRunStatus()));
       }, 350);
     };
 
@@ -198,7 +215,10 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           },
         };
         latestMessages = messages;
-        return ensureSessionState(state, currentSessionId, messages, "", "running");
+        const nextStatus = state.pendingAsk || state.run.status === "awaiting_user"
+          ? "awaiting_user"
+          : "running";
+        return ensureSessionState(state, currentSessionId, messages, "", nextStatus);
       });
     };
 
@@ -293,16 +313,61 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           })
         : null;
       const projectContext = await loadProjectContext({
-        readFile: readWorkspaceTextFile,
-        readTree: readWorkspaceTree,
-        workspaceRootPath: workspaceState.rootPath,
-      });
+            readFile: readWorkspaceTextFile,
+            readTree: readWorkspaceTree,
+            workspaceRootPath: workspaceState.rootPath,
+          });
+      const handleAskUser = ({
+        request,
+        toolCallId,
+      }: {
+        request: AskUserRequest;
+        toolCallId: string;
+      }) =>
+        new Promise<AskToolAnswer>((resolve, reject) => {
+          if (!sessionId || !isCurrentRun()) {
+            reject(new Error("当前会话已失效，无法等待用户回答。"));
+            return;
+          }
+
+          pendingAsk = {
+            messageId: assistantMessage.id,
+            request,
+            resolve: (answer) => {
+              pendingAsk = null;
+              resolve(answer);
+            },
+            reject: (error) => {
+              pendingAsk = null;
+              reject(error);
+            },
+            toolCallId,
+          };
+
+          set((state) => {
+            if (state.activeRunRequestId !== runRequestId || !sessionId) {
+              pendingAsk?.reject(new Error("当前会话已失效，无法等待用户回答。"));
+              return state;
+            }
+            return {
+              pendingAsk,
+              ...ensureSessionState(
+                state,
+                sessionId,
+                state.messagesBySession[sessionId] ?? latestMessages,
+                "",
+                "awaiting_user",
+              ),
+            };
+          });
+        });
       if (!isCurrentRun()) return;
 
       const planningState = derivePlanningState(persistedConversationHistory);
       // 写作模式默认 toolset：global + workspace + localResource，统一通过工厂装配。
       const workspaceTools = buildBookWorkspaceTools({
         rootPath: workspaceState.rootPath,
+        includeAsk: true,
       });
 
       // 4. 调用 LLM 流式接口，逐 part 合并到 assistant 消息。
@@ -318,6 +383,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         enabledToolIds,
         mode: "book",
         manualContext,
+        onAskUser: handleAskUser,
         onUsage: attachUsageToAssistant,
         planningState,
         projectContext,
@@ -346,7 +412,20 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           };
           latestMessages = messages;
           scheduleAssistantPersist();
-          return ensureSessionState(state, activeSessionId, messages, "", "running");
+          return {
+            pendingAsk: part.type === "ask-user" && part.status === "completed"
+              ? null
+              : state.pendingAsk,
+            ...ensureSessionState(
+              state,
+              activeSessionId,
+              messages,
+              "",
+              part.type === "ask-user" && part.status === "awaiting_user"
+                ? "awaiting_user"
+                : "running",
+            ),
+          };
         });
       }
 
@@ -364,6 +443,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         activeRunRequestId:
           state.activeRunRequestId === runRequestId ? null : state.activeRunRequestId,
         inflightToolRequestIds: [],
+        pendingAsk: null,
         ...ensureSessionState(state, completedSessionId, latestMessages, "", "completed"),
       }));
       await flushAssistant("completed");
@@ -376,6 +456,10 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       await persistChain;
 
       if (abortController.signal.aborted) {
+        const interruptedPendingAsk = get().pendingAsk;
+        if (interruptedPendingAsk) {
+          interruptedPendingAsk.reject(new Error("等待用户输入的交互已中断，请重新发起。"));
+        }
         const abortedState = resolveAbortedAssistantState(latestMessages, assistantMessage.id);
         latestMessages = abortedState.messages;
         if (get().activeRunRequestId === runRequestId) {
@@ -385,6 +469,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
                 abortController: null,
                 activeRunRequestId: null,
                 inflightToolRequestIds: [],
+                pendingAsk: null,
                 planningState: derivePlanningState(latestMessages),
                 run: buildInitialRun(),
               };
@@ -393,6 +478,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
               abortController: null,
               activeRunRequestId: null,
               inflightToolRequestIds: [],
+              pendingAsk: null,
               ...ensureSessionState(state, sessionId, latestMessages, "", "idle"),
             };
           });
@@ -428,6 +514,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
             abortController: null,
             activeRunRequestId: null,
             inflightToolRequestIds: [],
+            pendingAsk: null,
             errorMessage: formatAgentError(error, "Agent 执行失败，请稍后重试。"),
             planningState: derivePlanningState(latestMessages),
             run: buildRun(
@@ -442,6 +529,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           abortController: null,
           activeRunRequestId: null,
           inflightToolRequestIds: [],
+          pendingAsk: null,
           ...ensureSessionState(state, sessionId, latestMessages, "", "failed"),
         };
       });
@@ -523,6 +611,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       const abortController = state.abortController;
       const requestIds = [...state.inflightToolRequestIds];
       const sessionId = state.activeSessionId;
+      const pendingAsk = state.pendingAsk;
       const messages = sessionId ? (state.messagesBySession[sessionId] ?? []) : [];
       const assistant = messages[messages.length - 1];
       const shouldRemovePlaceholder = Boolean(
@@ -530,8 +619,9 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       );
       const nextMessages = shouldRemovePlaceholder ? messages.slice(0, -1) : messages;
 
-      if (!abortController && requestIds.length === 0) return;
+      if (!abortController && requestIds.length === 0 && !pendingAsk) return;
 
+      pendingAsk?.reject(new Error("等待用户输入的交互已中断，请重新发起。"));
       abortController?.abort();
       set((current) => {
         if (!sessionId) {
@@ -539,12 +629,14 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
             abortController: null,
             activeRunRequestId: null,
             inflightToolRequestIds: [],
+            pendingAsk: null,
           };
         }
         return {
           abortController: null,
           activeRunRequestId: null,
           inflightToolRequestIds: [],
+          pendingAsk: null,
           ...ensureSessionState(current, sessionId, nextMessages, "", "idle"),
         };
       });
@@ -585,6 +677,25 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           set({ errorMessage: "草稿保存失败。" });
         });
       }
+    },
+    submitAskAnswer: (answer) => {
+      const pendingAsk = get().pendingAsk;
+      const sessionId = get().activeSessionId;
+      if (!pendingAsk || !sessionId) {
+        return;
+      }
+
+      set((state) => ({
+        pendingAsk: null,
+        ...ensureSessionState(
+          state,
+          sessionId,
+          state.messagesBySession[sessionId] ?? [],
+          "",
+          "running",
+        ),
+      }));
+      pendingAsk.resolve(answer);
     },
     stopMessage: () => {
       void get().hardStopCurrentRun("manual_stop");

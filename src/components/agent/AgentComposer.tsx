@@ -19,16 +19,19 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { getBaseName } from "../../lib/bookWorkspace/paths";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
 import type { ManualTurnContextSelection } from "../../lib/agent/manualTurnContext";
 import type { PlanItem, PlanningState } from "../../lib/agent/planning";
-import type { AgentRunStatus } from "../../lib/agent/types";
+import type { AgentRunStatus, AskToolAnswer } from "../../lib/agent/types";
+import type { PendingAskState } from "../../stores/chatRun/helpers";
 import { AgentManualResourcePicker } from "./AgentManualResourcePicker";
 import { AgentWorkspaceFilePicker } from "./AgentWorkspaceFilePicker";
 
@@ -45,6 +48,8 @@ type AgentComposerProps = {
   onInputChange: (value: string) => void;
   onStop: () => void;
   onSubmit: (selection: ManualTurnContextSelection) => void;
+  onSubmitAskAnswer: (answer: AskToolAnswer) => void;
+  pendingAsk: PendingAskState | null;
   planningState: PlanningState;
   resources: SelectableResource[];
   rootNode: TreeNode | null;
@@ -73,6 +78,13 @@ function hasIncompleteItems(items: PlanItem[]) {
   return items.some((item) => item.status !== "completed");
 }
 
+function buildInitialAskSelection(_pendingAsk: PendingAskState | null) {
+  return {
+    customInput: "",
+    selectedIds: [] as string[],
+  };
+}
+
 const COMPOSER_MIN_ROWS = 2;
 
 export function AgentComposer({
@@ -81,12 +93,15 @@ export function AgentComposer({
   onInputChange,
   onStop,
   onSubmit,
+  onSubmitAskAnswer,
+  pendingAsk,
   planningState,
   resources,
   rootNode,
   runStatus,
 }: AgentComposerProps) {
   const isRunning = runStatus === "running";
+  const isAskMode = Boolean(pendingAsk);
   const [isCoaching, setIsCoaching] = useState(false);
   const showPlan = hasIncompleteItems(planningState.items);
   const hasStalePlan = planningState.roundsSinceUpdate >= 3;
@@ -98,6 +113,9 @@ export function AgentComposer({
     filePaths: [],
     skillIds: [],
   });
+  const [askSelectedIds, setAskSelectedIds] = useState<string[]>([]);
+  const [askCustomInput, setAskCustomInput] = useState("");
+  const askRequest = pendingAsk?.request ?? null;
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -108,6 +126,12 @@ export function AgentComposer({
     textarea.style.height = "auto";
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, [input]);
+
+  useEffect(() => {
+    const nextState = buildInitialAskSelection(pendingAsk);
+    setAskSelectedIds(nextState.selectedIds);
+    setAskCustomInput(nextState.customInput);
+  }, [pendingAsk]);
 
   const selectedItems = useMemo(() => {
     const resourceItems = resources
@@ -129,13 +153,25 @@ export function AgentComposer({
     return [...resourceItems, ...fileItems];
   }, [resources, selection.agentIds, selection.filePaths, selection.skillIds]);
 
+  const askUsesCustomInput = Boolean(
+    askRequest && askSelectedIds.includes(askRequest.customOptionId),
+  );
+  const askMinSelections = askRequest?.minSelections ?? 1;
+  const askMaxSelections = askRequest?.maxSelections ?? (askRequest?.selectionMode === "single" ? 1 : Number.POSITIVE_INFINITY);
+  const askHasValidSelectionCount =
+    askSelectedIds.length >= askMinSelections && askSelectedIds.length <= askMaxSelections;
+  const askCanSubmit =
+    Boolean(askRequest)
+    && askHasValidSelectionCount
+    && (!askUsesCustomInput || Boolean(askCustomInput.trim()));
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey) {
       return;
     }
 
     event.preventDefault();
-    if (!isRunning && input.trim()) {
+    if (!isRunning && !isAskMode && input.trim()) {
       onSubmit(selection);
       setSelection({ agentIds: [], filePaths: [], skillIds: [] });
     }
@@ -188,6 +224,69 @@ export function AgentComposer({
   const handleSubmit = () => {
     onSubmit(selection);
     setSelection({ agentIds: [], filePaths: [], skillIds: [] });
+  };
+
+  const handleAskToggle = (optionId: string) => {
+    if (!askRequest) {
+      return;
+    }
+
+    if (askRequest.selectionMode === "single") {
+      setAskSelectedIds([optionId]);
+      if (optionId !== askRequest.customOptionId) {
+        setAskCustomInput("");
+      }
+      return;
+    }
+
+    setAskSelectedIds((current) => {
+      if (current.includes(optionId)) {
+        if (optionId === askRequest.customOptionId) {
+          setAskCustomInput("");
+        }
+        return removeValue(current, optionId);
+      }
+      if (current.length >= askMaxSelections) {
+        return current;
+      }
+      return [...current, optionId];
+    });
+  };
+
+  const handleAskSubmit = () => {
+    if (!askRequest || !askCanSubmit) {
+      return;
+    }
+
+    const values = askSelectedIds
+      .map((optionId) => {
+        const option = askRequest.options.find((item) => item.id === optionId);
+        if (!option) {
+          return null;
+        }
+        if (optionId === askRequest.customOptionId) {
+          return {
+            type: "custom" as const,
+            id: option.id,
+            label: option.label,
+            value: askCustomInput.trim(),
+          };
+        }
+        return {
+          type: "option" as const,
+          id: option.id,
+          label: option.label,
+          value: option.label,
+        };
+      })
+      .filter((value): value is AskToolAnswer["values"][number] => value !== null);
+
+    onSubmitAskAnswer({
+      selectionMode: askRequest.selectionMode,
+      values,
+      usedCustomInput: askUsesCustomInput,
+      customInput: askUsesCustomInput ? askCustomInput.trim() : undefined,
+    });
   };
 
   return (
@@ -274,7 +373,7 @@ export function AgentComposer({
         </div>
       ) : null}
 
-      {selectedItems.length > 0 ? (
+      {!isAskMode && selectedItems.length > 0 ? (
         <div className="flex flex-wrap gap-2 px-3 py-2">
           {selectedItems.map((item) => (
             <span
@@ -302,116 +401,210 @@ export function AgentComposer({
       ) : null}
 
       <div className="overflow-hidden border-t border-border">
-        <textarea
-          ref={textareaRef}
-          aria-label="Agent 输入框"
-          className="editor-textarea px-3 py-3 leading-6"
-          onChange={(event) => onInputChange(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="输入新想法"
-          rows={COMPOSER_MIN_ROWS}
-          value={input}
-        />
-        <div className="flex h-11 items-center gap-2 border-t border-border px-2">
-          <div className="flex min-w-0 flex-1 items-center gap-0.5">
-            {/* 选择技能/子 Agent */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+        {isAskMode && askRequest ? (
+          <div>
+            <div className="space-y-1 px-3 py-3">
+              <div className="text-sm font-medium text-foreground">{askRequest.title}</div>
+              {askRequest.description ? (
+                <div className="text-xs leading-5 text-muted-foreground">
+                  {askRequest.description}
+                </div>
+              ) : null}
+            </div>
+            <div className="divide-y divide-border border-y border-border">
+              {askRequest.options.map((option) => {
+                const selected = askSelectedIds.includes(option.id);
+                const isCustomOption = option.id === askRequest.customOptionId;
+                const isSingleSelect = askRequest.selectionMode === "single";
+                return (
+                  <div
+                    key={option.id}
+                    className={cn(
+                      "transition-colors",
+                      selected ? "bg-panel-subtle" : "bg-transparent hover:bg-accent/30",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => handleAskToggle(option.id)}
+                      className="flex min-h-11 w-full items-start gap-3 px-3 py-3 text-left text-foreground transition-colors"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center border transition-colors",
+                          isSingleSelect ? "rounded-full" : "rounded-[0.375rem]",
+                          selected
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-muted-foreground/40 bg-background text-transparent",
+                        )}
+                      >
+                        {selected ? <Check className="h-3 w-3" /> : null}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className={cn(
+                          "block text-sm leading-6",
+                          selected ? "font-medium text-foreground" : "font-normal text-foreground",
+                        )}
+                        >
+                          {option.label}
+                        </span>
+                        {option.description ? (
+                          <span className="block text-xs leading-5 text-muted-foreground">
+                            {option.description}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                    {isCustomOption && selected ? (
+                      <div className="border-t border-border/70 px-3 pb-3 pl-11 pt-3">
+                        <Input
+                          aria-label="用户输入"
+                          className="h-9 border-border bg-background"
+                          placeholder={askRequest.customPlaceholder ?? "请输入内容"}
+                          value={askCustomInput}
+                          onChange={(event) => setAskCustomInput(event.target.value)}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-between gap-3 px-3 py-3">
+              <div className="text-xs text-muted-foreground">
+                {askRequest.selectionMode === "single"
+                  ? "请选择一项后确认"
+                  : `可多选${Number.isFinite(askMaxSelections) ? `，最多 ${askMaxSelections} 项` : ""}`}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={onStop}>
+                  终止
+                </Button>
                 <Button
                   type="button"
-                  aria-label="选择技能或子 Agent"
-                  title="选择技能或子 Agent — 为本次消息附加技能或委派对象"
-                  disabled={isRunning}
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground"
+                  size="sm"
+                  onClick={handleAskSubmit}
+                  disabled={!askCanSubmit}
                 >
-                  <SquareSlash className="size-5" />
+                  {askRequest.confirmLabel ?? "确认"}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                side="top"
-                sideOffset={6}
-                className="max-h-[60vh] w-56 overflow-y-auto p-1"
-              >
-                <AgentManualResourcePicker
-                  items={resources}
-                  onToggle={handleResourceToggle}
-                  selectedIds={[...selection.skillIds, ...selection.agentIds]}
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* 选择工作区文件 */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  aria-label="选择工作区文件"
-                  title="选择工作区文件 — 将工作区文件作为本次消息的上下文"
-                  disabled={isRunning}
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground"
-                >
-                  <AtSign className="size-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                side="top"
-                sideOffset={6}
-                className="max-h-[60vh] w-56 overflow-y-auto p-1"
-              >
-                <AgentWorkspaceFilePicker
-                  onToggleFile={handleFileToggle}
-                  rootNode={rootNode}
-                  selectedFilePaths={selection.filePaths}
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </div>
+            </div>
           </div>
-          <Button
-            type="button"
-            aria-label="鞭策"
-            title="鞭策 — 终止当前活动并催促 AI 回到正轨"
-            disabled={isCoaching}
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground"
-            onClick={() => {
-              setIsCoaching(true);
-              void onCoach().finally(() => setIsCoaching(false));
-            }}
-          >
-            <Zap className="size-5" />
-          </Button>
-          <div aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
-          <Button
-            type="button"
-            aria-label={isRunning ? "停止输出" : "发送消息"}
-            title={
-              isRunning
-                ? "停止输出 — 终止当前输出并保留已生成内容"
-                : "发送消息 — 将当前输入发送给 agent 开始处理"
-            }
-            onClick={isRunning ? onStop : handleSubmit}
-            disabled={!isRunning && !input.trim()}
-            variant={isRunning ? "secondary" : "default"}
-            size="icon-sm"
-            className={
-              isRunning
-                ? "h-7 w-7 rounded-full"
-                : "h-7 w-7 rounded-full border-transparent bg-foreground text-background hover:bg-foreground/88"
-            }
-          >
-            {isRunning ? (
-              <Square className="h-3.5 w-3.5 fill-current" />
-            ) : (
-              <SendHorizontal className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        </div>
+        ) : (
+          <>
+            <textarea
+              ref={textareaRef}
+              aria-label="Agent 输入框"
+              className="editor-textarea px-3 py-3 leading-6"
+              onChange={(event) => onInputChange(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="输入新想法"
+              rows={COMPOSER_MIN_ROWS}
+              value={input}
+            />
+            <div className="flex h-11 items-center gap-2 border-t border-border px-2">
+              <div className="flex min-w-0 flex-1 items-center gap-0.5">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      aria-label="选择技能或子 Agent"
+                      title="选择技能或子 Agent — 为本次消息附加技能或委派对象"
+                      disabled={isRunning}
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground"
+                    >
+                      <SquareSlash className="size-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    side="top"
+                    sideOffset={6}
+                    className="max-h-[60vh] w-56 overflow-y-auto p-1"
+                  >
+                    <AgentManualResourcePicker
+                      items={resources}
+                      onToggle={handleResourceToggle}
+                      selectedIds={[...selection.skillIds, ...selection.agentIds]}
+                    />
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      aria-label="选择工作区文件"
+                      title="选择工作区文件 — 将工作区文件作为本次消息的上下文"
+                      disabled={isRunning}
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground"
+                    >
+                      <AtSign className="size-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    side="top"
+                    sideOffset={6}
+                    className="max-h-[60vh] w-56 overflow-y-auto p-1"
+                  >
+                    <AgentWorkspaceFilePicker
+                      onToggleFile={handleFileToggle}
+                      rootNode={rootNode}
+                      selectedFilePaths={selection.filePaths}
+                    />
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <Button
+                type="button"
+                aria-label="鞭策"
+                title="鞭策 — 终止当前活动并催促 AI 回到正轨"
+                disabled={isCoaching}
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground"
+                onClick={() => {
+                  setIsCoaching(true);
+                  void onCoach().finally(() => setIsCoaching(false));
+                }}
+              >
+                <Zap className="size-5" />
+              </Button>
+              <div aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
+              <Button
+                type="button"
+                aria-label={isRunning ? "停止输出" : "发送消息"}
+                title={
+                  isRunning
+                    ? "停止输出 — 终止当前输出并保留已生成内容"
+                    : "发送消息 — 将当前输入发送给 agent 开始处理"
+                }
+                onClick={isRunning ? onStop : handleSubmit}
+                disabled={!isRunning && !input.trim()}
+                variant={isRunning ? "secondary" : "default"}
+                size="icon-sm"
+                className={
+                  isRunning
+                    ? "h-7 w-7 rounded-full"
+                    : "h-7 w-7 rounded-full border-transparent bg-foreground text-background hover:bg-foreground/88"
+                }
+              >
+                {isRunning ? (
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                ) : (
+                  <SendHorizontal className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

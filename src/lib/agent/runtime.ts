@@ -1,12 +1,20 @@
+import type { AskToolAnswer, AskUserRequest } from "./types";
+
 export type ToolResult = {
   ok: boolean;
   summary: string;
   data?: unknown;
 };
 
+export type AgentToolInteractiveContext = {
+  askUser?: (request: AskUserRequest) => Promise<AskToolAnswer>;
+};
+
 export type AgentToolExecutionContext = {
   abortSignal?: AbortSignal;
   requestId?: string;
+  toolCallId?: string;
+  interactive?: AgentToolInteractiveContext;
 };
 
 export type AgentTool = {

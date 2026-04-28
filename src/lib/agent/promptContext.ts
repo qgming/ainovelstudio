@@ -161,6 +161,7 @@ function buildAgentCatalogBlock(agent: ResolvedAgent) {
 }
 
 const TOOL_USAGE_HINT: Record<string, string> = {
+  ask: "当需求不明确、存在多个合理方向，或必须让用户在几个方案里做选择时使用；支持单选/多选，最后一项“用户输入”会自动补上，回答后当前轮会继续。",
   todo: "多步任务（≥3 步）开场写短计划；同一时间只保留一个 in_progress，允许整份重写；长链路任务建议传 phase 字段（plot/bible/outline/chapter/write/review/polish）方便跨轮承接。",
   task: "批量独立任务 ≥3 项或需隔离上下文时派发；prompt 写清输入范围与期望输出，可传 agentId 指定目标。",
   browse: "不知道路径时首选；mode：list（默认）看子项、stat 看路径概况、tree 拿裁剪后的目录树；list 可配 kind、extensions、sortBy、limit。",
