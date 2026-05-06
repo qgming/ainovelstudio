@@ -110,30 +110,36 @@ describe("requireWorkflowDecisionResult", () => {
     });
   });
 
-  it("工具结果缺失时回退解析标签式正文", () => {
-    const parts: AgentPart[] = [
+  it("文本兜底兼容 approve/reject/retry 词汇", () => {
+    const partsApprove: AgentPart[] = [
       {
         type: "text",
         text: [
-          "通过结论：不通过",
-          "判断原因：冲突建立不足，转折偏快。",
-          "问题列表：",
-          "- 开篇动机偏弱",
-          "- 结尾钩子不够明确",
-          "修订摘要：补强角色目标，并重写章末钩子。",
+          "通过结论：approved",
+          "判断原因：开篇已落地。",
+          "修订摘要：",
         ].join("\n"),
       } as AgentPart,
     ];
+    expect(requireWorkflowDecisionResult(decisionStep, null, partsApprove)).toMatchObject({
+      pass: true,
+      reason: "开篇已落地。",
+    });
 
-    expect(requireWorkflowDecisionResult(decisionStep, null, parts)).toEqual({
+    const partsRetry: AgentPart[] = [
+      {
+        type: "text",
+        text: [
+          "pass: retry",
+          "reason: 章末钩子缺失。",
+          "revision_brief: 补一段悬念。",
+        ].join("\n"),
+      } as AgentPart,
+    ];
+    expect(requireWorkflowDecisionResult(decisionStep, null, partsRetry)).toMatchObject({
       pass: false,
-      label: "no",
-      reason: "冲突建立不足，转折偏快。",
-      issues: [
-        { type: "review", severity: "medium", message: "开篇动机偏弱" },
-        { type: "review", severity: "medium", message: "结尾钩子不够明确" },
-      ],
-      revision_brief: "补强角色目标，并重写章末钩子。",
+      reason: "章末钩子缺失。",
+      revision_brief: "补一段悬念。",
     });
   });
 });

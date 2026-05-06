@@ -460,7 +460,9 @@ export async function* runAgentTurn({
 
       flushProgressQueue();
       throwIfAborted(abortSignal);
-      const usage = await result.usagePromise;
+      const usage = result.usagePromise
+        ? await withAbort(abortSignal, () => result.usagePromise as Promise<AgentUsage | null>)
+        : null;
       if (usage) {
         onUsage?.(usage);
       }

@@ -1,8 +1,8 @@
 {
   "templateKey": "builtin:short-story-factory",
   "name": "短篇集创作",
-  "description": "面向短篇集批量生产的工作流，每轮生成一篇全新独立短篇（1 万到 3 万字），自动完成立项、蓝图、成稿、终审与发布整理。",
-  "basePrompt": "直接使用当前内置编辑链完成短篇集批量生产。把当前绑定工作区视为'短篇集工厂根目录'，不是单本书目录。每次循环都必须新建一个独立短篇项目，并严格优先遵循用户在工作流里设置的主提示词，包括题材、受众、情绪基调、主卖点、禁用元素和风格方向。每一轮只做一件事：基于主提示词，生产一篇适配目标平台的全新独立短篇，目标字数 1 万到 3 万字，完结即收口，然后开始下一篇。所有节点都先读文件，再决定创建、更新、维护哪些文件。不要把短篇做成长篇前置建档流程；优先用最少步骤完成题材锁定、故事蓝图、整本成稿、终审和发布整理。必须主动避开最近几轮已经写过的题材、关系模板、反转方式和结局套路，确保整个工厂输出的是短篇集，而不是同一篇小说的变体续写。",
+  "description": "面向短篇集批量生产的工作流，每轮生成一篇全新独立短篇（1 万到 3 万字），完成立项 → 蓝图 → 成稿 → 终审 → 发布整理。",
+  "basePrompt": "目标：把当前绑定工作区视为短篇集工厂根目录，每一轮新建一个独立短篇项目并完成发布整理。所有事实以工作区文件为准；每篇短篇都是独立完结作品，不续写其他短篇，也不为下一篇埋长期主线。必须主动避开最近几篇已用过的题材、关系结构、反转方式与结局套路。严格遵循用户主提示词中的题材、平台、卖点、风格与禁写约束。",
   "loopConfig": {
     "maxLoops": 5
   },
@@ -12,35 +12,35 @@
       "agentId": "short-novelist",
       "name": "选题立项",
       "roleLabel": "选题立项",
-      "responsibilityPrompt": "把绑定工作区视为短篇集工厂根目录。先读取用户主提示词、已有项目目录、`.project/status/project-state.json` 和 `.project/status/factory-index.json`（若存在），再为本轮新短篇锁定题材、受众、关系结构、冲突引擎、情绪走向、反转方式、目标字数、目标章节数和书名候选。你的目标是让这一篇既符合主提示词，又和最近几篇明显区分。请创建新的项目目录和立项文件，并写清本轮的题材关键词、卖点和避重说明。"
+      "responsibilityPrompt": "为本轮新短篇锁定题材与定位。必读：用户主提示词、`.project/status/project-state.json`（若存在）、`.project/status/factory-index.json`（若存在）、最近几个短篇项目目录。允许写入：本轮新短篇项目目录及其立项文件（题材、受众、关系结构、冲突引擎、情绪走向、反转方式、目标字数 / 章节数、书名候选、与近期作品的差异点）。完成条件：新项目目录与立项文件已写回，并简短说明本篇区分点。"
     },
     {
       "key": "novelist-blueprint",
       "agentId": "short-novelist",
       "name": "故事蓝图",
       "roleLabel": "故事蓝图",
-      "responsibilityPrompt": "定位本轮最新创建的短篇项目目录，读取主提示词和立项文件，为这篇短篇搭一个够写、好写、可发布的故事蓝图。重点一次性写清开篇钩子、主冲突、核心关系、推进节奏、中段反转、高潮回收、结局情绪点、章节拆分和必要的最小设定。不要把时间花在庞杂设定建档上；你的交付物应该让作者拿到后就能直接整本成稿。"
+      "responsibilityPrompt": "为本轮短篇产出可直接成稿的故事蓝图。必读：本轮项目目录、立项文件、用户主提示词。允许写入：本轮项目目录下的蓝图文件与最小设定文件。完成条件：蓝图含开篇钩子、主冲突、核心关系、推进节奏、中段反转、高潮回收、结局情绪点、章节拆分；不做重型建档。"
     },
     {
       "key": "novelist-draft",
       "agentId": "short-novelist",
       "name": "整本成稿",
       "roleLabel": "整本成稿",
-      "responsibilityPrompt": "定位本轮当前短篇项目目录，读取主提示词、立项文件、故事蓝图、最小设定和 revision_brief，完成整本短篇成稿。必须保证这是一篇独立完结的短篇，不续写旧项目，不为下一轮埋长期主线。优先强开头、强冲突、强情绪拉扯、强反转、清晰 payoff 和可发布性。若收到 revision_brief，请只返修当前短篇项目。"
+      "responsibilityPrompt": "完成本轮短篇整本成稿。必读：本轮项目目录、立项文件、故事蓝图、最小设定、最近一次 revision_brief（若有）。允许写入：本轮项目目录下的章节正文文件。完成条件：1 万至 3 万字独立完结，强开头 / 强冲突 / 强反转 / 清晰 payoff；返工模式只修订当前项目，不动其他短篇。"
     },
     {
       "key": "polisher-review",
       "agentId": "manuscript-polisher",
-      "name": "终审编辑",
-      "roleLabel": "可发布质检",
-      "responsibilityPrompt": "以终稿编辑的质检角色工作（不要做润色）。定位本轮当前短篇项目目录，读取全本终稿、故事蓝图和最小设定，按短篇标准检查开头抓人程度、冲突密度、反转有效性、节奏、结局满足感、一致性和可发布性。最终必须使用 workflow_decision 提交 pass、issues、revision_brief。若不通过，请把 revision_brief 写成只针对当前短篇的返工单。"
+      "name": "发布终审",
+      "roleLabel": "发布终审",
+      "responsibilityPrompt": "对本轮短篇做发布前质检（不要润色）。必读：本轮项目目录的全本终稿、故事蓝图、立项文件。完成条件：必须调用一次 `workflow_decision` 提交 pass / reason / issues / revision_brief；revision_brief 是只针对当前项目的可执行返工单。正文回复仅一句简短结论。"
     },
     {
       "key": "polisher-release",
       "agentId": "manuscript-polisher",
       "name": "发布整理",
-      "roleLabel": "终稿收口",
-      "responsibilityPrompt": "以终稿编辑的润色角色工作。在当前短篇已经通过终审后，读取终稿、故事蓝图和主提示词，对发布稿做最后一轮整理。你的目标是清理 AI 痕迹、统一文风、强化简介和标签，更新当前项目的 `.project/status/project-state.json`，并把这一篇登记进工厂级 `.project/status/factory-index.json`。只处理当前项目，不要回头改其他短篇。"
+      "roleLabel": "发布整理",
+      "responsibilityPrompt": "对通过终审的短篇做发布前最后整理（禁用 `workflow_decision`）。必读：本轮项目终稿、故事蓝图、用户主提示词。允许写入：当前项目内终稿（最小修改）、`.project/status/project-state.json`、工厂级 `.project/status/factory-index.json`。完成条件：清理 AI 味、统一文风、强化简介与标签、登记进 factory-index；不回头改其他短篇。"
     }
   ],
   "steps": [
@@ -55,7 +55,7 @@
       "type": "agent_task",
       "name": "选题立项",
       "memberKey": "novelist-setup",
-      "promptTemplate": "请把当前绑定工作区当作短篇集工厂根目录。先读取用户主提示词、已有项目目录、`.project/status/project-state.json` 和 `.project/status/factory-index.json`（若存在），再创建本轮新的短篇项目目录。为这一篇锁定题材、受众、关系结构、冲突引擎、情绪走向、反转方式、目标字数、目标章节数和书名候选，并写清与最近几篇的差异点。正文只需简短汇报本轮立项结果，不要严格输出 JSON。",
+      "promptTemplate": "为本轮新短篇创建项目目录并写入立项文件，含题材、受众、冲突 / 反转方向、目标字数 / 章节、与最近几篇的差异点。正文回复一句话说明：新项目目录路径与本篇定位。",
       "outputMode": "text",
       "nextStepKey": "story-blueprint"
     },
@@ -64,7 +64,7 @@
       "type": "agent_task",
       "name": "故事蓝图",
       "memberKey": "novelist-blueprint",
-      "promptTemplate": "请定位本轮最新创建的短篇项目目录，读取主提示词和立项文件，为这篇短篇产出可直接成稿的故事蓝图。重点写清开篇钩子、主冲突、核心关系、推进节奏、中段反转、高潮回收、结局情绪点、章节拆分和必要最小设定。不要做重型建档。正文只需简短说明本轮蓝图重点和主要文件，不要严格输出 JSON。",
+      "promptTemplate": "在本轮项目目录写入故事蓝图与最小设定，覆盖开篇 / 冲突 / 反转 / 高潮 / 结局 / 章节拆分。正文回复一句话说明：蓝图文件路径与最关键决策。",
       "outputMode": "text",
       "nextStepKey": "draft-short"
     },
@@ -73,7 +73,7 @@
       "type": "agent_task",
       "name": "整本成稿",
       "memberKey": "novelist-draft",
-      "promptTemplate": "请定位本轮当前短篇项目目录，读取主提示词、立项文件、故事蓝图、最小设定和 revision_brief，完成整本短篇成稿。目标字数 1 万到 3 万字，必须是独立完结短篇，不能续写旧项目，也不要为下一轮埋长期主线。若收到 revision_brief，请只返修当前项目。正文只需简短说明本轮写了哪些文件和是否还有风险点，不要严格输出 JSON。",
+      "promptTemplate": "在本轮项目目录完成整本短篇成稿。若收到 revision_brief 只返修当前项目。正文回复一句话说明：写入文件、字数是否达标、风险点。",
       "outputMode": "text",
       "nextStepKey": "final-review"
     },
@@ -82,7 +82,7 @@
       "type": "decision",
       "name": "发布终审",
       "memberKey": "polisher-review",
-      "promptTemplate": "请定位本轮当前短篇项目目录，读取全本终稿、故事蓝图和最小设定，按短篇标准检查开头抓人程度、冲突密度、反转有效性、节奏、结局满足感、一致性和可发布性。最终使用 workflow_decision 提交 pass、reason、issues、revision_brief。若未通过，请把 revision_brief 写成只针对当前项目的返工单。正文只需简短说明终审结论，不要严格输出 JSON。",
+      "promptTemplate": "审查本轮短篇是否可发布。必须在节点结束前调用一次 `workflow_decision`：pass=true 进入发布整理；pass=false 退回整本成稿。revision_brief 必须是可直接执行的返工单。",
       "sourceStepKey": "draft-short",
       "trueNextStepKey": "release-pack",
       "falseNextStepKey": "draft-short"
@@ -92,7 +92,7 @@
       "type": "agent_task",
       "name": "发布整理",
       "memberKey": "polisher-release",
-      "promptTemplate": "请在当前短篇已经通过终审后，读取终稿、故事蓝图和主提示词，对发布稿做最后一轮整理。重点清理 AI 痕迹、统一文风、强化简介和标签，更新当前项目的 `.project/status/project-state.json`，并把该短篇收录进工厂级 `.project/status/factory-index.json`。正文只需简短说明本轮整理了哪些发布文件，不要严格输出 JSON。",
+      "promptTemplate": "对当前短篇做发布前最后整理：最小修改清 AI 味、统一文风、强化简介与标签，并把本篇登记进 `.project/status/factory-index.json`。正文回复一句话说明：动了哪些文件。",
       "outputMode": "text",
       "nextStepKey": "success-end"
     },

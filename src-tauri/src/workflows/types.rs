@@ -94,6 +94,8 @@ pub enum WorkflowStepDefinition {
         source_step_id: String,
         true_next_step_id: Option<String>,
         false_next_step_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pass_rule: Option<String>,
     },
     End {
         id: String,
@@ -132,6 +134,8 @@ pub enum WorkflowStepInput {
         source_step_id: String,
         true_next_step_id: Option<String>,
         false_next_step_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pass_rule: Option<String>,
     },
     End {
         name: String,
@@ -323,6 +327,8 @@ pub(crate) enum WorkflowTemplateStep {
         source_step_key: String,
         true_next_step_key: Option<String>,
         false_next_step_key: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pass_rule: Option<String>,
     },
     End {
         key: String,

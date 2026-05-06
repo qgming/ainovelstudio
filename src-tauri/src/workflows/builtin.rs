@@ -361,6 +361,7 @@ pub(crate) fn materialize_workflow_from_package_force(
                     source_step_key,
                     true_next_step_key,
                     false_next_step_key,
+                    pass_rule,
                 } => WorkflowStepDefinition::Decision {
                     id: step_ids_by_key
                         .get(key)
@@ -384,6 +385,7 @@ pub(crate) fn materialize_workflow_from_package_force(
                     false_next_step_id: false_next_step_key
                         .as_ref()
                         .and_then(|value| step_ids_by_key.get(value).cloned()),
+                    pass_rule: pass_rule.clone(),
                 },
                 WorkflowTemplateStep::End {
                     key,

@@ -62,6 +62,7 @@ pub(crate) fn validate_step_input(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
+            ..
         } => {
             if name.trim().is_empty() {
                 return Err("步骤名称不能为空。".into());
@@ -438,6 +439,7 @@ fn upsert_step_internal(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
             ..
         } => (
             id.clone(),
@@ -450,6 +452,7 @@ fn upsert_step_internal(
                 "sourceStepId": source_step_id,
                 "trueNextStepId": true_next_step_id,
                 "falseNextStepId": false_next_step_id,
+                "passRule": pass_rule,
             }))?,
         ),
         WorkflowStepDefinition::End {
@@ -722,6 +725,10 @@ pub(crate) fn list_steps(
                     .map(ToString::to_string),
                 false_next_step_id: payload_value
                     .get("falseNextStepId")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                pass_rule: payload_value
+                    .get("passRule")
                     .and_then(Value::as_str)
                     .map(ToString::to_string),
             },

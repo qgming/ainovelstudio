@@ -10,6 +10,7 @@
     "build:android": "tauri android build --apk --target aarch64 --split-per-abi && node scripts/collect-release-bundles.mjs android",
     "preview": "vite preview",
     "tauri": "tauri",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude src/lib/agent/modelGateway.integration.test.ts",
     "test:integration": "vitest run src/lib/agent/modelGateway.integration.test.ts"
   },

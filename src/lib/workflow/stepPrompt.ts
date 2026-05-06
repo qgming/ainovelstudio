@@ -166,13 +166,48 @@ function buildDeltaSection(params: {
   }
 
   return renderSection(
-    "交接上下文",
+    "线索摘要",
     [
-      "以下信息由程序按预算整理，用于帮助你快速承接当前节点；涉及事实仍以工作区文件为准。",
+      "以下信息由程序按预算整理，仅作线索；事实仍以工作区文件为准，必要时用 read 重新核对。",
       deltaMemory.text,
     ].join("\n\n"),
   );
 }
+
+function buildAgentTaskExecutionRules(params: {
+  chapterWriteMode?: ChapterWriteMode;
+}) {
+  const { chapterWriteMode } = params;
+  const lines = [
+    "- 严格执行 system s00 Agent OS 内核：Inspect → Plan → Act → Verify → Report；除纯方法论外不得跳过 Inspect。",
+    "- 工作区文件是事实源；交接上下文只是线索，不替代 read。",
+    "- 只完成本节点产出，不替判断节点决定通过/失败，不替下游节点提前推进。",
+    "- 实际产出必须用工具写回工作区文件，不要把正文堆在对话里。",
+    "- 改已有文件优先 edit / json，新建用 path + write，不无故整文件覆盖。",
+  ];
+  if (chapterWriteMode === "rework_current_chapter") {
+    lines.push(
+      "- 当前处于【返工模式】：只针对最近一次审查问题修订当前对象，不推进到下一章或新对象。",
+    );
+  } else if (chapterWriteMode === "new_chapter") {
+    lines.push("- 当前处于【正常推进】：完成本轮目标对象。");
+  }
+  lines.push(
+    "- 完成后用一段简短中文摘要说明：改了哪些文件、关键决策、风险与下一节点交接要点。",
+  );
+  return lines.join("\n");
+}
+
+const DECISION_CONTRACT = [
+  "- 唯一职责：审查上一步产物，给出通过 / 失败判断；不重写正文，不派发子任务。",
+  "- 必须在节点结束前调用一次 `workflow_decision`，工作流引擎只读取该 tool 结果，不解析正文。",
+  "- 字段要求：",
+  "  - pass: boolean，true 进入成功分支，false 进入失败分支。",
+  "  - reason: 一句话判断原因。",
+  "  - issues: 结构化数组，元素 {type, severity: low|medium|high, message}；无问题填空数组。",
+  "  - revision_brief: 给返工节点的可执行修订单；pass=true 可填空字符串。",
+  "- 正文回复保持简短结论一段话即可，仅供作者阅读。",
+].join("\n");
 
 function buildAgentTaskPrompt(input: BuildStepPromptInput) {
   const {
@@ -195,6 +230,7 @@ function buildAgentTaskPrompt(input: BuildStepPromptInput) {
       buildIdentitySection({ attemptIndex, chapterWriteMode, step, teamMember }),
     ),
     ...buildRoleAndTaskSections(step, teamMember),
+    renderSection("执行边界", buildAgentTaskExecutionRules({ chapterWriteMode })),
     buildDeltaSection({
       incomingMessages,
       previousStepRun,
@@ -227,6 +263,7 @@ function buildDecisionPrompt(input: BuildStepPromptInput) {
       buildDecisionDispatchHint(step as WorkflowDecisionStepDefinition),
     ),
     ...buildRoleAndTaskSections(step, teamMember),
+    renderSection("判断契约", DECISION_CONTRACT),
     buildDeltaSection({
       incomingMessages,
       previousStepRun,

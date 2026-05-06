@@ -639,7 +639,7 @@ describe("agent session (streaming)", () => {
       "- 当前文件类型：章节/正文稿件",
     );
     expect(request.messages[0].content).toContain("- 本轮任务类型：分析/诊断");
-    expect(request.messages[0].content).toContain("## s15 用户请求");
+    expect(request.messages[0].content).toContain("## s16 用户请求");
     expect(request.messages[0].content).toContain("帮我整理这一章的冲突节奏");
   });
 
@@ -707,7 +707,7 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("### 手动指定文件");
     expect(request.messages[0].content).toContain("#### 人物.md");
     expect(request.messages[0].content).toContain("主角：林燃");
-    expect(request.messages[0].content).toContain("## s15 用户请求");
+    expect(request.messages[0].content).toContain("## s16 用户请求");
   });
 
   it("多步任务但没有计划时，会在当前轮上下文里注入先规划提醒", async () => {

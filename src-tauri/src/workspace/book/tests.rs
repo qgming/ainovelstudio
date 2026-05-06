@@ -193,7 +193,7 @@ fn create_book_workspace_db_builds_template_tree() {
 
     assert_eq!(
         child_names,
-        vec![".project", "设定", "大纲", "正文"]
+        vec![".project", "大纲", "正文", "设定"]
     );
 }
 
@@ -260,5 +260,5 @@ fn import_and_export_zip_roundtrip() {
         .into_iter()
         .map(|child| child.name)
         .collect::<Vec<_>>();
-    assert_eq!(child_names, vec![".project", "设定", "大纲", "正文"]);
+    assert_eq!(child_names, vec![".project", "大纲", "正文", "设定"]);
 }

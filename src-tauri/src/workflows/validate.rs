@@ -204,6 +204,7 @@ pub(crate) fn build_step_from_input(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
         } => WorkflowStepDefinition::Decision {
             id: step_id,
             workflow_id,
@@ -214,6 +215,7 @@ pub(crate) fn build_step_from_input(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
         },
         WorkflowStepInput::End {
             name,

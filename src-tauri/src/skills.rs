@@ -790,17 +790,63 @@ fn write_skill_content(
     save_skill_files(app, skill_id, &files, SKILL_SOURCE_INSTALLED, false)
 }
 
+fn resolve_skill_reference_pointer(content: &str) -> Option<(String, String)> {
+    let lines = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    if lines.len() != 1 {
+        return None;
+    }
+
+    let target = lines[0].strip_prefix("../../")?;
+    let parts = target.split('/').collect::<Vec<_>>();
+    if parts.len() < 3 || !validate_skill_name(parts[0]) {
+        return None;
+    }
+    if parts[1] != SKILL_REFERENCES_DIR && parts[1] != SKILL_TEMPLATES_DIR {
+        return None;
+    }
+
+    Some((parts[0].to_string(), parts[1..].join("/")))
+}
+
+fn read_skill_content_inner(
+    app: &AppHandle,
+    skill_id: &str,
+    relative_path: &str,
+    depth: usize,
+) -> CommandResult<String> {
+    let path = validate_skill_file_path(relative_path)?;
+    let (_, files) = read_skill_package(app, skill_id)?;
+    let content = files
+        .get(&path)
+        .cloned()
+        .ok_or_else(|| "未找到对应技能文件。".to_string())?;
+
+    if depth < 4 {
+        if let Some((target_skill_id, target_relative_path)) =
+            resolve_skill_reference_pointer(&content)
+        {
+            return read_skill_content_inner(
+                app,
+                &target_skill_id,
+                &target_relative_path,
+                depth + 1,
+            );
+        }
+    }
+
+    Ok(content)
+}
+
 fn read_skill_content(
     app: &AppHandle,
     skill_id: &str,
     relative_path: &str,
 ) -> CommandResult<String> {
-    let path = validate_skill_file_path(relative_path)?;
-    let (_, files) = read_skill_package(app, skill_id)?;
-    files
-        .get(&path)
-        .cloned()
-        .ok_or_else(|| "未找到对应技能文件。".into())
+    read_skill_content_inner(app, skill_id, relative_path, 0)
 }
 
 fn path_depth(path: &Path) -> usize {

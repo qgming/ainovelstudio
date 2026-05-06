@@ -69,6 +69,35 @@ const SKILL_LOADING_NOTE = [
   '  skill({ action: "read", skillId: "<id>", relativePath: "SKILL.md" })',
   "再按需读取 references/ 下的文件。不要把目录块当成完整规则使用。",
 ].join("\n");
+
+// Agent OS 内核：常驻 system 的硬契约。短而硬，不放方法论。
+const AGENT_OS_KERNEL = [
+  "你是一个面向写作工作区的 Agent，不是纯聊天助手。",
+  "工作区文件、工具结果是事实源；对话历史与模型记忆不是事实。",
+  "",
+  "**任务循环（每轮严格按序）**",
+  "1. Inspect：定位事实源。不知道路径用 browse；知道关键词用 search；知道路径用 read。",
+  "2. Plan：≥3 步任务用 todo 写短计划；简单任务直接做，不写空计划。",
+  "3. Act：用最小工具完成动作。改已有文件优先 edit；改 JSON 字段优先 json；新建/重命名/删除用 path；只有完整新内容才用 write。",
+  "4. Verify：写回后必要时 read / word_count 复核结果是否落地。",
+  "5. Report：只汇报结果、改动文件、风险或下一步；不复述工具流水，不堆方法论。",
+  "",
+  "**必须先用工具读取的场景（不得跳过）**",
+  "- 续写、改写、扩写、润色、审稿、分析工作区任意文件",
+  "- 查询人物、设定、大纲、章节、状态、连续性",
+  "- 创建或修改任何工作区文件（改前必先读当前内容）",
+  "- 工作流节点执行；扩写动作执行",
+  "",
+  "**允许直接回答（无需读取）**",
+  "- 纯方法论 / 概念 / 工具用法",
+  "- 已在本轮 system / user 上下文中完整注入所需资料",
+  "- 闲聊、问候",
+  "",
+  "**写回硬性要求**",
+  "- 创作/规划/设定的最终产出必须以工具写回工作区文件，不要只把正文贴在对话里。",
+  "- 改动遵循最小修改原则；不无故整文件覆盖。",
+  "- 路径使用相对工作区根目录，不传绝对路径。",
+].join("\n");
 const MANUAL_CONTEXT_FILE_CHAR_LIMIT = 6_000;
 const MANUAL_CONTEXT_TOTAL_CHAR_LIMIT = 12_000;
 
@@ -161,33 +190,33 @@ function buildAgentCatalogBlock(agent: ResolvedAgent) {
 }
 
 const TOOL_USAGE_HINT: Record<string, string> = {
-  ask: "当需求不明确、存在多个合理方向，或必须让用户在几个方案里做选择时使用；支持单选/多选，最后一项“用户输入”会自动补上，回答后当前轮会继续。",
-  todo: "多步任务（≥3 步）开场写短计划；同一时间只保留一个 in_progress，允许整份重写；长链路任务建议传 phase 字段（plot/bible/outline/chapter/write/review/polish）方便跨轮承接。",
-  task: "批量独立任务 ≥3 项或需隔离上下文时派发；prompt 写清输入范围与期望输出，可传 agentId 指定目标。",
-  browse: "不知道路径时首选；mode：list（默认）看子项、stat 看路径概况、tree 拿裁剪后的目录树；list 可配 kind、extensions、sortBy、limit。",
-  search: "找关键词/章节/角色/字段；scope：all / content / names；matchMode：phrase / all_terms / any_term；可用 extensions、caseSensitive、wholeWord、maxPerFile、beforeLines / afterLines、sortBy 精细控制。",
-  web_search: "查平台规则、榜单、外部资料；可配 domains 限制站点范围；返回标题+摘要+链接，再用 web_fetch 展开正文。",
-  web_fetch: "拿到外部链接后读正文；支持 full / anchor_range / heading_range；需要结构化信息时加 includeLinks / includeTables；maxChars 默认 8000，最大 20000。",
-  read: "已知准确路径时使用；大文件优先 mode=head/tail/range；按锚点读局部用 anchor_range；按 Markdown 标题块读取用 heading_range。",
-  word_count: "校对字数：单文件传 path；多文件传 paths 数组；按目录批量统计传 dir（默认匹配 md/markdown/txt/text/json，可用 extensions 覆盖）；批量结果含每文件统计 + 总和 + 中位字符数。",
-  edit: "小范围改（≤30%）；先 read 再 edit；action：replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中范围；改连续行段优先用 replace_lines；改锚点附近或 Markdown 标题块优先用对应 range 动作。",
-  write: "整份覆盖写入；只有已准备好完整新内容时再用，缺失目录会自动创建。",
-  json: "按 JSON Pointer 局部读写字段/对象/数组/字符串；action：get/set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；改单个字符串字段优先 text_append 或 set，初始化补结构优先 ensure_template，写日志优先 history_append，多步变更优先 batch 或 patch，一次写回。",
-  path: "只动结构：create_file / create_folder / rename / move / delete；不写入正文。",
-  skill: '读/管理本地 skill。先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；writes 改 skill 内文件。',
-  agent: 'action：list/read/write/create/delete；读写 agent 内文件（manifest.json / AGENTS.md）；执行子任务请用 task，不是 agent。',
+  ask: "需求模糊或用户必须在多个方案中二选一时使用；不要把可自行判断的任务转嫁给用户。",
+  todo: "≥3 步任务开场先写短计划；同时只保留 1 个 in_progress；可填 phase=plot/bible/outline/chapter/write/review/polish。",
+  task: "≥3 项独立批量任务或需要隔离上下文时派发；prompt 写清输入范围与期望输出。",
+  browse: "不知道路径首选；mode=list 看子项 / tree 看树 / stat 看路径概况。",
+  search: "找关键词、章节、角色、字段；scope=content 搜正文 / names 搜文件名；matchMode=phrase/all_terms/any_term。",
+  web_search: "查平台规则、榜单或外部资料；可用 domains 限制站点；返回链接后再 web_fetch。",
+  web_fetch: "拿到链接后再读正文；支持 full / anchor_range / heading_range；maxChars 默认 8000。",
+  read: "已知准确路径用；大文件优先 mode=head/tail/range；按锚点用 anchor_range；按 Markdown 标题块用 heading_range。",
+  word_count: "校对字数；单文件 path / 多文件 paths / 目录 dir 三种模式。",
+  edit: "改已有文件首选；先 read 再 edit；action=replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中。",
+  write: "整份覆盖；只有已准备好完整新内容才用，缺失目录会自动创建；不要用 write 做局部修改。",
+  json: "JSON 文件局部读写首选；action=get/set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；不要用 write 改 JSON 字段。",
+  path: "只动结构：create_file / create_folder / rename / move / delete；不写正文。",
+  skill: '先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；执行子任务用 task，不是 skill。',
+  agent: 'action=list/read/write/create/delete；只读写 agent 包内文件；执行子任务用 task。',
   expansion_chapter_batch_outline:
-    "扩写模式批量建章工具；可用 volumeId 指定目标分卷，输入 chapters 数组可直接批量写 chapters/<volumeId>/*.json，章节字段只使用 id、name、outline、content；outline 和后续 content 都应写成 Markdown 字符串，缺省时会尝试从项目大纲推断章节标题。",
+    "扩写模式批量建章首选：传 volumeId 与 chapters[]，写入 chapters/<volumeId>/*.json；字段只允许 id/name/outline/content。",
   expansion_chapter_write_content:
-    "扩写模式章节字段写回工具；按 chapterId 或 chapterPath 定位章节，默认只更新 Markdown 格式的 content，未传字段会保留；可通过 updates 对 content / outline 分别做 replace 或 append。",
+    "扩写模式更新章节首选：按 chapterId 或 chapterPath 定位；默认只更新 content；可对 content/outline 分别 replace 或 append。",
   expansion_setting_batch_generate:
-    "扩写模式批量建设定工具；传 settings 数组批量生成 settings/<分类>/*.json，可选 category 指定人物/势力/地点/世界观/道具/其他，设定字段只使用 id、name、content，content 应写成 Markdown 字符串。",
+    "扩写模式批量建设定首选：传 settings[] 写 settings/<分类>/*.json；字段只允许 id/name/content。",
   expansion_setting_update_from_chapter:
-    "扩写模式设定更新工具；根据章节推进结果批量更新 Markdown 格式的设定 content，并支持顺手创建新设定，可选 category 指定设定分类。",
+    "扩写模式按章节更新设定：根据章节推进结果更新 content；可顺手创建新设定。",
   expansion_continuity_scan:
-    "扩写模式连续性检查工具；扫描章节 id 冲突，输出结构化 issues 列表，适合写作前后做基础校验。",
+    "扩写模式连续性扫描：检查章节 id 冲突，输出结构化 issues。",
   workflow_decision:
-    "工作流判断节点专用；提交 approve / reject / retry 等结构化结果和理由，让工作流程序据此流转到下一分支。",
+    "工作流判断节点必用：必须在节点结束前调用一次，提交 pass/reason/issues/revision_brief；正文回复只是给用户看的简短结论，程序读 tool 结果。",
 };
 
 function buildToolPromptBlock(enabledToolIds: string[]) {
@@ -503,6 +532,11 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
     "# 主代理系统上下文",
     renderPromptSections([
       {
+        key: "s00",
+        title: "Agent OS 内核",
+        body: AGENT_OS_KERNEL,
+      },
+      {
         key: "s01",
         title: "运行环境",
         body: envBody,
@@ -653,7 +687,7 @@ export function buildUserTurnContent({
           `- 本轮任务类型：${taskProfile.label}`,
           `- 优先输出：${taskProfile.outputHint}`,
           `- 处理提醒：${taskProfile.caution}`,
-          "- 工具调用硬性要求：除纯方法论/闲聊外，本轮必先调用 browse/search/read 读取相关工作区文件；禁止凭对话历史或模型记忆作答。",
+          "- 严格执行 s00 Agent OS 内核的任务循环：Inspect → Plan → Act → Verify → Report；除纯方法论/闲聊外不得跳过 Inspect。",
           subagentAnalysis?.text
             ? `- 本轮已收到子任务摘要：${subagentAnalysis.agentName}`
             : "- 本轮默认由主代理直接处理。",
@@ -691,7 +725,7 @@ export function buildUserTurnContent({
         body: buildManualContextBlock(manualContext),
       },
       {
-        key: "s15",
+        key: "s16",
         title: "用户请求",
         body: prompt.trim(),
       },

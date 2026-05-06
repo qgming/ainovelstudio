@@ -53,6 +53,53 @@ describe("prompt context", () => {
     vi.useRealTimers();
   });
 
+  it("system prompt 注入 Agent OS Kernel 与任务循环", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledAgents: [createAgent()],
+      enabledSkills: [createSkill()],
+      enabledToolIds: [],
+    });
+
+    expect(system).toContain("## s00 Agent OS 内核");
+    expect(system).toContain("Inspect");
+    expect(system).toContain("Plan");
+    expect(system).toContain("Verify");
+    expect(system).toContain("Report");
+  });
+
+  it("system prompt 各 section key 唯一", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledAgents: [createAgent()],
+      enabledSkills: [createSkill()],
+      enabledToolIds: [],
+    });
+
+    const sectionKeys = [...system.matchAll(/^## (s\d+[a-z]?)\s/gmu)].map(
+      (match) => match[1],
+    );
+    const unique = new Set(sectionKeys);
+    expect(sectionKeys).toHaveLength(unique.size);
+  });
+
+  it("user prompt 用户请求渲染在 s16，且各 section key 唯一", () => {
+    const prompt = buildUserTurnContent({
+      activeFilePath: "章节/第一章.md",
+      prompt: "继续写这一章",
+      workspaceRootPath: "C:/books/北境余烬",
+    });
+
+    expect(prompt).toContain("## s16 用户请求");
+    expect(prompt).not.toMatch(/## s15 用户请求/u);
+
+    const sectionKeys = [...prompt.matchAll(/^## (s\d+[a-z]?)\s/gmu)].map(
+      (match) => match[1],
+    );
+    const unique = new Set(sectionKeys);
+    expect(sectionKeys).toHaveLength(unique.size);
+  });
+
   it("system prompt 只保留技能目录，不常驻完整 skill 正文", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
@@ -152,5 +199,86 @@ describe("prompt context", () => {
     expect(prompt).toContain(".project/status/latest-plot.json");
     expect(prompt).toContain("先看设定再动笔");
     expect(prompt).toContain("核心冲突：逃出试炼场");
+  });
+
+  it("book 模式渲染图书工作区契约与项目入口", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledAgents: [createAgent()],
+      enabledSkills: [createSkill()],
+      enabledToolIds: [],
+      mode: "book",
+    });
+
+    expect(system).toContain("# 模式：BOOK");
+    expect(system).toContain(".project/AGENTS.md");
+    expect(system).toContain("## s05 可委派子代理目录");
+  });
+
+  it("workflow 判断节点强制 workflow_decision 与 pass/issues 字段", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledAgents: [createAgent()],
+      enabledSkills: [createSkill()],
+      enabledToolIds: [],
+      includeAgentCatalog: false,
+      mode: "workflow",
+      modeContext: {
+        nodeKind: "decision",
+        workflowName: "长篇连载",
+        stepName: "质量检查",
+        memberName: "终稿编辑",
+        memberRoleLabel: "质量检查",
+      },
+    });
+
+    expect(system).toContain("# 模式：WORKFLOW · 判断节点");
+    expect(system).toContain("`workflow_decision`");
+    expect(system).toContain("pass:");
+    expect(system).toContain("issues:");
+    expect(system).toContain("revision_brief:");
+    expect(system).not.toContain("## s05 可委派子代理目录");
+  });
+
+  it("workflow 代理节点要求写回工作区文件并附交接", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledAgents: [createAgent()],
+      enabledSkills: [createSkill()],
+      enabledToolIds: [],
+      includeAgentCatalog: false,
+      mode: "workflow",
+      modeContext: {
+        nodeKind: "agent_task",
+        workflowName: "长篇连载",
+        stepName: "正文续写",
+        memberName: "长篇作者",
+        memberRoleLabel: "正文续写",
+        isReworkMode: true,
+      },
+    });
+
+    expect(system).toContain("# 模式：WORKFLOW · 代理节点");
+    expect(system).toContain("返工模式");
+    expect(system).toContain("写回硬性要求");
+  });
+
+  it("expansion 模式只允许专用 expansion 工具写回章节/设定", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledAgents: [createAgent()],
+      enabledSkills: [createSkill()],
+      enabledToolIds: [],
+      mode: "expansion",
+      modeContext: {
+        actionId: "chapter-write",
+        actionLabel: "章节正文",
+      },
+    });
+
+    expect(system).toContain("# 模式：EXPANSION");
+    expect(system).toContain("expansion_chapter_write_content");
+    expect(system).toContain("expansion_setting_batch_generate");
+    expect(system).toContain("禁止用通用 write/edit");
   });
 });

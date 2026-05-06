@@ -453,6 +453,7 @@ pub fn update_workflow_step(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
             ..
         } => WorkflowStepDefinition::Decision {
             id: stepId,
@@ -464,6 +465,7 @@ pub fn update_workflow_step(
             source_step_id,
             true_next_step_id,
             false_next_step_id,
+            pass_rule,
         },
         WorkflowStepDefinition::End {
             name,

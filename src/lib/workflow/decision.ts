@@ -10,8 +10,41 @@ import type {
   WorkflowStepDefinition,
 } from "./types";
 
-const DECISION_PASS_TRUE_VALUES = new Set(["true", "yes", "y", "pass", "通过", "通过了", "是"]);
-const DECISION_PASS_FALSE_VALUES = new Set(["false", "no", "n", "fail", "reject", "不通过", "未通过", "否"]);
+const DECISION_PASS_TRUE_VALUES = new Set([
+  "true",
+  "yes",
+  "y",
+  "pass",
+  "approve",
+  "approved",
+  "accept",
+  "accepted",
+  "ok",
+  "通过",
+  "通过了",
+  "是",
+  "同意",
+  "采纳",
+]);
+const DECISION_PASS_FALSE_VALUES = new Set([
+  "false",
+  "no",
+  "n",
+  "fail",
+  "failed",
+  "reject",
+  "rejected",
+  "retry",
+  "rework",
+  "block",
+  "blocked",
+  "不通过",
+  "未通过",
+  "否",
+  "拒绝",
+  "返工",
+  "重做",
+]);
 
 function parseDecisionBoolean(value: string) {
   const normalized = value.trim().toLowerCase();
