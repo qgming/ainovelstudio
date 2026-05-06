@@ -25,6 +25,7 @@ vi.mock("../lib/chat/api", () => ({
 vi.mock("../lib/bookWorkspace/api", () => ({
   cancelToolRequests: vi.fn(),
   readWorkspaceTextFile: vi.fn(),
+  readWorkspaceTree: vi.fn(),
 }));
 
 vi.mock("../lib/agentConfig/api", () => ({

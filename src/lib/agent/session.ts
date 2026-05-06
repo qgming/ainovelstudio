@@ -40,6 +40,75 @@ import { logPromptDebug, normalizeDebugMessageContent, createSystemMessage } fro
 import { buildAiSdkTools } from "./buildAiSdkTools";
 import { runSubAgentTask } from "./runSubAgentTask";
 
+const MAX_TASK_BATCH_SIZE = 8;
+const DEFAULT_TASK_BATCH_CONCURRENCY = 2;
+const MAX_TASK_BATCH_CONCURRENCY = 4;
+
+type TaskToolItemInput = {
+  id?: string;
+  prompt: string;
+  agentId?: string;
+};
+
+type TaskToolInput = {
+  prompt?: string;
+  agentId?: string;
+  tasks?: TaskToolItemInput[];
+  concurrency?: number;
+  sharedContext?: string;
+};
+
+type NormalizedTaskRequest = {
+  id: string;
+  prompt: string;
+  agentId?: string;
+};
+
+type TaskExecutionResult = {
+  id: string;
+  status: "completed" | "failed";
+  summary: string;
+  agentId?: string;
+  agentName?: string;
+  subagentId?: string;
+  error?: string;
+};
+
+const taskItemInputSchema = z.object({
+  id: z.string().optional().describe("可选。批量任务里的稳定 ID，便于结果回填。"),
+  prompt: z.string().min(1).describe("需要外包给子代理的局部任务指令。"),
+  agentId: z.string().optional().describe("可选。目标子代理 ID。"),
+});
+
+const taskToolInputSchema = z
+  .object({
+    prompt: z.string().min(1).optional().describe("单个子任务指令。"),
+    agentId: z.string().optional().describe("单任务目标子代理 ID。"),
+    tasks: z
+      .array(taskItemInputSchema)
+      .min(1)
+      .max(MAX_TASK_BATCH_SIZE)
+      .optional()
+      .describe("批量子任务，最多 8 个，仅用于彼此独立的工作。"),
+    concurrency: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_TASK_BATCH_CONCURRENCY)
+      .optional()
+      .describe("批量并发数，默认 2，最大 4。"),
+    sharedContext: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "所有子任务共享的前缀（章节摘要、人物清单、世界观片段等），避免每个 prompt 重复塞。",
+      ),
+  })
+  .refine((input) => Boolean(input.prompt || input.tasks?.length), {
+    message: "必须提供 prompt 或 tasks。",
+  });
+
 export type RunAgentTurnInput = {
   abortSignal?: AbortSignal;
   activeFilePath: string | null;
@@ -96,6 +165,128 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+function normalizeTaskToolInput(input: TaskToolInput) {
+  const requests = input.tasks?.length
+    ? input.tasks.map((task, index) => ({
+        id: task.id?.trim() || `task-${index + 1}`,
+        prompt: task.prompt,
+        agentId: task.agentId,
+      }))
+    : [
+        {
+          id: "task-1",
+          prompt: input.prompt ?? "",
+          agentId: input.agentId,
+        },
+      ];
+  const concurrency = input.tasks?.length
+    ? input.concurrency ?? DEFAULT_TASK_BATCH_CONCURRENCY
+    : 1;
+  const sharedContext = input.sharedContext?.trim() || undefined;
+
+  return {
+    concurrency: Math.min(concurrency, MAX_TASK_BATCH_CONCURRENCY, requests.length),
+    isBatch: Boolean(input.tasks?.length),
+    requests,
+    sharedContext,
+  };
+}
+
+function buildSubAgentPromptWithContext(prompt: string, sharedContext?: string) {
+  if (!sharedContext) {
+    return prompt;
+  }
+  return ["## 共享上下文", sharedContext, "", "## 当前子任务", prompt].join("\n");
+}
+
+async function runTaskBatch(
+  requests: NormalizedTaskRequest[],
+  concurrency: number,
+  runOne: (request: NormalizedTaskRequest) => Promise<TaskExecutionResult>,
+) {
+  const results: TaskExecutionResult[] = [];
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, requests.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < requests.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await runOne(requests[currentIndex]);
+      }
+    }),
+  );
+
+  return results;
+}
+
+function buildTaskBatchOutput(results: TaskExecutionResult[]) {
+  const completed = results.filter((result) => result.status === "completed").length;
+  return {
+    mode: "batch",
+    total: results.length,
+    completed,
+    failed: results.length - completed,
+    results,
+  };
+}
+
+async function runTaskRequest({
+  abortSignal,
+  enabledAgents,
+  enabledSkills,
+  enabledToolIds,
+  onProgress,
+  providerConfig,
+  request,
+  streamFn,
+  workspaceTools,
+}: {
+  abortSignal?: AbortSignal;
+  enabledAgents: ResolvedAgent[];
+  enabledSkills: ResolvedSkill[];
+  enabledToolIds: string[];
+  onProgress: (snapshot: AgentPart & { type: "subagent" }) => void;
+  providerConfig: AgentProviderConfig;
+  request: NormalizedTaskRequest;
+  streamFn: typeof streamAgentText;
+  workspaceTools: Record<string, AgentTool>;
+}): Promise<TaskExecutionResult> {
+  try {
+    const output = await runSubAgentTask({
+      abortSignal,
+      agentId: request.agentId,
+      enabledAgents,
+      enabledSkills,
+      taskPrompt: request.prompt,
+      providerConfig,
+      streamFn,
+      workspaceTools,
+      enabledToolIds: enabledToolIds.filter((toolId) => toolId !== "task"),
+      onProgress,
+    });
+    return {
+      id: request.id,
+      status: "completed",
+      agentId: output.agent.id,
+      agentName: output.agent.name,
+      summary: output.text || `${output.agent.name} 子任务已完成。`,
+      subagentId: output.subagentId,
+    };
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    return {
+      id: request.id,
+      status: "failed",
+      summary: getErrorMessage(error, "子任务执行失败。"),
+      error: getErrorMessage(error, "子任务执行失败。"),
+    };
+  }
 }
 
 function createPartQueue() {
@@ -257,8 +448,6 @@ export async function* runAgentTurn({
   _streamFn = streamAgentText,
   _subagentStreamFn = streamAgentText,
 }: RunAgentTurnInput): AsyncGenerator<AgentPart> {
-  const progressQueue: AgentPart[] = [];
-
   if (!hasProviderConfig(providerConfig)) {
     yield {
       type: "text",
@@ -289,34 +478,52 @@ export async function* runAgentTurn({
   if (enabledToolIds.includes("task") && enabledAgents.length > 0) {
     aiTools.task = defineTool({
       description:
-        "将局部任务交给子代理在干净上下文中执行，并返回摘要结果。可传 agentId 指定目标代理。",
-      inputSchema: z.object({
-        prompt: z.string().min(1).describe("需要外包给子代理的局部任务指令。"),
-        agentId: z
-          .string()
-          .optional()
-          .describe("可选。目标子代理 ID；不传时系统会尝试自动匹配。"),
-      }),
-      execute: async (input: { prompt: string; agentId?: string }) => {
-        const output = await runSubAgentTask({
-          abortSignal,
-          agentId: input.agentId,
-          enabledAgents,
-          enabledSkills,
-          taskPrompt: input.prompt,
-          providerConfig,
-          streamFn: _subagentStreamFn,
-          workspaceTools,
-          enabledToolIds: enabledToolIds.filter((toolId) => toolId !== "task"),
-          onProgress: (snapshot) => {
-            progressQueue.push(snapshot);
-          },
-        });
+        [
+          "把【批量信息类子任务】交给子代理在干净上下文中执行，并实时回传进度。",
+          "✅ 适用：按章批量更新设定/状态、多主题资料搜索、批量拆爆款、风格诊断、合规检查等彼此独立的工作。",
+          "❌ 禁用：写正文、续写章节、生成卷纲细纲——这些必须在主对话直写以保证连续性与文风一致。",
+          "用法：单任务用 prompt；批量用 tasks[]（最多 8 个），可配 concurrency（默认 2，最大 4）。",
+          "公共前缀（章节摘要、人物清单等）放进 sharedContext，避免每个 prompt 重复塞，省 token。",
+        ].join("\n"),
+      inputSchema: taskToolInputSchema,
+      execute: async (input: TaskToolInput) => {
+        const { concurrency, isBatch, requests, sharedContext } =
+          normalizeTaskToolInput(input);
+        const runOne = (request: NormalizedTaskRequest) =>
+          runTaskRequest({
+            abortSignal,
+            enabledAgents,
+            enabledSkills,
+            enabledToolIds,
+            providerConfig,
+            request: {
+              ...request,
+              prompt: buildSubAgentPromptWithContext(request.prompt, sharedContext),
+            },
+            streamFn: _subagentStreamFn,
+            workspaceTools,
+            onProgress: (snapshot) => {
+              throwIfAborted(abortSignal);
+              partQueue.push(snapshot);
+            },
+          });
+
+        const results = isBatch
+          ? await runTaskBatch(requests, concurrency, runOne)
+          : [await runOne(requests[0])];
+        if (isBatch) {
+          return buildTaskBatchOutput(results);
+        }
+
+        // 单任务也用统一 shape 返回，便于主代理判别 status。
+        const output = results[0];
         return {
-          agentId: output.agent.id,
-          agentName: output.agent.name,
-          summary: output.text || `${output.agent.name} 子任务已完成。`,
+          status: output.status,
+          agentId: output.agentId,
+          agentName: output.agentName,
+          summary: output.summary,
           subagentId: output.subagentId,
+          ...(output.error ? { error: output.error } : {}),
         };
       },
     });
@@ -405,22 +612,11 @@ export async function* runAgentTurn({
     tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
   });
 
-  const flushProgressQueue = () => {
-    while (progressQueue.length > 0) {
-      throwIfAborted(abortSignal);
-      const snapshot = progressQueue.shift();
-      if (snapshot) {
-        partQueue.push(snapshot);
-      }
-    }
-  };
-
   void (async () => {
     try {
       throwIfAborted(abortSignal);
       for await (const part of result.fullStream) {
         throwIfAborted(abortSignal);
-        flushProgressQueue();
 
         switch (part.type) {
           case "text-delta":
@@ -454,11 +650,8 @@ export async function* runAgentTurn({
           default:
             break;
         }
-
-        flushProgressQueue();
       }
 
-      flushProgressQueue();
       throwIfAborted(abortSignal);
       const usage = result.usagePromise
         ? await withAbort(abortSignal, () => result.usagePromise as Promise<AgentUsage | null>)

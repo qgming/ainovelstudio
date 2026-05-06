@@ -4,6 +4,47 @@ import { DEFAULT_MAIN_AGENT_MARKDOWN } from "./promptContext";
 import { runAgentTurn } from "./session";
 import type { AgentPart } from "./types";
 
+function createTestAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
+  return {
+    id: "plot-agent",
+    name: "剧情代理",
+    description: "负责剧情推进",
+    role: "剧情",
+    tags: ["剧情", "动机"],
+    sourceLabel: "内置",
+    body: "专注处理剧情与人物动机。",
+    suggestedTools: ["read"],
+    enabled: true,
+    files: ["manifest.json", "AGENTS.md"],
+    sourceKind: "builtin-package",
+    dispatchHint: "当用户询问剧情推进时",
+    validation: { errors: [], isValid: true, warnings: [] },
+    discoveredAt: 1,
+    isBuiltin: true,
+    manifestFilePath: "agents/plot-agent/manifest.json",
+    ...overrides,
+  };
+}
+
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function withTimeout<T>(promise: Promise<T>, message: string) {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), 1000);
+    }),
+  ]);
+}
+
 describe("agent session (streaming)", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -1697,6 +1738,273 @@ describe("agent session (streaming)", () => {
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain(
       "## s11 子任务摘要（剧情代理）",
     );
+  });
+
+  it("子代理进度会在 task 工具执行期间实时流出", async () => {
+    const parts: AgentPart[] = [];
+    const releaseSubagent = createDeferred();
+    const firstSubagentProgress = createDeferred<AgentPart>();
+
+    async function* mockSubagentFullStream() {
+      yield { type: "reasoning-delta" as const, text: "正在分析人物动机。" };
+      await releaseSubagent.promise;
+      yield { type: "text-delta" as const, text: "建议先补一段主角迟疑。" };
+    }
+
+    const mockSubagentStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockSubagentFullStream(),
+    });
+    const mockStreamFn = vi.fn().mockImplementation(
+      (request: {
+        tools?: Record<
+          string,
+          {
+            execute?: (
+              input: { prompt: string; agentId?: string },
+              options: unknown,
+            ) => Promise<unknown>;
+          }
+        >;
+      }) => ({
+        fullStream: (async function* () {
+          yield {
+            type: "tool-call" as const,
+            toolName: "task",
+            toolCallId: "task-call-live-1",
+            input: { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+          };
+          const output = await request.tools?.task?.execute?.(
+            { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+            {} as never,
+          );
+          yield {
+            type: "tool-result" as const,
+            toolName: "task",
+            toolCallId: "task-call-live-1",
+            output: output ?? "",
+          };
+        })(),
+      }),
+    );
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      enabledAgents: [createTestAgent()],
+      enabledSkills: [],
+      enabledToolIds: ["task"],
+      prompt: "帮我分析主角动机",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    const consume = (async () => {
+      for await (const part of stream) {
+        parts.push(part);
+        if (
+          part.type === "subagent" &&
+          part.status === "running" &&
+          part.parts.length > 0
+        ) {
+          firstSubagentProgress.resolve(part);
+        }
+      }
+    })();
+
+    const livePart = await withTimeout(
+      firstSubagentProgress.promise,
+      "子代理进度未实时流出。",
+    );
+    expect(livePart).toMatchObject({
+      type: "subagent",
+      status: "running",
+      summary: "剧情代理 子任务执行中",
+    });
+    expect(parts.some((part) => part.type === "tool-result")).toBe(false);
+
+    releaseSubagent.resolve();
+    await consume;
+
+    expect(parts.some((part) => part.type === "tool-result")).toBe(true);
+    expect(
+      parts.some((part) => part.type === "subagent" && part.status === "completed"),
+    ).toBe(true);
+  });
+
+  it("task 工具支持批量派发独立子任务", async () => {
+    const parts: AgentPart[] = [];
+
+    const mockSubagentStreamFn = vi.fn().mockImplementation(
+      (request: { messages: Array<{ content: string }> }) => ({
+        fullStream: (async function* () {
+          const content = request.messages[0].content;
+          yield {
+            type: "text-delta" as const,
+            text: content.includes("支线")
+              ? "支线建议：保留药铺线。"
+              : "主线建议：强化入城动机。",
+          };
+        })(),
+      }),
+    );
+    const mockStreamFn = vi.fn().mockImplementation(
+      (request: {
+        tools?: Record<
+          string,
+          {
+            execute?: (
+              input: {
+                tasks: Array<{ id: string; prompt: string; agentId: string }>;
+                concurrency: number;
+              },
+              options: unknown,
+            ) => Promise<unknown>;
+          }
+        >;
+      }) => ({
+        fullStream: (async function* () {
+          const output = await request.tools?.task?.execute?.(
+            {
+              concurrency: 2,
+              tasks: [
+                { id: "main", prompt: "分析主线", agentId: "plot-agent" },
+                { id: "side", prompt: "分析支线", agentId: "plot-agent" },
+              ],
+            },
+            {} as never,
+          );
+          yield {
+            type: "tool-result" as const,
+            toolName: "task",
+            toolCallId: "task-call-batch-1",
+            output: output ?? "",
+          };
+        })(),
+      }),
+    );
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      enabledAgents: [createTestAgent()],
+      enabledSkills: [],
+      enabledToolIds: ["task"],
+      prompt: "批量分析主线和支线",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    const taskResult = parts.find(
+      (part): part is Extract<AgentPart, { type: "tool-result" }> =>
+        part.type === "tool-result" && part.toolName === "task",
+    );
+    expect(taskResult?.output).toMatchObject({
+      mode: "batch",
+      total: 2,
+      completed: 2,
+      failed: 0,
+      results: [
+        expect.objectContaining({ id: "main", status: "completed" }),
+        expect.objectContaining({ id: "side", status: "completed" }),
+      ],
+    });
+    expect(mockSubagentStreamFn).toHaveBeenCalledTimes(2);
+    expect(
+      parts.filter((part) => part.type === "subagent" && part.status === "completed"),
+    ).toHaveLength(2);
+  });
+
+  it("task 工具的 sharedContext 会作为公共前缀拼接到每个子任务", async () => {
+    const capturedPrompts: string[] = [];
+
+    const mockSubagentStreamFn = vi.fn().mockImplementation(
+      (request: { messages: Array<{ content: string }> }) => {
+        capturedPrompts.push(request.messages[0].content);
+        return {
+          fullStream: (async function* () {
+            yield { type: "text-delta" as const, text: "已处理。" };
+          })(),
+        };
+      },
+    );
+    const mockStreamFn = vi.fn().mockImplementation(
+      (request: {
+        tools?: Record<
+          string,
+          {
+            execute?: (
+              input: {
+                tasks: Array<{ id: string; prompt: string; agentId: string }>;
+                sharedContext: string;
+              },
+              options: unknown,
+            ) => Promise<unknown>;
+          }
+        >;
+      }) => ({
+        fullStream: (async function* () {
+          await request.tools?.task?.execute?.(
+            {
+              sharedContext: "第一章摘要：主角入城遇到药铺老板。",
+              tasks: [
+                { id: "char", prompt: "更新主角状态", agentId: "plot-agent" },
+                { id: "world", prompt: "更新城市设定", agentId: "plot-agent" },
+              ],
+            },
+            {} as never,
+          );
+          yield {
+            type: "tool-result" as const,
+            toolName: "task",
+            toolCallId: "task-call-shared-1",
+            output: "",
+          };
+        })(),
+      }),
+    );
+
+    const stream = runAgentTurn({
+      activeFilePath: "章节/第一章.md",
+      enabledAgents: [createTestAgent()],
+      enabledSkills: [],
+      enabledToolIds: ["task"],
+      prompt: "按章批量更新设定",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // 仅驱动流，不需要收集
+    }
+
+    expect(capturedPrompts).toHaveLength(2);
+    for (const prompt of capturedPrompts) {
+      expect(prompt).toContain("## 共享上下文");
+      expect(prompt).toContain("第一章摘要：主角入城遇到药铺老板。");
+      expect(prompt).toContain("## 当前子任务");
+    }
+    expect(capturedPrompts[0]).toContain("更新主角状态");
+    expect(capturedPrompts[1]).toContain("更新城市设定");
   });
 
   it("子代理继承已启用的写入与结构工具", async () => {

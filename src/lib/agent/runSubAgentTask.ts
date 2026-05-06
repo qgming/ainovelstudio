@@ -8,7 +8,7 @@ import type { ResolvedAgent } from "../../stores/subAgentStore";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
 import { selectSubAgentForPrompt } from "./delegation";
-import { streamAgentText } from "./modelGateway";
+import { streamAgentText, type StreamAgentTextResult } from "./modelGateway";
 import { buildSubAgentSystem } from "./promptContext";
 import { buildAiSdkTools } from "./buildAiSdkTools";
 import { createSubagentSnapshot, mergeSubagentInnerParts } from "./subagentParts";
@@ -16,6 +16,8 @@ import { throwIfAborted } from "./asyncUtils";
 import { createToolResultPart } from "./toolParts";
 import type { AgentTool } from "./runtime";
 import type { AgentPart } from "./types";
+
+let subagentSequence = 0;
 
 export type RunSubAgentTaskParams = {
   abortSignal?: AbortSignal;
@@ -29,6 +31,25 @@ export type RunSubAgentTaskParams = {
   enabledToolIds: string[];
   onProgress?: (snapshot: AgentPart & { type: "subagent" }) => void;
 };
+
+function buildSubagentId(agentId: string) {
+  subagentSequence += 1;
+  return `subagent-${agentId}-${Date.now()}-${subagentSequence}`;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  return "子代理执行失败。";
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
 
 export async function runSubAgentTask(
   params: RunSubAgentTaskParams,
@@ -68,7 +89,7 @@ export async function runSubAgentTask(
     taskPrompt,
   ].join("\n\n");
 
-  const subagentId = `subagent-${matchedAgent.id}-${Date.now()}`;
+  const subagentId = buildSubagentId(matchedAgent.id);
   const innerParts: AgentPart[] = [];
   const subagentTools = buildAiSdkTools(
     workspaceTools,
@@ -88,66 +109,52 @@ export async function runSubAgentTask(
     }),
   );
 
-  // 2. 调用 LLM 并流式收集片段。
-  const result = streamFn({
-    abortSignal,
-    messages: [{ role: "user", content: subagentPrompt }],
-    providerConfig,
-    system: buildSubAgentSystem(matchedAgent, enabledSkills),
-    tools: Object.keys(subagentTools).length > 0 ? subagentTools : undefined,
-  });
+  try {
+    // 2. 调用 LLM 并流式收集片段。
+    const result = streamFn({
+      abortSignal,
+      messages: [{ role: "user", content: subagentPrompt }],
+      providerConfig,
+      system: buildSubAgentSystem(matchedAgent, enabledSkills),
+      tools: Object.keys(subagentTools).length > 0 ? subagentTools : undefined,
+    });
 
-  for await (const part of result.fullStream) {
-    throwIfAborted(abortSignal);
-    let mappedPart: AgentPart | null = null;
+    for await (const part of result.fullStream) {
+      throwIfAborted(abortSignal);
+      const mappedPart = mapSubagentStreamPart(part);
+      if (!mappedPart) {
+        continue;
+      }
 
-    switch (part.type) {
-      case "text-delta":
-        mappedPart = { type: "text-delta", delta: part.text };
-        break;
-      case "reasoning-delta":
-        mappedPart = {
-          type: "reasoning",
-          summary: "正在思考",
-          detail: part.text,
-        };
-        break;
-      case "tool-call":
-        mappedPart = {
-          type: "tool-call",
-          toolName: part.toolName,
-          toolCallId: part.toolCallId,
+      const mergedParts = mergeSubagentInnerParts(innerParts, mappedPart);
+      innerParts.splice(0, innerParts.length, ...mergedParts);
+      throwIfAborted(abortSignal);
+      onProgress?.(
+        createSubagentSnapshot({
+          id: subagentId,
+          name: matchedAgent.name,
           status: "running",
-          inputSummary: JSON.stringify(part.input),
-        };
-        break;
-      case "tool-result":
-        mappedPart = createToolResultPart({
-          toolName: part.toolName,
-          toolCallId: part.toolCallId,
-          output: part.output,
-        });
-        break;
-      default:
-        break;
+          summary: `${matchedAgent.name} 子任务执行中`,
+          parts: innerParts,
+        }),
+      );
+    }
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
     }
 
-    if (!mappedPart) {
-      continue;
-    }
-
-    const mergedParts = mergeSubagentInnerParts(innerParts, mappedPart);
-    innerParts.splice(0, innerParts.length, ...mergedParts);
-    throwIfAborted(abortSignal);
     onProgress?.(
       createSubagentSnapshot({
         id: subagentId,
         name: matchedAgent.name,
-        status: "running",
-        summary: `${matchedAgent.name} 子任务执行中`,
+        status: "failed",
+        summary: `${matchedAgent.name} 子任务失败`,
+        detail: getErrorMessage(error),
         parts: innerParts,
       }),
     );
+    throw error;
   }
 
   // 3. 汇总文本片段作为子任务的最终摘要。
@@ -171,4 +178,37 @@ export async function runSubAgentTask(
   );
 
   return { agent: matchedAgent, text: finalText, subagentId };
+}
+
+type SubagentStreamPart = StreamAgentTextResult["fullStream"] extends AsyncIterable<infer T>
+  ? T
+  : never;
+
+function mapSubagentStreamPart(part: SubagentStreamPart): AgentPart | null {
+  switch (part.type) {
+    case "text-delta":
+      return { type: "text-delta", delta: part.text };
+    case "reasoning-delta":
+      return {
+        type: "reasoning",
+        summary: "正在思考",
+        detail: part.text,
+      };
+    case "tool-call":
+      return {
+        type: "tool-call",
+        toolName: part.toolName,
+        toolCallId: part.toolCallId,
+        status: "running",
+        inputSummary: JSON.stringify(part.input),
+      };
+    case "tool-result":
+      return createToolResultPart({
+        toolName: part.toolName,
+        toolCallId: part.toolCallId,
+        output: part.output,
+      });
+    default:
+      return null;
+  }
 }
