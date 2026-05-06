@@ -7,18 +7,12 @@ function getSourceModeLabel(sourceType: UsageSourceType) {
   if (sourceType === "workflow") {
     return "工作流";
   }
-  if (sourceType === "expansion") {
-    return "创作台";
-  }
   return "图书 Agent";
 }
 
 function getSourceModeClassName(sourceType: UsageSourceType) {
   if (sourceType === "workflow") {
     return "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300";
-  }
-  if (sourceType === "expansion") {
-    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300";
   }
   return "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300";
 }

@@ -117,16 +117,14 @@ function MetricCard({
 }: {
   label: string;
   value: number;
-  tone?: "slate" | "blue" | "violet" | "emerald";
+  tone?: "slate" | "blue" | "violet";
 }) {
   const toneClassName =
     tone === "blue"
       ? "text-blue-700 dark:text-blue-300"
       : tone === "violet"
         ? "text-violet-700 dark:text-violet-300"
-        : tone === "emerald"
-          ? "text-emerald-700 dark:text-emerald-300"
-          : "text-[#0f172a] dark:text-white";
+        : "text-[#0f172a] dark:text-white";
   return (
     <div className="border-r border-b border-[#e2e8f0] px-4 py-4 last:border-r-0 dark:border-[#20242b]">
       <p className="text-[11px] uppercase tracking-[0.22em] text-[#94a3b8] dark:text-[#64748b]">{label}</p>
@@ -167,17 +165,11 @@ function SourceSummaryCard({
           tokenLabel: "工作流 Tokens",
           tone: "violet" as const,
         }
-      : sourceType === "expansion"
-        ? {
-            requestsLabel: "创作台请求",
-            tokenLabel: "创作台 Tokens",
-            tone: "emerald" as const,
-          }
-        : {
-            requestsLabel: "图书 Agent 请求",
-            tokenLabel: "图书 Agent Tokens",
-            tone: "blue" as const,
-          };
+      : {
+          requestsLabel: "图书 Agent 请求",
+          tokenLabel: "图书 Agent Tokens",
+          tone: "blue" as const,
+        };
 
   return (
     <div className="grid border-b border-border sm:grid-cols-2">
@@ -259,7 +251,6 @@ export function UsageAnalyticsSection() {
   const summary = useMemo(() => summarizeLogs(filteredLogs), [filteredLogs]);
   const chatSummary = useMemo(() => getSourceSummary(filteredLogs, "chat"), [filteredLogs]);
   const workflowSummary = useMemo(() => getSourceSummary(filteredLogs, "workflow"), [filteredLogs]);
-  const expansionSummary = useMemo(() => getSourceSummary(filteredLogs, "expansion"), [filteredLogs]);
 
   const heatmapWeeks = useMemo(() => {
     const days = buildHeatmapDays(filteredLogs);
@@ -330,7 +321,6 @@ export function UsageAnalyticsSection() {
                 <option value="all">全部模式</option>
                 <option value="chat">图书 Agent</option>
                 <option value="workflow">工作流</option>
-                <option value="expansion">创作台</option>
               </select>
             </div>
             <span className="text-xs text-[#94a3b8] dark:text-[#64748b]">当前日志 {formatMetric(filteredLogs.length)} 条</span>
@@ -347,7 +337,6 @@ export function UsageAnalyticsSection() {
         </div>
         <SourceSummaryCard sourceType="chat" summary={chatSummary} />
         <SourceSummaryCard sourceType="workflow" summary={workflowSummary} />
-        <SourceSummaryCard sourceType="expansion" summary={expansionSummary} />
 
         <div className="min-h-[320px] px-4 py-4">
           <div className="flex items-center gap-2">

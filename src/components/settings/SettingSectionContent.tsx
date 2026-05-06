@@ -75,11 +75,7 @@ function ToolLibrarySection({
       ALL_TOOL_DEFS.map((toolDef) => ({
         ...toolDef,
         scopeLabel:
-          toolDef.scope === "expansion"
-            ? "Expansion"
-            : toolDef.scope === "workflow"
-              ? "Workflow"
-              : "Tool",
+          toolDef.scope === "workflow" ? "Workflow" : "Tool",
       })),
     [],
   );

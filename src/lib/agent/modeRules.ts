@@ -8,7 +8,7 @@
  * - 短而硬：每条规则要么是"必须 / 禁止"，要么是"分支判断"；不写方法论。
  */
 
-export type AgentMode = "book" | "workflow" | "expansion";
+export type AgentMode = "book" | "workflow";
 
 export type WorkflowModeContext = {
   /** 节点类型；agent_task = 普通代理节点，decision = 判断节点 */
@@ -25,19 +25,11 @@ export type WorkflowModeContext = {
   isReworkMode?: boolean;
 };
 
-export type ExpansionModeContext = {
-  /** 当前动作 ID，例如 project-batch-outline */
-  actionId: string;
-  /** 当前动作显示名 */
-  actionLabel: string;
-};
-
 export type BookModeContext = Record<string, never>;
 
 export type ModeContextMap = {
   book: BookModeContext;
   workflow: WorkflowModeContext;
-  expansion: ExpansionModeContext;
 };
 
 const BOOK_MODE_RULES = [
@@ -110,27 +102,6 @@ function buildWorkflowModeRules(ctx: WorkflowModeContext) {
     .join("\n");
 }
 
-function buildExpansionModeRules(ctx: ExpansionModeContext) {
-  return [
-    `# 模式：EXPANSION · 单次动作`,
-    `动作：${ctx.actionLabel}（id=${ctx.actionId}）`,
-    "",
-    "**动作契约**",
-    "- 单轮一次性动作，conversationHistory 为空；本轮内必须一次性完成，不要等待用户澄清。",
-    "- 一次动作只动一个语义对象（一卷章节、一类设定、一个章节正文等），不越界改其他对象。",
-    "- 创作前先读 `project/AGENTS.md`、`project/README.md`、`project/outline.md`，user s14 已注入则不重复 read。",
-    "",
-    "**专用工具（写回硬性要求）**",
-    "- 章节写回只能用 `expansion_chapter_batch_outline` 或 `expansion_chapter_write_content`，禁止用通用 write/edit 改章节 JSON。",
-    "- 设定写回只能用 `expansion_setting_batch_generate` 或 `expansion_setting_update_from_chapter`，禁止用通用 write/edit 改设定 JSON。",
-    "- 章节字段只允许 id/name/outline/content；设定字段只允许 id/name/content；outline 与 content 写成 Markdown，不要外包 ``` 代码块。",
-    "",
-    "**完成条件**",
-    "- 专用工具写回成功。",
-    "- 一句话说明本动作改了哪些对象、是否还有未完成项。",
-  ].join("\n");
-}
-
 export function buildModeRules<M extends AgentMode>(
   mode: M,
   context: ModeContextMap[M],
@@ -140,8 +111,6 @@ export function buildModeRules<M extends AgentMode>(
       return BOOK_MODE_RULES;
     case "workflow":
       return buildWorkflowModeRules(context as WorkflowModeContext);
-    case "expansion":
-      return buildExpansionModeRules(context as ExpansionModeContext);
     default:
       return BOOK_MODE_RULES;
   }

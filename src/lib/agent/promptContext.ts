@@ -86,7 +86,7 @@ const AGENT_OS_KERNEL = [
   "- 续写、改写、扩写、润色、审稿、分析工作区任意文件",
   "- 查询人物、设定、大纲、章节、状态、连续性",
   "- 创建或修改任何工作区文件（改前必先读当前内容）",
-  "- 工作流节点执行；扩写动作执行",
+  "- 工作流节点执行",
   "",
   "**允许直接回答（无需读取）**",
   "- 纯方法论 / 概念 / 工具用法",
@@ -205,16 +205,6 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   path: "只动结构：create_file / create_folder / rename / move / delete；不写正文。",
   skill: '先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；执行子任务用 task，不是 skill。',
   agent: 'action=list/read/write/create/delete；只读写 agent 包内文件；执行子任务用 task。',
-  expansion_chapter_batch_outline:
-    "扩写模式批量建章首选：传 volumeId 与 chapters[]，写入 chapters/<volumeId>/*.json；字段只允许 id/name/outline/content。",
-  expansion_chapter_write_content:
-    "扩写模式更新章节首选：按 chapterId 或 chapterPath 定位；默认只更新 content；可对 content/outline 分别 replace 或 append。",
-  expansion_setting_batch_generate:
-    "扩写模式批量建设定首选：传 settings[] 写 settings/<分类>/*.json；字段只允许 id/name/content。",
-  expansion_setting_update_from_chapter:
-    "扩写模式按章节更新设定：根据章节推进结果更新 content；可顺手创建新设定。",
-  expansion_continuity_scan:
-    "扩写模式连续性扫描：检查章节 id 冲突，输出结构化 issues。",
   workflow_decision:
     "工作流判断节点必用：必须在节点结束前调用一次，提交 pass/reason/issues/revision_brief；正文回复只是给用户看的简短结论，程序读 tool 结果。",
 };
@@ -521,8 +511,6 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
     switch (effectiveMode) {
       case "workflow":
         return "你正在神笔写作的【工作流】内作为某个节点运行。每个节点是独立 LLM 调用，节点之间通过工作区文件 + 交接上下文协作，不共享对话历史。";
-      case "expansion":
-        return "你正在神笔写作的【扩写创作台】内执行单次动作。本轮无对话历史，需在一轮内完成全部产出。";
       default:
         return "你正在神笔写作【图书项目编辑模式】运行，可与作者多轮协作，按需调用工具、技能和子代理。";
     }

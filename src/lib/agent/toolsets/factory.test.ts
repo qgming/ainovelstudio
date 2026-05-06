@@ -46,22 +46,8 @@ vi.mock("../tools", () => ({
   },
 }));
 
-vi.mock("../../expansion/agentToolset", () => ({
-  createExpansionAgentToolset: (opts: { workspaceId: string }) => ({
-    expansion_agent_tool: true,
-    _wsId: opts.workspaceId,
-  }),
-}));
-vi.mock("../../expansion/semanticToolset", () => ({
-  createExpansionSemanticToolset: (opts: { workspaceId: string }) => ({
-    expansion_semantic_tool: true,
-    _wsId: opts.workspaceId,
-  }),
-}));
-
 import {
   buildBookWorkspaceTools,
-  buildExpansionTools,
   createDefaultBookWorkspaceToolset,
   createDefaultLocalResourceToolset,
 } from "./factory";
@@ -140,20 +126,5 @@ describe("buildBookWorkspaceTools", () => {
     const tools = buildBookWorkspaceTools({ rootPath: null });
     expect(tools).toMatchObject({ global_tool: expect.anything(), local_tool: true });
     expect(tools).not.toHaveProperty("workspace_tool");
-  });
-});
-
-describe("buildExpansionTools", () => {
-  it("含 global + localResource + 扩写 agent + 扩写语义 四段", () => {
-    const tools = buildExpansionTools({
-      workspaceId: "ws-1",
-      onWorkspaceMutated: async () => {},
-    });
-    expect(tools).toMatchObject({
-      global_tool: expect.anything(),
-      local_tool: true,
-      expansion_agent_tool: true,
-      expansion_semantic_tool: true,
-    });
   });
 });

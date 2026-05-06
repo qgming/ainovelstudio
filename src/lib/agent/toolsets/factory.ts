@@ -1,15 +1,14 @@
 /**
  * Agent 工具集装配工厂。
  *
- * 项目内有三处需要为 agent 运行时拼装 `workspaceTools` 字段：
+ * 项目内有两处需要为 agent 运行时拼装 `workspaceTools` 字段：
  *   1. 写作模式（chatRunStore.sendMessage）
  *   2. 工作流引擎（workflow/engine.executeConfiguredStep）
- *   3. 扩写工作区（pages/ExpansionDetailPage.runWorkspaceAgentAction）
  *
- * 这三处之前各自 `createGlobalToolset() + createLocalResourceToolset(...) + createWorkspaceToolset(...)`，
+ * 这两处之前各自 `createGlobalToolset() + createLocalResourceToolset(...) + createWorkspaceToolset(...)`，
  * 其中 store 与 engine 的 localResource 装配字节级重复，仅 workspaceMutated 守卫不同。
  *
- * 本模块以"模式工厂"形式收敛：调用方只声明意图（写作 / 扩写、是否需 rootPath 匹配守卫等），
+ * 本模块以"模式工厂"形式收敛：调用方只声明意图（是否需 rootPath 匹配守卫等），
  * 内部统一管控 sub-agent / skills 注册表刷新等通用副作用，避免再次散落。
  */
 
@@ -21,8 +20,6 @@ import {
   createLocalResourceToolset,
   createWorkspaceToolset,
 } from "../tools";
-import { createExpansionAgentToolset } from "../../expansion/agentToolset";
-import { createExpansionSemanticToolset } from "../../expansion/semanticToolset";
 import type { AgentTool } from "../runtime";
 import type { WorkflowDecisionResult } from "../../workflow/types";
 
@@ -104,33 +101,6 @@ export function buildBookWorkspaceTools(options: {
     ...createDefaultLocalResourceToolset({
       includeAsk: options.includeAsk,
       onWorkflowDecision: options.onWorkflowDecision,
-    }),
-  };
-}
-
-/**
- * 扩写模式默认 toolset：global + localResource + 扩写 agent + 扩写语义。
- *
- * 注意：扩写模式不使用书籍工作区的文件工具，而是通过虚拟 `expansion://` 命名空间的专用工具。
- *
- * @param options.workspaceId 扩写工作区 id。
- * @param options.onWorkspaceMutated 当扩写文件被工具修改时回调（页面据此 reload）。
- */
-export function buildExpansionTools(options: {
-  workspaceId: string;
-  onWorkspaceMutated: () => Promise<void>;
-}): AgentToolMap {
-  const { workspaceId, onWorkspaceMutated } = options;
-  return {
-    ...createGlobalToolset(),
-    ...createDefaultLocalResourceToolset({ includeAsk: false }),
-    ...createExpansionAgentToolset({
-      workspaceId,
-      onWorkspaceMutated,
-    }),
-    ...createExpansionSemanticToolset({
-      workspaceId,
-      onWorkspaceMutated,
     }),
   };
 }

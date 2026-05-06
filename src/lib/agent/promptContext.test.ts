@@ -262,23 +262,4 @@ describe("prompt context", () => {
     expect(system).toContain("返工模式");
     expect(system).toContain("写回硬性要求");
   });
-
-  it("expansion 模式只允许专用 expansion 工具写回章节/设定", () => {
-    const system = buildSystemPrompt({
-      defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
-      enabledSkills: [createSkill()],
-      enabledToolIds: [],
-      mode: "expansion",
-      modeContext: {
-        actionId: "chapter-write",
-        actionLabel: "章节正文",
-      },
-    });
-
-    expect(system).toContain("# 模式：EXPANSION");
-    expect(system).toContain("expansion_chapter_write_content");
-    expect(system).toContain("expansion_setting_batch_generate");
-    expect(system).toContain("禁止用通用 write/edit");
-  });
 });

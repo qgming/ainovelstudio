@@ -404,7 +404,7 @@ describe("BookAgentPanel", () => {
             id: "user-1",
             role: "user",
             author: "你",
-            parts: [{ type: "text", text: "继续扩写这一章" }],
+            parts: [{ type: "text", text: "继续写这一章" }],
           },
           {
             id: "assistant-1",

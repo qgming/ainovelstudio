@@ -193,7 +193,7 @@ npm run build:android
 │  ├─ components/           UI 组件（按 feature 划分；common/ 收纳 LoadingBlock / ErrorBlock 等）
 │  ├─ hooks/                跨组件复用的状态与副作用（按 feature 划分子目录）
 │  ├─ stores/               Zustand 状态管理（仅状态 + actions，不构造 toolset）
-│  ├─ lib/                  业务规则与纯函数：agent / workflow / bookWorkspace / expansion / chat
+│  ├─ lib/                  业务规则与纯函数：agent / workflow / bookWorkspace / chat
 │  └─ test/                 前端测试初始化
 ├─ src-tauri/               Tauri + Rust 后端
 │  ├─ src/                  本地命令、数据库、工作流、数据管理
@@ -209,11 +209,11 @@ npm run build:android
 
 - `pages/` —— 路由壳：解析路由参数、装载顶层容器；不放业务规则。
 - `components/<feature>/` —— 受控展示组件；通用块（加载、错误、Toast、BusyButton）放在 `components/common/` 与 `components/ui/`。
-- `hooks/<feature>/` —— 跨组件复用的状态与副作用；如 `useExpansionWorkspaceAgent` / `useBookPanelResize`。
+- `hooks/<feature>/` —— 跨组件复用的状态与副作用；如 `useBookPanelResize`。
 - `lib/<feature>/` —— 业务规则、纯函数、与 Tauri/AI SDK 的对接；纯函数优先放这里以便单测。
 - `stores/` —— Zustand store；仅持状态字段与 actions，不直接构造 agent toolset。
 
-Agent 工具集统一通过 `lib/agent/toolsets/factory.ts` 装配，写作模式（chatRunStore）、工作流引擎与扩写工作区共用同一组工厂，避免散落重复。
+Agent 工具集统一通过 `lib/agent/toolsets/factory.ts` 装配，写作模式（chatRunStore）与工作流引擎共用同一组工厂，避免散落重复。
 
 
 ## 适合的使用场景
