@@ -1,14 +1,18 @@
 // 图书工作区：目录树构建 + 内容搜索。
 
+use crate::workspace::book::data::display_relative_path;
 use crate::workspace::book::data::{
     load_book_by_root_path, load_entry_records, TreeNode, WorkspaceEntryRecord,
     WorkspaceSearchMatch,
 };
-use crate::workspace::book::data::display_relative_path;
 use crate::workspace::common::{bytes_to_text, check_cancellation, CommandResult};
 use crate::ToolCancellationRegistry;
 use rusqlite::Connection;
 use std::collections::HashMap;
+
+#[path = "natural_sort.rs"]
+mod natural_sort;
+use natural_sort::natural_name_cmp;
 
 const DEFAULT_SEARCH_LIMIT: usize = 50;
 const MAX_SEARCH_LIMIT: usize = 200;
@@ -19,7 +23,7 @@ fn sort_tree_nodes(nodes: &mut [TreeNode]) {
         let right_rank = if right.kind == "directory" { 0 } else { 1 };
         left_rank
             .cmp(&right_rank)
-            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            .then_with(|| natural_name_cmp(&left.name, &right.name))
     });
 }
 

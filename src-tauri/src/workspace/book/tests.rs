@@ -1,9 +1,7 @@
 #![cfg(test)]
 
 use crate::workspace::book::archive::{export_book_zip_db, import_book_zip_db};
-use crate::workspace::book::data::{
-    run_book_migrations, BookRecord,
-};
+use crate::workspace::book::data::{run_book_migrations, BookRecord};
 use crate::workspace::book::ops::{
     delete_workspace_entry_db, move_workspace_entry_db, read_text_file_db,
     rename_workspace_entry_db, write_text_file_db,
@@ -11,6 +9,8 @@ use crate::workspace::book::ops::{
 use crate::workspace::book::templates::create_book_workspace_db;
 use crate::workspace::book::tree::read_workspace_tree_db;
 use rusqlite::Connection;
+use std::io::{Cursor, Write};
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
 fn create_connection() -> Connection {
     let connection = Connection::open_in_memory().expect("in-memory db should open");
@@ -23,6 +23,16 @@ fn create_book(connection: &mut Connection, name: &str) -> BookRecord {
     let book = create_book_workspace_db(&transaction, name).expect("book should be created");
     transaction.commit().expect("transaction should commit");
     book
+}
+
+fn read_root_child_names(connection: &Connection, root_path: &str) -> Vec<String> {
+    read_workspace_tree_db(connection, root_path)
+        .expect("tree should load")
+        .children
+        .expect("tree should contain children")
+        .into_iter()
+        .map(|child| child.name)
+        .collect()
 }
 
 #[test]
@@ -90,7 +100,9 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(project_status.contains("\"characters\": \"设定/角色\""));
     assert!(project_status.contains("\"factions\": \"设定/势力\""));
     assert!(project_status.contains("\"systemState\": \".project/status/system-state.json\""));
-    assert!(project_status.contains("\"continuityIndex\": \".project/status/continuity-index.json\""));
+    assert!(
+        project_status.contains("\"continuityIndex\": \".project/status/continuity-index.json\"")
+    );
     assert!(project_status.contains("\"memoryGuide\": \".project/MEMORY/README.md\""));
     assert!(project_status.contains("\"chapterDraft\": \"正文/第001章_章名.md\""));
     assert!(project_status.contains("\"chapterPlan\": \"大纲/细纲_第001章.md\""));
@@ -191,10 +203,7 @@ fn create_book_workspace_db_builds_template_tree() {
         .collect::<Vec<_>>();
     assert_eq!(memory_child_names, vec!["README.md"]);
 
-    assert_eq!(
-        child_names,
-        vec![".project", "大纲", "正文", "设定"]
-    );
+    assert_eq!(child_names, vec![".project", "大纲", "正文", "设定"]);
 }
 
 #[test]
@@ -241,24 +250,51 @@ fn workspace_operations_use_sqlite_storage() {
 fn import_and_export_zip_roundtrip() {
     let mut source_connection = create_connection();
     let original = create_book(&mut source_connection, "北境余烬");
-    let exported = export_book_zip_db(&source_connection, &original.root_path)
-        .expect("zip should export");
+    let exported =
+        export_book_zip_db(&source_connection, &original.root_path).expect("zip should export");
 
     let mut target_connection = create_connection();
     let transaction = target_connection
         .transaction()
         .expect("transaction should open");
-    let book = import_book_zip_db(&transaction, "北境余烬.zip", exported)
-        .expect("zip should import");
+    let book =
+        import_book_zip_db(&transaction, "北境余烬.zip", exported).expect("zip should import");
     transaction.commit().expect("transaction should commit");
 
-    let tree = read_workspace_tree_db(&target_connection, &book.root_path)
-        .expect("tree should load");
-    let child_names = tree
-        .children
-        .expect("tree should contain children")
-        .into_iter()
-        .map(|child| child.name)
-        .collect::<Vec<_>>();
-    assert_eq!(child_names, vec![".project", "大纲", "正文", "设定"]);
+    assert_eq!(
+        read_root_child_names(&target_connection, &book.root_path),
+        vec![".project", "大纲", "正文", "设定"]
+    );
+}
+
+#[test]
+fn import_plain_zip_without_project_agents() {
+    let cursor = Cursor::new(Vec::new());
+    let mut archive = ZipWriter::new(cursor);
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    archive
+        .start_file("章节/第001章.md", options)
+        .expect("zip file should start");
+    archive
+        .write_all("第一章正文".as_bytes())
+        .expect("zip file should write");
+    let archive_bytes = archive.finish().expect("zip should finish").into_inner();
+
+    let mut connection = create_connection();
+    let transaction = connection.transaction().expect("transaction should open");
+    let book = import_book_zip_db(&transaction, "普通资料.zip", archive_bytes)
+        .expect("plain zip should import");
+    transaction.commit().expect("transaction should commit");
+
+    let project_agents = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/普通资料/.project/AGENTS.md",
+    )
+    .expect("project AGENTS should be supplemented");
+    assert!(project_agents.contains("# 普通资料 工作区 AGENTS"));
+    assert_eq!(
+        read_root_child_names(&connection, &book.root_path),
+        vec![".project", "章节"]
+    );
 }

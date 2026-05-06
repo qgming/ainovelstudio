@@ -2,7 +2,7 @@
 
 use crate::workspace::book::data::{
     ensure_directory_chain, insert_entry, load_book_by_id, load_book_by_root_path,
-    load_entry_records, touch_book, BookRecord, BOOK_ROOT_PREFIX,
+    load_entry_record, load_entry_records, touch_book, BookRecord, BOOK_ROOT_PREFIX,
 };
 use crate::workspace::book::templates::create_book_workspace_db;
 use crate::workspace::common::{
@@ -10,7 +10,6 @@ use crate::workspace::common::{
     validate_name, validate_relative_segments, CommandResult,
 };
 use rusqlite::{params, Connection, Transaction};
-use std::collections::HashSet;
 use std::io::{Cursor, Read, Seek, Write};
 use std::path::Path;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
@@ -20,7 +19,7 @@ const MAX_BOOK_ARCHIVE_DEPTH: usize = 12;
 const MAX_BOOK_ARCHIVE_ENTRIES: usize = 5_000;
 const MAX_BOOK_ARCHIVE_FILE_SIZE: u64 = 10 * 1024 * 1024;
 const MAX_BOOK_ARCHIVE_TOTAL_SIZE: u64 = 256 * 1024 * 1024;
-const REQUIRED_BOOK_WORKSPACE_FILES: [&str; 1] = [".project/AGENTS.md"];
+const REQUIRED_BOOK_WORKSPACE_FILE: &str = ".project/AGENTS.md";
 
 fn is_ignored_book_archive_path(path: &str) -> bool {
     path.split('/')
@@ -31,15 +30,6 @@ fn path_depth(path: &str) -> usize {
     path.split('/')
         .filter(|segment| !segment.is_empty())
         .count()
-}
-
-fn preview_archive_paths(paths: &[String]) -> String {
-    let preview = paths.iter().take(8).cloned().collect::<Vec<_>>().join("，");
-    if preview.is_empty() {
-        "无可用文件".into()
-    } else {
-        preview
-    }
 }
 
 fn collect_book_archive_file_paths<R: Read + Seek>(
@@ -82,67 +72,128 @@ fn collect_book_archive_file_paths<R: Read + Seek>(
     Ok(file_paths)
 }
 
-fn archive_contains_required_book_files(file_set: &HashSet<String>, prefix: &str) -> bool {
-    REQUIRED_BOOK_WORKSPACE_FILES.iter().all(|relative_path| {
-        let candidate = if prefix.is_empty() {
-            (*relative_path).to_string()
-        } else {
-            format!("{prefix}/{relative_path}")
-        };
-        file_set.contains(&candidate)
-    })
-}
-
-fn detect_book_archive_root(file_paths: &[String]) -> CommandResult<String> {
-    let file_set = file_paths.iter().cloned().collect::<HashSet<_>>();
-    let mut candidates = vec![String::new()];
-    let mut seen = HashSet::from([String::new()]);
-
+fn detect_book_workspace_root(file_paths: &[String]) -> CommandResult<Option<String>> {
+    if file_paths.is_empty() {
+        return Err("ZIP 中未找到可导入的文件。".into());
+    }
+    let mut root_prefix: Option<String> = None;
     for path in file_paths {
-        let mut current = parent_relative_path(path);
-        while !current.is_empty() {
-            if seen.insert(current.clone()) {
-                candidates.push(current.clone());
+        if path == REQUIRED_BOOK_WORKSPACE_FILE {
+            let next_prefix = String::new();
+            if root_prefix
+                .as_ref()
+                .is_some_and(|prefix| prefix != &next_prefix)
+            {
+                return Err("ZIP 中检测到多个书籍工作区，当前仅支持单书导入。".into());
             }
-            current = parent_relative_path(&current);
+            root_prefix = Some(next_prefix);
+            continue;
+        }
+
+        let suffix = format!("/{REQUIRED_BOOK_WORKSPACE_FILE}");
+        if let Some(prefix) = path.strip_suffix(&suffix) {
+            if root_prefix
+                .as_ref()
+                .is_some_and(|existing| existing != prefix)
+            {
+                return Err("ZIP 中检测到多个书籍工作区，当前仅支持单书导入。".into());
+            }
+            root_prefix = Some(prefix.to_string());
         }
     }
 
-    let matching_roots = candidates
-        .into_iter()
-        .filter(|prefix| archive_contains_required_book_files(&file_set, prefix))
-        .collect::<Vec<_>>();
-
-    if matching_roots.is_empty() {
-        return Err(format!(
-            "ZIP 中未找到有效书籍工作区。至少需要包含 .project/AGENTS.md。检测到的文件示例：{}",
-            preview_archive_paths(file_paths)
-        ));
-    }
-    if matching_roots.len() > 1 {
-        return Err(format!(
-            "ZIP 中检测到多个书籍工作区，当前仅支持单书导入。检测到：{}",
-            matching_roots.join("，")
-        ));
-    }
-
-    Ok(matching_roots[0].clone())
+    Ok(root_prefix)
 }
 
-fn derive_imported_book_name(root_prefix: &str, file_name: &str) -> CommandResult<String> {
-    let candidate = if !root_prefix.is_empty() {
-        crate::workspace::common::entry_name_from_path(root_prefix)?
-    } else {
-        Path::new(file_name)
-            .file_stem()
-            .and_then(|name| name.to_str())
-            .map(str::trim)
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| "无法确定导入书籍名称。".to_string())?
-            .to_string()
-    };
+fn derive_imported_book_name(root_prefix: Option<&str>, file_name: &str) -> CommandResult<String> {
+    let archive_stem = Path::new(file_name)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
+    let root_name =
+        root_prefix.and_then(|prefix| crate::workspace::common::entry_name_from_path(prefix).ok());
 
-    validate_name(&candidate)
+    root_name
+        .as_deref()
+        .into_iter()
+        .chain(archive_stem)
+        .find_map(|candidate| validate_name(candidate).ok())
+        .ok_or_else(|| "无法确定导入书籍名称。".to_string())
+}
+
+fn relative_archive_path(path: String, root_prefix: Option<&str>) -> Option<String> {
+    match root_prefix {
+        Some("") => Some(path),
+        Some(prefix) => path
+            .strip_prefix(&format!("{prefix}/"))
+            .map(|suffix| suffix.to_string()),
+        None => Some(path),
+    }
+}
+
+fn insert_archive_file_entry(
+    transaction: &Transaction<'_>,
+    book_id: &str,
+    relative_path: &str,
+    content_bytes: &[u8],
+    timestamp: u64,
+) -> CommandResult<()> {
+    ensure_directory_chain(
+        transaction,
+        book_id,
+        &parent_relative_path(relative_path),
+        timestamp,
+    )?;
+    if let Some(existing) = load_entry_record(transaction, book_id, relative_path)? {
+        if existing.kind != "file" {
+            return Err("ZIP 内文件路径与已有目录冲突。".into());
+        }
+        transaction
+            .execute(
+                r#"
+                UPDATE book_workspace_entries
+                SET extension = ?1, content_bytes = ?2, updated_at = ?3
+                WHERE book_id = ?4 AND path = ?5
+                "#,
+                params![
+                    file_extension(relative_path).as_deref(),
+                    content_bytes,
+                    timestamp as i64,
+                    book_id,
+                    relative_path,
+                ],
+            )
+            .map_err(error_to_string)?;
+        return Ok(());
+    }
+    insert_entry(
+        transaction,
+        book_id,
+        relative_path,
+        "file",
+        file_extension(relative_path).as_deref(),
+        content_bytes,
+        timestamp,
+    )
+}
+
+fn remove_non_project_template_entries(
+    transaction: &Transaction<'_>,
+    book_id: &str,
+) -> CommandResult<()> {
+    transaction
+        .execute(
+            r#"
+            DELETE FROM book_workspace_entries
+            WHERE book_id = ?1
+              AND path != '.project'
+              AND path NOT LIKE '.project/%'
+            "#,
+            params![book_id],
+        )
+        .map_err(error_to_string)?;
+    Ok(())
 }
 
 pub(crate) fn import_book_zip_db(
@@ -152,16 +203,20 @@ pub(crate) fn import_book_zip_db(
 ) -> CommandResult<BookRecord> {
     let mut archive = ZipArchive::new(Cursor::new(archive_bytes)).map_err(error_to_string)?;
     let file_paths = collect_book_archive_file_paths(&mut archive)?;
-    let root_prefix = detect_book_archive_root(&file_paths)?;
-    let book_name = derive_imported_book_name(&root_prefix, file_name)?;
+    let root_prefix = detect_book_workspace_root(&file_paths)?;
+    let book_name = derive_imported_book_name(root_prefix.as_deref(), file_name)?;
     let book = create_book_workspace_db(transaction, &book_name)?;
 
-    transaction
-        .execute(
-            "DELETE FROM book_workspace_entries WHERE book_id = ?1",
-            params![book.id],
-        )
-        .map_err(error_to_string)?;
+    if root_prefix.is_some() {
+        transaction
+            .execute(
+                "DELETE FROM book_workspace_entries WHERE book_id = ?1",
+                params![book.id],
+            )
+            .map_err(error_to_string)?;
+    } else {
+        remove_non_project_template_entries(transaction, &book.id)?;
+    }
 
     let timestamp = now_timestamp();
     for index in 0..archive.len() {
@@ -170,50 +225,28 @@ pub(crate) fn import_book_zip_db(
         if path.is_empty() || is_ignored_book_archive_path(&path) {
             continue;
         }
+        let Some(relative_path) = relative_archive_path(path, root_prefix.as_deref()) else {
+            continue;
+        };
+        if relative_path.is_empty() {
+            continue;
+        }
 
         if entry.is_dir() {
-            let relative_path = if root_prefix.is_empty() {
-                path
-            } else if let Some(suffix) = path.strip_prefix(&format!("{root_prefix}/")) {
-                suffix.to_string()
-            } else {
-                continue;
-            };
-
-            if relative_path.is_empty() {
-                continue;
-            }
-
             validate_relative_segments(&relative_path)?;
             ensure_directory_chain(transaction, &book.id, &relative_path, timestamp)?;
             continue;
         }
 
-        let relative_path = if root_prefix.is_empty() {
-            path
-        } else if let Some(suffix) = path.strip_prefix(&format!("{root_prefix}/")) {
-            suffix.to_string()
-        } else {
-            continue;
-        };
-
         validate_relative_segments(&relative_path)?;
-        ensure_directory_chain(
-            transaction,
-            &book.id,
-            &parent_relative_path(&relative_path),
-            timestamp,
-        )?;
         let mut content_bytes = Vec::new();
         entry
             .read_to_end(&mut content_bytes)
             .map_err(error_to_string)?;
-        insert_entry(
+        insert_archive_file_entry(
             transaction,
             &book.id,
             &relative_path,
-            "file",
-            file_extension(&relative_path).as_deref(),
             &content_bytes,
             timestamp,
         )?;
