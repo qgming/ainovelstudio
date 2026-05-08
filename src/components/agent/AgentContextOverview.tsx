@@ -1,8 +1,13 @@
 import type { AgentMessage, AgentUsage } from "../../lib/agent/types";
 
 type AgentContextOverviewProps = {
+  compactionCount?: number;
   currentModel: string;
+  isCompacting?: boolean;
+  latestCompactionAt?: string | null;
+  latestCompactionTokensBefore?: number | null;
   messages: AgentMessage[];
+  onCompact?: () => void;
   sessionCreatedAt?: string | null;
   sessionTitle: string;
   sessionUpdatedAt?: string | null;
@@ -156,8 +161,13 @@ function ContextBreakdown({ usage }: { usage: AgentUsage | null }) {
 }
 
 export function AgentContextOverview({
+  compactionCount = 0,
   currentModel,
+  isCompacting = false,
+  latestCompactionAt,
+  latestCompactionTokensBefore,
   messages,
+  onCompact,
   sessionCreatedAt,
   sessionTitle,
   sessionUpdatedAt,
@@ -191,7 +201,23 @@ export function AgentContextOverview({
             value={`${formatCount(latestUsage?.cacheReadTokens ?? 0)} / ${formatCount(latestUsage?.cacheWriteTokens ?? 0)}`}
           />
           <MetricCard label="会话累计 token" value={formatCount(sessionUsage.totalTokens)} />
+          <MetricCard label="压缩次数" value={formatCount(compactionCount)} />
+          <MetricCard label="最近压缩" value={formatEpoch(latestCompactionAt)} />
+          <MetricCard
+            label="压缩前 token"
+            value={formatCount(latestCompactionTokensBefore ?? 0)}
+          />
         </div>
+        {onCompact ? (
+          <button
+            type="button"
+            className="mt-4 h-9 rounded-md border border-[#cbd5e1] px-3 text-sm font-medium text-[#111827] transition-colors hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#334155] dark:text-[#eef2f7] dark:hover:bg-[#1f2937]"
+            disabled={isCompacting}
+            onClick={onCompact}
+          >
+            {isCompacting ? "正在压缩" : "压缩上下文"}
+          </button>
+        ) : null}
       </div>
       <ContextBreakdown usage={latestUsage} />
     </div>

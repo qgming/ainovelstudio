@@ -1,7 +1,7 @@
 /**
- * chatRunStore（原 agentStore）的辅助纯函数与 setter 适配器。
+ * chatRunStore 的辅助纯函数与 setter 适配器。
  *
- * 这些 helper 之前内联在 stores/agentStore.ts 顶部，与 store 实现混在一起。
+ * 这些 helper 从 store 主体中抽离，用于维持状态变换的可测试性。
  * 抽出后 store 主体只关心状态机与 actions 编排。
  */
 
@@ -23,6 +23,7 @@ import {
   normalizeRecoveredStatus,
   sortSessionSummaries,
 } from "../../lib/chat/sessionRuntime";
+import { entriesToMessages, getCompactionCount, getLatestCompactionEntry } from "../../lib/chat/entries";
 import type { ChatBootstrap, ChatSessionSummary } from "../../lib/chat/types";
 import {
   getStoredDefaultAgentMarkdown,
@@ -43,6 +44,8 @@ export type RunActivityState = {
   activeRunRequestId: string | null;
   inflightToolRequestIds: string[];
   pendingAsk: PendingAskState | null;
+  queuedFollowUpMessages: string[];
+  queuedSteeringMessages: string[];
   run: AgentRun;
 };
 
@@ -52,6 +55,8 @@ export function selectIsAgentRunActive(state: RunActivityState): boolean {
     state.abortController !== null ||
     state.inflightToolRequestIds.length > 0 ||
     state.pendingAsk !== null ||
+    state.queuedFollowUpMessages.length > 0 ||
+    state.queuedSteeringMessages.length > 0 ||
     state.run.status === "running" ||
     state.run.status === "awaiting_user"
   );
@@ -67,6 +72,12 @@ export type ChatRunStoreState = {
   activeSessionId: string | null;
   autopilotGoalsBySession: Record<string, string>;
   pendingAsk: PendingAskState | null;
+  queuedFollowUpMessages: string[];
+  queuedSteeringMessages: string[];
+  compactionCount: number;
+  isCompacting: boolean;
+  latestCompactionAt: string | null;
+  latestCompactionTokensBefore: number | null;
   contextTags: string[];
   currentBookId: string | null;
   draftsBySession: Record<string, string>;
@@ -75,6 +86,7 @@ export type ChatRunStoreState = {
   inflightToolRequestIds: string[];
   isHistoryOpen: boolean;
   isHydrated: boolean;
+  entriesBySession: Record<string, ChatBootstrap["activeSessionEntries"]>;
   messagesBySession: Record<string, AgentMessage[]>;
   planningState: PlanningState;
   run: AgentRun;
@@ -91,6 +103,12 @@ export function buildInitialState(): ChatRunStoreState {
     activeSessionId: null,
     autopilotGoalsBySession: {},
     pendingAsk: null,
+    queuedFollowUpMessages: [],
+    queuedSteeringMessages: [],
+    compactionCount: 0,
+    isCompacting: false,
+    latestCompactionAt: null,
+    latestCompactionTokensBefore: null,
     contextTags: ["工具: 文件工作区"],
     currentBookId: null,
     draftsBySession: {},
@@ -99,6 +117,7 @@ export function buildInitialState(): ChatRunStoreState {
     inflightToolRequestIds: [],
     isHistoryOpen: false,
     isHydrated: false,
+    entriesBySession: {},
     messagesBySession: {},
     planningState: { items: [], roundsSinceUpdate: 0 },
     run: buildInitialRun(),
@@ -150,6 +169,9 @@ export function applyBootstrap(
   const nextMessagesBySession = Object.fromEntries(
     Object.entries(state.messagesBySession).filter(([sessionId]) => validIds.has(sessionId)),
   ) as Record<string, AgentMessage[]>;
+  const nextEntriesBySession = Object.fromEntries(
+    Object.entries(state.entriesBySession).filter(([sessionId]) => validIds.has(sessionId)),
+  ) as Record<string, ChatBootstrap["activeSessionEntries"]>;
   const nextDraftsBySession = Object.fromEntries(
     Object.entries(state.draftsBySession).filter(([sessionId]) => validIds.has(sessionId)),
   ) as Record<string, string>;
@@ -158,8 +180,9 @@ export function applyBootstrap(
   ) as Record<string, string>;
 
   if (bootstrap.activeSessionId) {
+    nextEntriesBySession[bootstrap.activeSessionId] = bootstrap.activeSessionEntries;
     nextMessagesBySession[bootstrap.activeSessionId] = normalizeRecoveredMessages(
-      bootstrap.activeSessionMessages,
+      entriesToMessages(bootstrap.activeSessionEntries),
     );
     nextDraftsBySession[bootstrap.activeSessionId] = bootstrap.activeSessionDraft;
   }
@@ -170,6 +193,10 @@ export function applyBootstrap(
   const activeMessages = bootstrap.activeSessionId
     ? (nextMessagesBySession[bootstrap.activeSessionId] ?? [])
     : [];
+  const activeEntries = bootstrap.activeSessionId
+    ? (nextEntriesBySession[bootstrap.activeSessionId] ?? [])
+    : [];
+  const latestCompaction = getLatestCompactionEntry(activeEntries);
   const planningState = derivePlanningState(activeMessages);
 
   return {
@@ -178,11 +205,18 @@ export function applyBootstrap(
     currentBookId: bootstrap.bookId ?? state.currentBookId,
     draftsBySession: nextDraftsBySession,
     errorMessage: null,
+    entriesBySession: nextEntriesBySession,
     input: bootstrap.activeSessionId
       ? (nextDraftsBySession[bootstrap.activeSessionId] ?? "")
       : "",
     inflightToolRequestIds: [],
     pendingAsk: null,
+    queuedFollowUpMessages: [],
+    queuedSteeringMessages: [],
+    compactionCount: getCompactionCount(activeEntries),
+    isCompacting: false,
+    latestCompactionAt: latestCompaction?.createdAt ?? null,
+    latestCompactionTokensBefore: latestCompaction?.payload.tokensBefore ?? null,
     isHydrated: true,
     messagesBySession: nextMessagesBySession,
     planningState,

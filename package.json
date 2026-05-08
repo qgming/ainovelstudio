@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude src/lib/agent/modelGateway.integration.test.ts",
+    "test": "vitest run --exclude src/lib/agent/modelGateway.integration.test.ts --exclude coding-agent/**",
     "test:integration": "vitest run src/lib/agent/modelGateway.integration.test.ts"
   },
   "dependencies": {

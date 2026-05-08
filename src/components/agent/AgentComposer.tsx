@@ -59,6 +59,7 @@ type AgentComposerProps = {
   input: string;
   modes?: AgentComposerMode[];
   onCoach: () => Promise<void>;
+  onFollowUp?: (selection: ManualTurnContextSelection) => void;
   onInputChange: (value: string) => void;
   onModeChange?: (modeId: AgentMode) => void;
   onStop: () => void;
@@ -66,6 +67,8 @@ type AgentComposerProps = {
   onSubmitAskAnswer: (answer: AskToolAnswer) => void;
   pendingAsk: PendingAskState | null;
   planningState: PlanningState;
+  queuedFollowUpMessages?: string[];
+  queuedSteeringMessages?: string[];
   resources: SelectableResource[];
   rootNode: TreeNode | null;
   runStatus: AgentRunStatus;
@@ -127,6 +130,7 @@ export function AgentComposer({
   input,
   modes = DEFAULT_AGENT_COMPOSER_MODES,
   onCoach,
+  onFollowUp,
   onInputChange,
   onModeChange,
   onStop,
@@ -134,6 +138,8 @@ export function AgentComposer({
   onSubmitAskAnswer,
   pendingAsk,
   planningState,
+  queuedFollowUpMessages = [],
+  queuedSteeringMessages = [],
   resources,
   rootNode,
   runStatus,
@@ -158,7 +164,6 @@ export function AgentComposer({
   const activeMode = modes.find((mode) => mode.id === selectedModeId) ?? modes[0] ?? DEFAULT_AGENT_COMPOSER_MODES[0];
   const ActiveModeIcon = activeMode.icon;
   const inputPlaceholder = MODE_INPUT_PLACEHOLDERS[activeMode.id];
-
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) {
@@ -212,9 +217,15 @@ export function AgentComposer({
     }
 
     event.preventDefault();
-    if (!isRunning && !isAskMode && input.trim()) {
+    if (!isAskMode && input.trim()) {
+      if (event.altKey && isRunning && onFollowUp) {
+        onFollowUp(selection);
+        return;
+      }
       onSubmit(selection);
-      setSelection({ filePaths: [], skillIds: [] });
+      if (!isRunning) {
+        setSelection({ filePaths: [], skillIds: [] });
+      }
     }
   };
 
@@ -650,32 +661,58 @@ export function AgentComposer({
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
-              <Button
-                type="button"
-                aria-label={isRunning ? "停止输出" : "发送消息"}
-                title={
-                  isRunning
-                    ? "停止输出 — 终止当前输出并保留已生成内容"
-                    : "发送消息 — 将当前输入发送给 agent 开始处理"
-                }
-                onClick={isRunning ? onStop : handleSubmit}
-                disabled={!isRunning && !input.trim()}
-                variant={isRunning ? "secondary" : "default"}
-                size="icon-sm"
-                className={
-                  isRunning
-                    ? "h-7 w-7 rounded-full"
-                    : "h-7 w-7 rounded-full border-transparent bg-foreground text-background hover:bg-foreground/88"
-                }
-              >
-                {isRunning ? (
-                  <Square className="h-3.5 w-3.5 fill-current" />
-                ) : (
-                  <SendHorizontal className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            </div>
+	              <div aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
+              {queuedSteeringMessages.length > 0 ? (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                  纠偏 {queuedSteeringMessages.length}
+                </span>
+              ) : null}
+              {queuedFollowUpMessages.length > 0 ? (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                  续跑 {queuedFollowUpMessages.length}
+                </span>
+              ) : null}
+	              {isRunning ? (
+	                <>
+	                  <Button
+	                    type="button"
+	                    aria-label="发送纠偏"
+	                    title="发送纠偏 — 插入到当前工具结果之后继续执行"
+	                    onClick={handleSubmit}
+	                    disabled={!input.trim()}
+	                    variant="default"
+	                    size="icon-sm"
+	                    className="h-7 w-7 rounded-full border-transparent bg-foreground text-background hover:bg-foreground/88"
+	                  >
+	                    <SendHorizontal className="h-3.5 w-3.5" />
+	                  </Button>
+	                  <Button
+	                    type="button"
+	                    aria-label="停止输出"
+	                    title="停止输出 — 终止当前输出并保留已生成内容"
+	                    onClick={onStop}
+	                    variant="secondary"
+	                    size="icon-sm"
+	                    className="h-7 w-7 rounded-full"
+	                  >
+	                    <Square className="h-3.5 w-3.5 fill-current" />
+	                  </Button>
+	                </>
+	              ) : (
+	                <Button
+	                  type="button"
+	                  aria-label="发送消息"
+	                  title="发送消息 — 将当前输入发送给 agent 开始处理"
+	                  onClick={handleSubmit}
+	                  disabled={!input.trim()}
+	                  variant="default"
+	                  size="icon-sm"
+	                  className="h-7 w-7 rounded-full border-transparent bg-foreground text-background hover:bg-foreground/88"
+	                >
+	                  <SendHorizontal className="h-3.5 w-3.5" />
+	                </Button>
+	              )}
+	            </div>
           </>
         )}
       </div>

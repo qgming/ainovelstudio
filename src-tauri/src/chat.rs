@@ -29,13 +29,12 @@ pub struct ChatSessionSummary {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatMessageDocument {
+pub struct ChatEntryDocument {
     id: String,
-    role: String,
-    author: String,
-    parts: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    meta: Option<Value>,
+    seq: i64,
+    entry_type: String,
+    payload: Value,
+    created_at: String,
 }
 
 #[derive(Serialize)]
@@ -44,19 +43,17 @@ pub struct ChatBootstrap {
     book_id: String,
     sessions: Vec<ChatSessionSummary>,
     active_session_id: Option<String>,
-    active_session_messages: Vec<ChatMessageDocument>,
+    active_session_entries: Vec<ChatEntryDocument>,
     active_session_draft: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ChatMessageInput {
-    id: String,
-    role: String,
-    author: String,
-    parts: Value,
+pub struct ChatEntryInput {
     #[serde(default)]
-    meta: Option<Value>,
+    id: Option<String>,
+    entry_type: String,
+    payload: Value,
 }
 
 #[derive(Deserialize)]
@@ -242,44 +239,37 @@ fn read_session(
         .map_err(error_to_string)
 }
 
-fn load_messages(
+fn load_entries(
     connection: &rusqlite::Connection,
     session_id: &str,
-) -> CommandResult<Vec<ChatMessageDocument>> {
+) -> CommandResult<Vec<ChatEntryDocument>> {
     let mut statement = connection
         .prepare(
             r#"
-            SELECT id, role, author, parts_json, meta_json
-            FROM chat_messages
+            SELECT id, seq, entry_type, payload_json, created_at
+            FROM chat_entries
             WHERE session_id = ?1
             ORDER BY seq ASC
             "#,
         )
         .map_err(error_to_string)?;
 
-    let messages = statement
+    let entries = statement
         .query_map(params![session_id], |row| {
-            let meta_raw: String = row.get("meta_json")?;
-            Ok(ChatMessageDocument {
+            let payload_json: String = row.get("payload_json")?;
+            Ok(ChatEntryDocument {
                 id: row.get("id")?,
-                role: row.get("role")?,
-                author: row.get("author")?,
-                parts: parse_json(
-                    &row.get::<_, String>("parts_json")?,
-                    Value::Array(Vec::new()),
-                ),
-                meta: if meta_raw.trim().is_empty() || meta_raw.trim() == "null" {
-                    None
-                } else {
-                    Some(parse_json(&meta_raw, Value::Object(Default::default())))
-                },
+                seq: row.get("seq")?,
+                entry_type: row.get("entry_type")?,
+                payload: parse_json(&payload_json, Value::Null),
+                created_at: row.get("created_at")?,
             })
         })
         .map_err(error_to_string)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(error_to_string)?;
 
-    Ok(messages)
+    Ok(entries)
 }
 
 fn get_state_value(connection: &rusqlite::Connection, key: &str) -> CommandResult<Option<Value>> {
@@ -382,7 +372,7 @@ fn build_bootstrap(
         book_id: book_id.to_string(),
         sessions: load_sessions(connection, book_id)?,
         active_session_id: Some(session_id.clone()),
-        active_session_messages: load_messages(connection, &session_id)?,
+        active_session_entries: load_entries(connection, &session_id)?,
         active_session_draft: draft,
     })
 }
@@ -429,10 +419,10 @@ fn apply_patch(
     read_session(connection, session_id, book_id)
 }
 
-fn next_message_seq(connection: &rusqlite::Connection, session_id: &str) -> CommandResult<i64> {
+fn next_entry_seq(connection: &rusqlite::Connection, session_id: &str) -> CommandResult<i64> {
     connection
         .query_row(
-            "SELECT COALESCE(MAX(seq), 0) + 1 FROM chat_messages WHERE session_id = ?1",
+            "SELECT COALESCE(MAX(seq), 0) + 1 FROM chat_entries WHERE session_id = ?1",
             params![session_id],
             |row| row.get::<_, i64>(0),
         )
@@ -588,32 +578,36 @@ pub fn set_chat_draft(app: AppHandle, sessionId: String, draft: String) -> Comma
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn append_chat_message(
+pub fn load_chat_entries(
     app: AppHandle,
     bookId: String,
     sessionId: String,
-    message: ChatMessageInput,
+) -> CommandResult<Vec<ChatEntryDocument>> {
+    let connection = open_database(&app)?;
+    read_session(&connection, &sessionId, &bookId)?;
+    load_entries(&connection, &sessionId)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn append_chat_entry(
+    app: AppHandle,
+    bookId: String,
+    sessionId: String,
+    entry: ChatEntryInput,
     sessionPatch: Option<ChatSessionPatch>,
 ) -> CommandResult<ChatSessionSummary> {
     let connection = open_database(&app)?;
-    let seq = next_message_seq(&connection, &sessionId)?;
+    let seq = next_entry_seq(&connection, &sessionId)?;
     let book_id = read_session(&connection, &sessionId, &bookId)?.book_id;
+    let entry_id = entry.id.unwrap_or_else(|| Uuid::new_v4().to_string());
     connection
         .execute(
             r#"
-            INSERT INTO chat_messages (id, session_id, seq, role, author, parts_json, meta_json, created_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            INSERT INTO chat_entries (id, session_id, seq, entry_type, payload_json, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
-            params![
-                message.id,
-                sessionId,
-                seq,
-                message.role,
-                message.author,
-                message.parts.to_string(),
-                message.meta.unwrap_or(Value::Null).to_string(),
-                now_iso(),
-            ],
+            params![entry_id, sessionId.clone(), seq, entry.entry_type, entry.payload.to_string(), now_iso()],
         )
         .map_err(error_to_string)?;
     apply_patch(&connection, &sessionId, &book_id, sessionPatch)
@@ -621,13 +615,12 @@ pub fn append_chat_message(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn update_chat_message(
+pub fn update_chat_entry(
     app: AppHandle,
     bookId: String,
     sessionId: String,
-    messageId: String,
-    parts: Value,
-    meta: Option<Value>,
+    entryId: String,
+    payload: Value,
     sessionPatch: Option<ChatSessionPatch>,
 ) -> CommandResult<ChatSessionSummary> {
     let connection = open_database(&app)?;
@@ -635,17 +628,11 @@ pub fn update_chat_message(
     connection
         .execute(
             r#"
-            UPDATE chat_messages
-            SET parts_json = ?3,
-                meta_json = ?4
+            UPDATE chat_entries
+            SET payload_json = ?3
             WHERE session_id = ?1 AND id = ?2
             "#,
-            params![
-                sessionId,
-                messageId,
-                parts.to_string(),
-                meta.unwrap_or(Value::Null).to_string()
-            ],
+            params![sessionId.clone(), entryId, payload.to_string()],
         )
         .map_err(error_to_string)?;
     apply_patch(&connection, &sessionId, &book_id, sessionPatch)
@@ -653,20 +640,48 @@ pub fn update_chat_message(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn delete_chat_message(
+pub fn delete_chat_entry(
     app: AppHandle,
     bookId: String,
     sessionId: String,
-    messageId: String,
+    entryId: String,
     sessionPatch: Option<ChatSessionPatch>,
 ) -> CommandResult<ChatSessionSummary> {
     let connection = open_database(&app)?;
     let book_id = read_session(&connection, &sessionId, &bookId)?.book_id;
     connection
         .execute(
-            "DELETE FROM chat_messages WHERE session_id = ?1 AND id = ?2",
-            params![sessionId, messageId],
+            "DELETE FROM chat_entries WHERE session_id = ?1 AND id = ?2",
+            params![sessionId.clone(), entryId],
         )
         .map_err(error_to_string)?;
     apply_patch(&connection, &sessionId, &book_id, sessionPatch)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn append_compaction_entry(
+    app: AppHandle,
+    bookId: String,
+    sessionId: String,
+    summary: String,
+    tokensBefore: i64,
+    firstKeptMessageId: Option<String>,
+    sessionPatch: Option<ChatSessionPatch>,
+) -> CommandResult<ChatSessionSummary> {
+    append_chat_entry(
+        app,
+        bookId,
+        sessionId,
+        ChatEntryInput {
+            id: None,
+            entry_type: "compaction".into(),
+            payload: serde_json::json!({
+                "summary": summary,
+                "tokensBefore": tokensBefore,
+                "firstKeptMessageId": firstKeptMessageId,
+            }),
+        },
+        sessionPatch,
+    )
 }

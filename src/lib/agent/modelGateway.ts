@@ -561,12 +561,15 @@ export type StreamAgentTextInput = {
   maxSteps?: number;
   messages: ModelMessage[];
   providerConfig: AgentProviderConfig;
+  singleStep?: boolean;
   system: string;
   tools?: ToolSet;
 };
 
 export type StreamAgentTextResult = {
+  finishReasonPromise?: Promise<string>;
   fullStream: ReturnType<typeof streamText>["fullStream"];
+  responseMessagesPromise?: Promise<ModelMessage[]>;
   usagePromise?: Promise<AgentUsage | null>;
 };
 
@@ -643,6 +646,7 @@ export function streamAgentText({
   maxSteps,
   messages,
   providerConfig,
+  singleStep,
   system,
   tools,
 }: StreamAgentTextInput): StreamAgentTextResult {
@@ -656,19 +660,29 @@ export function streamAgentText({
     providerOptions: buildProviderOptions(normalizedConfig),
     system,
     tools,
-    stopWhen: typeof maxSteps === "number" && maxSteps > 0 ? [isLoopFinished(), stepCountIs(maxSteps)] : isLoopFinished(),
+    stopWhen: singleStep
+      ? stepCountIs(1)
+      : typeof maxSteps === "number" && maxSteps > 0
+        ? [isLoopFinished(), stepCountIs(maxSteps)]
+        : isLoopFinished(),
   });
 
+  const finishReasonPromise = Promise.resolve(result.finishReason);
+  const responseMessagesPromise = Promise.resolve(result.response)
+    .then((response) => response.messages as ModelMessage[])
+    .catch(() => []);
   const usagePromise = createAbortAwareUsagePromise({
     abortSignal,
-    finishReasonPromise: result.finishReason,
+    finishReasonPromise,
     providerConfig: normalizedConfig,
     responsePromise: result.response,
     totalUsagePromise: result.totalUsage,
   });
 
   return {
+    finishReasonPromise,
     fullStream: result.fullStream,
+    responseMessagesPromise,
     usagePromise,
   };
 }

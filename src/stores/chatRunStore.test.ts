@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { mockInvoke, streamControl } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
   streamControl: {
-    runAgentTurn: vi.fn(),
+    runPrompt: vi.fn(),
   },
 }));
 
@@ -12,14 +12,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 vi.mock("../lib/chat/api", () => ({
-  appendChatMessage: vi.fn(),
+  appendChatEntry: vi.fn(),
   createChatSession: vi.fn(),
-  deleteChatMessage: vi.fn(),
+  deleteChatEntry: vi.fn(),
   deleteChatSession: vi.fn(),
   initializeChatStorage: vi.fn(),
   setChatDraft: vi.fn(),
   switchChatSession: vi.fn(),
-  updateChatMessage: vi.fn(),
+  updateChatEntry: vi.fn(),
 }));
 
 vi.mock("../lib/bookWorkspace/api", () => ({
@@ -63,14 +63,22 @@ vi.mock("../lib/agent/manualTurnContext", () => ({
 }));
 
 vi.mock("../lib/agent/session", () => ({
-  runAgentTurn: streamControl.runAgentTurn,
+  createWritingAgentSession: vi.fn((options) => ({
+    abort: (reason?: string) => options.abortController?.abort(reason),
+    compact: vi.fn(),
+    followUp: vi.fn(),
+    prompt: (prompt: string) => streamControl.runPrompt({ ...options, prompt }),
+    steer: vi.fn(async (prompt: string) => streamControl.runPrompt({ ...options, prompt })),
+    subscribe: vi.fn(() => () => undefined),
+    waitForIdle: vi.fn(),
+  })),
 }));
 
-import { appendChatMessage, createChatSession, initializeChatStorage } from "../lib/chat/api";
+import { appendChatEntry, createChatSession, initializeChatStorage } from "../lib/chat/api";
 import { cancelToolRequests } from "../lib/bookWorkspace/api";
 import { resolveManualTurnContext, type ManualTurnContextPayload } from "../lib/agent/manualTurnContext";
 import { useAgentSettingsStore } from "./agentSettingsStore";
-import { useAgentStore } from "./agentStore";
+import { useChatRunStore as useAgentStore } from "./chatRunStore";
 
 function createEmptyManualContext(): ManualTurnContextPayload {
   return {
@@ -79,15 +87,15 @@ function createEmptyManualContext(): ManualTurnContextPayload {
   };
 }
 
-describe("agentStore", () => {
+describe("chatRunStore", () => {
   beforeEach(() => {
     mockInvoke.mockReset();
     mockInvoke.mockResolvedValue(undefined);
-    streamControl.runAgentTurn.mockReset();
-    streamControl.runAgentTurn.mockImplementation(async function* () {
+    streamControl.runPrompt.mockReset();
+    streamControl.runPrompt.mockImplementation(async function* () {
       return;
     });
-    vi.mocked(appendChatMessage).mockReset();
+    vi.mocked(appendChatEntry).mockReset();
     vi.mocked(resolveManualTurnContext).mockReset();
     vi.mocked(resolveManualTurnContext).mockResolvedValue(createEmptyManualContext());
     vi.mocked(cancelToolRequests).mockReset();
@@ -148,7 +156,7 @@ describe("agentStore", () => {
       releaseManualContext = () => resolve(createEmptyManualContext());
     });
     vi.mocked(resolveManualTurnContext).mockReturnValue(manualContextPromise);
-    streamControl.runAgentTurn.mockImplementation(async function* () {
+    streamControl.runPrompt.mockImplementation(async function* () {
       yield { type: "text-delta", delta: "已开始响应" };
     });
 
@@ -203,7 +211,7 @@ describe("agentStore", () => {
 
     await useAgentStore.getState().coachMessage();
 
-    const prompt = streamControl.runAgentTurn.mock.calls[0]?.[0]?.prompt;
+    const prompt = streamControl.runPrompt.mock.calls[0]?.[0]?.prompt;
     expect(prompt).toContain("节奏明显慢了");
     expect(prompt).toContain("原来的剧情、人设、风格都保留");
     expect(prompt).toContain("先说清楚卡点");
@@ -212,7 +220,7 @@ describe("agentStore", () => {
 
   it("目标模式会持续自动检查并执行到目标完成", async () => {
     let callCount = 0;
-    streamControl.runAgentTurn.mockImplementation(async function* () {
+    streamControl.runPrompt.mockImplementation(async function* () {
       callCount += 1;
       yield {
         type: "text-delta",
@@ -237,14 +245,14 @@ describe("agentStore", () => {
 
     await useAgentStore.getState().sendMessage();
 
-    expect(streamControl.runAgentTurn).toHaveBeenCalledTimes(9);
-    expect(streamControl.runAgentTurn.mock.calls[0]?.[0]?.mode).toBe("autopilot");
-    expect(streamControl.runAgentTurn.mock.calls[0]?.[0]?.modeContext).toMatchObject({
+    expect(streamControl.runPrompt).toHaveBeenCalledTimes(9);
+    expect(streamControl.runPrompt.mock.calls[0]?.[0]?.mode).toBe("autopilot");
+    expect(streamControl.runPrompt.mock.calls[0]?.[0]?.modeContext).toMatchObject({
       goal: "完成第一章审校并写回文件",
       iteration: 1,
     });
-    expect(streamControl.runAgentTurn.mock.calls[1]?.[0]?.prompt).toContain("自动检查");
-    expect(streamControl.runAgentTurn.mock.calls[8]?.[0]?.modeContext).toMatchObject({
+    expect(streamControl.runPrompt.mock.calls[1]?.[0]?.prompt).toContain("自动检查");
+    expect(streamControl.runPrompt.mock.calls[8]?.[0]?.modeContext).toMatchObject({
       goal: "完成第一章审校并写回文件",
       iteration: 9,
     });
@@ -258,7 +266,7 @@ describe("agentStore", () => {
       releaseManualContext = () => resolve(createEmptyManualContext());
     });
     vi.mocked(resolveManualTurnContext).mockReturnValue(manualContextPromise);
-    vi.mocked(appendChatMessage).mockResolvedValue({
+    vi.mocked(appendChatEntry).mockResolvedValue({
       id: "session-1",
       title: "继续写",
       summary: "正在思考",
@@ -320,7 +328,7 @@ describe("agentStore", () => {
       releaseManualContext = () => resolve(createEmptyManualContext());
     });
     vi.mocked(resolveManualTurnContext).mockReturnValue(manualContextPromise);
-    streamControl.runAgentTurn.mockImplementation(async function* () {
+    streamControl.runPrompt.mockImplementation(async function* () {
       yield { type: "text-delta", delta: "不会显示" };
     });
 
@@ -369,7 +377,7 @@ describe("agentStore", () => {
       releaseCreateSession = () => resolve({
         activeSessionDraft: "",
         activeSessionId: "session-1",
-        activeSessionMessages: [],
+        activeSessionEntries: [],
         sessions: [
           {
             id: "session-1",
@@ -420,7 +428,7 @@ describe("agentStore", () => {
   });
 
   it("sendMessage 在首个响应前报错时会结束运行态并追加错误消息", async () => {
-    streamControl.runAgentTurn.mockImplementation(async function* () {
+    streamControl.runPrompt.mockImplementation(async function* () {
       throw new Error("provider exploded");
     });
 
@@ -456,29 +464,37 @@ describe("agentStore", () => {
     vi.mocked(initializeChatStorage).mockResolvedValue({
       activeSessionDraft: "",
       activeSessionId: "session-1",
-      activeSessionMessages: [
+      activeSessionEntries: [
         {
           id: "assistant-1",
-          role: "assistant",
-          author: "主代理",
-          parts: [
-            { type: "placeholder", text: "正在思考" },
-            {
-              type: "tool-call",
-              toolName: "read_file",
-              toolCallId: "tool-1",
-              status: "running",
-              inputSummary: "{\"path\":\"章节/第一章.md\"}",
+          seq: 1,
+          entryType: "message",
+          payload: {
+            message: {
+              id: "assistant-1",
+              role: "assistant",
+              author: "主代理",
+              parts: [
+                { type: "placeholder", text: "正在思考" },
+                {
+                  type: "tool-call",
+                  toolName: "read_file",
+                  toolCallId: "tool-1",
+                  status: "running",
+                  inputSummary: "{\"path\":\"章节/第一章.md\"}",
+                },
+                {
+                  type: "subagent",
+                  id: "subagent-1",
+                  name: "editor",
+                  status: "running",
+                  summary: "已派发子任务：editor",
+                  parts: [{ type: "placeholder", text: "正在思考" }],
+                },
+              ],
             },
-            {
-              type: "subagent",
-              id: "subagent-1",
-              name: "editor",
-              status: "running",
-              summary: "已派发子任务：editor",
-              parts: [{ type: "placeholder", text: "正在思考" }],
-            },
-          ],
+          },
+          createdAt: "1",
         },
       ],
       sessions: [

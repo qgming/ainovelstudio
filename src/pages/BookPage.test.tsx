@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { BookPage } from "./BookPage";
-import { useAgentStore } from "../stores/agentStore";
+import { useChatRunStore as useAgentStore } from "../stores/chatRunStore";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 function renderBookPage(props: React.ComponentProps<typeof BookPage> = {}) {

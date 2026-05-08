@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 
 .claude/
+coding-agent/
 
 # Tauri Android generated project and build artifacts
 src-tauri/gen/android/

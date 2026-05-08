@@ -108,6 +108,9 @@ export type AgentPart =
 
 export type AgentMessageMeta = {
   activeFilePath?: string | null;
+  compactionId?: string | null;
+  entryId?: string | null;
+  finishReason?: string | null;
   workspaceRootPath?: string | null;
   usage?: AgentUsage | null;
 };

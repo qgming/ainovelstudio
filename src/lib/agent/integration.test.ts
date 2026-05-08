@@ -1,7 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "./promptContext";
-import { runAgentTurn } from "./session";
+import { createWritingAgentSession } from "./session";
 import type { AgentPart } from "./types";
+
+function runSessionPrompt(input: Record<string, any>) {
+  const abortController = input.abortSignal
+    ? ({ signal: input.abortSignal, abort: () => undefined } as AbortController)
+    : new AbortController();
+  const session = createWritingAgentSession({
+    ...input,
+    abortController,
+    streamFn: input._streamFn,
+    subagentStreamFn: input._subagentStreamFn,
+  } as never);
+  return session.prompt(String(input.prompt ?? ""));
+}
 
 function createDeferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -30,7 +43,7 @@ describe("agent session (streaming)", () => {
   it("未配置 provider 时 yield 提示文本", async () => {
     const parts: AgentPart[] = [];
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: [],
@@ -66,7 +79,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "chapter-1.md",
       enabledSkills: [],
       enabledToolIds: [],
@@ -98,7 +111,7 @@ describe("agent session (streaming)", () => {
       })(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "chapter-1.md",
       enabledSkills: [],
       enabledToolIds: [],
@@ -153,7 +166,7 @@ describe("agent session (streaming)", () => {
       })(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       abortSignal,
       activeFilePath: null,
       enabledSkills: [],
@@ -186,7 +199,7 @@ describe("agent session (streaming)", () => {
       })(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       abortSignal: abortController.signal,
       activeFilePath: null,
       enabledSkills: [],
@@ -244,7 +257,7 @@ describe("agent session (streaming)", () => {
       })(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["read"],
@@ -260,7 +273,7 @@ describe("agent session (streaming)", () => {
           execute: executeMock,
         },
       },
-      onToolRequestStateChange: (event) => {
+      onToolRequestStateChange: (event: { requestId: string; status: "start" | "finish" }) => {
         events.push(event);
       },
       _streamFn: mockStreamFn,
@@ -284,7 +297,7 @@ describe("agent session (streaming)", () => {
     expect(executeMock).toHaveBeenCalledWith(
       { path: "章节/第一章.md" },
       expect.objectContaining({
-        abortSignal: undefined,
+        abortSignal: expect.any(AbortSignal),
         requestId: expect.stringMatching(/^tool-read-/),
       }),
     );
@@ -333,7 +346,7 @@ describe("agent session (streaming)", () => {
       usagePromise,
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       abortSignal: abortController.signal,
       activeFilePath: null,
       enabledSkills: [],
@@ -407,7 +420,7 @@ describe("agent session (streaming)", () => {
         },
       );
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       abortSignal: abortController.signal,
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
@@ -459,7 +472,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第二章.md",
       workspaceRootPath: "C:/books/北境余烬",
       conversationHistory: [
@@ -518,7 +531,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第三章.md",
       workspaceRootPath: "C:/books/北境余烬",
       conversationHistory: [
@@ -591,7 +604,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       defaultAgentMarkdown: "# 自定义主代理\n\n- 优先吸收上下文后回答。",
@@ -641,7 +654,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       enabledSkills: [],
@@ -695,7 +708,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       enabledSkills: [],
@@ -733,7 +746,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       enabledSkills: [],
@@ -781,7 +794,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       enabledSkills: [],
@@ -837,7 +850,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["browse"],
@@ -920,7 +933,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["path"],
@@ -1008,7 +1021,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["skill"],
@@ -1101,7 +1114,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["web_search"],
@@ -1195,7 +1208,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["web_fetch"],
@@ -1287,7 +1300,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["read"],
@@ -1369,7 +1382,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
       enabledToolIds: ["read"],
@@ -1424,7 +1437,7 @@ describe("agent session (streaming)", () => {
       fullStream: mockMainFullStream(),
     });
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
       enabledToolIds: ["read"],
@@ -1527,7 +1540,7 @@ describe("agent session (streaming)", () => {
         },
       );
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       enabledSkills: [],
@@ -1672,7 +1685,7 @@ describe("agent session (streaming)", () => {
       }),
     );
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
       enabledToolIds: ["task"],
@@ -1772,7 +1785,7 @@ describe("agent session (streaming)", () => {
       }),
     );
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
       enabledToolIds: ["task"],
@@ -1860,7 +1873,7 @@ describe("agent session (streaming)", () => {
       }),
     );
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
       enabledToolIds: ["task"],
@@ -1935,7 +1948,7 @@ describe("agent session (streaming)", () => {
         },
       );
 
-    const stream = runAgentTurn({
+    const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
       enabledToolIds: ["task", "write", "json", "path"],

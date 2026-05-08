@@ -1,8 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AgentMessage } from "../agent/types";
-import type { ChatBootstrap, ChatSessionPatch, ChatSessionSummary } from "./types";
-
-type ChatMessagePayload = Pick<AgentMessage, "id" | "role" | "author" | "parts" | "meta">;
+import type { ChatBootstrap, ChatEntry, ChatEntryInput, ChatSessionPatch, ChatSessionSummary } from "./types";
 
 export function initializeChatStorage(bookId = "__global__") {
   return invoke<ChatBootstrap>("initialize_chat_storage", { bookId });
@@ -28,38 +25,58 @@ export function setChatDraft(sessionId: string, draft: string) {
   return invoke<void>("set_chat_draft", { draft, sessionId });
 }
 
-export function appendChatMessage(
-  bookId: string,
-  sessionId: string,
-  message: ChatMessagePayload,
-  sessionPatch?: ChatSessionPatch,
-) {
-  return invoke<ChatSessionSummary>("append_chat_message", { bookId, message, sessionId, sessionPatch });
+export function loadChatEntries(bookId: string, sessionId: string) {
+  return invoke<ChatEntry[]>("load_chat_entries", { bookId, sessionId });
 }
 
-export function updateChatMessage(
+export function appendChatEntry(
   bookId: string,
   sessionId: string,
-  messageId: string,
-  parts: AgentMessage["parts"],
-  meta?: AgentMessage["meta"],
+  entry: ChatEntryInput,
   sessionPatch?: ChatSessionPatch,
 ) {
-  return invoke<ChatSessionSummary>("update_chat_message", {
+  return invoke<ChatSessionSummary>("append_chat_entry", { bookId, entry, sessionId, sessionPatch });
+}
+
+export function updateChatEntry(
+  bookId: string,
+  sessionId: string,
+  entryId: string,
+  payload: unknown,
+  sessionPatch?: ChatSessionPatch,
+) {
+  return invoke<ChatSessionSummary>("update_chat_entry", {
     bookId,
-    messageId,
-    meta,
-    parts,
+    entryId,
+    payload,
     sessionId,
     sessionPatch,
   });
 }
 
-export function deleteChatMessage(
+export function deleteChatEntry(
   bookId: string,
   sessionId: string,
-  messageId: string,
+  entryId: string,
   sessionPatch?: ChatSessionPatch,
 ) {
-  return invoke<ChatSessionSummary>("delete_chat_message", { bookId, messageId, sessionId, sessionPatch });
+  return invoke<ChatSessionSummary>("delete_chat_entry", { bookId, entryId, sessionId, sessionPatch });
+}
+
+export function appendCompactionEntry(
+  bookId: string,
+  sessionId: string,
+  summary: string,
+  tokensBefore: number,
+  firstKeptMessageId?: string | null,
+  sessionPatch?: ChatSessionPatch,
+) {
+  return invoke<ChatSessionSummary>("append_compaction_entry", {
+    bookId,
+    firstKeptMessageId,
+    sessionId,
+    sessionPatch,
+    summary,
+    tokensBefore,
+  });
 }

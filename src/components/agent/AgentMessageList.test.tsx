@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BookAgentPanel } from "../book/BookAgentPanel";
 import { AgentMessageList } from "./AgentMessageList";
-import { useAgentStore } from "../../stores/agentStore";
+import { useChatRunStore as useAgentStore } from "../../stores/chatRunStore";
 import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 import { useSkillsStore } from "../../stores/skillsStore";

@@ -1,8 +1,7 @@
 /**
  * 聊天运行 Store（chatRunStore）：管理写作模式下与主 agent 的会话、运行态、历史。
  *
- * 历史名称为 agentStore；为消歧义（避免与 agentSettingsStore 混淆）改名。
- * 老路径 `stores/agentStore.ts` 仍保留 re-export 兼容旧 import。
+ * chatRunStore 管理写作模式下与主 agent 的会话、运行态、历史。
  *
  * 边界约束：
  *   - 本 store 只持状态与 actions；toolset 装配走 lib/agent/toolsets/factory。
@@ -11,17 +10,18 @@
 
 import { create } from "zustand";
 import {
-  appendChatMessage,
+  appendChatEntry,
+  deleteChatEntry,
   createChatSession,
-  deleteChatMessage,
   deleteChatSession,
   initializeChatStorage,
   setChatDraft,
   switchChatSession,
-  updateChatMessage,
+  updateChatEntry,
 } from "../lib/chat/api";
 import { readWorkspaceTextFile, readWorkspaceTree, cancelToolRequests } from "../lib/bookWorkspace/api";
-import type { ChatSessionSummary } from "../lib/chat/types";
+import type { ChatEntry, ChatSessionSummary } from "../lib/chat/types";
+import { getCompactionCount } from "../lib/chat/entries";
 import {
   buildAssistantPlaceholderMessage,
   buildInitialRun,
@@ -41,7 +41,7 @@ import { loadProjectContext } from "../lib/agent/projectContext";
 import { formatProviderError } from "../lib/agent/errorFormatting";
 import { derivePlanningState } from "../lib/agent/planning";
 import type { AgentMode } from "../lib/agent/modeRules";
-import { runAgentTurn } from "../lib/agent/session";
+import { createWritingAgentSession, type WritingAgentSession } from "../lib/agent/session";
 import { buildBookWorkspaceTools } from "../lib/agent/toolsets/factory";
 import type {
   AgentMessage,
@@ -69,6 +69,14 @@ import {
   type ChatRunStoreState,
   type PendingAskState,
 } from "./chatRun/helpers";
+import { shouldCompactUsage } from "../lib/agent/compaction";
+import { compactChatEntries } from "./chatRun/compactionController";
+import { queuePatchFromEvent } from "./chatRun/eventReducer";
+import {
+  appendMessageEntry,
+  removeEntry,
+  replaceMessageEntry,
+} from "./chatRun/persistenceAdapter";
 
 type RunInterruptReason = "manual_stop" | "app_close" | "restart" | "reset" | "coach";
 
@@ -82,6 +90,8 @@ type ChatRunStoreActions = {
   openHistory: () => void;
   reset: () => void;
   sendMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
+  followUpMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
+  compactSession: (reason?: "manual") => Promise<void>;
   setActiveMode: (modeId: AgentMode) => void;
   setInput: (value: string) => void;
   stopMessage: () => void;
@@ -90,9 +100,6 @@ type ChatRunStoreActions = {
 };
 
 export type ChatRunStore = ChatRunStoreState & ChatRunStoreActions;
-
-// 兼容旧名导出：新代码请使用 ChatRunStore。
-export type AgentStore = ChatRunStore;
 export { selectIsAgentRunActive };
 
 const COACH_PROMPT =
@@ -129,7 +136,17 @@ function isAutopilotGoalCompleted(messages: AgentMessage[]) {
   return getLastAssistantText(messages).includes(AUTOPILOT_COMPLETION_MARK);
 }
 
+
 export const useChatRunStore = create<ChatRunStore>((set, get) => {
+  let activeWritingSession: WritingAgentSession | null = null;
+  let unsubscribeWritingSession: (() => void) | null = null;
+
+  function clearActiveWritingSession() {
+    unsubscribeWritingSession?.();
+    unsubscribeWritingSession = null;
+    activeWritingSession = null;
+  }
+
   /** 确保存在一个活动会话；若尚未 hydrated 会先 initialize。 */
   async function ensureActiveSession() {
     const bookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
@@ -154,8 +171,82 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     return bootstrap.activeSessionId;
   }
 
+  async function steerActiveRun() {
+    const text = get().input.trim();
+    const sessionId = get().activeSessionId;
+    if (!text || !sessionId || !activeWritingSession) return false;
+
+    await activeWritingSession.steer(text);
+    set((state) => ({
+      ...ensureSessionState(
+        state,
+        sessionId,
+        state.messagesBySession[sessionId] ?? [],
+        "",
+        state.run.status === "awaiting_user" ? "awaiting_user" : "running",
+      ),
+    }));
+    void setChatDraft(sessionId, "").catch(() => {
+      set({ errorMessage: "草稿保存失败。" });
+    });
+    return true;
+  }
+
+  async function followUpActiveRun() {
+    const text = get().input.trim();
+    const sessionId = get().activeSessionId;
+    if (!text || !sessionId || !activeWritingSession) return false;
+
+    await activeWritingSession.followUp(text);
+    set((state) => ({
+      ...ensureSessionState(
+        state,
+        sessionId,
+        state.messagesBySession[sessionId] ?? [],
+        "",
+        state.run.status === "awaiting_user" ? "awaiting_user" : "running",
+      ),
+    }));
+    void setChatDraft(sessionId, "").catch(() => set({ errorMessage: "草稿保存失败。" }));
+    return true;
+  }
+
+  async function compactCurrentSession(reason: "manual" | "threshold" = "manual") {
+    const sessionId = get().activeSessionId;
+    if (!sessionId || selectIsAgentRunActive(get())) return;
+    const entries = get().entriesBySession[sessionId] ?? [];
+    set({ isCompacting: true, errorMessage: null });
+    try {
+      const providerConfig = useAgentSettingsStore.getState().config;
+      const result = await compactChatEntries({
+        bookId: get().currentBookId,
+        entries,
+        messages: get().messagesBySession[sessionId] ?? [],
+        providerConfig,
+        sessionId,
+      });
+      if (!result) {
+        set({ isCompacting: false });
+        return;
+      }
+      applyPersistedSummary(set, result.summary);
+      set((state) => ({
+        compactionCount: getCompactionCount(result.entries),
+        entriesBySession: { ...state.entriesBySession, [sessionId]: result.entries },
+        isCompacting: false,
+        latestCompactionAt: result.latestCompactionAt,
+        latestCompactionTokensBefore: result.latestCompactionTokensBefore,
+      }));
+    } catch (error) {
+      set({
+        errorMessage: formatAgentError(error, reason === "manual" ? "压缩上下文失败。" : "自动压缩上下文失败。"),
+        isCompacting: false,
+      });
+    }
+  }
+
   /**
-   * 实际执行一次发送：组参 → 调用 runAgentTurn → 流式合并 part → 写库。
+   * 实际执行一次发送：组参 → 创建 WritingAgentSession → 消费事件/part → 写库。
    * 这是一个状态机（abort/error/usage 等多分支），保持单函数完整性更便于审视。
    */
   async function sendMessageInternal(
@@ -175,6 +266,9 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     const runRequestId = buildRunRequestId();
     const optimisticSessionId = get().activeSessionId;
     let pendingAsk: PendingAskState | null = null;
+    const conversationEntries = optimisticSessionId
+      ? (get().entriesBySession[optimisticSessionId] ?? [])
+      : [];
     const conversationHistory = optimisticSessionId
       ? (get().messagesBySession[optimisticSessionId] ?? [])
       : [];
@@ -184,6 +278,8 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     const assistantMessage = buildAssistantPlaceholderMessage(messageMeta);
     let sessionId: string | null = optimisticSessionId;
     let latestMessages = [...conversationHistory, userMessage, assistantMessage];
+    let latestEntries: ChatEntry[] = [...conversationEntries];
+    let latestUsage: AgentUsage | null = null;
     let persistTimer: ReturnType<typeof setTimeout> | null = null;
     let persistChain = Promise.resolve();
 
@@ -214,12 +310,11 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       if (!assistant || assistant.id !== assistantMessage.id) return;
 
       await persistSummary(
-        updateChatMessage(
+        updateChatEntry(
           get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
           sessionId,
           assistantMessage.id,
-          assistant.parts,
-          assistant.meta,
+          { message: assistant },
           buildSessionPatch(latestMessages, status),
         ),
       );
@@ -235,6 +330,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
 
     const attachUsageToAssistant = (usage: AgentUsage) => {
       if (!isCurrentRun() || !sessionId) return;
+      latestUsage = usage;
 
       const currentSessionId = sessionId;
       set((state) => {
@@ -245,18 +341,25 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
 
         messages[messages.length - 1] = {
           ...lastMessage,
-          meta: {
-            ...(lastMessage.meta ?? {}),
-            usage,
-          },
+	          meta: {
+	            ...(lastMessage.meta ?? {}),
+	            finishReason: usage.finishReason,
+	            usage,
+	          },
         };
         latestMessages = messages;
+        latestEntries = replaceMessageEntry(latestEntries, messages[messages.length - 1]);
         const nextStatus = state.pendingAsk || state.run.status === "awaiting_user"
           ? "awaiting_user"
           : "running";
-        return ensureSessionState(state, currentSessionId, messages, "", nextStatus);
+        return {
+          entriesBySession: { ...state.entriesBySession, [currentSessionId]: latestEntries },
+          ...ensureSessionState(state, currentSessionId, messages, "", nextStatus),
+        };
       });
     };
+
+    latestEntries = appendMessageEntry(appendMessageEntry(latestEntries, userMessage), assistantMessage);
 
     // 1. 立即更新 UI：先把 user + 占位 assistant 推上去。
     set((state) => {
@@ -287,6 +390,10 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
 	          : state.autopilotGoalsBySession,
 	        inflightToolRequestIds: [],
 	        errorMessage: null,
+	        entriesBySession: {
+	          ...state.entriesBySession,
+	          [optimisticSessionId]: latestEntries,
+	        },
 	        ...ensureSessionState(state, optimisticSessionId, latestMessages, "", "running"),
 	      };
     });
@@ -307,7 +414,15 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         sessionId === optimisticSessionId
           ? conversationHistory
           : (get().messagesBySession[sessionId] ?? []);
+      const persistedConversationEntries =
+        sessionId === optimisticSessionId
+          ? conversationEntries
+          : (get().entriesBySession[sessionId] ?? []);
       latestMessages = [...persistedConversationHistory, userMessage, assistantMessage];
+      latestEntries = appendMessageEntry(
+        appendMessageEntry([...persistedConversationEntries], userMessage),
+        assistantMessage,
+      );
       const currentSessionId = sessionId;
 	      set((state) => ({
 	        abortController,
@@ -320,20 +435,30 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
 	          : state.autopilotGoalsBySession,
 	        inflightToolRequestIds: [],
 	        errorMessage: null,
+	        entriesBySession: {
+	          ...state.entriesBySession,
+	          [currentSessionId]: latestEntries,
+	        },
 	        ...ensureSessionState(state, currentSessionId, latestMessages, "", "running"),
 	      }));
       void setChatDraft(currentSessionId, "");
 
       const currentBookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
       await persistSummary(
-        appendChatMessage(
+        appendChatEntry(
           currentBookId,
           sessionId,
-          userMessage,
+          { id: userMessage.id, entryType: "message", payload: { message: userMessage } },
           buildSessionPatch(latestMessages, "running"),
         ),
       );
-      await persistSummary(appendChatMessage(currentBookId, sessionId, assistantMessage));
+      await persistSummary(
+        appendChatEntry(
+          currentBookId,
+          sessionId,
+          { id: assistantMessage.id, entryType: "message", payload: { message: assistantMessage } },
+        ),
+      );
 
       // 3. 读取本轮所需的 provider / 工具 / agent 配置。
       await ensureAgentSettingsReady();
@@ -422,12 +547,14 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         includeAsk: true,
       });
 
-      // 4. 调用 LLM 流式接口，逐 part 合并到 assistant 消息。
-      const stream = runAgentTurn({
-        abortSignal: abortController.signal,
-        activeFilePath: workspaceState.activeFilePath,
-        debugLabel: `chat-session:${sessionId}`,
-        workspaceRootPath: workspaceState.rootPath,
+	      // 4. 调用 LLM 流式接口，逐 part 合并到 assistant 消息。
+	      clearActiveWritingSession();
+	      const writingSession = createWritingAgentSession({
+	        abortController,
+	        activeFilePath: workspaceState.activeFilePath,
+	        debugLabel: `chat-session:${sessionId}`,
+	        workspaceRootPath: workspaceState.rootPath,
+        conversationEntries: persistedConversationEntries,
         conversationHistory: persistedConversationHistory,
         defaultAgentMarkdown,
         enabledSkills,
@@ -436,17 +563,22 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         modeContext,
         manualContext,
         onAskUser: handleAskUser,
-        onUsage: attachUsageToAssistant,
-        planningState,
-        projectContext,
-        prompt: nextInput,
-        providerConfig,
+	        onUsage: attachUsageToAssistant,
+	        planningState,
+	        projectContext,
+	        providerConfig,
         workspaceTools,
-        onToolRequestStateChange: ({ requestId, status }) => {
-          if (!isCurrentRun() && status === "start") return;
-          trackInflightToolRequest(set, requestId, status === "start" ? "start" : "finish");
-        },
-      });
+	        onToolRequestStateChange: ({ requestId, status }) => {
+	          if (!isCurrentRun() && status === "start") return;
+	          trackInflightToolRequest(set, requestId, status === "start" ? "start" : "finish");
+	        },
+	      });
+	      activeWritingSession = writingSession;
+	      unsubscribeWritingSession = writingSession.subscribe((event) => {
+	        const patch = queuePatchFromEvent(event);
+	        if (patch) set(patch);
+	      });
+	      const stream = writingSession.prompt(nextInput);
 
       for await (const part of stream) {
         if (!isCurrentRun()) return;
@@ -463,11 +595,13 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
             parts: mergePart(lastMessage.parts, part as AgentPart),
           };
           latestMessages = messages;
+          latestEntries = replaceMessageEntry(latestEntries, messages[messages.length - 1]);
           scheduleAssistantPersist();
           return {
             pendingAsk: part.type === "ask-user" && part.status === "completed"
               ? null
               : state.pendingAsk,
+            entriesBySession: { ...state.entriesBySession, [activeSessionId]: latestEntries },
             ...ensureSessionState(
               state,
               activeSessionId,
@@ -481,24 +615,30 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         });
       }
 
-      // 5. 流式结束后落库 + 切回 idle 态。
-      if (persistTimer) {
-        window.clearTimeout(persistTimer);
-        persistTimer = null;
+	      // 5. 流式结束后落库 + 切回 idle 态。
+	      clearActiveWritingSession();
+	      if (persistTimer) {
+	        window.clearTimeout(persistTimer);
+	        persistTimer = null;
       }
       await persistChain;
       if (!isCurrentRun()) return;
 
       const completedSessionId = sessionId;
       set((state) => ({
-        abortController: null,
-        activeRunRequestId:
-          state.activeRunRequestId === runRequestId ? null : state.activeRunRequestId,
-        inflightToolRequestIds: [],
-        pendingAsk: null,
-        ...ensureSessionState(state, completedSessionId, latestMessages, "", "completed"),
+	        abortController: null,
+	        activeRunRequestId:
+	          state.activeRunRequestId === runRequestId ? null : state.activeRunRequestId,
+	        inflightToolRequestIds: [],
+	        pendingAsk: null,
+	        queuedFollowUpMessages: [],
+	        queuedSteeringMessages: [],
+	        ...ensureSessionState(state, completedSessionId, latestMessages, "", "completed"),
       }));
       await flushAssistant("completed");
+      if (latestUsage && shouldCompactUsage(latestUsage)) {
+        await compactCurrentSession("threshold");
+      }
       if (
         activeModeId === "autopilot"
         && autopilotGoal
@@ -516,9 +656,10 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           },
         );
       }
-    } catch (error) {
-      // 6. abort / 失败的两条路径分别处理。
-      if (persistTimer) {
+	    } catch (error) {
+	      // 6. abort / 失败的两条路径分别处理。
+	      clearActiveWritingSession();
+	      if (persistTimer) {
         window.clearTimeout(persistTimer);
         persistTimer = null;
       }
@@ -531,30 +672,41 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         }
         const abortedState = resolveAbortedAssistantState(latestMessages, assistantMessage.id);
         latestMessages = abortedState.messages;
+        latestEntries = abortedState.removePlaceholder
+          ? removeEntry(latestEntries, assistantMessage.id)
+          : replaceMessageEntry(latestEntries, abortedState.assistant ?? assistantMessage);
         if (get().activeRunRequestId === runRequestId) {
           set((state) => {
             if (!sessionId) {
               return {
                 abortController: null,
                 activeRunRequestId: null,
-                inflightToolRequestIds: [],
-                pendingAsk: null,
-                planningState: derivePlanningState(latestMessages),
-                run: buildInitialRun(),
+	                inflightToolRequestIds: [],
+	                pendingAsk: null,
+	                queuedFollowUpMessages: [],
+	                queuedSteeringMessages: [],
+	                planningState: derivePlanningState(latestMessages),
+	                run: buildInitialRun(),
               };
             }
             return {
               abortController: null,
               activeRunRequestId: null,
-              inflightToolRequestIds: [],
-              pendingAsk: null,
-              ...ensureSessionState(state, sessionId, latestMessages, "", "idle"),
+	              inflightToolRequestIds: [],
+	              pendingAsk: null,
+	              queuedFollowUpMessages: [],
+	              queuedSteeringMessages: [],
+	              entriesBySession: {
+	                ...state.entriesBySession,
+	                [sessionId]: latestEntries,
+	              },
+	              ...ensureSessionState(state, sessionId, latestMessages, "", "idle"),
             };
           });
         }
         if (sessionId && abortedState.removePlaceholder && abortedState.assistant) {
           await persistSummary(
-            deleteChatMessage(
+            deleteChatEntry(
               get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
               sessionId,
               abortedState.assistant.id,
@@ -577,14 +729,17 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         messageMeta,
       );
       latestMessages = [...latestMessages, systemMessage];
+      latestEntries = appendMessageEntry(latestEntries, systemMessage);
       set((state) => {
         if (!sessionId) {
           return {
             abortController: null,
             activeRunRequestId: null,
-            inflightToolRequestIds: [],
-            pendingAsk: null,
-            errorMessage: formatAgentError(error, "Agent 执行失败，请稍后重试。"),
+	            inflightToolRequestIds: [],
+	            pendingAsk: null,
+	            queuedFollowUpMessages: [],
+	            queuedSteeringMessages: [],
+	            errorMessage: formatAgentError(error, "Agent 执行失败，请稍后重试。"),
             planningState: derivePlanningState(latestMessages),
             run: buildRun(
               "failed-run",
@@ -597,17 +752,23 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         return {
           abortController: null,
           activeRunRequestId: null,
-          inflightToolRequestIds: [],
-          pendingAsk: null,
-          ...ensureSessionState(state, sessionId, latestMessages, "", "failed"),
+	          inflightToolRequestIds: [],
+	          pendingAsk: null,
+	          queuedFollowUpMessages: [],
+	          queuedSteeringMessages: [],
+	          entriesBySession: {
+	            ...state.entriesBySession,
+	            [sessionId]: latestEntries,
+	          },
+	          ...ensureSessionState(state, sessionId, latestMessages, "", "failed"),
         };
       });
       if (sessionId) {
         await persistSummary(
-          appendChatMessage(
+          appendChatEntry(
             get().currentBookId ?? DEFAULT_CHAT_BOOK_ID,
             sessionId,
-            systemMessage,
+            { id: systemMessage.id, entryType: "message", payload: { message: systemMessage } },
             buildSessionPatch(latestMessages, "failed"),
           ),
         );
@@ -687,26 +848,39 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         sessionId && assistant?.role === "assistant" && isPlaceholderOnly(assistant),
       );
       const nextMessages = shouldRemovePlaceholder ? messages.slice(0, -1) : messages;
+      const nextEntries = shouldRemovePlaceholder
+        ? removeEntry(state.entriesBySession[sessionId ?? ""] ?? [], assistant?.id ?? "")
+        : state.entriesBySession[sessionId ?? ""] ?? [];
 
       if (!abortController && requestIds.length === 0 && !pendingAsk) return;
 
-      pendingAsk?.reject(new Error("等待用户输入的交互已中断，请重新发起。"));
-      abortController?.abort();
-      set((current) => {
+	      pendingAsk?.reject(new Error("等待用户输入的交互已中断，请重新发起。"));
+	      activeWritingSession?.abort(_reason);
+	      clearActiveWritingSession();
+	      abortController?.abort();
+	      set((current) => {
         if (!sessionId) {
           return {
             abortController: null,
             activeRunRequestId: null,
-            inflightToolRequestIds: [],
-            pendingAsk: null,
-          };
+	            inflightToolRequestIds: [],
+	            pendingAsk: null,
+	            queuedFollowUpMessages: [],
+	            queuedSteeringMessages: [],
+	          };
         }
         return {
           abortController: null,
           activeRunRequestId: null,
-          inflightToolRequestIds: [],
-          pendingAsk: null,
-          ...ensureSessionState(current, sessionId, nextMessages, "", "idle"),
+	          inflightToolRequestIds: [],
+	          pendingAsk: null,
+	          queuedFollowUpMessages: [],
+	          queuedSteeringMessages: [],
+	          entriesBySession: {
+	            ...current.entriesBySession,
+	            [sessionId]: nextEntries,
+	          },
+	          ...ensureSessionState(current, sessionId, nextMessages, "", "idle"),
         };
       });
 
@@ -715,14 +889,26 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     reset: () => {
       void get().hardStopCurrentRun("reset");
       set(buildInitialState());
+	    },
+	    sendMessage: async (selection) => {
+	      if (selectIsAgentRunActive(get())) {
+	        await steerActiveRun();
+	        return;
+	      }
+	      await sendMessageInternal(null, selection);
+	    },
+    followUpMessage: async () => {
+      if (selectIsAgentRunActive(get())) {
+        await followUpActiveRun();
+      }
     },
-    sendMessage: async (selection) => {
-      if (selectIsAgentRunActive(get())) return;
-      await sendMessageInternal(null, selection);
+    compactSession: async (reason = "manual") => {
+      await compactCurrentSession(reason);
     },
     coachMessage: async () => {
       if (selectIsAgentRunActive(get())) {
-        await get().hardStopCurrentRun("coach");
+        activeWritingSession?.steer(COACH_PROMPT);
+        return;
       }
       await sendMessageInternal(COACH_PROMPT, undefined, { modeId: "book" });
     },
@@ -792,6 +978,3 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     },
   };
 });
-
-// 兼容旧名导出。
-export const useAgentStore = useChatRunStore;

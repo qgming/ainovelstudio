@@ -75,7 +75,7 @@ vi.mock("./stores/updateStore", () => ({
 
 import App from "./App";
 import { BUILTIN_TOOLS } from "./lib/agent/toolDefs";
-import { useAgentStore } from "./stores/agentStore";
+import { useChatRunStore as useAgentStore } from "./stores/chatRunStore";
 import { useAgentSettingsStore } from "./stores/agentSettingsStore";
 import { useBookWorkspaceStore } from "./stores/bookWorkspaceStore";
 import { useThemeStore } from "./stores/themeStore";
@@ -100,7 +100,7 @@ const chatBootstrap = {
     },
   ],
   activeSessionId: "session-1",
-  activeSessionMessages: [],
+  activeSessionEntries: [],
   activeSessionDraft: "",
 };
 const tree = {

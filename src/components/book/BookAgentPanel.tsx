@@ -13,7 +13,8 @@ import { AgentComposer, DEFAULT_AGENT_COMPOSER_MODES } from "../agent/AgentCompo
 import { AgentContextOverview } from "../agent/AgentContextOverview";
 import { AgentInfoDisplay } from "../agent/AgentInfoDisplay";
 import { AgentMessageList } from "../agent/AgentMessageList";
-import { selectIsAgentRunActive, useAgentStore } from "../../stores/agentStore";
+import { selectIsAgentRunActive } from "../../stores/chatRun/helpers";
+import { useChatRunStore } from "../../stores/chatRunStore";
 import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
@@ -74,30 +75,38 @@ function AgentHeaderButton({ modeLabel }: { modeLabel: string }) {
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
-  const activeModeId = useAgentStore((state) => state.activeModeId);
-  const activeSessionId = useAgentStore((state) => state.activeSessionId);
-  const autopilotGoal = useAgentStore((state) =>
+  const activeModeId = useChatRunStore((state) => state.activeModeId);
+  const activeSessionId = useChatRunStore((state) => state.activeSessionId);
+  const autopilotGoal = useChatRunStore((state) =>
     state.activeSessionId ? (state.autopilotGoalsBySession[state.activeSessionId] ?? null) : null,
   );
-  const createNewSession = useAgentStore((state) => state.createNewSession);
-  const errorMessage = useAgentStore((state) => state.errorMessage);
-  const input = useAgentStore((state) => state.input);
-  const isHistoryOpen = useAgentStore((state) => state.isHistoryOpen);
-  const openHistory = useAgentStore((state) => state.openHistory);
-  const planningState = useAgentStore((state) => state.planningState);
-  const closeHistory = useAgentStore((state) => state.closeHistory);
-  const pendingAsk = useAgentStore((state) => state.pendingAsk);
-  const run = useAgentStore((state) => state.run);
-  const isRunning = useAgentStore(selectIsAgentRunActive);
-  const sendMessage = useAgentStore((state) => state.sendMessage);
-  const coachMessage = useAgentStore((state) => state.coachMessage);
-  const sessions = useAgentStore((state) => state.sessions);
-  const setActiveMode = useAgentStore((state) => state.setActiveMode);
-  const setInput = useAgentStore((state) => state.setInput);
-  const stopMessage = useAgentStore((state) => state.stopMessage);
-  const submitAskAnswer = useAgentStore((state) => state.submitAskAnswer);
-  const switchSession = useAgentStore((state) => state.switchSession);
-  const initializeAgentHistory = useAgentStore((state) => state.initialize);
+  const compactSession = useChatRunStore((state) => state.compactSession);
+  const compactionCount = useChatRunStore((state) => state.compactionCount);
+  const createNewSession = useChatRunStore((state) => state.createNewSession);
+  const errorMessage = useChatRunStore((state) => state.errorMessage);
+  const followUpMessage = useChatRunStore((state) => state.followUpMessage);
+  const input = useChatRunStore((state) => state.input);
+  const isCompacting = useChatRunStore((state) => state.isCompacting);
+  const isHistoryOpen = useChatRunStore((state) => state.isHistoryOpen);
+  const latestCompactionAt = useChatRunStore((state) => state.latestCompactionAt);
+  const latestCompactionTokensBefore = useChatRunStore((state) => state.latestCompactionTokensBefore);
+  const openHistory = useChatRunStore((state) => state.openHistory);
+  const planningState = useChatRunStore((state) => state.planningState);
+  const queuedFollowUpMessages = useChatRunStore((state) => state.queuedFollowUpMessages);
+  const queuedSteeringMessages = useChatRunStore((state) => state.queuedSteeringMessages);
+  const closeHistory = useChatRunStore((state) => state.closeHistory);
+  const pendingAsk = useChatRunStore((state) => state.pendingAsk);
+  const run = useChatRunStore((state) => state.run);
+  const isRunning = useChatRunStore(selectIsAgentRunActive);
+  const sendMessage = useChatRunStore((state) => state.sendMessage);
+  const coachMessage = useChatRunStore((state) => state.coachMessage);
+  const sessions = useChatRunStore((state) => state.sessions);
+  const setActiveMode = useChatRunStore((state) => state.setActiveMode);
+  const setInput = useChatRunStore((state) => state.setInput);
+  const stopMessage = useChatRunStore((state) => state.stopMessage);
+  const submitAskAnswer = useChatRunStore((state) => state.submitAskAnswer);
+  const switchSession = useChatRunStore((state) => state.switchSession);
+  const initializeAgentHistory = useChatRunStore((state) => state.initialize);
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
@@ -149,8 +158,13 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[24rem] p-2">
               <AgentContextOverview
+                compactionCount={compactionCount}
                 currentModel={currentModel}
+                isCompacting={isCompacting}
+                latestCompactionAt={latestCompactionAt}
+                latestCompactionTokensBefore={latestCompactionTokensBefore}
                 messages={run.messages}
+                onCompact={() => void compactSession("manual")}
                 sessionCreatedAt={activeSessionSummary?.createdAt ?? null}
                 sessionTitle={run.title}
                 sessionUpdatedAt={activeSessionSummary?.updatedAt ?? null}
@@ -210,11 +224,16 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         onCoach={coachMessage}
         onInputChange={setInput}
         onModeChange={setActiveMode}
+        onFollowUp={(selection) => {
+          void followUpMessage(selection);
+        }}
         onStop={stopMessage}
         onSubmitAskAnswer={submitAskAnswer}
-        pendingAsk={pendingAsk}
-        planningState={planningState}
-        onSubmit={(selection) => {
+	        pendingAsk={pendingAsk}
+	        planningState={planningState}
+	        queuedFollowUpMessages={queuedFollowUpMessages}
+	        queuedSteeringMessages={queuedSteeringMessages}
+	        onSubmit={(selection) => {
           void sendMessage(selection);
         }}
         resources={[

@@ -1,6 +1,7 @@
 use crate::db::open_database;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::AppHandle;
 
 type CommandResult<T> = Result<T, String>;
@@ -56,12 +57,17 @@ fn error_to_string(error: impl ToString) -> String {
     error.to_string()
 }
 
-fn parse_message_meta(raw: &str) -> StoredMessageMeta {
-    if raw.trim().is_empty() || raw.trim() == "null" {
+fn parse_entry_meta(raw: &str) -> StoredMessageMeta {
+    let Ok(value) = serde_json::from_str::<Value>(raw) else {
         return StoredMessageMeta::default();
-    }
-
-    serde_json::from_str::<StoredMessageMeta>(raw).unwrap_or_default()
+    };
+    let Some(meta) = value
+        .get("message")
+        .and_then(|message| message.get("meta"))
+    else {
+        return StoredMessageMeta::default();
+    };
+    serde_json::from_value::<StoredMessageMeta>(meta.clone()).unwrap_or_default()
 }
 
 fn as_u64(value: Option<u64>) -> u64 {
@@ -108,15 +114,16 @@ pub fn read_usage_logs(app: AppHandle) -> CommandResult<Vec<UsageLogEntry>> {
         .prepare(
             r#"
             SELECT
-                m.id AS message_id,
-                m.session_id,
+                e.id AS message_id,
+                e.session_id,
                 s.title AS session_title,
-                m.created_at,
-                m.meta_json
-            FROM chat_messages m
-            INNER JOIN chat_sessions s ON s.id = m.session_id
-            WHERE m.role = ?1
-            ORDER BY m.created_at DESC, m.seq DESC
+                e.created_at,
+                e.payload_json
+            FROM chat_entries e
+            INNER JOIN chat_sessions s ON s.id = e.session_id
+            WHERE e.entry_type = 'message'
+              AND json_extract(e.payload_json, '$.message.role') = ?1
+            ORDER BY e.created_at DESC, e.seq DESC
             "#,
         )
         .map_err(error_to_string)?;
@@ -128,16 +135,16 @@ pub fn read_usage_logs(app: AppHandle) -> CommandResult<Vec<UsageLogEntry>> {
                 row.get::<_, String>("session_id")?,
                 row.get::<_, String>("session_title")?,
                 row.get::<_, String>("created_at")?,
-                row.get::<_, String>("meta_json")?,
+                row.get::<_, String>("payload_json")?,
             ))
         })
         .map_err(error_to_string)?;
 
     let mut logs = Vec::new();
     for row in chat_rows {
-        let (message_id, session_id, session_title, created_at, meta_json) =
+        let (message_id, session_id, session_title, created_at, payload_json) =
             row.map_err(error_to_string)?;
-        let meta = parse_message_meta(&meta_json);
+        let meta = parse_entry_meta(&payload_json);
         let Some(usage) = meta.usage else {
             continue;
         };
