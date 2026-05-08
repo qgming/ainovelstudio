@@ -184,4 +184,23 @@ describe("prompt context", () => {
     expect(system).toContain(".project/AGENTS.md");
     expect(system).toContain("## s05 临时 Subagent");
   });
+
+  it("autopilot 模式渲染目标契约与目标上下文", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledSkills: [],
+      enabledToolIds: ["todo"],
+      mode: "autopilot",
+      modeContext: {
+        goal: "完成第一章审校并写回文件",
+        iteration: 1,
+      },
+    });
+
+    expect(system).toContain("# 模式：AUTOPILOT");
+    expect(system).toContain("目标");
+    expect(system).toContain("完成第一章审校并写回文件");
+    expect(system).toContain("第 1 轮");
+    expect(system).toContain("目标已完成");
+  });
 });

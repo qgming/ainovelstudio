@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { Sparkles } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 import { AgentComposer } from "./AgentComposer";
 
@@ -101,6 +102,35 @@ describe("AgentComposer", () => {
     render(<AgentComposer {...buildComposerProps()} />);
 
     expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute("rows", "2");
+    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute("placeholder", "输入想法、问题或要处理的任务");
+  });
+
+  it("默认显示协作模式并支持切换到目标模式", () => {
+    const handleModeChange = vi.fn();
+
+    render(
+      <AgentComposer
+        {...buildComposerProps()}
+        modes={[
+          { id: "book", label: "协作", description: "默认对话与任务执行模式", icon: Sparkles },
+          { id: "autopilot", label: "目标", description: "按目标自动检查并继续执行", icon: Sparkles },
+        ]}
+        onModeChange={handleModeChange}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "当前模式：协作" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: /目标/ }));
+
+    expect(handleModeChange).toHaveBeenCalledWith("autopilot");
+    expect(screen.getByRole("button", { name: "当前模式：目标" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute(
+      "placeholder",
+      "输入目标：第一次发送会设定目标，之后会自动检查并持续执行直到完成",
+    );
   });
 
   it("ask 单选模式下可以选择预设项并确认", () => {

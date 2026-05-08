@@ -12,6 +12,7 @@ import type {
   AskToolAnswer,
   AskUserRequest,
 } from "../../lib/agent/types";
+import type { AgentMode } from "../../lib/agent/modeRules";
 import { derivePlanningState, type PlanningState } from "../../lib/agent/planning";
 import {
   buildInitialRun,
@@ -61,8 +62,10 @@ export const DEFAULT_CHAT_BOOK_ID = "__global__";
 
 export type ChatRunStoreState = {
   abortController: AbortController | null;
+  activeModeId: AgentMode;
   activeRunRequestId: string | null;
   activeSessionId: string | null;
+  autopilotGoalsBySession: Record<string, string>;
   pendingAsk: PendingAskState | null;
   contextTags: string[];
   currentBookId: string | null;
@@ -83,8 +86,10 @@ export type ChatRunStoreState = {
 export function buildInitialState(): ChatRunStoreState {
   return {
     abortController: null,
+    activeModeId: "book",
     activeRunRequestId: null,
     activeSessionId: null,
+    autopilotGoalsBySession: {},
     pendingAsk: null,
     contextTags: ["工具: 文件工作区"],
     currentBookId: null,
@@ -148,6 +153,9 @@ export function applyBootstrap(
   const nextDraftsBySession = Object.fromEntries(
     Object.entries(state.draftsBySession).filter(([sessionId]) => validIds.has(sessionId)),
   ) as Record<string, string>;
+  const nextAutopilotGoalsBySession = Object.fromEntries(
+    Object.entries(state.autopilotGoalsBySession).filter(([sessionId]) => validIds.has(sessionId)),
+  ) as Record<string, string>;
 
   if (bootstrap.activeSessionId) {
     nextMessagesBySession[bootstrap.activeSessionId] = normalizeRecoveredMessages(
@@ -166,6 +174,7 @@ export function applyBootstrap(
 
   return {
     activeSessionId: bootstrap.activeSessionId,
+    autopilotGoalsBySession: nextAutopilotGoalsBySession,
     currentBookId: bootstrap.bookId ?? state.currentBookId,
     draftsBySession: nextDraftsBySession,
     errorMessage: null,

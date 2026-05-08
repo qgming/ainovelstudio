@@ -1,11 +1,14 @@
 import {
   AtSign,
   Check,
+  ChevronDown,
   Circle,
   Clock3,
+  LucideIcon,
   Maximize2,
   Minimize2,
   SendHorizontal,
+  Sparkles,
   Square,
   SquareSlash,
   X,
@@ -23,9 +26,11 @@ import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import type { AgentMode } from "../../lib/agent/modeRules";
 import { getBaseName } from "../../lib/bookWorkspace/paths";
 import type { TreeNode } from "../../lib/bookWorkspace/types";
 import type { ManualTurnContextSelection } from "../../lib/agent/manualTurnContext";
@@ -42,10 +47,20 @@ type SelectableResource = {
   name: string;
 };
 
+export type AgentComposerMode = {
+  description: string;
+  icon: LucideIcon;
+  id: AgentMode;
+  label: string;
+};
+
 type AgentComposerProps = {
+  activeModeId?: AgentMode;
   input: string;
+  modes?: AgentComposerMode[];
   onCoach: () => Promise<void>;
   onInputChange: (value: string) => void;
+  onModeChange?: (modeId: AgentMode) => void;
   onStop: () => void;
   onSubmit: (selection: ManualTurnContextSelection) => void;
   onSubmitAskAnswer: (answer: AskToolAnswer) => void;
@@ -86,11 +101,34 @@ function buildInitialAskSelection(_pendingAsk: PendingAskState | null) {
 }
 
 const COMPOSER_MIN_ROWS = 2;
+const DEFAULT_COMPOSER_MODE_ID: AgentMode = "book";
+const MODE_INPUT_PLACEHOLDERS: Record<AgentMode, string> = {
+  autopilot: "输入目标：第一次发送会设定目标，之后会自动检查并持续执行直到完成",
+  book: "输入想法、问题或要处理的任务",
+};
+
+export const DEFAULT_AGENT_COMPOSER_MODES: AgentComposerMode[] = [
+  {
+    description: "默认对话与任务执行模式",
+    icon: Sparkles,
+    id: DEFAULT_COMPOSER_MODE_ID,
+    label: "协作",
+  },
+  {
+    description: "按目标自动检查并继续执行",
+    icon: Circle,
+    id: "autopilot",
+    label: "目标",
+  },
+];
 
 export function AgentComposer({
+  activeModeId,
   input,
+  modes = DEFAULT_AGENT_COMPOSER_MODES,
   onCoach,
   onInputChange,
+  onModeChange,
   onStop,
   onSubmit,
   onSubmitAskAnswer,
@@ -103,6 +141,7 @@ export function AgentComposer({
   const isRunning = runStatus === "running";
   const isAskMode = Boolean(pendingAsk);
   const [isCoaching, setIsCoaching] = useState(false);
+  const [localModeId, setLocalModeId] = useState(activeModeId ?? modes[0]?.id ?? DEFAULT_COMPOSER_MODE_ID);
   const showPlan = hasIncompleteItems(planningState.items);
   const hasStalePlan = planningState.roundsSinceUpdate >= 3;
   const completedCount = countCompletedItems(planningState.items);
@@ -115,6 +154,10 @@ export function AgentComposer({
   const [askSelectedIds, setAskSelectedIds] = useState<string[]>([]);
   const [askCustomInput, setAskCustomInput] = useState("");
   const askRequest = pendingAsk?.request ?? null;
+  const selectedModeId = activeModeId ?? localModeId;
+  const activeMode = modes.find((mode) => mode.id === selectedModeId) ?? modes[0] ?? DEFAULT_AGENT_COMPOSER_MODES[0];
+  const ActiveModeIcon = activeMode.icon;
+  const inputPlaceholder = MODE_INPUT_PLACEHOLDERS[activeMode.id];
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -210,6 +253,11 @@ export function AgentComposer({
   const handleSubmit = () => {
     onSubmit(selection);
     setSelection({ filePaths: [], skillIds: [] });
+  };
+
+  const handleModeSelect = (modeId: AgentMode) => {
+    setLocalModeId(modeId);
+    onModeChange?.(modeId);
   };
 
   const handleAskToggle = (optionId: string) => {
@@ -487,7 +535,7 @@ export function AgentComposer({
               className="editor-textarea px-3 py-3 leading-6"
               onChange={(event) => onInputChange(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="输入新想法"
+              placeholder={inputPlaceholder}
               rows={COMPOSER_MIN_ROWS}
               value={input}
             />
@@ -563,6 +611,45 @@ export function AgentComposer({
               >
                 <Zap className="size-5" />
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    aria-label={`当前模式：${activeMode.label}`}
+                    title={`${activeMode.label} — ${activeMode.description}`}
+                    disabled={isRunning}
+                    variant="outline"
+                    size="sm"
+                    className="h-7 max-w-[8.5rem] gap-1.5 rounded-full px-2 text-xs text-foreground"
+                  >
+                    <ActiveModeIcon className="size-3.5" />
+                    <span className="truncate">{activeMode.label}</span>
+                    <ChevronDown className="size-3 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top" sideOffset={6} className="w-48">
+                  {modes.map((mode) => {
+                    const ModeIcon = mode.icon;
+                    const selected = mode.id === activeMode.id;
+                    return (
+                      <DropdownMenuItem
+                        key={mode.id}
+                        onSelect={() => handleModeSelect(mode.id)}
+                        className="items-start gap-2 py-2"
+                      >
+                        <ModeIcon className="mt-0.5 size-4 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{mode.label}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {mode.description}
+                          </span>
+                        </span>
+                        {selected ? <Check className="mt-0.5 size-4" /> : null}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <div aria-hidden="true" className="h-6 w-px shrink-0 bg-border" />
               <Button
                 type="button"

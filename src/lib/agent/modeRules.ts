@@ -8,11 +8,16 @@
  * - 短而硬：每条规则要么是"必须 / 禁止"，要么是"分支判断"；不写方法论。
  */
 
-export type AgentMode = "book";
+export type AgentMode = "book" | "autopilot";
 
 export type BookModeContext = Record<string, never>;
+export type AutopilotModeContext = {
+  goal: string;
+  iteration: number;
+};
 
 export type ModeContextMap = {
+  autopilot: AutopilotModeContext;
   book: BookModeContext;
 };
 
@@ -40,11 +45,33 @@ const BOOK_MODE_RULES = [
   "- 最终回复一句话说明：本轮改了什么、还缺什么、建议下一步。",
 ].join("\n");
 
+function buildAutopilotModeRules(context: AutopilotModeContext) {
+  const goal = context.goal?.trim() || "未指定";
+  const iteration = context.iteration || 1;
+  return [
+    "# 模式：AUTOPILOT（目标）",
+    "",
+    "**当前目标**",
+    `- 目标：${goal}`,
+    `- 当前自动执行轮次：第 ${iteration} 轮`,
+    "",
+    "**执行契约**",
+    "- 把当前目标视为跨多轮任务，不要在单轮结束后被动等待。",
+    "- 每轮先检查目标完成度；目标未完成时，直接推进最有价值的下一步。",
+    "- 只有缺少用户专属判断、外部授权或高风险破坏性操作时，才使用 `ask` 暂停等待用户。",
+    "- 涉及创作、规划、设定、审校的成果必须写回工作区文件，写回后再核对是否满足目标。",
+    "- 目标完成时，在最终回复中明确写出「目标已完成」。",
+    "- 目标未完成时，不要写「目标已完成」，并给出下一步已经推进到哪里。",
+  ].join("\n");
+}
+
 export function buildModeRules<M extends AgentMode>(
   mode: M,
-  _context: ModeContextMap[M],
+  context: ModeContextMap[M],
 ): string {
   switch (mode) {
+    case "autopilot":
+      return buildAutopilotModeRules(context as AutopilotModeContext);
     case "book":
       return BOOK_MODE_RULES;
     default:

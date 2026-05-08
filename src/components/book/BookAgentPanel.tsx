@@ -9,8 +9,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { PanelHeader, PanelNotice, PanelTitle, PanelToolbar } from "@/components/ui/panel";
-import { AgentComposer } from "../agent/AgentComposer";
+import { AgentComposer, DEFAULT_AGENT_COMPOSER_MODES } from "../agent/AgentComposer";
 import { AgentContextOverview } from "../agent/AgentContextOverview";
+import { AgentInfoDisplay } from "../agent/AgentInfoDisplay";
 import { AgentMessageList } from "../agent/AgentMessageList";
 import { selectIsAgentRunActive, useAgentStore } from "../../stores/agentStore";
 import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
@@ -55,11 +56,17 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
 
 ToolbarButton.displayName = "ToolbarButton";
 
-function AgentHeaderButton() {
+function AgentHeaderButton({ modeLabel }: { modeLabel: string }) {
   return (
     <div className="flex min-w-0 items-center gap-1 px-1">
       <ChevronRight className="h-4 w-4 shrink-0 text-primary" />
       <PanelTitle>Agent</PanelTitle>
+      <span
+        aria-label="当前 Agent 模式"
+        className="editor-status-chip ml-1 max-w-20 truncate bg-background/45"
+      >
+        {modeLabel}
+      </span>
     </div>
   );
 }
@@ -67,7 +74,11 @@ function AgentHeaderButton() {
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
+  const activeModeId = useAgentStore((state) => state.activeModeId);
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
+  const autopilotGoal = useAgentStore((state) =>
+    state.activeSessionId ? (state.autopilotGoalsBySession[state.activeSessionId] ?? null) : null,
+  );
   const createNewSession = useAgentStore((state) => state.createNewSession);
   const errorMessage = useAgentStore((state) => state.errorMessage);
   const input = useAgentStore((state) => state.input);
@@ -81,6 +92,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const sendMessage = useAgentStore((state) => state.sendMessage);
   const coachMessage = useAgentStore((state) => state.coachMessage);
   const sessions = useAgentStore((state) => state.sessions);
+  const setActiveMode = useAgentStore((state) => state.setActiveMode);
   const setInput = useAgentStore((state) => state.setInput);
   const stopMessage = useAgentStore((state) => state.stopMessage);
   const submitAskAnswer = useAgentStore((state) => state.submitAskAnswer);
@@ -92,6 +104,9 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const skillsStatus = useSkillsStore((state) => state.status);
   const enabledSkills = getEnabledSkills({ manifests, preferences });
   const currentModel = useAgentSettingsStore((state) => state.config.model);
+  const activeModeLabel =
+    DEFAULT_AGENT_COMPOSER_MODES.find((mode) => mode.id === activeModeId)?.label
+    ?? "协作";
   const displayRunStatus = run.status === "awaiting_user"
     ? "awaiting_user"
     : isRunning
@@ -123,7 +138,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       className="flex h-full shrink-0 flex-col overflow-hidden bg-app"
     >
       <PanelHeader className="bg-transparent px-2">
-        <AgentHeaderButton />
+        <AgentHeaderButton modeLabel={activeModeLabel} />
         <PanelToolbar className="gap-0.5">
           {/* 会话上下文：使用 DropdownMenu 承载块状内容（非菜单项） */}
           <DropdownMenu>
@@ -182,11 +197,19 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
           {errorMessage}
         </PanelNotice>
       ) : null}
+      {activeModeId === "autopilot" && autopilotGoal ? (
+        <AgentInfoDisplay
+          description={autopilotGoal}
+          title="当前目标"
+        />
+      ) : null}
       <AgentMessageList messages={run.messages} runStatus={displayRunStatus} />
       <AgentComposer
+        activeModeId={activeModeId}
         input={input}
         onCoach={coachMessage}
         onInputChange={setInput}
+        onModeChange={setActiveMode}
         onStop={stopMessage}
         onSubmitAskAnswer={submitAskAnswer}
         pendingAsk={pendingAsk}

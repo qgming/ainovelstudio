@@ -34,7 +34,7 @@ function extractPartText(part: AgentPart): string {
   }
 }
 
-function extractMessageText(message: AgentMessage) {
+export function extractMessageText(message: AgentMessage) {
   return message.parts.map(extractPartText).join(" ").trim();
 }
 

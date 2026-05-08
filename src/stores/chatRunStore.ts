@@ -31,6 +31,7 @@ import {
   buildSystemMessage,
   buildUserMessage,
   deriveSessionTitle,
+  extractMessageText,
   isPlaceholderOnly,
   mergePart,
 } from "../lib/chat/sessionRuntime";
@@ -39,9 +40,11 @@ import { resolveManualTurnContext, type ManualTurnContextSelection } from "../li
 import { loadProjectContext } from "../lib/agent/projectContext";
 import { formatProviderError } from "../lib/agent/errorFormatting";
 import { derivePlanningState } from "../lib/agent/planning";
+import type { AgentMode } from "../lib/agent/modeRules";
 import { runAgentTurn } from "../lib/agent/session";
 import { buildBookWorkspaceTools } from "../lib/agent/toolsets/factory";
 import type {
+  AgentMessage,
   AgentRunStatus,
   AgentPart,
   AgentUsage,
@@ -79,6 +82,7 @@ type ChatRunStoreActions = {
   openHistory: () => void;
   reset: () => void;
   sendMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
+  setActiveMode: (modeId: AgentMode) => void;
   setInput: (value: string) => void;
   stopMessage: () => void;
   submitAskAnswer: (answer: AskToolAnswer) => void;
@@ -93,9 +97,36 @@ export { selectIsAgentRunActive };
 
 const COACH_PROMPT =
   "你刚才这个节奏明显慢了。原来的剧情、人设、风格都保留，别把问题扩大。现在先说清楚卡点，然后接着断点继续干。网文这东西最怕拖，读者不会等你慢慢找状态，给我把冲突和爽点往前推。";
+const AUTOPILOT_COMPLETION_MARK = "目标已完成";
+
+type SendMessageOptions = {
+  autopilotGoal?: string;
+  autopilotIteration?: number;
+  modeId?: AgentMode;
+};
 
 async function cancelInflightToolRequests(requestIds: string[]) {
   await cancelToolRequests(requestIds);
+}
+
+function buildAutopilotContinuePrompt(goal: string, iteration: number) {
+  return [
+    "自动检查：请根据当前对话、计划和工作区状态检查总目标是否已经完成。",
+    `总目标：${goal}`,
+    `当前自动轮次：${iteration}`,
+    "",
+    "如果目标已经完成，核对关键成果后在最终回复中写出「目标已完成」。",
+    "如果目标还没有完成，直接继续执行最重要的下一步，并写回或验证必要文件。",
+  ].join("\n");
+}
+
+function getLastAssistantText(messages: AgentMessage[]) {
+  const assistant = [...messages].reverse().find((message) => message.role === "assistant");
+  return assistant ? extractMessageText(assistant) : "";
+}
+
+function isAutopilotGoalCompleted(messages: AgentMessage[]) {
+  return getLastAssistantText(messages).includes(AUTOPILOT_COMPLETION_MARK);
 }
 
 export const useChatRunStore = create<ChatRunStore>((set, get) => {
@@ -130,10 +161,16 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
   async function sendMessageInternal(
     promptOverride: string | null,
     selection?: ManualTurnContextSelection,
+    options: SendMessageOptions = {},
   ) {
     const nextInput = promptOverride ?? get().input.trim();
     if (!nextInput) return;
 
+    const activeModeId = options.modeId ?? get().activeModeId;
+    const autopilotGoal = activeModeId === "autopilot"
+      ? options.autopilotGoal ?? nextInput
+      : null;
+    const autopilotIteration = options.autopilotIteration ?? 1;
     const abortController = new AbortController();
     const runRequestId = buildRunRequestId();
     const optimisticSessionId = get().activeSessionId;
@@ -239,13 +276,19 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           ),
         };
       }
-      return {
-        abortController,
-        activeRunRequestId: runRequestId,
-        inflightToolRequestIds: [],
-        errorMessage: null,
-        ...ensureSessionState(state, optimisticSessionId, latestMessages, "", "running"),
-      };
+	      return {
+	        abortController,
+	        activeRunRequestId: runRequestId,
+	        autopilotGoalsBySession: optimisticSessionId && autopilotGoal
+	          ? {
+	              ...state.autopilotGoalsBySession,
+	              [optimisticSessionId]: autopilotGoal,
+	            }
+	          : state.autopilotGoalsBySession,
+	        inflightToolRequestIds: [],
+	        errorMessage: null,
+	        ...ensureSessionState(state, optimisticSessionId, latestMessages, "", "running"),
+	      };
     });
 
     if (optimisticSessionId) {
@@ -266,13 +309,19 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
           : (get().messagesBySession[sessionId] ?? []);
       latestMessages = [...persistedConversationHistory, userMessage, assistantMessage];
       const currentSessionId = sessionId;
-      set((state) => ({
-        abortController,
-        activeRunRequestId: runRequestId,
-        inflightToolRequestIds: [],
-        errorMessage: null,
-        ...ensureSessionState(state, currentSessionId, latestMessages, "", "running"),
-      }));
+	      set((state) => ({
+	        abortController,
+	        activeRunRequestId: runRequestId,
+	        autopilotGoalsBySession: autopilotGoal
+	          ? {
+	              ...state.autopilotGoalsBySession,
+	              [currentSessionId]: autopilotGoal,
+	            }
+	          : state.autopilotGoalsBySession,
+	        inflightToolRequestIds: [],
+	        errorMessage: null,
+	        ...ensureSessionState(state, currentSessionId, latestMessages, "", "running"),
+	      }));
       void setChatDraft(currentSessionId, "");
 
       const currentBookId = get().currentBookId ?? DEFAULT_CHAT_BOOK_ID;
@@ -361,6 +410,12 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       if (!isCurrentRun()) return;
 
       const planningState = derivePlanningState(persistedConversationHistory);
+      const modeContext = activeModeId === "autopilot"
+        ? {
+            goal: autopilotGoal ?? nextInput,
+            iteration: autopilotIteration,
+          }
+        : undefined;
       // 写作模式默认 toolset：global + workspace + localResource，统一通过工厂装配。
       const workspaceTools = buildBookWorkspaceTools({
         rootPath: workspaceState.rootPath,
@@ -377,7 +432,8 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         defaultAgentMarkdown,
         enabledSkills,
         enabledToolIds,
-        mode: "book",
+        mode: activeModeId,
+        modeContext,
         manualContext,
         onAskUser: handleAskUser,
         onUsage: attachUsageToAssistant,
@@ -443,6 +499,23 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         ...ensureSessionState(state, completedSessionId, latestMessages, "", "completed"),
       }));
       await flushAssistant("completed");
+      if (
+        activeModeId === "autopilot"
+        && autopilotGoal
+        && get().activeModeId === "autopilot"
+        && get().activeSessionId === completedSessionId
+        && !isAutopilotGoalCompleted(latestMessages)
+      ) {
+        await sendMessageInternal(
+          buildAutopilotContinuePrompt(autopilotGoal, autopilotIteration + 1),
+          undefined,
+          {
+            autopilotGoal,
+            autopilotIteration: autopilotIteration + 1,
+            modeId: "autopilot",
+          },
+        );
+      }
     } catch (error) {
       // 6. abort / 失败的两条路径分别处理。
       if (persistTimer) {
@@ -651,7 +724,11 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
       if (selectIsAgentRunActive(get())) {
         await get().hardStopCurrentRun("coach");
       }
-      await sendMessageInternal(COACH_PROMPT);
+      await sendMessageInternal(COACH_PROMPT, undefined, { modeId: "book" });
+    },
+    setActiveMode: (modeId) => {
+      if (selectIsAgentRunActive(get())) return;
+      set({ activeModeId: modeId });
     },
     setInput: (value) => {
       const sessionId = get().activeSessionId;

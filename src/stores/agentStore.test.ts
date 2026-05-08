@@ -210,6 +210,48 @@ describe("agentStore", () => {
     expect(prompt).toContain("把冲突和爽点往前推");
   });
 
+  it("目标模式会持续自动检查并执行到目标完成", async () => {
+    let callCount = 0;
+    streamControl.runAgentTurn.mockImplementation(async function* () {
+      callCount += 1;
+      yield {
+        type: "text-delta",
+        delta: callCount === 9 ? "目标已完成，已经写回目标文件。" : `第 ${callCount} 轮继续推进。`,
+      };
+    });
+
+    useAgentStore.setState({
+      activeModeId: "autopilot",
+      activeSessionId: "session-1",
+      input: "完成第一章审校并写回文件",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    await useAgentStore.getState().sendMessage();
+
+    expect(streamControl.runAgentTurn).toHaveBeenCalledTimes(9);
+    expect(streamControl.runAgentTurn.mock.calls[0]?.[0]?.mode).toBe("autopilot");
+    expect(streamControl.runAgentTurn.mock.calls[0]?.[0]?.modeContext).toMatchObject({
+      goal: "完成第一章审校并写回文件",
+      iteration: 1,
+    });
+    expect(streamControl.runAgentTurn.mock.calls[1]?.[0]?.prompt).toContain("自动检查");
+    expect(streamControl.runAgentTurn.mock.calls[8]?.[0]?.modeContext).toMatchObject({
+      goal: "完成第一章审校并写回文件",
+      iteration: 9,
+    });
+    expect(useAgentStore.getState().autopilotGoalsBySession["session-1"]).toBe("完成第一章审校并写回文件");
+    expect(useAgentStore.getState().run.status).toBe("completed");
+  });
+
   it("持久化 running summary 回写时不会打断当前运行态", async () => {
     let releaseManualContext!: () => void;
     const manualContextPromise: Promise<ManualTurnContextPayload> = new Promise((resolve) => {
