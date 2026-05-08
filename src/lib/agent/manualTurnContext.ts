@@ -1,20 +1,12 @@
 import { getBaseName } from "../bookWorkspace/paths";
 import type { ResolvedSkill } from "../../stores/skillsStore";
-import type { ResolvedAgent } from "../../stores/subAgentStore";
 
 export type ManualTurnContextSelection = {
-  agentIds: string[];
   filePaths: string[];
   skillIds: string[];
 };
 
 export type ManualTurnContextPayload = {
-  agents: Array<{
-    description: string;
-    id: string;
-    name: string;
-    role?: string;
-  }>;
   files: Array<{
     content: string;
     name: string;
@@ -30,7 +22,6 @@ export type ManualTurnContextPayload = {
 type ResolveManualTurnContextInput = {
   activeFilePath: string | null;
   draftContent: string;
-  enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   readFile: (rootPath: string, path: string) => Promise<string>;
   selection: ManualTurnContextSelection;
@@ -43,7 +34,6 @@ function unique<T>(values: T[]) {
 
 export function createEmptyManualTurnContextSelection(): ManualTurnContextSelection {
   return {
-    agentIds: [],
     filePaths: [],
     skillIds: [],
   };
@@ -52,7 +42,6 @@ export function createEmptyManualTurnContextSelection(): ManualTurnContextSelect
 export function resolveManualTurnContext({
   activeFilePath,
   draftContent,
-  enabledAgents,
   enabledSkills,
   readFile,
   selection,
@@ -68,16 +57,6 @@ export function resolveManualTurnContext({
           name: skill.name,
         })),
     ),
-    Promise.resolve(
-      enabledAgents
-        .filter((agent) => unique(selection.agentIds).includes(agent.id))
-        .map((agent) => ({
-          description: agent.description,
-          id: agent.id,
-          name: agent.name,
-          role: agent.role,
-        })),
-    ),
     resolveManualFiles({
       activeFilePath,
       draftContent,
@@ -85,7 +64,7 @@ export function resolveManualTurnContext({
       readFile,
       workspaceRootPath,
     }),
-  ]).then(([skills, agents, files]) => ({ agents, files, skills }));
+  ]).then(([skills, files]) => ({ files, skills }));
 }
 
 async function resolveManualFiles({

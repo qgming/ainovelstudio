@@ -10,7 +10,6 @@ type CommandResult<T> = Result<T, String>;
 const ACTIVE_SESSION_KEY: &str = "chat.active_session_id";
 const DRAFT_KEY_PREFIX: &str = "chat.draft.";
 const SKILLS_PREFERENCES_KEY: &str = "skills.preferences";
-const AGENTS_PREFERENCES_KEY: &str = "agents.preferences";
 const AGENT_SETTINGS_KEY: &str = "agent.settings";
 
 #[derive(Clone, Serialize)]
@@ -464,32 +463,6 @@ pub fn write_skill_preferences(
 pub fn clear_skill_preferences(app: AppHandle) -> CommandResult<()> {
     let connection = open_database(&app)?;
     delete_state_value(&connection, SKILLS_PREFERENCES_KEY)
-}
-
-#[tauri::command]
-pub fn read_agent_preferences(app: AppHandle) -> CommandResult<TogglePreferences> {
-    let connection = open_database(&app)?;
-    Ok(parse_preferences(get_state_value(
-        &connection,
-        AGENTS_PREFERENCES_KEY,
-    )?))
-}
-
-#[tauri::command]
-pub fn write_agent_preferences(
-    app: AppHandle,
-    preferences: TogglePreferences,
-) -> CommandResult<TogglePreferences> {
-    let connection = open_database(&app)?;
-    let value = serde_json::to_value(&preferences).map_err(error_to_string)?;
-    set_state_value(&connection, AGENTS_PREFERENCES_KEY, &value)?;
-    Ok(preferences)
-}
-
-#[tauri::command]
-pub fn clear_agent_preferences(app: AppHandle) -> CommandResult<()> {
-    let connection = open_database(&app)?;
-    delete_state_value(&connection, AGENTS_PREFERENCES_KEY)
 }
 
 #[tauri::command]

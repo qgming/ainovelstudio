@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedSkill } from "../../stores/skillsStore";
-import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 import type { ProjectContextPayload } from "./projectContext";
 
@@ -27,27 +26,6 @@ function createSkill(overrides: Partial<ResolvedSkill> = {}): ResolvedSkill {
   };
 }
 
-function createAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
-  return {
-    id: "writer-agent",
-    name: "续写代理",
-    description: "负责续写章节。",
-    body: "# writer",
-    discoveredAt: 1,
-    enabled: true,
-    files: ["manifest.json", "AGENTS.md"],
-    isBuiltin: true,
-    manifestFilePath: "agents/writer/manifest.json",
-    role: "续写与润色",
-    sourceKind: "builtin-package",
-    sourceLabel: "内置",
-    suggestedTools: ["read_file"],
-    tags: ["续写"],
-    validation: { errors: [], isValid: true, warnings: [] },
-    ...overrides,
-  };
-}
-
 describe("prompt context", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -56,7 +34,6 @@ describe("prompt context", () => {
   it("system prompt 注入 Agent OS Kernel 与任务循环", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
       enabledSkills: [createSkill()],
       enabledToolIds: [],
     });
@@ -71,7 +48,6 @@ describe("prompt context", () => {
   it("system prompt 各 section key 唯一", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
       enabledSkills: [createSkill()],
       enabledToolIds: [],
     });
@@ -103,7 +79,6 @@ describe("prompt context", () => {
   it("system prompt 只保留技能目录，不常驻完整 skill 正文", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
       enabledSkills: [createSkill()],
       enabledToolIds: [],
     });
@@ -117,17 +92,14 @@ describe("prompt context", () => {
     expect(system).not.toContain("MEMORY.md");
   });
 
-  it("工作流模式下不注入可委派子代理目录", () => {
+  it("未启用 task 时不注入临时 subagent 提示", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
       enabledSkills: [createSkill()],
       enabledToolIds: [],
-      includeAgentCatalog: false,
     });
 
-    expect(system).not.toContain("## s05 可委派子代理目录");
-    expect(system).not.toContain("### 子代理：续写代理");
+    expect(system).not.toContain("## s05 临时 Subagent");
   });
 
   it("手动指定的大文件会裁剪成摘录并提示按需读取全文", () => {
@@ -135,7 +107,6 @@ describe("prompt context", () => {
     const prompt = buildUserTurnContent({
       activeFilePath: "设定/人物.md",
       manualContext: {
-        agents: [],
         files: [{ content, name: "人物.md", path: "设定/人物.md" }],
         skills: [],
       },
@@ -204,62 +175,13 @@ describe("prompt context", () => {
   it("book 模式渲染图书工作区契约与项目入口", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
       enabledSkills: [createSkill()],
-      enabledToolIds: [],
+      enabledToolIds: ["task"],
       mode: "book",
     });
 
     expect(system).toContain("# 模式：BOOK");
     expect(system).toContain(".project/AGENTS.md");
-    expect(system).toContain("## s05 可委派子代理目录");
-  });
-
-  it("workflow 判断节点强制 workflow_decision 与 pass/issues 字段", () => {
-    const system = buildSystemPrompt({
-      defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
-      enabledSkills: [createSkill()],
-      enabledToolIds: [],
-      includeAgentCatalog: false,
-      mode: "workflow",
-      modeContext: {
-        nodeKind: "decision",
-        workflowName: "长篇连载",
-        stepName: "质量检查",
-        memberName: "终稿编辑",
-        memberRoleLabel: "质量检查",
-      },
-    });
-
-    expect(system).toContain("# 模式：WORKFLOW · 判断节点");
-    expect(system).toContain("`workflow_decision`");
-    expect(system).toContain("pass:");
-    expect(system).toContain("issues:");
-    expect(system).toContain("revision_brief:");
-    expect(system).not.toContain("## s05 可委派子代理目录");
-  });
-
-  it("workflow 代理节点要求写回工作区文件并附交接", () => {
-    const system = buildSystemPrompt({
-      defaultAgentMarkdown: "# 主代理",
-      enabledAgents: [createAgent()],
-      enabledSkills: [createSkill()],
-      enabledToolIds: [],
-      includeAgentCatalog: false,
-      mode: "workflow",
-      modeContext: {
-        nodeKind: "agent_task",
-        workflowName: "长篇连载",
-        stepName: "正文续写",
-        memberName: "长篇作者",
-        memberRoleLabel: "正文续写",
-        isReworkMode: true,
-      },
-    });
-
-    expect(system).toContain("# 模式：WORKFLOW · 代理节点");
-    expect(system).toContain("返工模式");
-    expect(system).toContain("写回硬性要求");
+    expect(system).toContain("## s05 临时 Subagent");
   });
 });

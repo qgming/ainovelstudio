@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "../components/ui/tooltip";
 import type { TreeNode } from "../lib/bookWorkspace/types";
 
 const { mockInvoke } = vi.hoisted(() => ({
@@ -13,6 +15,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 import { BookPage } from "./BookPage";
 import { useAgentStore } from "../stores/agentStore";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
+
+function renderBookPage(props: React.ComponentProps<typeof BookPage> = {}) {
+  return render(
+    <TooltipProvider>
+      <BookPage {...props} />
+    </TooltipProvider>,
+  );
+}
 
 function mockViewport(width: number) {
   Object.defineProperty(window, "innerWidth", {
@@ -170,14 +180,14 @@ describe("BookPage", () => {
   });
 
   it("未打开书籍时显示选择和新建按钮", () => {
-    render(<BookPage />);
+    renderBookPage();
 
     expect(screen.getByRole("button", { name: "选择书籍" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建书籍" })).toBeInTheDocument();
   });
 
   it("选择书籍后显示三栏中的文件树和 Agent 工作台", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -190,7 +200,7 @@ describe("BookPage", () => {
   });
 
   it("点击文本文件后会自动保存编辑内容", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -216,7 +226,7 @@ describe("BookPage", () => {
   });
 
   it("可以打开并编辑 json 文件", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -240,7 +250,7 @@ describe("BookPage", () => {
   });
 
   it("打开文件时不会收起同级已展开的文件夹", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -256,21 +266,27 @@ describe("BookPage", () => {
   });
 
   it("文件树节点通过更多菜单收纳目录与文件操作", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "第一卷 更多操作" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "第一卷 更多操作" }), {
+      button: 0,
+      ctrlKey: false,
+    });
 
     expect(screen.getByRole("menuitem", { name: "新建文件夹" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "新建文件" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "关闭菜单" }));
-    fireEvent.click(screen.getByRole("button", { name: "第001章_待命名.md 更多操作" }));
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.pointerDown(screen.getByRole("button", { name: "第001章_待命名.md 更多操作" }), {
+      button: 0,
+      ctrlKey: false,
+    });
 
     expect(screen.queryByRole("menuitem", { name: "新建文件夹" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "新建文件" })).not.toBeInTheDocument();
@@ -279,7 +295,7 @@ describe("BookPage", () => {
   });
 
   it("支持刷新当前书籍以及单按钮切换全部展开和全部收起", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -305,7 +321,7 @@ describe("BookPage", () => {
   });
 
   it("编辑区顶部保存按钮使用纯图标工具栏样式", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -322,7 +338,7 @@ describe("BookPage", () => {
 
   it("移动端使用专属底部栏并在打开文件后切回写作区", async () => {
     mockViewport(390);
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -341,7 +357,7 @@ describe("BookPage", () => {
   });
 
   it("markdown 文件可切换到预览渲染视图", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -361,7 +377,7 @@ describe("BookPage", () => {
 
   it("已打开书籍后左上角改为返回首页按钮，不再打开书籍菜单", async () => {
     const handleNavigateHome = vi.fn();
-    render(<BookPage onNavigateHome={handleNavigateHome} />);
+    renderBookPage({ onNavigateHome: handleNavigateHome });
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -375,7 +391,7 @@ describe("BookPage", () => {
   });
 
   it("已打开书籍后左上角仍显示书名，但不再提供顶部新建书籍菜单", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -387,7 +403,7 @@ describe("BookPage", () => {
   });
 
   it("新建书籍时会弹出输入框并调用创建命令", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "新建书籍" }));
     fireEvent.change(screen.getByLabelText("书名"), { target: { value: "北境余烬" } });
@@ -407,7 +423,7 @@ describe("BookPage", () => {
       JSON.stringify({ rootPath, selectedFilePath: chapterPath }),
     );
 
-    render(<BookPage />);
+    renderBookPage();
 
     expect(await screen.findByRole("textbox", { name: "文件编辑器" })).toHaveValue("这是章节初稿");
     expect(screen.getByRole("heading", { name: "第001章_待命名.md" })).toBeInTheDocument();
@@ -419,7 +435,7 @@ describe("BookPage", () => {
       JSON.stringify({ leftPanelWidth: 360, rightPanelWidth: 410 }),
     );
 
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -432,7 +448,7 @@ describe("BookPage", () => {
   });
 
   it("拖拽分隔条后会调整宽度并持久化到本地", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -475,7 +491,7 @@ describe("BookPage", () => {
   });
 
   it("目录栏拖到折叠阈值后会收起成贴边按钮并记住上次展开宽度", async () => {
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -536,7 +552,7 @@ describe("BookPage", () => {
       }),
     );
 
-    render(<BookPage />);
+    renderBookPage();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
@@ -561,7 +577,7 @@ describe("BookPage", () => {
     });
     const handleWorkspaceBookChange = vi.fn();
 
-    render(<BookPage requestedBookId={otherBookId} onWorkspaceBookChange={handleWorkspaceBookChange} />);
+    renderBookPage({ requestedBookId: otherBookId, onWorkspaceBookChange: handleWorkspaceBookChange });
 
     expect(screen.getByText("正在打开书籍工作区...")).toBeInTheDocument();
     expect(handleWorkspaceBookChange).not.toHaveBeenCalled();
@@ -606,7 +622,7 @@ describe("BookPage", () => {
       status: "ready",
     });
 
-    const view = render(<BookPage />);
+    const view = renderBookPage();
     view.unmount();
 
     const state = useAgentStore.getState();

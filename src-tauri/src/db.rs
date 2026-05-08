@@ -1,7 +1,4 @@
-use crate::{
-    workflows::run_workflow_migrations,
-    workspace::run_workspace_migrations,
-};
+use crate::workspace::run_workspace_migrations;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::fs;
@@ -238,15 +235,6 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
                 updated_at INTEGER NOT NULL DEFAULT 0
             );
 
-            CREATE TABLE IF NOT EXISTS agent_packages (
-                id TEXT PRIMARY KEY,
-                source_kind TEXT NOT NULL,
-                is_builtin INTEGER NOT NULL DEFAULT 0,
-                manifest_json TEXT NOT NULL,
-                files_json TEXT NOT NULL,
-                updated_at INTEGER NOT NULL DEFAULT 0
-            );
-
             CREATE TABLE IF NOT EXISTS config_documents (
                 key TEXT PRIMARY KEY,
                 markdown TEXT NOT NULL,
@@ -259,10 +247,6 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
                 root_path TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL
             );
-
-            -- 移除已废弃的扩写模式：丢弃旧用量日志表（老用户首次启动时执行一次）
-            DROP TABLE IF EXISTS expansion_usage_logs;
-            DROP INDEX IF EXISTS idx_expansion_usage_logs_created_at;
             "#,
         )
         .map_err(error_to_string)?;
@@ -270,7 +254,6 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
     ensure_chat_sessions_book_id_column(connection)?;
     cleanup_book_workspace_registry(connection)?;
     run_workspace_migrations(connection)?;
-    run_workflow_migrations(connection)?;
 
     connection
         .execute_batch(

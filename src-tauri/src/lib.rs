@@ -1,4 +1,3 @@
-mod agents;
 mod app_control;
 mod chat;
 mod config;
@@ -8,7 +7,6 @@ mod embedded_resources;
 mod provider_proxy;
 mod skills;
 mod usage;
-mod workflows;
 mod workspace;
 
 use crate::app_control::terminate_application;
@@ -85,15 +83,6 @@ pub fn run() {
             workspace::cancel_tool_request,
             workspace::cancel_tool_requests,
             terminate_application,
-            agents::scan_installed_agents,
-            agents::initialize_builtin_agents,
-            agents::reset_builtin_agents,
-            agents::read_agent_detail,
-            agents::read_agent_file_content,
-            agents::write_agent_file_content,
-            agents::create_agent,
-            agents::delete_installed_agent,
-            agents::import_agent_zip,
             chat::initialize_chat_storage,
             chat::create_chat_session,
             chat::switch_chat_session,
@@ -106,9 +95,6 @@ pub fn run() {
             chat::read_skill_preferences,
             chat::write_skill_preferences,
             chat::clear_skill_preferences,
-            chat::read_agent_preferences,
-            chat::write_agent_preferences,
-            chat::clear_agent_preferences,
             chat::read_agent_settings,
             chat::write_agent_settings,
             chat::clear_agent_settings,
@@ -126,28 +112,6 @@ pub fn run() {
             data_management::upload_app_data_backup_via_webdav,
             data_management::download_app_data_backup_via_webdav,
             usage::read_usage_logs,
-            workflows::commands::initialize_builtin_workflows,
-            workflows::commands::reset_builtin_workflows,
-            workflows::commands::list_workflows,
-            workflows::commands::create_workflow,
-            workflows::commands::export_workflow_zip,
-            workflows::commands::delete_workflow,
-            workflows::commands::get_workflow_detail,
-            workflows::commands::delete_workflow_run,
-            workflows::commands::save_workflow_basics,
-            workflows::commands::bind_workflow_workspace,
-            workflows::commands::update_workflow_loop_config,
-            workflows::commands::add_workflow_team_member,
-            workflows::commands::update_workflow_team_member,
-            workflows::commands::remove_workflow_team_member,
-            workflows::commands::reorder_workflow_team_members,
-            workflows::commands::add_workflow_agent_step,
-            workflows::commands::add_workflow_step,
-            workflows::commands::update_workflow_step,
-            workflows::commands::remove_workflow_step,
-            workflows::commands::reorder_workflow_steps,
-            workflows::commands::save_workflow_run,
-            workflows::commands::save_workflow_step_run,
             workspace::pick_book_directory,
             workspace::list_book_workspaces,
             workspace::get_book_workspace_summary,

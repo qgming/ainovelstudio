@@ -6,7 +6,6 @@ export type WorkspaceToolContext = {
 };
 
 export type LocalResourceToolContext = {
-  refreshAgents?: () => Promise<void>;
   refreshSkills?: () => Promise<void>;
 };
 

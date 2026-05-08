@@ -249,13 +249,6 @@ describe("App shell", () => {
     expect(mockWindow.onCloseRequested).not.toHaveBeenCalled();
   });
 
-  it("可以切换到代理页", async () => {
-    window.location.hash = "#/agents";
-    render(<App />);
-
-    expect(await screen.findByRole("button", { name: "刷新代理库" })).toBeInTheDocument();
-  });
-
   it("默认进入首页并展示书籍入口动作", async () => {
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "initialize_chat_storage") {
@@ -272,11 +265,11 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: "刷新书架" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导入书籍" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建书籍" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "打开书籍 北境余烬" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Book 北境余烬" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "更多操作 北境余烬" })).toBeInTheDocument();
   });
 
-  it("首页启动时不会预先初始化技能库、代理库和 Agent 设置", async () => {
+  it("首页启动时不会预先初始化技能库和 Agent 设置", async () => {
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "initialize_chat_storage") {
         return chatBootstrap;
@@ -292,8 +285,6 @@ describe("App shell", () => {
     expect(await screen.findByRole("button", { name: "刷新书架" })).toBeInTheDocument();
     expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_builtin_skills")).toHaveLength(0);
     expect(mockInvoke.mock.calls.filter(([command]) => command === "scan_installed_skills")).toHaveLength(0);
-    expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_builtin_agents")).toHaveLength(0);
-    expect(mockInvoke.mock.calls.filter(([command]) => command === "scan_installed_agents")).toHaveLength(0);
     expect(mockInvoke.mock.calls.filter(([command]) => command === "read_agent_settings")).toHaveLength(0);
     expect(mockInvoke.mock.calls.filter(([command]) => command === "initialize_default_agent_config")).toHaveLength(0);
   });
@@ -319,7 +310,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "打开书籍 北境余烬" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Book 北境余烬" }));
 
     await waitFor(() => {
       expect(window.location.hash).toContain(`/books/${bookId}`);
@@ -349,7 +340,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "打开书籍 北境余烬" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Book 北境余烬" }));
 
     expect(await screen.findByText("北境余烬")).toBeInTheDocument();
     expect(await screen.findByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
@@ -417,7 +408,10 @@ describe("App shell", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "更多操作 北境余烬" }));
+    fireEvent.pointerDown(await screen.findByRole("button", { name: "更多操作 北境余烬" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     fireEvent.click(await screen.findByRole("menuitem", { name: "导出图书" }));
 
     await waitFor(() => {
@@ -447,7 +441,10 @@ describe("App shell", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "更多操作 北境余烬" }));
+    fireEvent.pointerDown(await screen.findByRole("button", { name: "更多操作 北境余烬" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     fireEvent.click(await screen.findByRole("menuitem", { name: "删除图书" }));
 
     expect(await screen.findByText("删除后不会进入回收站，请确认这是你想要的操作。")).toBeInTheDocument();
@@ -460,7 +457,7 @@ describe("App shell", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "打开书籍 北境余烬" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Book 北境余烬" })).not.toBeInTheDocument();
     });
   });
 
@@ -493,14 +490,14 @@ describe("App shell", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(new RegExp(`内置工具 · 已启用 ${BUILTIN_TOOLS.length}`)),
+        screen.getByText(new RegExp(`已启用 ${BUILTIN_TOOLS.length}`)),
       ).toBeInTheDocument();
     });
 
     expect(screen.getByText("读取文件")).toBeInTheDocument();
-    expect(screen.getByText("行编辑")).toBeInTheDocument();
-    expect(screen.getByText("内容搜索")).toBeInTheDocument();
-    expect(screen.getByText("读取目录树")).toBeInTheDocument();
+    expect(screen.getByText("局部编辑")).toBeInTheDocument();
+    expect(screen.getByText("搜索内容")).toBeInTheDocument();
+    expect(screen.getByText("浏览工作区")).toBeInTheDocument();
   });
 
   it("设置页会主动初始化模型配置并回填已保存的 key、url 和 model", async () => {
@@ -575,7 +572,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
     expect(screen.getByText("版本")).toBeInTheDocument();
-    expect(screen.getByText("0.2.3")).toBeInTheDocument();
+    expect(screen.getByText("0.2.4")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
@@ -586,18 +583,11 @@ describe("App shell", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("link", { name: "设置" }));
-    fireEvent.click(screen.getByRole("button", { name: "基本设置" }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
-    });
-
-    expect(screen.queryByText(/主题、模型 provider/)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "切换到浅色模式" }));
+    await screen.findByLabelText("默认 AGENTS 编辑器");
+    fireEvent.click(screen.getByRole("button", { name: "主题切换" }));
 
     expect(document.documentElement).not.toHaveClass("dark");
-    expect(screen.getByRole("button", { name: "切换到深色模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "主题切换" })).toBeInTheDocument();
   });
 
   it("从其他页面进入指定书籍页时，会先显示打开中状态，再稳定进入工作区", async () => {

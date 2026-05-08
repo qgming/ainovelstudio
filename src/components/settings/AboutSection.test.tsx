@@ -47,7 +47,7 @@ describe("AboutSection", () => {
     render(<AboutSection />);
 
     expect(screen.getByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
-    expect(screen.getByText("0.2.3")).toBeInTheDocument();
+    expect(screen.getByText("0.2.4")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
@@ -81,7 +81,7 @@ describe("AboutSection", () => {
     updateStoreState.status = "available";
     updateStoreState.updateSummary = {
       version: "0.2.4",
-      notes: "修复更新流程\n补齐工作流统计",
+      notes: "修复更新流程\n补齐用量统计",
       packageKind: "exe",
       publishedAt: "2026-04-22T06:30:00Z",
     };
@@ -90,7 +90,7 @@ describe("AboutSection", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("发现 0.2.4")).toBeInTheDocument();
-    expect(screen.getByText(/修复更新流程[\s\S]*补齐工作流统计/)).toBeInTheDocument();
+    expect(screen.getByText(/修复更新流程[\s\S]*补齐用量统计/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "下载更新" }));
 

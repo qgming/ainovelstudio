@@ -50,7 +50,7 @@ describe("Sidebar", () => {
     });
   });
 
-  it("把工作流入口放在首页和技能之间", () => {
+  it("主导航只保留首页和技能入口", () => {
     renderSidebar();
 
     const labels = screen
@@ -58,7 +58,7 @@ describe("Sidebar", () => {
       .map((link) => link.getAttribute("aria-label"))
       .filter(Boolean);
 
-    expect(labels.slice(0, 4)).toEqual(["首页", "工作流", "技能", "代理"]);
+    expect(labels.slice(0, 3)).toEqual(["首页", "技能", "设置"]);
   });
 
   it("桌面侧边栏只保留主题按钮和导航入口", () => {
@@ -106,10 +106,6 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "技能" })).toHaveClass("text-primary");
     expect(screen.getByRole("link", { name: "首页" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "首页" })).not.toHaveClass("text-primary");
-    expect(screen.getByRole("link", { name: "工作流" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "工作流" })).not.toHaveClass("text-primary");
-    expect(screen.getByRole("link", { name: "代理" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "代理" })).not.toHaveClass("text-primary");
   });
 
   it("小窗口下切换为底部导航栏", async () => {
@@ -119,28 +115,16 @@ describe("Sidebar", () => {
 
     expect(await screen.findByRole("navigation", { name: "主导航" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "首页" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "工作流" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "技能" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "代理" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "设置" })).toBeInTheDocument();
   });
 
-  it("移动端进入图书或工作流详情时隐藏全局底部导航", () => {
+  it("移动端进入图书详情时隐藏全局底部导航", () => {
     mockViewport(390);
 
-    const { rerender } = render(
+    render(
       <TooltipProvider>
         <MemoryRouter initialEntries={["/books/book-1"]}>
-          <Sidebar />
-        </MemoryRouter>
-      </TooltipProvider>,
-    );
-
-    expect(screen.queryByRole("navigation", { name: "主导航" })).not.toBeInTheDocument();
-
-    rerender(
-      <TooltipProvider>
-        <MemoryRouter initialEntries={["/workflows/workflow-1"]}>
           <Sidebar />
         </MemoryRouter>
       </TooltipProvider>,

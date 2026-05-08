@@ -8,7 +8,7 @@ import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
 
 export type ErrorBlockProps = {
-  /** 主标题，如"未找到该工作流"。 */
+  /** 主标题，如"未找到该资源"。 */
   title: string;
   /** 可选详情，通常是 errorMessage。 */
   description?: string | null;

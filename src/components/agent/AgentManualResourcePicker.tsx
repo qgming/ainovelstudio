@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 type ResourceItem = {
   description?: string;
   id: string;
-  kind: "agent" | "skill";
+  kind: "skill";
   name: string;
 };
 
@@ -14,7 +14,7 @@ type AgentManualResourcePickerProps = {
 };
 
 function EmptyState() {
-  return <p className="px-1 py-2 text-sm text-[#718096] dark:text-[#7f8a9b]">当前没有已启用的技能或子 Agent。</p>;
+  return <p className="px-1 py-2 text-sm text-[#718096] dark:text-[#7f8a9b]">当前没有已启用的技能。</p>;
 }
 
 function Section({ items, onToggle, selectedIds, title }: AgentManualResourcePickerProps & { title: string }) {
@@ -58,7 +58,6 @@ function Section({ items, onToggle, selectedIds, title }: AgentManualResourcePic
 
 export function AgentManualResourcePicker({ items, selectedIds, onToggle }: AgentManualResourcePickerProps) {
   const skills = items.filter((item) => item.kind === "skill");
-  const agents = items.filter((item) => item.kind === "agent");
 
   if (items.length === 0) {
     return <EmptyState />;
@@ -67,7 +66,6 @@ export function AgentManualResourcePicker({ items, selectedIds, onToggle }: Agen
   return (
     <div className="space-y-3 p-1">
       <Section items={skills} onToggle={onToggle} selectedIds={selectedIds} title={`技能 (${skills.length})`} />
-      <Section items={agents} onToggle={onToggle} selectedIds={selectedIds} title={`子 Agent (${agents.length})`} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * 聊天运行 Store（chatRunStore）：管理写作模式下与主 agent 的会话、运行态、历史。
  *
- * 历史名称为 agentStore；为消歧义（避免与 subAgentStore / agentSettingsStore 混淆）改名。
+ * 历史名称为 agentStore；为消歧义（避免与 agentSettingsStore 混淆）改名。
  * 老路径 `stores/agentStore.ts` 仍保留 re-export 兼容旧 import。
  *
  * 边界约束：
@@ -50,7 +50,6 @@ import type {
 } from "../lib/agent/types";
 import { useBookWorkspaceStore } from "./bookWorkspaceStore";
 import { getEnabledSkills, useSkillsStore } from "./skillsStore";
-import { getEnabledAgents, useSubAgentStore } from "./subAgentStore";
 import {
   applyBootstrap,
   applyPersistedSummary,
@@ -293,7 +292,6 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
 
       providerConfig = useAgentSettingsStore.getState().config;
       const enabledSkills = getEnabledSkills(useSkillsStore.getState());
-      const enabledAgents = getEnabledAgents(useSubAgentStore.getState());
       const enabledToolsMap = useAgentSettingsStore.getState().enabledTools;
       const defaultAgentMarkdown = await ensureMainAgentMarkdown();
       if (!isCurrentRun()) return;
@@ -305,7 +303,6 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         ? await resolveManualTurnContext({
             activeFilePath: workspaceState.activeFilePath,
             draftContent: workspaceState.draftContent,
-            enabledAgents,
             enabledSkills,
             readFile: readWorkspaceTextFile,
             selection,
@@ -378,7 +375,6 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
         workspaceRootPath: workspaceState.rootPath,
         conversationHistory: persistedConversationHistory,
         defaultAgentMarkdown,
-        enabledAgents,
         enabledSkills,
         enabledToolIds,
         mode: "book",

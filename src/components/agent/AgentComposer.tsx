@@ -38,7 +38,7 @@ import { AgentWorkspaceFilePicker } from "./AgentWorkspaceFilePicker";
 type SelectableResource = {
   description?: string;
   id: string;
-  kind: "agent" | "skill";
+  kind: "skill";
   name: string;
 };
 
@@ -109,7 +109,6 @@ export function AgentComposer({
   const [isPlanExpanded, setIsPlanExpanded] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [selection, setSelection] = useState<ManualTurnContextSelection>({
-    agentIds: [],
     filePaths: [],
     skillIds: [],
   });
@@ -137,8 +136,7 @@ export function AgentComposer({
     const resourceItems = resources
       .filter(
         (resource) =>
-          selection.skillIds.includes(resource.id) ||
-          selection.agentIds.includes(resource.id),
+          selection.skillIds.includes(resource.id),
       )
       .map((resource) => ({
         id: resource.id,
@@ -151,7 +149,7 @@ export function AgentComposer({
       label: getBaseName(path),
     }));
     return [...resourceItems, ...fileItems];
-  }, [resources, selection.agentIds, selection.filePaths, selection.skillIds]);
+  }, [resources, selection.filePaths, selection.skillIds]);
 
   const askUsesCustomInput = Boolean(
     askRequest && askSelectedIds.includes(askRequest.customOptionId),
@@ -173,26 +171,17 @@ export function AgentComposer({
     event.preventDefault();
     if (!isRunning && !isAskMode && input.trim()) {
       onSubmit(selection);
-      setSelection({ agentIds: [], filePaths: [], skillIds: [] });
+      setSelection({ filePaths: [], skillIds: [] });
     }
   };
 
   const handleResourceToggle = (resource: SelectableResource) => {
     setSelection((current) => {
-      if (resource.kind === "skill") {
-        return {
-          ...current,
-          skillIds: current.skillIds.includes(resource.id)
-            ? removeValue(current.skillIds, resource.id)
-            : [...current.skillIds, resource.id],
-        };
-      }
-
       return {
         ...current,
-        agentIds: current.agentIds.includes(resource.id)
-          ? removeValue(current.agentIds, resource.id)
-          : [...current.agentIds, resource.id],
+        skillIds: current.skillIds.includes(resource.id)
+          ? removeValue(current.skillIds, resource.id)
+          : [...current.skillIds, resource.id],
       };
     });
   };
@@ -208,14 +197,11 @@ export function AgentComposer({
 
   const handleRemoveSelected = (item: {
     id: string;
-    kind: "agent" | "file" | "skill";
+    kind: "file" | "skill";
   }) => {
     setSelection((current) => {
       if (item.kind === "skill") {
         return { ...current, skillIds: removeValue(current.skillIds, item.id) };
-      }
-      if (item.kind === "agent") {
-        return { ...current, agentIds: removeValue(current.agentIds, item.id) };
       }
       return { ...current, filePaths: removeValue(current.filePaths, item.id) };
     });
@@ -223,7 +209,7 @@ export function AgentComposer({
 
   const handleSubmit = () => {
     onSubmit(selection);
-    setSelection({ agentIds: [], filePaths: [], skillIds: [] });
+    setSelection({ filePaths: [], skillIds: [] });
   };
 
   const handleAskToggle = (optionId: string) => {
@@ -511,8 +497,8 @@ export function AgentComposer({
                   <DropdownMenuTrigger asChild>
                     <Button
                       type="button"
-                      aria-label="选择技能或子 Agent"
-                      title="选择技能或子 Agent — 为本次消息附加技能或委派对象"
+                      aria-label="选择技能"
+                      title="选择技能 — 为本次消息附加技能上下文"
                       disabled={isRunning}
                       variant="ghost"
                       size="icon"
@@ -530,7 +516,7 @@ export function AgentComposer({
                     <AgentManualResourcePicker
                       items={resources}
                       onToggle={handleResourceToggle}
-                      selectedIds={[...selection.skillIds, ...selection.agentIds]}
+                      selectedIds={selection.skillIds}
                     />
                   </DropdownMenuContent>
                 </DropdownMenu>

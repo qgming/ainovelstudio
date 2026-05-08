@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Cable, Download, GitBranch, LoaderCircle, RefreshCw, RotateCcw, Save, Upload } from "lucide-react";
+import { Cable, Download, LoaderCircle, RefreshCw, RotateCcw, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,12 +23,10 @@ import { applyAppClientStateAndReload } from "../../lib/dataManagement/clientSta
 import { useIsMobile } from "../../hooks/use-mobile";
 import { useDataManagementStore } from "../../stores/dataManagementStore";
 import { useSkillsStore } from "../../stores/skillsStore";
-import { useSubAgentStore } from "../../stores/subAgentStore";
-import { useWorkflowStore } from "../../stores/workflowStore";
 import { BackupScopeCard } from "./BackupScopeCard";
 import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 
-type ResetTarget = "skills" | "agents" | "workflows";
+type ResetTarget = "skills";
 
 const RESET_COPY: Record<
   ResetTarget,
@@ -45,44 +43,13 @@ const RESET_COPY: Record<
     successTitle: "技能已重写初始化",
     title: "重写技能初始化",
   },
-  agents: {
-    confirmLabel: "重写代理",
-    description: "会清空本地代理数据和启用偏好，然后重新写入内置代理。导入或手动创建的代理会被移除。",
-    successTitle: "代理已重写初始化",
-    title: "重写代理初始化",
-  },
-  workflows: {
-    confirmLabel: "重写工作流",
-    description: "会清空本地工作流、节点、成员和运行记录，然后重新写入内置工作流。",
-    successTitle: "工作流已重写初始化",
-    title: "重写工作流初始化",
-  },
 };
 
 function getResetSummary(target: ResetTarget, count: number) {
   switch (target) {
     case "skills":
       return `已重新写入 ${count} 个内置技能。`;
-    case "agents":
-      return `已重新写入 ${count} 个内置代理。`;
-    case "workflows":
-      return `已重新写入 ${count} 个内置工作流。`;
   }
-}
-
-function resetWorkflowStoreState() {
-  useWorkflowStore.setState({
-    activeRunId: null,
-    abortController: null,
-    currentDetail: null,
-    errorMessage: null,
-    inflightToolRequestIds: [],
-    isRunning: false,
-    selectedStepRunId: null,
-    status: "idle",
-    stopRequested: false,
-    workflows: [],
-  });
 }
 
 function isSameConfig(left: DataSyncSettingsDocument, right: DataSyncSettingsDocument) {
@@ -178,9 +145,7 @@ export function DataManagementSection() {
   const exportBackup = useDataManagementStore((state) => state.exportBackup);
   const importBackup = useDataManagementStore((state) => state.importBackup);
   const initialize = useDataManagementStore((state) => state.initialize);
-  const reinitializeAgents = useDataManagementStore((state) => state.reinitializeAgents);
   const reinitializeSkills = useDataManagementStore((state) => state.reinitializeSkills);
-  const reinitializeWorkflows = useDataManagementStore((state) => state.reinitializeWorkflows);
   const saveConfig = useDataManagementStore((state) => state.saveConfig);
   const status = useDataManagementStore((state) => state.status);
   const uploadCloudBackup = useDataManagementStore((state) => state.uploadCloudBackup);
@@ -311,30 +276,11 @@ export function DataManagementSection() {
 
     setResettingTarget(target);
     try {
-      if (target === "skills") {
-        const result = await reinitializeSkills();
-        await useSkillsStore.getState().initialize();
-        toast.success(RESET_COPY.skills.successTitle, {
-          description: getResetSummary("skills", result.initializedSkillIds.length),
-        });
-      }
-
-      if (target === "agents") {
-        const result = await reinitializeAgents();
-        await useSubAgentStore.getState().initialize();
-        toast.success(RESET_COPY.agents.successTitle, {
-          description: getResetSummary("agents", result.initializedAgentIds.length),
-        });
-      }
-
-      if (target === "workflows") {
-        const result = await reinitializeWorkflows();
-        resetWorkflowStoreState();
-        await useWorkflowStore.getState().refreshList();
-        toast.success(RESET_COPY.workflows.successTitle, {
-          description: getResetSummary("workflows", result.initializedWorkflowIds.length),
-        });
-      }
+      const result = await reinitializeSkills();
+      await useSkillsStore.getState().initialize();
+      toast.success(RESET_COPY.skills.successTitle, {
+        description: getResetSummary("skills", result.initializedSkillIds.length),
+      });
 
       setPendingResetTarget(null);
     } catch (error) {
@@ -440,7 +386,7 @@ export function DataManagementSection() {
               <div className="min-w-0">
                 <h3 className="text-[17px] font-medium tracking-[-0.03em] text-foreground">重写初始化</h3>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  清空对应本地数据后，重新写入内置内容。自定义导入或手动创建的数据会被移除。
+                  清空本地技能数据后，重新写入内置技能。自定义导入或手动创建的技能会被移除。
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -452,24 +398,6 @@ export function DataManagementSection() {
                 >
                   <RefreshCw className="h-4 w-4" />
                   重写技能
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isMutating}
-                  onClick={() => setPendingResetTarget("agents")}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  重写代理
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isMutating}
-                  onClick={() => setPendingResetTarget("workflows")}
-                >
-                  <GitBranch className="h-4 w-4" />
-                  重写工作流
                 </Button>
               </div>
             </div>

@@ -1,18 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Mock 三个 store 的 getState，验证刷新回调被调用与 guardRootMatch 守卫行为。
+// Mock store 的 getState，验证刷新回调被调用与 guardRootMatch 守卫行为。
 const mockBookWorkspaceState = {
   rootPath: "/workspace/A" as string | null,
   refreshWorkspaceAfterExternalChange: vi.fn(async () => {}),
 };
-const mockSubAgentRefresh = vi.fn(async () => {});
 const mockSkillsRefresh = vi.fn(async () => {});
 
 vi.mock("../../../stores/bookWorkspaceStore", () => ({
   useBookWorkspaceStore: { getState: () => mockBookWorkspaceState },
-}));
-vi.mock("../../../stores/subAgentStore", () => ({
-  useSubAgentStore: { getState: () => ({ refresh: mockSubAgentRefresh }) },
 }));
 vi.mock("../../../stores/skillsStore", () => ({
   useSkillsStore: { getState: () => ({ refresh: mockSkillsRefresh }) },
@@ -21,20 +17,14 @@ vi.mock("../../../stores/skillsStore", () => ({
 // Mock tools 工厂，仅校验调用入参与回调。
 const mockGlobalTool = { _global: true };
 const mockWorkspaceMutated = vi.fn();
-const mockOnWorkflowDecisionCaptured: { fn?: unknown } = {};
-const mockRefreshAgentsCaptured: { fn?: () => Promise<void> } = {};
 const mockRefreshSkillsCaptured: { fn?: () => Promise<void> } = {};
 
 vi.mock("../tools", () => ({
   createGlobalToolset: () => ({ global_tool: mockGlobalTool }),
   createLocalResourceToolset: (opts: {
-    refreshAgents?: () => Promise<void>;
     refreshSkills?: () => Promise<void>;
-    onWorkflowDecision?: unknown;
   }) => {
-    mockRefreshAgentsCaptured.fn = opts.refreshAgents;
     mockRefreshSkillsCaptured.fn = opts.refreshSkills;
-    mockOnWorkflowDecisionCaptured.fn = opts.onWorkflowDecision;
     return { local_tool: true };
   },
   createWorkspaceToolset: (opts: {
@@ -55,22 +45,13 @@ import {
 afterEach(() => {
   vi.clearAllMocks();
   mockBookWorkspaceState.rootPath = "/workspace/A";
-  mockOnWorkflowDecisionCaptured.fn = undefined;
 });
 
 describe("createDefaultLocalResourceToolset", () => {
   it("封装的 refresh 回调会调度对应 store.refresh", async () => {
     createDefaultLocalResourceToolset();
-    await mockRefreshAgentsCaptured.fn?.();
     await mockRefreshSkillsCaptured.fn?.();
-    expect(mockSubAgentRefresh).toHaveBeenCalledTimes(1);
     expect(mockSkillsRefresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("透传 onWorkflowDecision 到 createLocalResourceToolset", () => {
-    const decisionFn = vi.fn();
-    createDefaultLocalResourceToolset({ onWorkflowDecision: decisionFn });
-    expect(mockOnWorkflowDecisionCaptured.fn).toBe(decisionFn);
   });
 
   it("includeAsk=false 时会从本地工具集中移除 ask", () => {

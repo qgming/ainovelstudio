@@ -13,7 +13,6 @@
 
 import { z } from "zod";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
-import type { ResolvedAgent } from "../../stores/subAgentStore";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { AgentTool } from "./runtime";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
@@ -38,7 +37,7 @@ import { createToolResultPart } from "./toolParts";
 import { throwIfAborted, withAbort } from "./asyncUtils";
 import { logPromptDebug, normalizeDebugMessageContent, createSystemMessage } from "./debug";
 import { buildAiSdkTools } from "./buildAiSdkTools";
-import { runSubAgentTask } from "./runSubAgentTask";
+import { runSubAgentTask, type TemporarySubAgentProfile } from "./runSubAgentTask";
 
 const MAX_TASK_BATCH_SIZE = 8;
 const DEFAULT_TASK_BATCH_CONCURRENCY = 2;
@@ -47,12 +46,16 @@ const MAX_TASK_BATCH_CONCURRENCY = 4;
 type TaskToolItemInput = {
   id?: string;
   prompt: string;
-  agentId?: string;
+  agentName?: string;
+  role?: string;
+  instructions?: string;
 };
 
 type TaskToolInput = {
   prompt?: string;
-  agentId?: string;
+  agentName?: string;
+  role?: string;
+  instructions?: string;
   tasks?: TaskToolItemInput[];
   concurrency?: number;
   sharedContext?: string;
@@ -61,14 +64,13 @@ type TaskToolInput = {
 type NormalizedTaskRequest = {
   id: string;
   prompt: string;
-  agentId?: string;
+  temporaryAgent?: TemporarySubAgentProfile;
 };
 
 type TaskExecutionResult = {
   id: string;
   status: "completed" | "failed";
   summary: string;
-  agentId?: string;
   agentName?: string;
   subagentId?: string;
   error?: string;
@@ -77,13 +79,17 @@ type TaskExecutionResult = {
 const taskItemInputSchema = z.object({
   id: z.string().optional().describe("可选。批量任务里的稳定 ID，便于结果回填。"),
   prompt: z.string().min(1).describe("需要外包给子代理的局部任务指令。"),
-  agentId: z.string().optional().describe("可选。目标子代理 ID。"),
+  agentName: z.string().optional().describe("可选。临时 subagent 名称。"),
+  role: z.string().optional().describe("可选。临时 subagent 的专业角色。"),
+  instructions: z.string().optional().describe("可选。临时 subagent 的执行约束或专长说明。"),
 });
 
 const taskToolInputSchema = z
-  .object({
-    prompt: z.string().min(1).optional().describe("单个子任务指令。"),
-    agentId: z.string().optional().describe("单任务目标子代理 ID。"),
+	  .object({
+	    prompt: z.string().min(1).optional().describe("单个子任务指令。"),
+	    agentName: z.string().optional().describe("单任务临时 subagent 名称。"),
+    role: z.string().optional().describe("单任务临时 subagent 角色。"),
+    instructions: z.string().optional().describe("单任务临时 subagent 执行说明。"),
     tasks: z
       .array(taskItemInputSchema)
       .min(1)
@@ -116,14 +122,10 @@ export type RunAgentTurnInput = {
   workspaceRootPath?: string | null;
   conversationHistory?: AgentMessage[];
   defaultAgentMarkdown?: string;
-  enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   /** 启用的工具 ID 列表 */
   enabledToolIds: string[];
-  includeAgentCatalog?: boolean;
-  /** 当前调用模式；不传时按 book 模式渲染 */
   mode?: AgentMode;
-  /** 模式专属上下文 */
   modeContext?: ModeContextMap[AgentMode];
   manualContext?: ManualTurnContextPayload | null;
   planningState?: PlanningState | null;
@@ -169,16 +171,16 @@ function isAbortError(error: unknown) {
 
 function normalizeTaskToolInput(input: TaskToolInput) {
   const requests = input.tasks?.length
-    ? input.tasks.map((task, index) => ({
-        id: task.id?.trim() || `task-${index + 1}`,
-        prompt: task.prompt,
-        agentId: task.agentId,
-      }))
+      ? input.tasks.map((task, index) => ({
+          id: task.id?.trim() || `task-${index + 1}`,
+          prompt: task.prompt,
+          temporaryAgent: buildTemporaryAgentProfile(task),
+        }))
     : [
         {
           id: "task-1",
           prompt: input.prompt ?? "",
-          agentId: input.agentId,
+          temporaryAgent: buildTemporaryAgentProfile(input),
         },
       ];
   const concurrency = input.tasks?.length
@@ -191,6 +193,25 @@ function normalizeTaskToolInput(input: TaskToolInput) {
     isBatch: Boolean(input.tasks?.length),
     requests,
     sharedContext,
+  };
+}
+
+function buildTemporaryAgentProfile(input: {
+  agentName?: string;
+  instructions?: string;
+  role?: string;
+}): TemporarySubAgentProfile | undefined {
+  const name = input.agentName?.trim();
+  const role = input.role?.trim();
+  const instructions = input.instructions?.trim();
+  if (!name && !role && !instructions) {
+    return undefined;
+  }
+  return {
+    body: instructions,
+    description: instructions,
+    name,
+    role,
   };
 }
 
@@ -235,9 +256,8 @@ function buildTaskBatchOutput(results: TaskExecutionResult[]) {
 }
 
 async function runTaskRequest({
-  abortSignal,
-  enabledAgents,
-  enabledSkills,
+	  abortSignal,
+	  enabledSkills,
   enabledToolIds,
   onProgress,
   providerConfig,
@@ -246,8 +266,7 @@ async function runTaskRequest({
   workspaceTools,
 }: {
   abortSignal?: AbortSignal;
-  enabledAgents: ResolvedAgent[];
-  enabledSkills: ResolvedSkill[];
+	  enabledSkills: ResolvedSkill[];
   enabledToolIds: string[];
   onProgress: (snapshot: AgentPart & { type: "subagent" }) => void;
   providerConfig: AgentProviderConfig;
@@ -256,11 +275,10 @@ async function runTaskRequest({
   workspaceTools: Record<string, AgentTool>;
 }): Promise<TaskExecutionResult> {
   try {
-    const output = await runSubAgentTask({
-      abortSignal,
-      agentId: request.agentId,
-      enabledAgents,
-      enabledSkills,
+	    const output = await runSubAgentTask({
+	      abortSignal,
+	      temporaryAgent: request.temporaryAgent,
+	      enabledSkills,
       taskPrompt: request.prompt,
       providerConfig,
       streamFn,
@@ -269,10 +287,9 @@ async function runTaskRequest({
       onProgress,
     });
     return {
-      id: request.id,
-      status: "completed",
-      agentId: output.agent.id,
-      agentName: output.agent.name,
+	      id: request.id,
+	      status: "completed",
+	      agentName: output.agent.name,
       summary: output.text || `${output.agent.name} 子任务已完成。`,
       subagentId: output.subagentId,
     };
@@ -429,12 +446,10 @@ export async function* runAgentTurn({
   debugLabel,
   workspaceRootPath,
   conversationHistory = [],
-  defaultAgentMarkdown,
-  enabledAgents,
-  enabledSkills,
-  enabledToolIds,
-  includeAgentCatalog = true,
-  mode,
+	  defaultAgentMarkdown,
+	  enabledSkills,
+	  enabledToolIds,
+	  mode,
   modeContext,
   manualContext,
   planningState,
@@ -475,14 +490,14 @@ export async function* runAgentTurn({
     },
   );
 
-  if (enabledToolIds.includes("task") && enabledAgents.length > 0) {
+  if (enabledToolIds.includes("task")) {
     aiTools.task = defineTool({
       description:
         [
-          "把【批量信息类子任务】交给子代理在干净上下文中执行，并实时回传进度。",
+          "按需创建【临时 subagent】在干净上下文中执行局部任务，并实时回传进度。",
           "✅ 适用：按章批量更新设定/状态、多主题资料搜索、批量拆爆款、风格诊断、合规检查等彼此独立的工作。",
           "❌ 禁用：写正文、续写章节、生成卷纲细纲——这些必须在主对话直写以保证连续性与文风一致。",
-          "用法：单任务用 prompt；批量用 tasks[]（最多 8 个），可配 concurrency（默认 2，最大 4）。",
+          "用法：单任务用 prompt，可传 agentName / role / instructions 描述临时角色；批量用 tasks[]（最多 8 个），每项也可单独传角色。",
           "公共前缀（章节摘要、人物清单等）放进 sharedContext，避免每个 prompt 重复塞，省 token。",
         ].join("\n"),
       inputSchema: taskToolInputSchema,
@@ -491,9 +506,8 @@ export async function* runAgentTurn({
           normalizeTaskToolInput(input);
         const runOne = (request: NormalizedTaskRequest) =>
           runTaskRequest({
-            abortSignal,
-            enabledAgents,
-            enabledSkills,
+	            abortSignal,
+	            enabledSkills,
             enabledToolIds,
             providerConfig,
             request: {
@@ -519,7 +533,6 @@ export async function* runAgentTurn({
         const output = results[0];
         return {
           status: output.status,
-          agentId: output.agentId,
           agentName: output.agentName,
           summary: output.summary,
           subagentId: output.subagentId,
@@ -530,12 +543,10 @@ export async function* runAgentTurn({
   }
 
   const system = buildSystemPrompt({
-    defaultAgentMarkdown,
-    enabledAgents,
-    enabledSkills,
-    enabledToolIds,
-    includeAgentCatalog,
-    mode,
+	    defaultAgentMarkdown,
+	    enabledSkills,
+	    enabledToolIds,
+	    mode,
     modeContext,
   });
 

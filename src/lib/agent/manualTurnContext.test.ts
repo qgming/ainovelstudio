@@ -4,37 +4,17 @@ import { createEmptyManualTurnContextSelection, resolveManualTurnContext } from 
 describe("manual turn context", () => {
   it("创建空选择状态", () => {
     expect(createEmptyManualTurnContextSelection()).toEqual({
-      agentIds: [],
       filePaths: [],
       skillIds: [],
     });
   });
 
-  it("解析手动选择的技能、子代理与文件内容", async () => {
+  it("解析手动选择的技能与文件内容", async () => {
     const readFile = vi.fn(async (_rootPath: string, path: string) => `FILE:${path}`);
 
     const result = await resolveManualTurnContext({
       activeFilePath: "章节/第一章.md",
       draftContent: "ACTIVE_DRAFT",
-      enabledAgents: [
-        {
-          id: "writer-agent",
-          name: "续写代理",
-          description: "负责续写章节。",
-          body: "",
-          discoveredAt: 1,
-          files: [],
-          isBuiltin: true,
-          manifestFilePath: "agents/writer-agent/manifest.json",
-          role: "擅长续写与润色",
-          sourceKind: "builtin-package",
-          sourceLabel: "内置",
-          suggestedTools: [],
-          tags: [],
-          validation: { errors: [], isValid: true, warnings: [] },
-          enabled: true,
-        },
-      ],
       enabledSkills: [
         {
           id: "plot-skill",
@@ -56,7 +36,6 @@ describe("manual turn context", () => {
       ],
       readFile,
       selection: {
-        agentIds: ["writer-agent"],
         filePaths: ["章节/第一章.md", "设定/人物.md"],
         skillIds: ["plot-skill"],
       },
@@ -68,14 +47,6 @@ describe("manual turn context", () => {
         description: "拆解章节冲突与节奏。",
         id: "plot-skill",
         name: "剧情规划",
-      },
-    ]);
-    expect(result.agents).toEqual([
-      {
-        description: "负责续写章节。",
-        id: "writer-agent",
-        name: "续写代理",
-        role: "擅长续写与润色",
       },
     ]);
     expect(result.files).toEqual([

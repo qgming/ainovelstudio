@@ -14,7 +14,7 @@ description: |
 
 - 用户要开新长篇、写卷级大纲或前 30 章细纲。
 - 用户要写当前卷的某一章正文、续写下一章、或按 revision_brief 返修当前章。
-- 长篇相关 agent 节点（章节规划 / 正文续写）执行任务。
+- 长篇相关临时 subagent（章节规划 / 正文续写）执行任务。
 
 ## Inputs To Read
 
@@ -86,7 +86,7 @@ description: |
 - `设定/世界观/*.md`、`设定/角色/角色名.md`、`设定/势力/势力名.md`（仅在创作必须时新建）
 - `.project/status/system-state.json`：当前章节、活跃文件字段
 
-不要写：他人维护的 `character-state.json` / `latest-plot.json` / `continuity-index.json`（交给 `continuity-keeper`）。
+不要写：他人维护的 `character-state.json` / `latest-plot.json` / `continuity-index.json`（交给连续性维护子任务）。
 
 ## Reference Map
 

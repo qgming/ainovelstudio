@@ -2,7 +2,7 @@
 name: story-short-analyze
 description: |
   短篇网文拆文的执行手册。拆解爆款短篇的叙事结构、情绪曲线、反转技巧与钩子设计。
-  Use when: 用户要拆短篇 / 分析对标短篇 / 研究反转 / 剖析情绪曲线，或拆文 agent 节点处理短篇时调用。
+  Use when: 用户要拆短篇 / 分析对标短篇 / 研究反转 / 剖析情绪曲线，或临时拆文 subagent 处理短篇时调用。
   触发方式：/story-short-analyze、/短篇拆文、「帮我拆这个短篇」「分析这篇故事」
 ---
 
@@ -13,12 +13,12 @@ description: |
 ## Use When
 
 - 用户提到具体短篇并要求拆解。
-- 调研工作流处理短篇方向时的对标拆文节点。
+- 短篇方向的对标拆文子任务。
 
 ## Inputs To Read
 
 - 对标短篇正文（用 `web_search` + `web_fetch` 拿）。
-- 本轮 `scan-*.md`（若来自调研工作流）。
+- 本轮 `scan-*.md`（若来自市场扫描子任务）。
 - 已有 `analyses/` 拆解：避免重复。
 
 ## Procedure

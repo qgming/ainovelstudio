@@ -117,16 +117,9 @@ fn read_database_updated_at(connection: &Connection) -> CommandResult<u64> {
         "SELECT MAX(CAST(updated_at AS INTEGER)) FROM app_state",
         "SELECT MAX(updated_at) FROM config_documents",
         "SELECT MAX(updated_at) FROM skill_packages",
-        "SELECT MAX(updated_at) FROM agent_packages",
         "SELECT MAX(CAST(updated_at AS INTEGER)) FROM chat_sessions",
         "SELECT MAX(updated_at) FROM book_workspaces",
         "SELECT MAX(updated_at) FROM book_workspace_entries",
-        "SELECT MAX(updated_at) FROM workflow_packages",
-        "SELECT MAX(updated_at) FROM workflows",
-        "SELECT MAX(updated_at) FROM workflow_team_members",
-        "SELECT MAX(updated_at) FROM workflow_steps",
-        "SELECT MAX(COALESCE(finished_at, started_at)) FROM workflow_runs",
-        "SELECT MAX(COALESCE(finished_at, started_at)) FROM workflow_step_runs",
     ];
     let mut latest = 0_u64;
     for query in queries {

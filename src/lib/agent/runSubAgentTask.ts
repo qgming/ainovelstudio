@@ -4,10 +4,8 @@
  * 之前定义在 session.ts 顶部，现拆分以便主回合主流程更清晰可读。
  */
 
-import type { ResolvedAgent } from "../../stores/subAgentStore";
 import type { ResolvedSkill } from "../../stores/skillsStore";
 import type { AgentProviderConfig } from "../../stores/agentSettingsStore";
-import { selectSubAgentForPrompt } from "./delegation";
 import { streamAgentText, type StreamAgentTextResult } from "./modelGateway";
 import { buildSubAgentSystem } from "./promptContext";
 import { buildAiSdkTools } from "./buildAiSdkTools";
@@ -16,13 +14,13 @@ import { throwIfAborted } from "./asyncUtils";
 import { createToolResultPart } from "./toolParts";
 import type { AgentTool } from "./runtime";
 import type { AgentPart } from "./types";
+import type { RuntimeSubAgentProfile } from "./subagentProfile";
 
 let subagentSequence = 0;
 
 export type RunSubAgentTaskParams = {
   abortSignal?: AbortSignal;
-  agentId?: string;
-  enabledAgents: ResolvedAgent[];
+  temporaryAgent?: TemporarySubAgentProfile;
   enabledSkills: ResolvedSkill[];
   taskPrompt: string;
   providerConfig: AgentProviderConfig;
@@ -30,6 +28,13 @@ export type RunSubAgentTaskParams = {
   workspaceTools: Record<string, AgentTool>;
   enabledToolIds: string[];
   onProgress?: (snapshot: AgentPart & { type: "subagent" }) => void;
+};
+
+export type TemporarySubAgentProfile = {
+  body?: string;
+  description?: string;
+  name?: string;
+  role?: string;
 };
 
 function buildSubagentId(agentId: string) {
@@ -51,13 +56,35 @@ function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function buildTemporaryAgent(profile?: TemporarySubAgentProfile): RuntimeSubAgentProfile {
+  const name = profile?.name?.trim() || "临时 Subagent";
+  const role = profile?.role?.trim() || "临时任务执行";
+  const description = profile?.description?.trim() || "按当前 task 工具调用临时创建的一次性子代理。";
+  const body = profile?.body?.trim() || [
+    `# ${name}`,
+    "",
+    `角色：${role}`,
+    "",
+    description,
+    "",
+    "只处理父代理交给你的局部任务，优先输出高密度结论或可直接合并的结果。",
+  ].join("\n");
+
+  return {
+    body,
+    description,
+    id: `temporary-${name}`,
+    name,
+    role,
+  };
+}
+
 export async function runSubAgentTask(
   params: RunSubAgentTaskParams,
-): Promise<{ agent: ResolvedAgent; text: string; subagentId: string }> {
+): Promise<{ agent: RuntimeSubAgentProfile; text: string; subagentId: string }> {
   const {
     abortSignal,
-    agentId,
-    enabledAgents,
+    temporaryAgent,
     enabledSkills,
     taskPrompt,
     providerConfig,
@@ -67,21 +94,7 @@ export async function runSubAgentTask(
     onProgress,
   } = params;
 
-  // 1. 选择子代理：显式 ID 优先；否则单 agent 直选；多 agent 走启发式匹配。
-  const explicitAgent = agentId
-    ? (enabledAgents.find((agent) => agent.id === agentId) ?? null)
-    : null;
-  if (agentId && !explicitAgent) {
-    throw new Error(`未找到可用子代理：${agentId}`);
-  }
-  const matchedAgent =
-    explicitAgent ??
-    (enabledAgents.length === 1
-      ? enabledAgents[0]
-      : selectSubAgentForPrompt(taskPrompt, enabledAgents));
-  if (!matchedAgent) {
-    throw new Error("无法确定子代理，请在 task.agentId 中指定目标代理 ID。");
-  }
+  const matchedAgent = buildTemporaryAgent(temporaryAgent);
 
   const subagentPrompt = [
     "这是父代理拆出的一个局部子任务，请在干净上下文中完成，并只返回必要摘要或结果。",

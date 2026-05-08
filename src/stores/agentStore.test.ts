@@ -58,13 +58,6 @@ vi.mock("./skillsStore", () => ({
   },
 }));
 
-vi.mock("./subAgentStore", () => ({
-  getEnabledAgents: vi.fn(() => []),
-  useSubAgentStore: {
-    getState: () => ({ refresh: vi.fn() }),
-  },
-}));
-
 vi.mock("../lib/agent/manualTurnContext", () => ({
   resolveManualTurnContext: vi.fn(),
 }));
@@ -81,7 +74,6 @@ import { useAgentStore } from "./agentStore";
 
 function createEmptyManualContext(): ManualTurnContextPayload {
   return {
-    agents: [],
     files: [],
     skills: [],
   };
@@ -175,7 +167,6 @@ describe("agentStore", () => {
     });
 
     const sendPromise = useAgentStore.getState().sendMessage({
-      agentIds: [],
       filePaths: [],
       skillIds: [],
     });
@@ -241,7 +232,6 @@ describe("agentStore", () => {
     });
 
     const sendPromise = useAgentStore.getState().sendMessage({
-      agentIds: [],
       filePaths: [],
       skillIds: [],
     });
@@ -283,7 +273,6 @@ describe("agentStore", () => {
     });
 
     const sendPromise = useAgentStore.getState().sendMessage({
-      agentIds: [],
       filePaths: [],
       skillIds: [],
     });

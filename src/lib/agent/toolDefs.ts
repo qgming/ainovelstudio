@@ -6,8 +6,6 @@ export type ToolDef = {
   name: string;
   /** 设置页和 prompt 使用的简短描述 */
   description: string;
-  /** 归属场景 */
-  scope?: "global" | "workflow";
 };
 
 export const BUILTIN_TOOLS: ToolDef[] = [
@@ -25,8 +23,9 @@ export const BUILTIN_TOOLS: ToolDef[] = [
   },
   {
     id: "task",
-    name: "子任务派发",
-    description: "将局部任务派发给子代理在独立上下文中执行，并返回摘要结果。",
+    name: "临时子任务",
+    description:
+      "按需创建一次性 subagent，在独立上下文中执行局部任务；可直接传入角色、职责和补充指令，无需预装代理。",
   },
   {
     id: "browse",
@@ -94,38 +93,17 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     description:
       "列出、读取、创建、更新或删除本地 skill 文件；优先先列出再读写具体文件。",
   },
-  {
-    id: "agent",
-    name: "代理资源",
-    description:
-      "列出、读取、创建、更新或删除本地 agent 文件；优先先列出再读写具体文件。",
-  },
 ];
 
-export const WORKFLOW_MODE_TOOLS: ToolDef[] = [
-  {
-    id: "workflow_decision",
-    name: "工作流判断提交",
-    description:
-      "向工作流判断节点提交结构化判定结果，程序会依据该结果选择通过或返工分支。",
-    scope: "workflow",
-  },
-];
-
-export const ALL_TOOL_DEFS: ToolDef[] = [
-  ...BUILTIN_TOOLS,
-  ...WORKFLOW_MODE_TOOLS,
-];
+export const ALL_TOOL_DEFS: ToolDef[] = [...BUILTIN_TOOLS];
 
 const LEGACY_TOOL_ID_MAP: Record<string, string> = {
   create_file: "path",
   create_folder: "path",
   delete_path: "path",
   line_edit: "edit",
-  list_agents: "agent",
   list_skills: "skill",
   move_path: "path",
-  read_agent_file: "agent",
   read_file: "read",
   read_skill_file: "skill",
   read_workspace_tree: "browse",

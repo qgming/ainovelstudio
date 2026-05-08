@@ -85,7 +85,7 @@ description: |
 - 当前短篇项目目录及其子文件（立项 / 蓝图 / 正文 / 最小设定）。
 - `.project/status/project-state.json`：本项目的题材、字数、阶段。
 
-不要写：工厂级 `factory-index.json`（由 `manuscript-polisher` 在发布整理时登记）；不要回头改其他短篇项目。
+不要写：工厂级 `factory-index.json`（由发布整理子任务登记）；不要回头改其他短篇项目。
 
 ## Reference Map
 

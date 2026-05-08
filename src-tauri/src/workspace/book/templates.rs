@@ -104,7 +104,7 @@ pub(crate) fn create_project_readme_template(book_name: &str) -> String {
     render_book_template(
         r#"# {BOOK_NAME} 项目 README
 
-本文件记录这本书本身的执行性 brief。对话与工作流会默认加载本文件。规则、命名、回写契约见 `.project/AGENTS.md`。
+本文件记录这本书本身的执行性 brief。对话会默认加载本文件。规则、命名、回写契约见 `.project/AGENTS.md`。
 
 ## 作品定位
 
@@ -272,7 +272,6 @@ pub(crate) fn create_system_state_template(book_name: &str) -> String {
         r#"{
   "bookName": "{BOOK_NAME}",
   "currentPhase": "构思中",
-  "activeWorkflow": null,
   "currentTask": "待补充",
   "currentVolume": null,
   "currentOutlineFile": null,

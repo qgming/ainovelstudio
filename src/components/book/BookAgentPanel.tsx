@@ -15,7 +15,6 @@ import { AgentMessageList } from "../agent/AgentMessageList";
 import { selectIsAgentRunActive, useAgentStore } from "../../stores/agentStore";
 import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { getEnabledSkills, useSkillsStore } from "../../stores/skillsStore";
-import { getEnabledAgents, useSubAgentStore } from "../../stores/subAgentStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 
 type BookAgentPanelProps = {
@@ -91,13 +90,8 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
   const skillsStatus = useSkillsStore((state) => state.status);
-  const initializeAgents = useSubAgentStore((state) => state.initialize);
   const enabledSkills = getEnabledSkills({ manifests, preferences });
-  const agentManifests = useSubAgentStore((state) => state.manifests);
-  const agentPreferences = useSubAgentStore((state) => state.preferences);
-  const agentsStatus = useSubAgentStore((state) => state.status);
   const currentModel = useAgentSettingsStore((state) => state.config.model);
-  const enabledAgents = getEnabledAgents({ manifests: agentManifests, preferences: agentPreferences });
   const displayRunStatus = run.status === "awaiting_user"
     ? "awaiting_user"
     : isRunning
@@ -109,10 +103,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
     if (skillsStatus === "idle") {
       void initializeSkills();
     }
-    if (agentsStatus === "idle") {
-      void initializeAgents();
-    }
-  }, [agentsStatus, initializeAgents, initializeSkills, skillsStatus]);
+  }, [initializeSkills, skillsStatus]);
 
   useEffect(() => {
     if (!rootBookId) {
@@ -209,12 +200,6 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
             id: skill.id,
             kind: "skill" as const,
             name: skill.name,
-          })),
-          ...enabledAgents.map((agent) => ({
-            description: agent.role || agent.description,
-            id: agent.id,
-            kind: "agent" as const,
-            name: agent.name,
           })),
         ]}
         rootNode={rootNode}

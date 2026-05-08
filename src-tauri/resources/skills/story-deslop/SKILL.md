@@ -2,7 +2,7 @@
 name: story-deslop
 description: |
   网文去 AI 味的执行手册。检测并清除文本中的 AI 写作痕迹，让文字回归自然、有人味。
-  Use when: 用户要去 AI 味 / 终稿润色 / 统一文风 / 减少机翻感，或终稿编辑节点执行润色任务时调用。
+  Use when: 用户要去 AI 味 / 终稿润色 / 统一文风 / 减少机翻感，或临时终稿编辑 subagent 执行润色任务时调用。
   触发方式：/story-deslop、/去AI味、「去AI味」「去味」「deslop」「这篇太AI了」
 ---
 
@@ -13,8 +13,8 @@ description: |
 ## Use When
 
 - 用户要清 AI 味 / 终稿润色。
-- 终稿编辑（manuscript-polisher）的润色模式。
-- 长篇连载工作流的终稿润色节点、短篇集工作流的发布整理节点。
+- 临时终稿编辑 subagent 的润色任务。
+- 长篇连载或短篇集的终稿整理任务。
 
 ## Inputs To Read
 

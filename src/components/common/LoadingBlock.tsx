@@ -7,7 +7,7 @@ import { LoaderCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export type LoadingBlockProps = {
-  /** 主标题，如"正在加载工作流详情..."。 */
+  /** 主标题，如"正在加载详情..."。 */
   title: string;
   /** 可选副标题，进一步说明等待原因。 */
   description?: string;

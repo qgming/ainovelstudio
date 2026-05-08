@@ -92,7 +92,6 @@ describe("AgentComposer", () => {
     fireEvent.keyDown(screen.getByLabelText("Agent 输入框"), { key: "Enter" });
 
     expect(handleSubmit).toHaveBeenCalledWith({
-      agentIds: [],
       filePaths: [],
       skillIds: [],
     });

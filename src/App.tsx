@@ -11,12 +11,6 @@ import { HomePage } from "./pages/HomePage";
 import { useThemeStore } from "./stores/themeStore";
 import { useUpdateStore } from "./stores/updateStore";
 
-const AgentDetailPage = lazy(() =>
-  import("./pages/AgentDetailPage").then((module) => ({ default: module.AgentDetailPage })),
-);
-const AgentsPage = lazy(() =>
-  import("./pages/AgentsPage").then((module) => ({ default: module.AgentsPage })),
-);
 const BookWorkspacePage = lazy(() =>
   import("./pages/BookWorkspacePage").then((module) => ({ default: module.BookWorkspacePage })),
 );
@@ -29,13 +23,6 @@ const SkillDetailPage = lazy(() =>
 const SkillsPage = lazy(() =>
   import("./pages/SkillsPage").then((module) => ({ default: module.SkillsPage })),
 );
-const WorkflowDetailPage = lazy(() =>
-  import("./pages/WorkflowDetailPage").then((module) => ({ default: module.WorkflowDetailPage })),
-);
-const WorkflowsPage = lazy(() =>
-  import("./pages/WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })),
-);
-
 function AppRouteLoadingState() {
   return (
     <section className="editor-shell flex h-full min-h-0 items-center justify-center px-6 text-sm text-muted-foreground">
@@ -100,12 +87,6 @@ function AppShell() {
                 <Route path="/books/:bookId" element={<BookWorkspacePage />} />
                 <Route path="/skills" element={<SkillsPage />} />
                 <Route path="/skills/:skillId" element={<SkillDetailPage />} />
-                <Route path="/agents" element={<AgentsPage />} />
-                <Route path="/agents/:agentId" element={<AgentDetailPage />} />
-                <Route path="/workflows" element={<WorkflowsPage />} />
-                <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
-                <Route path="/expansions" element={<Navigate to="/" replace />} />
-                <Route path="/expansions/:workspaceId" element={<Navigate to="/" replace />} />
                 <Route path="/setting" element={<SettingPage />} />
                 <Route path="/setting/:sectionKey" element={<SettingPage />} />
               </Routes>

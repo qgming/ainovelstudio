@@ -1,30 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ResolvedAgent } from "../../stores/subAgentStore";
 import { DEFAULT_MAIN_AGENT_MARKDOWN } from "./promptContext";
 import { runAgentTurn } from "./session";
 import type { AgentPart } from "./types";
-
-function createTestAgent(overrides: Partial<ResolvedAgent> = {}): ResolvedAgent {
-  return {
-    id: "plot-agent",
-    name: "剧情代理",
-    description: "负责剧情推进",
-    role: "剧情",
-    tags: ["剧情", "动机"],
-    sourceLabel: "内置",
-    body: "专注处理剧情与人物动机。",
-    suggestedTools: ["read"],
-    enabled: true,
-    files: ["manifest.json", "AGENTS.md"],
-    sourceKind: "builtin-package",
-    dispatchHint: "当用户询问剧情推进时",
-    validation: { errors: [], isValid: true, warnings: [] },
-    discoveredAt: 1,
-    isBuiltin: true,
-    manifestFilePath: "agents/plot-agent/manifest.json",
-    ...overrides,
-  };
-}
 
 function createDeferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -55,7 +32,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "你好",
@@ -92,7 +68,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: "chapter-1.md",
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "续写",
@@ -125,7 +100,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: "chapter-1.md",
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       projectContext: {
@@ -182,7 +156,6 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       abortSignal,
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "停止测试",
@@ -216,7 +189,6 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       abortSignal: abortController.signal,
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["read"],
       prompt: "读取文件",
@@ -274,7 +246,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["read"],
       prompt: "读取文件",
@@ -365,7 +336,6 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       abortSignal: abortController.signal,
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "停止测试",
@@ -412,7 +382,7 @@ describe("agent session (streaming)", () => {
             string,
             {
               execute?: (
-                input: { prompt: string; agentId?: string },
+                input: { prompt: string },
                 options: unknown,
               ) => Promise<unknown>;
             }
@@ -425,10 +395,10 @@ describe("agent session (streaming)", () => {
                 type: "tool-call" as const,
                 toolName: "task",
                 toolCallId: "task-call-stop-1",
-                input: { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+                input: { prompt: "帮我分析主角动机" },
               };
               await taskTool?.execute?.(
-                { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+                { prompt: "帮我分析主角动机" },
                 {} as never,
               );
             })(),
@@ -436,29 +406,10 @@ describe("agent session (streaming)", () => {
           };
         },
       );
-    const enabledAgent: ResolvedAgent = {
-      id: "plot-agent",
-      name: "剧情代理",
-      description: "负责剧情推进",
-      role: "剧情",
-      tags: ["剧情", "动机"],
-      sourceLabel: "内置",
-      body: "专注处理剧情与人物动机。",
-      suggestedTools: ["read"],
-      enabled: true,
-      files: ["manifest.json", "AGENTS.md"],
-      sourceKind: "builtin-package",
-      dispatchHint: "当用户询问剧情推进时",
-      validation: { errors: [], isValid: true, warnings: [] },
-      discoveredAt: 1,
-      isBuiltin: true,
-      manifestFilePath: "agents/plot-agent/manifest.json",
-    };
 
     const stream = runAgentTurn({
       abortSignal: abortController.signal,
       activeFilePath: "章节/第一章.md",
-      enabledAgents: [enabledAgent],
       enabledSkills: [],
       enabledToolIds: ["task"],
       prompt: "帮我分析主角动机",
@@ -525,7 +476,6 @@ describe("agent session (streaming)", () => {
           parts: [{ type: "text", text: "上一章的核心冲突是主角是否进城。" }],
         },
       ],
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "继续分析第二章",
@@ -601,7 +551,6 @@ describe("agent session (streaming)", () => {
           ],
         },
       ],
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "继续分析第三章承接是否自然",
@@ -646,7 +595,6 @@ describe("agent session (streaming)", () => {
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       defaultAgentMarkdown: "# 自定义主代理\n\n- 优先吸收上下文后回答。",
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       prompt: "帮我整理这一章的冲突节奏",
@@ -684,7 +632,7 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("帮我整理这一章的冲突节奏");
   });
 
-  it("把手动选择的技能、子代理和文件内容注入当前轮上下文", async () => {
+  it("把手动选择的技能和文件内容注入当前轮上下文", async () => {
     async function* mockFullStream() {
       yield { type: "text-delta" as const, text: "收到" };
     }
@@ -696,7 +644,6 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       manualContext: {
@@ -705,14 +652,6 @@ describe("agent session (streaming)", () => {
             id: "plot-skill",
             name: "剧情规划",
             description: "拆解冲突和节奏。",
-          },
-        ],
-        agents: [
-          {
-            id: "writer-agent",
-            name: "续写代理",
-            description: "负责续写章节。",
-            role: "续写与润色",
           },
         ],
         files: [
@@ -741,10 +680,6 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("## s15 手动指定上下文");
     expect(request.messages[0].content).toContain("### 手动指定技能");
     expect(request.messages[0].content).toContain("剧情规划：拆解冲突和节奏。");
-    expect(request.messages[0].content).toContain("### 手动指定子代理");
-    expect(request.messages[0].content).toContain(
-      "续写代理（续写与润色）：负责续写章节。",
-    );
     expect(request.messages[0].content).toContain("### 手动指定文件");
     expect(request.messages[0].content).toContain("#### 人物.md");
     expect(request.messages[0].content).toContain("主角：林燃");
@@ -763,7 +698,6 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       planningState: { items: [], roundsSinceUpdate: 0 },
@@ -802,7 +736,6 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       planningState: {
@@ -851,7 +784,6 @@ describe("agent session (streaming)", () => {
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: [],
       planningState: { items: [], roundsSinceUpdate: 0 },
@@ -907,7 +839,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["browse"],
       prompt: "读取目录树",
@@ -991,7 +922,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["path"],
       prompt: "把章节移动到归档目录",
@@ -1080,7 +1010,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["skill"],
       prompt: "列出本地技能",
@@ -1174,7 +1103,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["web_search"],
       prompt: "查一下番茄小说最新规则",
@@ -1269,7 +1197,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["web_fetch"],
       prompt: "读一下这个网页",
@@ -1362,7 +1289,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["read"],
       prompt: "连续读取章节",
@@ -1445,7 +1371,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: null,
-      enabledAgents: [],
       enabledSkills: [],
       enabledToolIds: ["read"],
       prompt: "测试异常结果",
@@ -1498,28 +1423,9 @@ describe("agent session (streaming)", () => {
     const mockStreamFn = vi.fn().mockReturnValue({
       fullStream: mockMainFullStream(),
     });
-    const enabledAgent: ResolvedAgent = {
-      id: "plot-agent",
-      name: "剧情代理",
-      description: "负责剧情推进",
-      role: "剧情",
-      tags: ["剧情", "动机"],
-      sourceLabel: "内置",
-      body: "专注处理剧情与人物动机。",
-      suggestedTools: ["read"],
-      enabled: true,
-      files: ["manifest.json", "AGENTS.md"],
-      sourceKind: "builtin-package",
-      dispatchHint: "当用户询问剧情推进时",
-      validation: { errors: [], isValid: true, warnings: [] },
-      discoveredAt: 1,
-      isBuiltin: true,
-      manifestFilePath: "agents/plot-agent/manifest.json",
-    };
 
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
-      enabledAgents: [enabledAgent],
       enabledSkills: [],
       enabledToolIds: ["read"],
       prompt: "继续写这一章",
@@ -1587,7 +1493,7 @@ describe("agent session (streaming)", () => {
             string,
             {
               execute?: (
-                input: { prompt: string; agentId?: string },
+                input: { prompt: string },
                 options: unknown,
               ) => Promise<unknown>;
             }
@@ -1600,10 +1506,10 @@ describe("agent session (streaming)", () => {
                 type: "tool-call" as const,
                 toolName: "task",
                 toolCallId: "task-call-1",
-                input: { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+                input: { prompt: "帮我分析主角动机" },
               };
               const output = await taskTool?.execute?.(
-                { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+                { prompt: "帮我分析主角动机" },
                 {} as never,
               );
               yield {
@@ -1620,29 +1526,10 @@ describe("agent session (streaming)", () => {
           };
         },
       );
-    const enabledAgent: ResolvedAgent = {
-      id: "plot-agent",
-      name: "剧情代理",
-      description: "负责剧情推进",
-      role: "剧情",
-      tags: ["剧情", "动机"],
-      sourceLabel: "内置",
-      body: "专注处理剧情与人物动机。",
-      suggestedTools: ["read"],
-      enabled: true,
-      files: ["manifest.json", "AGENTS.md"],
-      sourceKind: "builtin-package",
-      dispatchHint: "当用户询问剧情推进时",
-      validation: { errors: [], isValid: true, warnings: [] },
-      discoveredAt: 1,
-      isBuiltin: true,
-      manifestFilePath: "agents/plot-agent/manifest.json",
-    };
 
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
-      enabledAgents: [enabledAgent],
       enabledSkills: [],
       enabledToolIds: ["read", "task"],
       prompt: "帮我分析主角动机",
@@ -1677,7 +1564,7 @@ describe("agent session (streaming)", () => {
     expect(subagentParts[0]).toMatchObject({
       type: "subagent",
       status: "running",
-      summary: "已派发子任务：剧情代理",
+      summary: "已派发子任务：临时 Subagent",
       parts: [],
     });
     expect(subagentParts[3].parts).toEqual([
@@ -1694,7 +1581,7 @@ describe("agent session (streaming)", () => {
     ]);
     expect(subagentParts[5]).toMatchObject({
       status: "completed",
-      summary: "剧情代理 子任务已完成",
+      summary: "临时 Subagent 子任务已完成",
       detail: "建议先补一段主角迟疑。",
     });
     expect(subagentParts[5].parts[subagentParts[5].parts.length - 1]).toEqual({
@@ -1706,7 +1593,7 @@ describe("agent session (streaming)", () => {
       toolName: "task",
       toolCallId: "task-call-1",
       status: "running",
-      inputSummary: '{"prompt":"帮我分析主角动机","agentId":"plot-agent"}',
+      inputSummary: '{"prompt":"帮我分析主角动机"}',
     });
     const taskResult = parts.find(
       (part): part is Extract<AgentPart, { type: "tool-result" }> =>
@@ -1717,16 +1604,14 @@ describe("agent session (streaming)", () => {
     expect(taskResult).toBeDefined();
     expect(taskResult?.status).toBe("completed");
     expect(taskResult?.output).toMatchObject({
-      agentId: "plot-agent",
-      agentName: "剧情代理",
+      agentName: "临时 Subagent",
     });
-    expect(taskResult?.outputSummary).toContain('"agentId":"plot-agent"');
-    expect(taskResult?.outputSummary).toContain('"agentName":"剧情代理"');
+    expect(taskResult?.outputSummary).toContain('"agentName":"临时 Subagent"');
     expect(taskResult?.outputSummary).toContain(
       '"summary":"建议先补一段主角迟疑。"',
     );
     expect(taskResult?.outputSummary).toContain(
-      '"subagentId":"subagent-plot-agent-',
+      '"subagentId":"subagent-temporary-临时 Subagent-',
     );
     expect(parts[parts.length - 1]).toEqual({
       type: "text-delta",
@@ -1760,7 +1645,7 @@ describe("agent session (streaming)", () => {
           string,
           {
             execute?: (
-              input: { prompt: string; agentId?: string },
+              input: { prompt: string },
               options: unknown,
             ) => Promise<unknown>;
           }
@@ -1771,10 +1656,10 @@ describe("agent session (streaming)", () => {
             type: "tool-call" as const,
             toolName: "task",
             toolCallId: "task-call-live-1",
-            input: { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+            input: { prompt: "帮我分析主角动机" },
           };
           const output = await request.tools?.task?.execute?.(
-            { prompt: "帮我分析主角动机", agentId: "plot-agent" },
+            { prompt: "帮我分析主角动机" },
             {} as never,
           );
           yield {
@@ -1789,7 +1674,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
-      enabledAgents: [createTestAgent()],
       enabledSkills: [],
       enabledToolIds: ["task"],
       prompt: "帮我分析主角动机",
@@ -1823,7 +1707,7 @@ describe("agent session (streaming)", () => {
     expect(livePart).toMatchObject({
       type: "subagent",
       status: "running",
-      summary: "剧情代理 子任务执行中",
+      summary: "临时 Subagent 子任务执行中",
     });
     expect(parts.some((part) => part.type === "tool-result")).toBe(false);
 
@@ -1859,7 +1743,7 @@ describe("agent session (streaming)", () => {
           {
             execute?: (
               input: {
-                tasks: Array<{ id: string; prompt: string; agentId: string }>;
+                tasks: Array<{ id: string; prompt: string }>;
                 concurrency: number;
               },
               options: unknown,
@@ -1872,8 +1756,8 @@ describe("agent session (streaming)", () => {
             {
               concurrency: 2,
               tasks: [
-                { id: "main", prompt: "分析主线", agentId: "plot-agent" },
-                { id: "side", prompt: "分析支线", agentId: "plot-agent" },
+                { id: "main", prompt: "分析主线" },
+                { id: "side", prompt: "分析支线" },
               ],
             },
             {} as never,
@@ -1890,7 +1774,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
-      enabledAgents: [createTestAgent()],
       enabledSkills: [],
       enabledToolIds: ["task"],
       prompt: "批量分析主线和支线",
@@ -1948,7 +1831,7 @@ describe("agent session (streaming)", () => {
           {
             execute?: (
               input: {
-                tasks: Array<{ id: string; prompt: string; agentId: string }>;
+                tasks: Array<{ id: string; prompt: string }>;
                 sharedContext: string;
               },
               options: unknown,
@@ -1961,8 +1844,8 @@ describe("agent session (streaming)", () => {
             {
               sharedContext: "第一章摘要：主角入城遇到药铺老板。",
               tasks: [
-                { id: "char", prompt: "更新主角状态", agentId: "plot-agent" },
-                { id: "world", prompt: "更新城市设定", agentId: "plot-agent" },
+                { id: "char", prompt: "更新主角状态" },
+                { id: "world", prompt: "更新城市设定" },
               ],
             },
             {} as never,
@@ -1979,7 +1862,6 @@ describe("agent session (streaming)", () => {
 
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
-      enabledAgents: [createTestAgent()],
       enabledSkills: [],
       enabledToolIds: ["task"],
       prompt: "按章批量更新设定",
@@ -2023,7 +1905,7 @@ describe("agent session (streaming)", () => {
             string,
             {
               execute?: (
-                input: { prompt: string; agentId?: string },
+                input: { prompt: string },
                 options: unknown,
               ) => Promise<unknown>;
             }
@@ -2036,10 +1918,10 @@ describe("agent session (streaming)", () => {
                 type: "tool-call" as const,
                 toolName: "task",
                 toolCallId: "task-call-write-1",
-                input: { prompt: "请生成报告并删除旧文件", agentId: "plot-agent" },
+                input: { prompt: "请生成报告并删除旧文件" },
               };
               const output = await taskTool?.execute?.(
-                { prompt: "请生成报告并删除旧文件", agentId: "plot-agent" },
+                { prompt: "请生成报告并删除旧文件" },
                 {} as never,
               );
               yield {
@@ -2052,28 +1934,9 @@ describe("agent session (streaming)", () => {
           };
         },
       );
-    const enabledAgent: ResolvedAgent = {
-      id: "plot-agent",
-      name: "剧情代理",
-      description: "负责剧情推进",
-      role: "剧情",
-      tags: ["剧情", "动机"],
-      sourceLabel: "内置",
-      body: "专注处理剧情与人物动机。",
-      suggestedTools: ["read", "write", "path", "json"],
-      enabled: true,
-      files: ["manifest.json", "AGENTS.md"],
-      sourceKind: "builtin-package",
-      dispatchHint: "当用户询问剧情推进时",
-      validation: { errors: [], isValid: true, warnings: [] },
-      discoveredAt: 1,
-      isBuiltin: true,
-      manifestFilePath: "agents/plot-agent/manifest.json",
-    };
 
     const stream = runAgentTurn({
       activeFilePath: "章节/第一章.md",
-      enabledAgents: [enabledAgent],
       enabledSkills: [],
       enabledToolIds: ["task", "write", "json", "path"],
       prompt: "请生成报告并删除旧文件",
@@ -2112,3 +1975,5 @@ describe("agent session (streaming)", () => {
     expect(subagentTools?.task).toBeUndefined();
   });
 });
+
+

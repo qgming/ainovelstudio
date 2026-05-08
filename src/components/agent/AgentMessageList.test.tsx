@@ -6,7 +6,6 @@ import { useAgentStore } from "../../stores/agentStore";
 import { useAgentSettingsStore } from "../../stores/agentSettingsStore";
 import { useBookWorkspaceStore } from "../../stores/bookWorkspaceStore";
 import { useSkillsStore } from "../../stores/skillsStore";
-import { useSubAgentStore } from "../../stores/subAgentStore";
 
 describe("BookAgentPanel", () => {
   beforeEach(() => {
@@ -25,13 +24,6 @@ describe("BookAgentPanel", () => {
       rootPath: null,
     });
     useSkillsStore.setState({
-      errorMessage: null,
-      lastScannedAt: null,
-      manifests: [],
-      preferences: { enabledById: {} },
-      status: "idle",
-    });
-    useSubAgentStore.setState({
       errorMessage: null,
       lastScannedAt: null,
       manifests: [],
@@ -60,7 +52,7 @@ describe("BookAgentPanel", () => {
     expect(screen.getByRole("button", { name: "鞭策" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开历史记录" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始新对话" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "选择技能或子 Agent" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择技能" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择工作区文件" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发送消息" })).toBeInTheDocument();
     expect(screen.getByLabelText("Agent 输入框")).toBeInTheDocument();
@@ -144,7 +136,7 @@ describe("BookAgentPanel", () => {
     expect(screen.getByText(/缓存命中 99.6%/)).toBeInTheDocument();
   });
 
-  it("支持打开技能和子 Agent 选择器", () => {
+  it("支持打开技能选择器", () => {
     useBookWorkspaceStore.setState({
       rootNode: {
         kind: "directory",
@@ -180,33 +172,14 @@ describe("BookAgentPanel", () => {
       ],
       preferences: { enabledById: {} },
     });
-    useSubAgentStore.setState({
-      manifests: [
-        {
-          id: "writer-agent",
-          name: "续写代理",
-          description: "负责续写章节。",
-          body: "",
-          discoveredAt: 1,
-          isBuiltin: true,
-          manifestFilePath: "agents/writer-agent/manifest.json",
-          role: "擅长续写与润色",
-          sourceKind: "builtin-package",
-          suggestedTools: [],
-          tags: ["writer"],
-          validation: { errors: [], isValid: true, warnings: [] },
-          defaultEnabled: true,
-        },
-      ],
-      preferences: { enabledById: {} },
-    });
-
     render(<BookAgentPanel width={420} />);
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "选择技能或子 Agent" }), { button: 0 });
+    fireEvent.pointerDown(screen.getByRole("button", { name: "选择技能" }), {
+      button: 0,
+      ctrlKey: false,
+    });
 
     expect(screen.getByRole("button", { name: /剧情规划/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /续写代理/ })).toBeInTheDocument();
   });
 
   it("点击历史按钮后在触发位置弹出会话菜单", () => {

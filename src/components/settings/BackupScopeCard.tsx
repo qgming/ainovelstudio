@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 const BACKUP_SCOPE_ITEMS = [
   "书籍工作区",
   "对话记录",
-  "技能 / 代理 / 工作流",
+  "技能",
   "模型配置",
   "预存模型配置",
   "预存供应商库",

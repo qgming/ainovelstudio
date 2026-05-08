@@ -2,7 +2,7 @@
 name: story-long-scan
 description: |
   长篇网文扫榜的执行手册。把起点 / 番茄 / 晋江等平台榜单与公开数据，转成可立项的题材建议。
-  Use when: 用户要扫长篇榜单 / 看长篇风口 / 找长篇题材 / 选题前调研，或市场侦察 agent 节点执行任务时调用。
+  Use when: 用户要扫长篇榜单 / 看长篇风口 / 找长篇题材 / 选题前调研，或临时市场侦察 subagent 执行任务时调用。
   触发方式：/story-long-scan、/长篇扫榜、「长篇什么火」「起点排行」
 ---
 
@@ -13,7 +13,7 @@ description: |
 ## Use When
 
 - 用户要看起点 / 番茄 / 晋江 / 七猫等平台的长篇榜单与风向。
-- 调研工作流的市场扫描节点（长篇方向）。
+- 长篇方向的批量市场扫描子任务。
 
 ## Inputs To Read
 
@@ -52,7 +52,7 @@ description: |
 
 - `.project/MEMORY/market/scan-*.md`
 
-不要写：正文、大纲、设定、选题简报（简报由 `story-analyst` / 简报节点产出）。
+不要写：正文、大纲、设定、选题简报（简报由后续拆解 / 简报子任务产出）。
 
 ## Evidence Rules
 

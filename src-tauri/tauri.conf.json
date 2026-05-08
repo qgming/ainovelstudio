@@ -32,7 +32,6 @@
     "targets": "all",
     "resources": {
       "resources/skills": "skills",
-      "resources/agents": "agents",
       "resources/config": "config"
     },
     "icon": [

@@ -3,16 +3,10 @@
  *
  * 项目内有两处需要为 agent 运行时拼装 `workspaceTools` 字段：
  *   1. 写作模式（chatRunStore.sendMessage）
- *   2. 工作流引擎（workflow/engine.executeConfiguredStep）
- *
- * 这两处之前各自 `createGlobalToolset() + createLocalResourceToolset(...) + createWorkspaceToolset(...)`，
- * 其中 store 与 engine 的 localResource 装配字节级重复，仅 workspaceMutated 守卫不同。
- *
- * 本模块以"模式工厂"形式收敛：调用方只声明意图（是否需 rootPath 匹配守卫等），
- * 内部统一管控 sub-agent / skills 注册表刷新等通用副作用，避免再次散落。
+ * 目前写作模式使用 global + workspace + localResource，工厂统一管控
+ * skills 注册表刷新与工作区刷新副作用。
  */
 
-import { useSubAgentStore } from "../../../stores/subAgentStore";
 import { useSkillsStore } from "../../../stores/skillsStore";
 import { useBookWorkspaceStore } from "../../../stores/bookWorkspaceStore";
 import {
@@ -21,27 +15,16 @@ import {
   createWorkspaceToolset,
 } from "../tools";
 import type { AgentTool } from "../runtime";
-import type { WorkflowDecisionResult } from "../../workflow/types";
 
 export type AgentToolMap = Record<string, AgentTool>;
 
-/**
- * 默认本地资源工具集装配：刷新子 agent / 技能注册表。
- *
- * @param options.onWorkflowDecision 仅工作流的 decision 节点用于回填决策结果。
- */
 export function createDefaultLocalResourceToolset(options?: {
-  onWorkflowDecision?: (decision: WorkflowDecisionResult) => void;
   includeAsk?: boolean;
 }): AgentToolMap {
   const localTools = createLocalResourceToolset({
-    refreshAgents: async () => {
-      await useSubAgentStore.getState().refresh();
-    },
     refreshSkills: async () => {
       await useSkillsStore.getState().refresh();
     },
-    onWorkflowDecision: options?.onWorkflowDecision,
   });
 
   if (options?.includeAsk === false) {
@@ -57,7 +40,6 @@ export function createDefaultLocalResourceToolset(options?: {
  *
  * @param options.rootPath 当前会话绑定的工作区根路径；为 null/空字符串时返回空集。
  * @param options.guardRootMatch 是否仅当当前 store rootPath 与传入 rootPath 一致时才刷新。
- *   工作流引擎需要该守卫（步骤运行期间用户可能切换书籍工作区）；写作模式始终是同一个工作区，无需守卫。
  */
 export function createDefaultBookWorkspaceToolset(options: {
   rootPath: string | null;
@@ -83,13 +65,10 @@ export function createDefaultBookWorkspaceToolset(options: {
  * 写作模式（书籍工作区）默认 toolset：global + workspace + localResource。
  *
  * @param options.rootPath 当前书籍工作区根路径；为空时仅返回 global + localResource。
- * @param options.guardRootMatch 见 {@link createDefaultBookWorkspaceToolset}，工作流场景需置 true。
- * @param options.onWorkflowDecision 仅 workflow decision 节点使用。
  */
 export function buildBookWorkspaceTools(options: {
   rootPath: string | null;
   guardRootMatch?: boolean;
-  onWorkflowDecision?: (decision: WorkflowDecisionResult) => void;
   includeAsk?: boolean;
 }): AgentToolMap {
   return {
@@ -100,7 +79,6 @@ export function buildBookWorkspaceTools(options: {
     }),
     ...createDefaultLocalResourceToolset({
       includeAsk: options.includeAsk,
-      onWorkflowDecision: options.onWorkflowDecision,
     }),
   };
 }

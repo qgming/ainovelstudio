@@ -3,8 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DataManagementSection } from "./DataManagementSection";
 import { useDataManagementStore } from "../../stores/dataManagementStore";
 import { useSkillsStore } from "../../stores/skillsStore";
-import { useSubAgentStore } from "../../stores/subAgentStore";
-import { useWorkflowStore } from "../../stores/workflowStore";
 
 const { toastMock } = vi.hoisted(() => ({
   toastMock: Object.assign(vi.fn(), {
@@ -33,11 +31,7 @@ describe("DataManagementSection", () => {
   const downloadCloudBackupMock = vi.fn();
   const initializeMock = vi.fn();
   const reinitializeSkillsMock = vi.fn();
-  const reinitializeAgentsMock = vi.fn();
-  const reinitializeWorkflowsMock = vi.fn();
-  const refreshWorkflowStoreMock = vi.fn();
   const initializeSkillsStoreMock = vi.fn();
-  const initializeAgentsStoreMock = vi.fn();
   const uploadCloudBackupMock = vi.fn();
 
   beforeEach(() => {
@@ -53,22 +47,8 @@ describe("DataManagementSection", () => {
       initializedSkillIds: ["builtin-skill"],
       skippedSkillIds: [],
     });
-    reinitializeAgentsMock.mockReset();
-    reinitializeAgentsMock.mockResolvedValue({
-      initializedAgentIds: ["builtin-agent"],
-      skippedAgentIds: [],
-    });
-    reinitializeWorkflowsMock.mockReset();
-    reinitializeWorkflowsMock.mockResolvedValue({
-      initializedWorkflowIds: ["builtin-workflow-a", "builtin-workflow-b"],
-      skippedTemplateKeys: [],
-    });
-    refreshWorkflowStoreMock.mockReset();
-    refreshWorkflowStoreMock.mockResolvedValue(undefined);
     initializeSkillsStoreMock.mockReset();
     initializeSkillsStoreMock.mockResolvedValue(undefined);
-    initializeAgentsStoreMock.mockReset();
-    initializeAgentsStoreMock.mockResolvedValue(undefined);
     uploadCloudBackupMock.mockReset();
     uploadCloudBackupMock.mockResolvedValue({
       localUpdatedAt: 123,
@@ -92,25 +72,19 @@ describe("DataManagementSection", () => {
       exportBackup: vi.fn(),
       importBackup: vi.fn(),
       initialize: initializeMock,
-      reinitializeAgents: reinitializeAgentsMock,
       reinitializeSkills: reinitializeSkillsMock,
-      reinitializeWorkflows: reinitializeWorkflowsMock,
       saveConfig: vi.fn(),
       status: "ready",
       uploadCloudBackup: uploadCloudBackupMock,
     });
     useSkillsStore.setState((state) => ({ ...state, initialize: initializeSkillsStoreMock }));
-    useSubAgentStore.setState((state) => ({ ...state, initialize: initializeAgentsStoreMock }));
-    useWorkflowStore.setState((state) => ({ ...state, refreshList: refreshWorkflowStoreMock }));
   });
 
-  it("展示三个重写初始化按钮", () => {
+  it("展示技能重写初始化按钮", () => {
     render(<DataManagementSection />);
 
     expect(screen.getByText("重写初始化")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重写技能" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重写代理" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重写工作流" })).toBeInTheDocument();
   });
 
   it("展示上传和下载云备份按钮", () => {
@@ -164,22 +138,22 @@ describe("DataManagementSection", () => {
     });
   });
 
-  it("确认后会重写工作流并刷新工作流 store", async () => {
+  it("确认后会重写技能并刷新技能 store", async () => {
     render(<DataManagementSection />);
 
-    fireEvent.click(screen.getByRole("button", { name: "重写工作流" }));
+    fireEvent.click(screen.getByRole("button", { name: "重写技能" }));
 
     const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText("重写工作流初始化")).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "重写工作流" }));
+    expect(within(dialog).getByText("重写技能初始化")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "重写技能" }));
 
     await waitFor(() => {
-      expect(reinitializeWorkflowsMock).toHaveBeenCalledTimes(1);
-      expect(refreshWorkflowStoreMock).toHaveBeenCalledTimes(1);
+      expect(reinitializeSkillsMock).toHaveBeenCalledTimes(1);
+      expect(initializeSkillsStoreMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(toastMock.success).toHaveBeenCalledWith("工作流已重写初始化", {
-      description: "已重新写入 2 个内置工作流。",
+    expect(toastMock.success).toHaveBeenCalledWith("技能已重写初始化", {
+      description: "已重新写入 1 个内置技能。",
     });
   });
 

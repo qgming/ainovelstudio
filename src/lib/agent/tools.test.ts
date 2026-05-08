@@ -1387,33 +1387,6 @@ describe("createLocalResourceToolset", () => {
     expect(result).toEqual({ ok: true, summary: "# SKILL" });
   });
 
-  it("agent 工具可以更新指定文件", async () => {
-    const refreshAgents = vi.fn().mockResolvedValue(undefined);
-    const toolset = createLocalResourceToolset({ refreshAgents });
-
-    const result = await toolset.agent.execute({
-      action: "write",
-      agentId: "writer",
-      content: "# AGENT",
-      relativePath: "AGENTS.md",
-    });
-
-    expect(mockWriteAgentFileContent).toHaveBeenCalledWith(
-      "writer",
-      "AGENTS.md",
-      "# AGENT",
-    );
-    expect(refreshAgents).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({
-      ok: true,
-      summary: "已更新代理 writer 的 AGENTS.md",
-      data: {
-        agentId: "writer",
-        relativePath: "AGENTS.md",
-      },
-    });
-  });
-
   it("todo 工具限制同一时间最多一个 in_progress", async () => {
     const toolset = createLocalResourceToolset();
 
@@ -1492,52 +1465,4 @@ describe("createLocalResourceToolset", () => {
     ).rejects.toThrow("当前环境不支持 ask 交互");
   });
 
-  it("workflow_decision 工具会提交结构化判断结果", async () => {
-    const onWorkflowDecision = vi.fn();
-    const toolset = createLocalResourceToolset({ onWorkflowDecision });
-
-    const result = await toolset.workflow_decision.execute({
-      issues: [
-        {
-          message: "主角上一段刚受伤，这一段直接高速奔跑。",
-          severity: "high",
-          type: "continuity",
-        },
-      ],
-      pass: false,
-      reason: "当前章节连续性问题会直接影响返工分支。",
-      revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
-    });
-
-    expect(onWorkflowDecision).toHaveBeenCalledWith({
-      issues: [
-        {
-          message: "主角上一段刚受伤，这一段直接高速奔跑。",
-          severity: "high",
-          type: "continuity",
-        },
-      ],
-      label: "no",
-      pass: false,
-      reason: "当前章节连续性问题会直接影响返工分支。",
-      revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
-    });
-    expect(result).toEqual({
-      ok: true,
-      summary: "已记录判断结果：不通过，原因已记录。",
-      data: {
-        issues: [
-          {
-            message: "主角上一段刚受伤，这一段直接高速奔跑。",
-            severity: "high",
-            type: "continuity",
-          },
-        ],
-        label: "no",
-        pass: false,
-        reason: "当前章节连续性问题会直接影响返工分支。",
-        revision_brief: "补上伤势处理和行动受限，再继续冲突场景。",
-      },
-    });
-  });
 });

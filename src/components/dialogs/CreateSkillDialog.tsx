@@ -15,7 +15,7 @@ type CreateSkillDialogProps = {
   onConfirm: () => void;
 };
 
-// 创建技能对话框：与 CreateAgentDialog 同构，复用 shadcn 表单组件。
+// 创建技能对话框：复用 shadcn 表单组件。
 export function CreateSkillDialog({
   busy = false,
   description,

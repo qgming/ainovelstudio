@@ -1,7 +1,7 @@
 import type { ResolvedSkill } from "../../stores/skillsStore";
-import type { ResolvedAgent } from "../../stores/subAgentStore";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
 import type { ProjectContextPayload } from "./projectContext";
+import type { RuntimeSubAgentProfile } from "./subagentProfile";
 import {
   renderPlanItems,
   type PlanningIntervention,
@@ -26,15 +26,13 @@ export const DEFAULT_MAIN_AGENT_MARKDOWN = [
 
 type BuildSystemPromptInput<M extends AgentMode = AgentMode> = {
   defaultAgentMarkdown?: string;
-  enabledAgents: ResolvedAgent[];
   enabledSkills: ResolvedSkill[];
   enabledToolIds: string[];
-  includeAgentCatalog?: boolean;
   /** 当前调用模式；不传时按 book 模式渲染。 */
   mode?: M;
   /** 模式专属上下文，由调用方按 mode 提供。 */
   modeContext?: ModeContextMap[M];
-  /** 是否注入技能目录 s03；工作流默认隐藏 */
+  /** 是否注入技能目录 s03 */
   includeSkillCatalog?: boolean;
 };
 
@@ -86,7 +84,7 @@ const AGENT_OS_KERNEL = [
   "- 续写、改写、扩写、润色、审稿、分析工作区任意文件",
   "- 查询人物、设定、大纲、章节、状态、连续性",
   "- 创建或修改任何工作区文件（改前必先读当前内容）",
-  "- 工作流节点执行",
+  "- 批量子任务执行",
   "",
   "**允许直接回答（无需读取）**",
   "- 纯方法论 / 概念 / 工具用法",
@@ -173,26 +171,10 @@ function buildSkillCatalogBlock(skill: ResolvedSkill) {
     .join("\n");
 }
 
-function buildAgentCatalogBlock(agent: ResolvedAgent) {
-  return [
-    `### 子代理：${agent.name}`,
-    `- id：${agent.id}`,
-    `- 来源：${agent.sourceLabel}`,
-    agent.role ? `- 角色：${agent.role}` : null,
-    `- 说明：${agent.description}`,
-    agent.dispatchHint ? `- 适用时机：${agent.dispatchHint}` : null,
-    agent.tags.length > 0 ? `- 匹配标签：${agent.tags.join(", ")}` : null,
-    `- 派发方式：task({ agentId: "${agent.id}", prompt: "..." })`,
-    "- 工具权限：继承当前主会话已启用的全部工具。",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 const TOOL_USAGE_HINT: Record<string, string> = {
   ask: "需求模糊或用户必须在多个方案中二选一时使用；不要把可自行判断的任务转嫁给用户。",
   todo: "≥3 步任务开场先写短计划；同时只保留 1 个 in_progress；可填 phase=plot/bible/outline/chapter/write/review/polish。",
-  task: "≥3 项独立批量任务或需要隔离上下文时派发；prompt 写清输入范围与期望输出。",
+  task: "≥3 项独立批量任务或需要隔离上下文时派发；可传 agentName/role/instructions 创建临时 subagent，prompt 写清输入范围与期望输出。",
   browse: "不知道路径首选；mode=list 看子项 / tree 看树 / stat 看路径概况。",
   search: "找关键词、章节、角色、字段；scope=content 搜正文 / names 搜文件名；matchMode=phrase/all_terms/any_term。",
   web_search: "查平台规则、榜单或外部资料；可用 domains 限制站点；返回链接后再 web_fetch。",
@@ -203,10 +185,7 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   write: "整份覆盖；只有已准备好完整新内容才用，缺失目录会自动创建；不要用 write 做局部修改。",
   json: "JSON 文件局部读写首选；action=get/set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；不要用 write 改 JSON 字段。",
   path: "只动结构：create_file / create_folder / rename / move / delete；不写正文。",
-  skill: '先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；执行子任务用 task，不是 skill。',
-  agent: 'action=list/read/write/create/delete；只读写 agent 包内文件；执行子任务用 task。',
-  workflow_decision:
-    "工作流判断节点必用：必须在节点结束前调用一次，提交 pass/reason/issues/revision_brief；正文回复只是给用户看的简短结论，程序读 tool 结果。",
+  skill: '先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；执行子任务用 task。',
 };
 
 function buildToolPromptBlock(enabledToolIds: string[]) {
@@ -357,18 +336,6 @@ function buildManualContextBlock(
     );
   }
 
-  if (manualContext.agents.length > 0) {
-    blocks.push(
-      [
-        "### 手动指定子代理",
-        ...manualContext.agents.map(
-          (agent) =>
-            `- ${agent.name}${agent.role ? `（${agent.role}）` : ""}：${agent.description}`,
-        ),
-      ].join("\n"),
-    );
-  }
-
   if (manualContext.files.length > 0) {
     let remainingChars = MANUAL_CONTEXT_TOTAL_CHAR_LIMIT;
     const renderedFiles: string[] = [];
@@ -429,7 +396,7 @@ function buildProjectContextBlock(
   }
 
   return [
-    "以下资源属于工作区默认项目上下文。进入对话或工作流时系统会优先注入，用于帮助你快速了解项目。",
+    "以下资源属于工作区默认项目上下文。进入对话时系统会优先注入，用于帮助你快速了解项目。",
     ...projectContext.files.map((file) => {
       const excerpt = createMiddleExcerpt(file.content, MANUAL_CONTEXT_FILE_CHAR_LIMIT);
       return [
@@ -446,16 +413,12 @@ function buildProjectContextBlock(
   ].join("\n\n");
 }
 
-function buildSubAgentManifestSummary(agent: ResolvedAgent) {
-  const suggestedTools = normalizeSuggestedToolIds(agent.suggestedTools);
-
+function buildSubAgentManifestSummary(agent: RuntimeSubAgentProfile) {
   return [
+    `- id：${agent.id}`,
+    `- name：${agent.name}`,
+    `- description：${agent.description}`,
     `- role：${agent.role || "未填写"}`,
-    agent.dispatchHint ? `- dispatchHint：${agent.dispatchHint}` : null,
-    suggestedTools.length > 0
-      ? `- suggestedTools：${suggestedTools.join(", ")}`
-      : "- suggestedTools：无",
-    agent.tags.length > 0 ? `- tags：${agent.tags.join(", ")}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -463,10 +426,8 @@ function buildSubAgentManifestSummary(agent: ResolvedAgent) {
 
 export function buildSystemPrompt<M extends AgentMode = AgentMode>({
   defaultAgentMarkdown,
-  enabledAgents,
   enabledSkills,
   enabledToolIds,
-  includeAgentCatalog = true,
   mode,
   modeContext,
   includeSkillCatalog,
@@ -485,36 +446,17 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
         ].join("\n")
       : "- 当前未启用额外技能。";
 
-  const agentBlock =
-    enabledAgents.length > 0
-      ? enabledAgents.map((agent) => buildAgentCatalogBlock(agent)).join("\n\n")
-      : "- 当前没有可委派的子代理。";
-
   const effectiveMode: AgentMode = mode ?? "book";
-  // 工作流默认隐藏技能目录与子代理目录；其他模式默认展示
-  const showSkillCatalog =
-    includeSkillCatalog ?? effectiveMode !== "workflow";
-  const showAgentCatalog =
-    effectiveMode === "workflow" ? false : includeAgentCatalog;
+  const showSkillCatalog = includeSkillCatalog ?? true;
 
   const modeRulesBody = (() => {
     if (effectiveMode === "book") {
       return buildModeRules("book", {} as ModeContextMap["book"]);
     }
-    if (!modeContext) {
-      return null;
-    }
-    return buildModeRules(effectiveMode, modeContext as ModeContextMap[typeof effectiveMode]);
+    return buildModeRules(effectiveMode, (modeContext ?? {}) as ModeContextMap[typeof effectiveMode]);
   })();
 
-  const envBody = (() => {
-    switch (effectiveMode) {
-      case "workflow":
-        return "你正在神笔写作的【工作流】内作为某个节点运行。每个节点是独立 LLM 调用，节点之间通过工作区文件 + 交接上下文协作，不共享对话历史。";
-      default:
-        return "你正在神笔写作【图书项目编辑模式】运行，可与作者多轮协作，按需调用工具、技能和子代理。";
-    }
-  })();
+  const envBody = "你正在神笔写作【图书项目编辑模式】运行，可与作者多轮协作，按需调用工具、技能和临时 subagent。";
 
   return joinSections([
     "# 主代理系统上下文",
@@ -551,15 +493,17 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
       },
       {
         key: "s05",
-        title: "可委派子代理目录",
-        body: showAgentCatalog ? agentBlock : null,
+        title: "临时 Subagent",
+        body: enabledToolIds.includes("task")
+          ? "需要隔离上下文或并行处理时，直接调用 task 工具并提供 agentName / role / instructions 创建一次性 subagent。"
+          : null,
       },
     ]),
   ]);
 }
 
 export function buildSubAgentSystem(
-  agent: ResolvedAgent,
+  agent: RuntimeSubAgentProfile,
   enabledSkills: ResolvedSkill[],
 ) {
   const skillBlock =
@@ -600,7 +544,6 @@ export function buildSubAgentSystem(
           `- 子任务来源：${agent.name}`,
           agent.role ? `- 专长方向：${agent.role}` : null,
           `- 任务说明：${agent.description}`,
-          agent.dispatchHint ? `- 适用时机：${agent.dispatchHint}` : null,
         ]
           .filter(Boolean)
           .join("\n"),
@@ -611,7 +554,7 @@ export function buildSubAgentSystem(
         body: [
           "- 只处理当前被拆出的局部任务，不要扩展成主任务总控。",
           "- 只使用当前提供的工具与资料，不要继续派生新的子任务。",
-          "- 继承父代理当前已启用的全部工具；agent manifest 里的 suggestedTools 只描述常用工作方式。",
+          "- 继承父代理当前已启用的全部工具。",
           "- 如果信息不足，基于现有工具做最小读取与最小验证。",
         ].join("\n"),
       },
@@ -621,7 +564,7 @@ export function buildSubAgentSystem(
         body: [
           "AGENTS.md：",
           agent.body,
-          "manifest 摘要：",
+          "临时档案：",
           buildSubAgentManifestSummary(agent),
         ].join("\n\n"),
       },

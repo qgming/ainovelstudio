@@ -74,8 +74,7 @@ function ToolLibrarySection({
     () =>
       ALL_TOOL_DEFS.map((toolDef) => ({
         ...toolDef,
-        scopeLabel:
-          toolDef.scope === "workflow" ? "Workflow" : "Tool",
+        scopeLabel: "Tool",
       })),
     [],
   );
@@ -90,14 +89,13 @@ function ToolLibrarySection({
         <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
           {toolCards.map((toolDef) => {
             const enabled = enabledTools[toolDef.id] ?? true;
-            const actions =
-              toolDef.scope === "global" || !toolDef.scope ? (
-                <Switch
-                  checked={enabled}
-                  label={enabled ? `禁用 ${toolDef.name}` : `启用 ${toolDef.name}`}
-                  onChange={() => toggleTool(toolDef.id)}
-                />
-              ) : null;
+            const actions = (
+              <Switch
+                checked={enabled}
+                label={enabled ? `禁用 ${toolDef.name}` : `启用 ${toolDef.name}`}
+                onChange={() => toggleTool(toolDef.id)}
+              />
+            );
 
             return (
               <ToolCard
