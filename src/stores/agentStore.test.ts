@@ -186,6 +186,30 @@ describe("agentStore", () => {
     expect(useAgentStore.getState().run.status).toBe("completed");
   });
 
+  it("coachMessage 会发送只针对执行状态的鞭策提示词", async () => {
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    await useAgentStore.getState().coachMessage();
+
+    const prompt = streamControl.runAgentTurn.mock.calls[0]?.[0]?.prompt;
+    expect(prompt).toContain("节奏明显慢了");
+    expect(prompt).toContain("原来的剧情、人设、风格都保留");
+    expect(prompt).toContain("先说清楚卡点");
+    expect(prompt).toContain("把冲突和爽点往前推");
+  });
+
   it("持久化 running summary 回写时不会打断当前运行态", async () => {
     let releaseManualContext!: () => void;
     const manualContextPromise: Promise<ManualTurnContextPayload> = new Promise((resolve) => {

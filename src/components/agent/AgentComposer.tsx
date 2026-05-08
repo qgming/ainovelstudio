@@ -551,7 +551,7 @@ export function AgentComposer({
               <Button
                 type="button"
                 aria-label="鞭策"
-                title="鞭策 — 终止当前活动并催促 AI 回到正轨"
+                title="鞭策 — 标记刚才执行中断或进度拖沓，并催促 AI 继续推进"
                 disabled={isCoaching}
                 variant="ghost"
                 size="icon"

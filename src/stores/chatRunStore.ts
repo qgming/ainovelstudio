@@ -92,7 +92,7 @@ export type AgentStore = ChatRunStore;
 export { selectIsAgentRunActive };
 
 const COACH_PROMPT =
-  "你刚才中断或偏离了目标。先用一句话说明当前进展，然后严格回到原始任务继续执行；如果之前的方案无效，立刻换一种方案，不要重复已失败的步骤。";
+  "你刚才这个节奏明显慢了。原来的剧情、人设、风格都保留，别把问题扩大。现在先说清楚卡点，然后接着断点继续干。网文这东西最怕拖，读者不会等你慢慢找状态，给我把冲突和爽点往前推。";
 
 async function cancelInflightToolRequests(requestIds: string[]) {
   await cancelToolRequests(requestIds);
