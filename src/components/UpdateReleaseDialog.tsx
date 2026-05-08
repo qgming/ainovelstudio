@@ -1,7 +1,7 @@
-import packageJson from "../../../package.json";
-import { normalizeVersionLabel } from "../../lib/update/version";
-import type { UpdateSummary } from "../../lib/update/types";
-import { Button } from "../ui/button";
+import packageJson from "../../package.json";
+import { normalizeVersionLabel } from "../lib/update/version";
+import type { UpdateSummary } from "../lib/update/types";
+import { Button } from "./ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../ui/dialog";
+} from "./ui/dialog";
 
 const APP_VERSION = packageJson.version;
 

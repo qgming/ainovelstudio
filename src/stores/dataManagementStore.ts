@@ -15,7 +15,7 @@ import { collectAppClientState } from "../lib/dataManagement/clientState";
 import {
   resetBuiltinSkills,
   type BuiltinSkillsInitializationResult,
-} from "../lib/skills/api";
+} from "../lib/skills";
 
 type DataManagementState = {
   config: DataSyncSettingsDocument;

@@ -5,10 +5,10 @@ import {
   type QueueMode,
   type CompactionRunner,
 } from "./core/session";
-import { runWritingPrompt } from "./writingPrompt";
-import type { WritingToolContext } from "./writingToolContext";
+import { runWritingAgent } from "./writingAgentRunner";
+import type { WritingRuntimeContext } from "./writingRuntimeContext";
 
-export type CreateWritingAgentSessionOptions = WritingToolContext & {
+export type CreateWritingAgentSessionOptions = WritingRuntimeContext & {
   abortController?: AbortController;
   compact?: CompactionRunner;
   conversationEntries?: ChatEntry[];
@@ -24,7 +24,7 @@ export function createWritingAgentSession(options: CreateWritingAgentSessionOpti
     followUpMode: options.followUpMode ?? "one-at-a-time",
     steeringMode: options.steeringMode ?? "one-at-a-time",
     runPrompt: ({ abortSignal, emit, prompt, takeFollowUpMessages, takeSteeringMessages }) =>
-      runWritingPrompt({
+      runWritingAgent({
         abortSignal,
         prompt,
         takeFollowUpMessages,
@@ -38,4 +38,4 @@ export function createWritingAgentSession(options: CreateWritingAgentSessionOpti
   });
 }
 
-export type { AgentSessionEvent, QueueMode, WritingAgentSession, WritingToolContext };
+export type { AgentSessionEvent, QueueMode, WritingAgentSession, WritingRuntimeContext };

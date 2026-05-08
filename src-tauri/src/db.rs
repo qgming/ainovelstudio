@@ -1,4 +1,4 @@
-use crate::workspace::run_workspace_migrations;
+use crate::workspace::book::run_book_migrations;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::fs;
@@ -205,21 +205,6 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
             CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at
             ON chat_sessions(updated_at DESC);
 
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id TEXT PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                seq INTEGER NOT NULL,
-                role TEXT NOT NULL,
-                author TEXT NOT NULL,
-                parts_json TEXT NOT NULL,
-                meta_json TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL,
-                FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
-            );
-
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_messages_session_seq
-            ON chat_messages(session_id, seq);
-
             CREATE TABLE IF NOT EXISTS chat_entries (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
@@ -232,25 +217,6 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
 
             CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_entries_session_seq
             ON chat_entries(session_id, seq);
-
-            INSERT OR IGNORE INTO chat_entries (id, session_id, seq, entry_type, payload_json, created_at)
-            SELECT
-                id,
-                session_id,
-                seq,
-                'message',
-                json_object(
-                    'message',
-                    json_object(
-                        'id', id,
-                        'role', role,
-                        'author', author,
-                        'parts', json(parts_json),
-                        'meta', json(meta_json)
-                    )
-                ),
-                created_at
-            FROM chat_messages;
 
             CREATE TABLE IF NOT EXISTS app_state (
                 key TEXT PRIMARY KEY,
@@ -285,7 +251,7 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
 
     ensure_chat_sessions_book_id_column(connection)?;
     cleanup_book_workspace_registry(connection)?;
-    run_workspace_migrations(connection)?;
+    run_book_migrations(connection)?;
 
     connection
         .execute_batch(

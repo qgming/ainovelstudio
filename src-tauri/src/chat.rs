@@ -607,7 +607,14 @@ pub fn append_chat_entry(
             INSERT INTO chat_entries (id, session_id, seq, entry_type, payload_json, created_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
-            params![entry_id, sessionId.clone(), seq, entry.entry_type, entry.payload.to_string(), now_iso()],
+            params![
+                entry_id,
+                sessionId.clone(),
+                seq,
+                entry.entry_type,
+                entry.payload.to_string(),
+                now_iso()
+            ],
         )
         .map_err(error_to_string)?;
     apply_patch(&connection, &sessionId, &book_id, sessionPatch)

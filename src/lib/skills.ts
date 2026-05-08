@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { invokeWithCancellation, type InvokeCancellationOptions } from "../bookWorkspace/api";
+import { invokeWithCancellation, type InvokeCancellationOptions } from "./bookWorkspace/api";
 
 export type SkillSourceKind = "builtin-package" | "installed-package";
 

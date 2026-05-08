@@ -1,20 +1,7 @@
 /**
  * Agent 运行时的调试与系统消息辅助。
- * - createSystemMessage：构造 system 角色的 AgentMessage（保留旧 export 兼容）。
  * - logPromptDebug：折叠输出 system + messages 便于排查 prompt。
  */
-
-import type { AgentMessage } from "./types";
-
-/** 构造一条系统消息（用于将上下文以系统通知形式插入到对话流）。 */
-export function createSystemMessage(text: string): AgentMessage {
-  return {
-    id: `system-${Date.now()}`,
-    role: "system",
-    author: "系统",
-    parts: [{ type: "text", text }],
-  };
-}
 
 export type DebuggableMessage = {
   content: string;

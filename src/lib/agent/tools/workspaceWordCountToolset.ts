@@ -169,7 +169,7 @@ export function createWorkspaceWordCountTools({
       execute: async (input, context) => {
         const abortContext = getAbortContext(context);
 
-        // 单文件模式（兼容旧调用）
+        // 单文件统计模式。
         if (input.path && !input.paths && !input.dir) {
           const path = ensureString(input.path, "word_count.path");
           const content = await readWorkspaceTextFile(rootPath, path, abortContext);

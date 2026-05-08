@@ -9,7 +9,7 @@
  *
  * 阶段 7 拆出：
  *   - lib/bookWorkspace/layoutMath.ts —— clamp / 占位 / 最大宽度计算
- *   - hooks/book/useBookPanelResize.ts —— 拖拽指针逻辑与 ref/state
+ *   - hooks/useBookPanelResize.ts —— 拖拽指针逻辑与 ref/state
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -29,7 +29,7 @@ import { getStoredWorkspaceSnapshot } from "../lib/bookWorkspace/api";
 import { getBaseName } from "../lib/bookWorkspace/paths";
 import type { TreeNode } from "../lib/bookWorkspace/types";
 import { useIsMobile } from "../hooks/use-mobile";
-import { useBookPanelResize } from "../hooks/book/useBookPanelResize";
+import { useBookPanelResize } from "../hooks/useBookPanelResize";
 import { useBookWorkspaceStore } from "../stores/bookWorkspaceStore";
 
 const AUTO_SAVE_DELAY_MS = 800;

@@ -19,11 +19,9 @@ import {
   buildRun,
   deriveSessionTitle,
   isPlaceholderOnly,
-  normalizeRecoveredMessages,
   normalizeRecoveredStatus,
   sortSessionSummaries,
 } from "../../lib/chat/sessionRuntime";
-import { entriesToMessages, getCompactionCount, getLatestCompactionEntry } from "../../lib/chat/entries";
 import type { ChatBootstrap, ChatSessionSummary } from "../../lib/chat/types";
 import {
   getStoredDefaultAgentMarkdown,
@@ -154,78 +152,6 @@ export function upsertSessionSummary(
 ): ChatSessionSummary[] {
   const filtered = sessions.filter((candidate) => candidate.id !== summary.id);
   return sortSessionSummaries([...filtered, summary]);
-}
-
-/** 把 ChatBootstrap 应用到 store state，得到 partial 更新。 */
-export function applyBootstrap(
-  state: ChatRunStoreState,
-  bootstrap: ChatBootstrap,
-): Partial<ChatRunStoreState> {
-  const normalizedSessions = bootstrap.sessions.map((session) => ({
-    ...session,
-    status: normalizeRecoveredStatus(session.status),
-  }));
-  const validIds = new Set(normalizedSessions.map((session) => session.id));
-  const nextMessagesBySession = Object.fromEntries(
-    Object.entries(state.messagesBySession).filter(([sessionId]) => validIds.has(sessionId)),
-  ) as Record<string, AgentMessage[]>;
-  const nextEntriesBySession = Object.fromEntries(
-    Object.entries(state.entriesBySession).filter(([sessionId]) => validIds.has(sessionId)),
-  ) as Record<string, ChatBootstrap["activeSessionEntries"]>;
-  const nextDraftsBySession = Object.fromEntries(
-    Object.entries(state.draftsBySession).filter(([sessionId]) => validIds.has(sessionId)),
-  ) as Record<string, string>;
-  const nextAutopilotGoalsBySession = Object.fromEntries(
-    Object.entries(state.autopilotGoalsBySession).filter(([sessionId]) => validIds.has(sessionId)),
-  ) as Record<string, string>;
-
-  if (bootstrap.activeSessionId) {
-    nextEntriesBySession[bootstrap.activeSessionId] = bootstrap.activeSessionEntries;
-    nextMessagesBySession[bootstrap.activeSessionId] = normalizeRecoveredMessages(
-      entriesToMessages(bootstrap.activeSessionEntries),
-    );
-    nextDraftsBySession[bootstrap.activeSessionId] = bootstrap.activeSessionDraft;
-  }
-
-  const activeSummary = bootstrap.activeSessionId
-    ? (normalizedSessions.find((session) => session.id === bootstrap.activeSessionId) ?? null)
-    : null;
-  const activeMessages = bootstrap.activeSessionId
-    ? (nextMessagesBySession[bootstrap.activeSessionId] ?? [])
-    : [];
-  const activeEntries = bootstrap.activeSessionId
-    ? (nextEntriesBySession[bootstrap.activeSessionId] ?? [])
-    : [];
-  const latestCompaction = getLatestCompactionEntry(activeEntries);
-  const planningState = derivePlanningState(activeMessages);
-
-  return {
-    activeSessionId: bootstrap.activeSessionId,
-    autopilotGoalsBySession: nextAutopilotGoalsBySession,
-    currentBookId: bootstrap.bookId ?? state.currentBookId,
-    draftsBySession: nextDraftsBySession,
-    errorMessage: null,
-    entriesBySession: nextEntriesBySession,
-    input: bootstrap.activeSessionId
-      ? (nextDraftsBySession[bootstrap.activeSessionId] ?? "")
-      : "",
-    inflightToolRequestIds: [],
-    pendingAsk: null,
-    queuedFollowUpMessages: [],
-    queuedSteeringMessages: [],
-    compactionCount: getCompactionCount(activeEntries),
-    isCompacting: false,
-    latestCompactionAt: latestCompaction?.createdAt ?? null,
-    latestCompactionTokensBefore: latestCompaction?.payload.tokensBefore ?? null,
-    isHydrated: true,
-    messagesBySession: nextMessagesBySession,
-    planningState,
-    run: activeSummary
-      ? buildRun(activeSummary.id, activeSummary.title, activeSummary.status, activeMessages)
-      : buildInitialRun(),
-    sessions: normalizedSessions,
-    status: "ready",
-  };
 }
 
 /** 把指定 session 的 messages/input/status 写回 store，并联动 run/planningState。 */

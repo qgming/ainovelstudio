@@ -66,7 +66,7 @@ vi.mock("../agents/api", () => ({
   writeAgentFileContent: mockWriteAgentFileContent,
 }));
 
-vi.mock("../skills/api", () => ({
+vi.mock("../skills", () => ({
   createSkill: mockCreateSkill,
   createSkillReferenceFile: mockCreateSkillReferenceFile,
   deleteInstalledSkill: mockDeleteInstalledSkill,
@@ -1349,7 +1349,7 @@ describe("createLocalResourceToolset", () => {
         description: "写作章节正文",
         sourceKind: "builtin-package",
         references: [{ path: "references/voice.md" }],
-        suggestedTools: ["read_file", "write_file"],
+        suggestedTools: ["read", "write"],
         tags: ["chapter"],
       },
     ]);

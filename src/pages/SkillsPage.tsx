@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "../components/PageShell";
 import { CreateSkillDialog } from "../components/dialogs/CreateSkillDialog";
-import { SkillCard } from "../components/skills/SkillCard";
+import { SkillCard } from "../components/SkillCard";
 import { getResolvedSkills, useSkillsStore } from "../stores/skillsStore";
 import { useNavigate } from "react-router-dom";
 

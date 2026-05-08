@@ -12,7 +12,7 @@ import {
   type SkillManifest,
   type SkillSourceKind,
   type TogglePreferences,
-} from "../lib/skills/api";
+} from "../lib/skills";
 
 export type ResolvedSkill = SkillManifest & {
   enabled: boolean;

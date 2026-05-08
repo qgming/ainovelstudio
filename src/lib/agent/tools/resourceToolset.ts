@@ -5,7 +5,7 @@ import {
   readSkillFileContent,
   scanInstalledSkills,
   writeSkillFileContent,
-} from "../../skills/api";
+} from "../../skills";
 import { renderPlanItems } from "../planning";
 import type { AgentTool, AgentToolExecutionContext } from "../runtime";
 import type {

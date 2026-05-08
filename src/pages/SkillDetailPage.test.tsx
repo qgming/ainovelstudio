@@ -2,11 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../components/ui/tooltip";
-import { readSkillFileContent } from "../lib/skills/api";
+import { readSkillFileContent } from "../lib/skills";
 import { SkillDetailPage } from "./SkillDetailPage";
 import { useSkillsStore } from "../stores/skillsStore";
 
-vi.mock("../lib/skills/api", () => ({
+vi.mock("../lib/skills", () => ({
   readSkillFileContent: vi.fn(),
   writeSkillFileContent: vi.fn(),
 }));

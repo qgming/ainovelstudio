@@ -120,7 +120,7 @@ describe("agent settings store", () => {
             reasoningEffort: "high",
             simulateOpencodeBeta: true,
           },
-          enabledTools: { read_file: false },
+          enabledTools: { read: false },
         });
       }
 

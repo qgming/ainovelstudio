@@ -19,11 +19,11 @@ vi.mock("../lib/dataManagement/clientState", () => ({
   collectAppClientState: vi.fn(() => ({ sidebarOpen: true })),
 }));
 
-vi.mock("../lib/skills/api", () => ({
+vi.mock("../lib/skills", () => ({
   resetBuiltinSkills: vi.fn(),
 }));
 
-import { resetBuiltinSkills } from "../lib/skills/api";
+import { resetBuiltinSkills } from "../lib/skills";
 import { useDataManagementStore } from "./dataManagementStore";
 
 describe("dataManagementStore", () => {

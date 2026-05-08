@@ -175,10 +175,7 @@ pub(crate) fn load_book_by_root_path(
         .ok_or_else(|| "目标书籍不存在。".to_string())
 }
 
-pub(crate) fn load_book_by_id(
-    connection: &Connection,
-    book_id: &str,
-) -> CommandResult<BookRecord> {
+pub(crate) fn load_book_by_id(connection: &Connection, book_id: &str) -> CommandResult<BookRecord> {
     connection
         .query_row(
             "SELECT id, name, root_path, updated_at FROM book_workspaces WHERE id = ?1",

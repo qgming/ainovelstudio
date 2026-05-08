@@ -1,12 +1,12 @@
 // 工作区模块通用工具：错误、时间戳、路径规范化、校验、取消令牌辅助。
 
 use crate::ToolCancellationRegistry;
+use encoding_rs::{GB18030, UTF_16BE, UTF_16LE};
 use std::path::Path;
 
 pub(crate) type CommandResult<T> = Result<T, String>;
 
-pub(crate) const INVALID_NAME_CHARS: [char; 9] =
-    ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+pub(crate) const INVALID_NAME_CHARS: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
 
 pub(crate) fn error_to_string(error: impl ToString) -> String {
     error.to_string()
@@ -216,5 +216,48 @@ pub(crate) fn check_adjacent_context(
 }
 
 pub(crate) fn bytes_to_text(bytes: Vec<u8>) -> CommandResult<String> {
-    String::from_utf8(bytes).map_err(|_| "文件不是 UTF-8 文本，无法按文本方式读取。".into())
+    if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        return decode_utf8(&bytes[3..]);
+    }
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        return decode_with_encoding(UTF_16LE, &bytes[2..]);
+    }
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        return decode_with_encoding(UTF_16BE, &bytes[2..]);
+    }
+    if let Ok(text) = std::str::from_utf8(&bytes) {
+        return Ok(text.trim_start_matches('\u{feff}').to_string());
+    }
+    decode_with_encoding(GB18030, &bytes)
+}
+
+fn decode_utf8(bytes: &[u8]) -> CommandResult<String> {
+    std::str::from_utf8(bytes)
+        .map(|text| text.trim_start_matches('\u{feff}').to_string())
+        .map_err(|_| "文件文本编码无法识别，请转换为 UTF-8 或 GBK 后重试。".into())
+}
+
+fn decode_with_encoding(
+    encoding: &'static encoding_rs::Encoding,
+    bytes: &[u8],
+) -> CommandResult<String> {
+    let (text, _, had_errors) = encoding.decode(bytes);
+    if had_errors {
+        return Err("文件文本编码无法识别，请转换为 UTF-8 或 GBK 后重试。".into());
+    }
+    Ok(text.into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bytes_to_text;
+
+    #[test]
+    fn bytes_to_text_decodes_gbk_text() {
+        let bytes = vec![0xC4, 0xE3, 0xBA, 0xC3, 0xA3, 0xAC, 0xCA, 0xC0, 0xBD, 0xE7];
+
+        let text = bytes_to_text(bytes).expect("gbk text should decode");
+
+        assert_eq!("你好，世界", text);
+    }
 }

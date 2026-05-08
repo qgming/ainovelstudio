@@ -8,8 +8,8 @@ use crate::workspace::book::data::{
 use crate::workspace::common::{
     bytes_to_text, check_adjacent_context, detect_line_ending, error_to_string, file_extension,
     join_relative_path, line_text_or_empty, now_timestamp, parent_relative_path, split_text_lines,
-    validate_line_number, validate_name, validate_optional_context_line, validate_relative_segments,
-    validate_single_line_text, CommandResult,
+    validate_line_number, validate_name, validate_optional_context_line,
+    validate_relative_segments, validate_single_line_text, CommandResult,
 };
 use rusqlite::{params, Connection, Transaction};
 use std::path::Path;

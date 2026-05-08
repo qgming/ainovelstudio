@@ -8,7 +8,7 @@ import type { AgentTool } from "./runtime";
 import type { AgentMessage, AgentUsage, AskToolAnswer, AskUserRequest } from "./types";
 import type { streamAgentText } from "./modelGateway";
 
-export type WritingToolContext = {
+export type WritingRuntimeContext = {
   activeFilePath: string | null;
   conversationEntries?: unknown[];
   conversationHistory?: AgentMessage[];

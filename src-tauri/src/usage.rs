@@ -61,10 +61,7 @@ fn parse_entry_meta(raw: &str) -> StoredMessageMeta {
     let Ok(value) = serde_json::from_str::<Value>(raw) else {
         return StoredMessageMeta::default();
     };
-    let Some(meta) = value
-        .get("message")
-        .and_then(|message| message.get("meta"))
-    else {
+    let Some(meta) = value.get("message").and_then(|message| message.get("meta")) else {
         return StoredMessageMeta::default();
     };
     serde_json::from_value::<StoredMessageMeta>(meta.clone()).unwrap_or_default()

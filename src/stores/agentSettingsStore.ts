@@ -3,13 +3,13 @@ import {
   initializeDefaultAgentConfig,
   readDefaultAgentConfig,
   writeDefaultAgentConfig,
-} from "../lib/agentConfig/api";
+} from "../lib/agentConfig";
 import {
   clearAgentSettings,
   readAgentSettings,
   writeAgentSettings,
-} from "../lib/agentSettings/api";
-import type { AgentProviderPreset, AgentModelConfigPreset } from "../lib/agentSettings/api";
+} from "../lib/agentSettings";
+import type { AgentProviderPreset, AgentModelConfigPreset } from "../lib/agentSettings";
 import {
   getDefaultEnabledTools,
   migrateEnabledTools,

@@ -2,7 +2,7 @@ import type { ToolSet } from "ai";
 import { buildAiSdkTools } from "./buildAiSdkTools";
 import { logPromptDebug, normalizeDebugMessageContent } from "./debug";
 import { generateAgentText, streamAgentText } from "./modelGateway";
-import { buildLinearConversationMessages } from "./linearContext";
+import { buildLinearConversationMessages } from "./linearConversationContext";
 import type { HistorySummaryOptions } from "./messageContext";
 import { getPlanningIntervention } from "./planning";
 import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
@@ -13,19 +13,19 @@ import { createScopedAskUser } from "./askRuntime";
 import { createTaskTool } from "./taskTool";
 import type { AgentSessionEvent } from "./core/events";
 import type { AgentPart } from "./types";
-import { hasProviderConfig, type WritingToolContext } from "./writingToolContext";
+import { hasProviderConfig, type WritingRuntimeContext } from "./writingRuntimeContext";
 
-type RunWritingPromptOptions = {
+type RunWritingAgentOptions = {
   abortSignal?: AbortSignal;
   emit?: (event: AgentSessionEvent) => void;
   prompt: string;
   takeFollowUpMessages?: () => string[];
   takeSteeringMessages?: () => string[];
-  toolContext: WritingToolContext;
+  toolContext: WritingRuntimeContext;
 };
 
 function buildHistorySummaryFn(
-  providerConfig: WritingToolContext["providerConfig"],
+  providerConfig: WritingRuntimeContext["providerConfig"],
 ): NonNullable<HistorySummaryOptions["summarizeHistory"]> {
   return async ({ currentUserContent, taskMemory }) => {
     const memoryLines = [
@@ -53,7 +53,7 @@ function buildHistorySummaryFn(
   };
 }
 
-function buildPromptContent(prompt: string, context: WritingToolContext) {
+function buildPromptContent(prompt: string, context: WritingRuntimeContext) {
   const planningIntervention = getPlanningIntervention(context.planningState, prompt);
   return buildUserTurnContent({
     activeFilePath: context.activeFilePath,
@@ -68,7 +68,7 @@ function buildPromptContent(prompt: string, context: WritingToolContext) {
 }
 
 function buildTools(
-  context: WritingToolContext,
+  context: WritingRuntimeContext,
   abortSignal: AbortSignal | undefined,
   enqueuePart: (part: AgentPart) => void,
 ): ToolSet {
@@ -95,7 +95,7 @@ function buildTools(
   return aiTools;
 }
 
-async function buildLoopContext(prompt: string, context: WritingToolContext) {
+async function buildLoopContext(prompt: string, context: WritingRuntimeContext) {
   const system = buildSystemPrompt({
     defaultAgentMarkdown: context.defaultAgentMarkdown,
     enabledSkills: context.enabledSkills,
@@ -122,14 +122,14 @@ async function buildLoopContext(prompt: string, context: WritingToolContext) {
   return { messages, system };
 }
 
-export async function* runWritingPrompt({
+export async function* runWritingAgent({
   abortSignal,
   emit,
   prompt,
   takeFollowUpMessages,
   takeSteeringMessages,
   toolContext,
-}: RunWritingPromptOptions): AsyncGenerator<AgentPart> {
+}: RunWritingAgentOptions): AsyncGenerator<AgentPart> {
   if (!hasProviderConfig(toolContext.providerConfig)) {
     yield { type: "text", text: "请先前往设置页配置 Base URL、API Key 和模型名称，再运行 Agent。" };
     return;

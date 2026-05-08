@@ -17,12 +17,12 @@ import {
   getStoredBookPanelLayout,
   setStoredBookPanelLayout,
   type BookPanelLayout,
-} from "../../lib/bookWorkspace/layout";
+} from "../lib/bookWorkspace/layout";
 import {
   clamp,
   getMaxLeftPanelWidth,
   getMaxRightPanelWidth,
-} from "../../lib/bookWorkspace/layoutMath";
+} from "../lib/bookWorkspace/layoutMath";
 
 export type ResizeHandle = "left" | "right" | null;
 

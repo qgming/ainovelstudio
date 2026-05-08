@@ -5,7 +5,7 @@ import appIcon from "../../assets/icon.png";
 import packageJson from "../../../package.json";
 import { normalizeVersionLabel } from "../../lib/update/version";
 import { useUpdateStore } from "../../stores/updateStore";
-import { UpdateReleaseDialog } from "../update/UpdateReleaseDialog";
+import { UpdateReleaseDialog } from "../UpdateReleaseDialog";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import { SettingsSectionHeader } from "./SettingsSectionHeader";

@@ -97,45 +97,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
 
 export const ALL_TOOL_DEFS: ToolDef[] = [...BUILTIN_TOOLS];
 
-const LEGACY_TOOL_ID_MAP: Record<string, string> = {
-  create_file: "path",
-  create_folder: "path",
-  delete_path: "path",
-  line_edit: "edit",
-  list_skills: "skill",
-  move_path: "path",
-  read_file: "read",
-  read_skill_file: "skill",
-  read_workspace_tree: "browse",
-  rename: "path",
-  search_workspace_content: "search",
-  write_file: "write",
-};
-
-function mergeLegacyToolPreferences(
-  enabledTools: Record<string, boolean>,
-  toolId: string,
-) {
-  const directValue = enabledTools[toolId];
-  if (typeof directValue === "boolean") {
-    return directValue;
-  }
-
-  const legacyValues = Object.entries(LEGACY_TOOL_ID_MAP)
-    .filter(([, nextToolId]) => nextToolId === toolId)
-    .map(([legacyToolId]) => enabledTools[legacyToolId])
-    .filter((value): value is boolean => typeof value === "boolean");
-
-  if (legacyValues.length === 0) {
-    return true;
-  }
-
-  if (legacyValues.every((value) => value === false)) {
-    return false;
-  }
-
-  return true;
-}
+const TOOL_IDS = new Set(BUILTIN_TOOLS.map((tool) => tool.id));
 
 /** 返回默认全部启用的工具映射 */
 export function getDefaultEnabledTools(): Record<string, boolean> {
@@ -153,17 +115,11 @@ export function migrateEnabledTools(
   return Object.fromEntries(
     BUILTIN_TOOLS.map((tool) => [
       tool.id,
-      mergeLegacyToolPreferences(enabledTools, tool.id),
+      typeof enabledTools[tool.id] === "boolean" ? enabledTools[tool.id] : true,
     ]),
   );
 }
 
-export function normalizeSuggestedToolId(toolId: string) {
-  return LEGACY_TOOL_ID_MAP[toolId] ?? toolId;
-}
-
 export function normalizeSuggestedToolIds(toolIds: string[]) {
-  return Array.from(
-    new Set(toolIds.map((toolId) => normalizeSuggestedToolId(toolId))),
-  );
+  return Array.from(new Set(toolIds.filter((toolId) => TOOL_IDS.has(toolId))));
 }

@@ -3,7 +3,7 @@ import { type ReactNode, useState } from "react";
 import { NavLink, useLocation, useMatch, useResolvedPath } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { UpdateReleaseDialog } from "@/components/update/UpdateReleaseDialog";
+import { UpdateReleaseDialog } from "@/components/UpdateReleaseDialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useThemeStore } from "../stores/themeStore";

@@ -18,7 +18,7 @@ import { Switch } from "../components/ui/switch";
 import { Textarea } from "../components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { cn } from "../lib/utils";
-import { readSkillFileContent, writeSkillFileContent } from "../lib/skills/api";
+import { readSkillFileContent, writeSkillFileContent } from "../lib/skills";
 import { getResolvedSkills, useSkillsStore } from "../stores/skillsStore";
 
 function DetailTitle({ currentLabel, parentLabel, parentTo }: { currentLabel: string; parentLabel: string; parentTo: string }) {

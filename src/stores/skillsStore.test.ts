@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/skills/api", () => ({
+vi.mock("../lib/skills", () => ({
   clearSkillPreferences: vi.fn().mockResolvedValue(undefined),
   createSkill: vi.fn(),
   createSkillReferenceFile: vi.fn(),
@@ -18,7 +18,7 @@ import {
   readSkillPreferences,
   scanInstalledSkills,
   writeSkillPreferences,
-} from "../lib/skills/api";
+} from "../lib/skills";
 import { getEnabledSkills, getResolvedSkills, useSkillsStore } from "./skillsStore";
 
 describe("skills store", () => {

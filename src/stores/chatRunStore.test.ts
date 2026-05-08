@@ -28,13 +28,13 @@ vi.mock("../lib/bookWorkspace/api", () => ({
   readWorkspaceTree: vi.fn(),
 }));
 
-vi.mock("../lib/agentConfig/api", () => ({
+vi.mock("../lib/agentConfig", () => ({
   initializeDefaultAgentConfig: vi.fn(async () => ({ markdown: "", path: null })),
   readDefaultAgentConfig: vi.fn(async () => ({ markdown: "", path: null })),
   writeDefaultAgentConfig: vi.fn(async () => ({ markdown: "", path: null })),
 }));
 
-vi.mock("../lib/agentSettings/api", () => ({
+vi.mock("../lib/agentSettings", () => ({
   clearAgentSettings: vi.fn(async () => undefined),
   readAgentSettings: vi.fn(async () => null),
   writeAgentSettings: vi.fn(async () => undefined),
