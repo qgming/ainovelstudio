@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Circle,
   Clock3,
+  GitBranch,
   LucideIcon,
   Maximize2,
   Minimize2,
@@ -106,8 +107,15 @@ function buildInitialAskSelection(_pendingAsk: PendingAskState | null) {
 const COMPOSER_MIN_ROWS = 2;
 const DEFAULT_COMPOSER_MODE_ID: AgentMode = "book";
 const MODE_INPUT_PLACEHOLDERS: Record<AgentMode, string> = {
-  autopilot: "输入目标：第一次发送会设定目标，之后会自动检查并持续执行直到完成",
+  autopilot: "输入全自动目标：YOLO 会按工作流循环执行、验证和回写，直到目标完成",
+  "book-design": "输入立项目标、平台、题材偏好或卖点方向",
   book: "输入想法、问题或要处理的任务",
+  "chapter-write": "输入要规划、续写或生产的章节目标",
+  "continuity-review": "输入要检查的章节、人物、伏笔或时间线问题",
+  flow: "输入工作流任务：按 Inspect、Plan、Act、Verify、State Maintain 严格推进",
+  "state-maintain": "输入要抽取和回写的章节状态变化",
+  "style-polish": "输入要润色、统一文风或去 AI 味的章节",
+  "volume-plan": "输入要规划的卷、阶段冲突或升级节奏",
 };
 
 export const DEFAULT_AGENT_COMPOSER_MODES: AgentComposerMode[] = [
@@ -118,10 +126,16 @@ export const DEFAULT_AGENT_COMPOSER_MODES: AgentComposerMode[] = [
     label: "协作",
   },
   {
-    description: "按目标自动检查并继续执行",
-    icon: Circle,
+    description: "按目标全自动读取、执行、验证和回写",
+    icon: Zap,
     id: "autopilot",
-    label: "目标",
+    label: "YOLO",
+  },
+  {
+    description: "严格执行章节生产和状态维护工作流",
+    icon: GitBranch,
+    id: "flow",
+    label: "工作流",
   },
 ];
 

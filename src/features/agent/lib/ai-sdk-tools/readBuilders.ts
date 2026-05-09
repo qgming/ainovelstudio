@@ -219,5 +219,32 @@ export function createReadToolBuilders(runTool: ToolRunner): Record<string, Tool
           return result.data ?? result.summary;
         },
       }),
+    canon_query: (toolName, tool) =>
+      defineTool({
+        description:
+          "查询长篇 canon 事实源。用于核对人物、地点、伏笔、能力边界、文风基线和章节摘要，减少凭印象续写。",
+        inputSchema: z.object({
+          kind: z
+            .enum(["canon", "status", "style", "chapter", "memory"])
+            .default("canon")
+            .describe("查询范围类型，默认 canon；status/style/chapter/memory 会收窄到对应目录。"),
+          limit: z
+            .number()
+            .int()
+            .positive()
+            .max(30)
+            .optional()
+            .describe("最多返回多少条线索，默认 12。"),
+          query: z.string().min(1).describe("要查询的人物、地点、伏笔、能力边界或章节线索。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
   };
 }

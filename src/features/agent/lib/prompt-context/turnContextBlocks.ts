@@ -18,7 +18,7 @@ export function buildManualContextBlock(
         ...manualContext.skills.map(
           (skill) => `- ${skill.name}：${skill.description}`,
         ),
-        "- 这些 skill 当前仅以目录信息注入；需要完整步骤时，请再读取对应 SKILL.md。",
+        "- 这些 skill 当前仅以目录信息注入；执行匹配任务前必须读取对应 SKILL.md。",
       ].join("\n"),
     );
   }

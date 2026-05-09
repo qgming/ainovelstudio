@@ -105,16 +105,28 @@ describe("AgentComposer", () => {
     expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute("placeholder", "输入想法、问题或要处理的任务");
   });
 
-  it("默认显示协作模式并支持切换到目标模式", () => {
+  it("默认模式菜单显示工作流模式", () => {
+    render(<AgentComposer {...buildComposerProps()} />);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "当前模式：协作" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(screen.getByRole("menuitem", { name: /工作流/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /流程/ })).not.toBeInTheDocument();
+  });
+
+  it("默认显示协作模式并支持切换到 YOLO 模式", () => {
     const handleModeChange = vi.fn();
 
     render(
       <AgentComposer
         {...buildComposerProps()}
-        modes={[
-          { id: "book", label: "协作", description: "默认对话与任务执行模式", icon: Sparkles },
-          { id: "autopilot", label: "目标", description: "按目标自动检查并继续执行", icon: Sparkles },
-        ]}
+	        modes={[
+	          { id: "book", label: "协作", description: "默认对话与任务执行模式", icon: Sparkles },
+	          { id: "autopilot", label: "YOLO", description: "按目标全自动执行", icon: Sparkles },
+	        ]}
         onModeChange={handleModeChange}
       />,
     );
@@ -123,15 +135,15 @@ describe("AgentComposer", () => {
       button: 0,
       ctrlKey: false,
     });
-    fireEvent.click(screen.getByRole("menuitem", { name: /目标/ }));
+	    fireEvent.click(screen.getByRole("menuitem", { name: /YOLO/ }));
 
-    expect(handleModeChange).toHaveBeenCalledWith("autopilot");
-    expect(screen.getByRole("button", { name: "当前模式：目标" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute(
-      "placeholder",
-      "输入目标：第一次发送会设定目标，之后会自动检查并持续执行直到完成",
-    );
-  });
+	    expect(handleModeChange).toHaveBeenCalledWith("autopilot");
+	    expect(screen.getByRole("button", { name: "当前模式：YOLO" })).toBeInTheDocument();
+	    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute(
+	      "placeholder",
+		      "输入全自动目标：YOLO 会按工作流循环执行、验证和回写，直到目标完成",
+	    );
+	  });
 
   it("ask 单选模式下可以选择预设项并确认", () => {
     const onSubmitAskAnswer = vi.fn();

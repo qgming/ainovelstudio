@@ -1,5 +1,6 @@
 use crate::domains::book_workspace::archive::{export_book_zip_db, import_book_zip_db};
 use crate::domains::book_workspace::data::{run_book_migrations, BookRecord};
+use crate::domains::book_workspace::maintenance::ensure_book_workspace_template_db;
 use crate::domains::book_workspace::ops::{
     delete_workspace_entry_db, move_workspace_entry_db, read_text_file_db,
     rename_workspace_entry_db, write_text_file_db,
@@ -49,10 +50,15 @@ fn create_book_workspace_db_builds_template_tree() {
     .expect("project AGENTS should load");
     assert!(project_agents.contains("# 北境余烬 工作区 AGENTS"));
     assert!(project_agents.contains(".project/README.md"));
+    assert!(project_agents.contains(".project/context-manifest.json"));
+    assert!(project_agents.contains(".project/canon/"));
+    assert!(project_agents.contains(".project/style/"));
     assert!(project_agents.contains(".project/status/project-state.json"));
     assert!(project_agents.contains(".project/status/system-state.json"));
     assert!(project_agents.contains(".project/status/continuity-index.json"));
     assert!(project_agents.contains(".project/MEMORY/README.md"));
+    assert!(project_agents.contains("## Skill Loading Rules"));
+    assert!(project_agents.contains("SKILL.md"));
     assert!(project_agents.contains("## 文件命名规则"));
     assert!(project_agents.contains("正文/第001章_章名.md"));
     assert!(project_agents.contains("大纲/细纲_第001章.md"));
@@ -82,6 +88,35 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(memory_readme.contains("continuity.md"));
     assert!(memory_readme.contains("当前记忆索引"));
 
+    let context_manifest = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/北境余烬/.project/context-manifest.json",
+    )
+    .expect("context manifest should load");
+    assert!(context_manifest.contains("\"taskType\": \"autopilot\""));
+    assert!(context_manifest.contains("\"taskType\": \"chapter-write\""));
+    assert!(context_manifest.contains(".project/style/voice.md"));
+    assert!(context_manifest.contains(".project/canon/README.md"));
+
+    let canon_readme = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/北境余烬/.project/canon/README.md",
+    )
+    .expect("canon README should load");
+    assert!(canon_readme.contains("# 北境余烬 Canon 索引"));
+    assert!(canon_readme.contains("characters.md"));
+
+    let style_voice = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/北境余烬/.project/style/voice.md",
+    )
+    .expect("style voice should load");
+    assert!(style_voice.contains("# 北境余烬 文风基线"));
+    assert!(style_voice.contains("单章节奏"));
+
     let project_status = read_text_file_db(
         &connection,
         &book.root_path,
@@ -89,15 +124,19 @@ fn create_book_workspace_db_builds_template_tree() {
     )
     .expect("project status should load");
     assert!(project_status.contains("\"bookName\": \"北境余烬\""));
-    assert!(project_status.contains("\"workspaceVersion\": 2"));
+    assert!(project_status.contains("\"workspaceVersion\": 3"));
     assert!(project_status.contains("\"projectMemory\": \".project/MEMORY\""));
     assert!(project_status.contains("\"projectStatus\": \".project/status\""));
+    assert!(project_status.contains("\"projectCanon\": \".project/canon\""));
+    assert!(project_status.contains("\"projectStyle\": \".project/style\""));
+    assert!(project_status.contains("\"projectRuns\": \".project/runs\""));
     assert!(project_status.contains("\"outline\": \"大纲\""));
     assert!(project_status.contains("\"draft\": \"正文\""));
     assert!(project_status.contains("\"worldbuilding\": \"设定/世界观\""));
     assert!(project_status.contains("\"characters\": \"设定/角色\""));
     assert!(project_status.contains("\"factions\": \"设定/势力\""));
     assert!(project_status.contains("\"systemState\": \".project/status/system-state.json\""));
+    assert!(project_status.contains("\"contextManifest\": \".project/context-manifest.json\""));
     assert!(
         project_status.contains("\"continuityIndex\": \".project/status/continuity-index.json\"")
     );
@@ -105,6 +144,7 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(project_status.contains("\"chapterDraft\": \"正文/第001章_章名.md\""));
     assert!(project_status.contains("\"chapterPlan\": \"大纲/细纲_第001章.md\""));
     assert!(project_status.contains("\"firstChapter\": \"正文/第001章_章名.md\""));
+    assert!(project_status.contains("任务明显匹配已启用 skill"));
 
     let system_state = read_text_file_db(
         &connection,
@@ -126,6 +166,7 @@ fn create_book_workspace_db_builds_template_tree() {
     assert!(latest_plot.contains("\"activeConflicts\": []"));
     assert!(latest_plot.contains("\"openThreads\": []"));
     assert!(latest_plot.contains("\"recentChapters\": []"));
+    assert!(latest_plot.contains("\"timelineUpdates\": []"));
 
     let character_state = read_text_file_db(
         &connection,
@@ -135,6 +176,7 @@ fn create_book_workspace_db_builds_template_tree() {
     .expect("character state should load");
     assert!(character_state.contains("\"bookName\": \"北境余烬\""));
     assert!(character_state.contains("\"characters\": {}"));
+    assert!(character_state.contains("\"updates\": []"));
 
     let continuity_index = read_text_file_db(
         &connection,
@@ -166,7 +208,18 @@ fn create_book_workspace_db_builds_template_tree() {
         .collect::<Vec<_>>();
     assert_eq!(
         project_child_names,
-        vec!["MEMORY", "status", "AGENTS.md", "README.md"]
+        vec![
+            "canon",
+            "chapters",
+            "evals",
+            "MEMORY",
+            "runs",
+            "status",
+            "style",
+            "AGENTS.md",
+            "context-manifest.json",
+            "README.md"
+        ]
     );
 
     let status_child_names = project_children
@@ -242,6 +295,65 @@ fn workspace_operations_use_sqlite_storage() {
     let contents = read_text_file_db(&connection, &book.root_path, "books/星河回声/正文/序章.md")
         .expect("moved file should be readable");
     assert_eq!(contents, "第一行\n第二行");
+}
+
+#[test]
+fn ensure_book_workspace_template_restores_missing_defaults_only() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "旧书升级");
+    let transaction = connection.transaction().expect("transaction should open");
+
+    write_text_file_db(
+        &transaction,
+        &book.root_path,
+        "books/旧书升级/.project/AGENTS.md",
+        "# 自定义规则\n保留用户内容",
+    )
+    .expect("custom AGENTS should write");
+    delete_workspace_entry_db(
+        &transaction,
+        &book.root_path,
+        "books/旧书升级/.project/context-manifest.json",
+    )
+    .expect("manifest should delete");
+    delete_workspace_entry_db(
+        &transaction,
+        &book.root_path,
+        "books/旧书升级/.project/style",
+    )
+    .expect("style directory should delete");
+
+    let created_paths = ensure_book_workspace_template_db(&transaction, &book.root_path)
+        .expect("template should repair");
+    transaction.commit().expect("transaction should commit");
+
+    assert!(created_paths.contains(&".project/context-manifest.json".to_string()));
+    assert!(created_paths.contains(&".project/style".to_string()));
+    assert!(created_paths.contains(&".project/style/voice.md".to_string()));
+
+    let project_agents = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/旧书升级/.project/AGENTS.md",
+    )
+    .expect("project AGENTS should remain readable");
+    assert_eq!(project_agents, "# 自定义规则\n保留用户内容");
+
+    let context_manifest = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/旧书升级/.project/context-manifest.json",
+    )
+    .expect("manifest should be restored");
+    assert!(context_manifest.contains("\"taskType\": \"flow\""));
+
+    let style_voice = read_text_file_db(
+        &connection,
+        &book.root_path,
+        "books/旧书升级/.project/style/voice.md",
+    )
+    .expect("style voice should be restored");
+    assert!(style_voice.contains("# 旧书升级 文风基线"));
 }
 
 #[test]

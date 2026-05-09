@@ -113,6 +113,31 @@ describe("useBookWorkspaceStore", () => {
     expect(useBookWorkspaceStore.getState().activeFilePath).toBe(chapterPath);
   });
 
+  it("打开书籍时会先补齐缺失的初始化模板", async () => {
+    window.localStorage.setItem(
+      "ainovelstudio-book-workspace",
+      JSON.stringify({ rootPath, selectedFilePath: null }),
+    );
+
+    mockInvoke.mockImplementation(async (command: string) => {
+      switch (command) {
+        case "ensure_book_workspace_template":
+          return [".project/context-manifest.json"];
+        case "get_book_workspace_summary":
+          return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
+        case "read_workspace_tree":
+          return initialTree;
+        default:
+          return undefined;
+      }
+    });
+
+    await useBookWorkspaceStore.getState().initializeWorkspace();
+
+    expect(mockInvoke.mock.calls[0]).toEqual(["ensure_book_workspace_template", { rootPath }]);
+    expect(useBookWorkspaceStore.getState().rootBookId).toBe(bookId);
+  });
+
   it("按 bookId 打开书籍时会保留该书的身份，不会再回退到 path summary", async () => {
     mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
       switch (command) {

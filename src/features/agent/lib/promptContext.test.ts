@@ -85,6 +85,8 @@ describe("prompt context", () => {
 
     expect(system).toContain("## s03 已启用技能");
     expect(system).toContain("system 里只保留技能目录");
+    expect(system).toContain("执行前必须");
+    expect(system).toContain("SKILL.md");
     expect(system).toContain("### 技能：代码审查");
     expect(system).toContain("用于审查代码改动的检查清单");
     expect(system).not.toContain("这里是很长的完整 skill 正文");
@@ -185,7 +187,7 @@ describe("prompt context", () => {
     expect(system).toContain("## s05 临时 Subagent");
   });
 
-  it("autopilot 模式渲染目标契约与目标上下文", () => {
+  it("autopilot 模式渲染 YOLO 契约与目标上下文", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
@@ -197,10 +199,42 @@ describe("prompt context", () => {
       },
     });
 
-    expect(system).toContain("# 模式：AUTOPILOT");
-    expect(system).toContain("目标");
+    expect(system).toContain("# 模式：YOLO");
+    expect(system).toContain("全自动目标执行");
     expect(system).toContain("完成第一章审校并写回文件");
     expect(system).toContain("第 1 轮");
-    expect(system).toContain("目标已完成");
+    expect(system).toContain("不用 ask");
+    expect(system).toContain("YOLO目标完成");
+  });
+
+  it("flow 模式渲染严格工作流和章节 harness", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledSkills: [],
+      enabledToolIds: ["todo", "read", "json", "canon_query"],
+      mode: "flow",
+    });
+
+    expect(system).toContain("# 模式：WORKFLOW");
+    expect(system).toContain("Skill Load");
+    expect(system).toContain("SKILL.md");
+    expect(system).toContain("再 State Maintain");
+    expect(system).toContain("chapter-plan -> draft -> continuity-review");
+    expect(system).toContain(".project/runs/chapter-NNN.json");
+  });
+
+  it("长篇章节模式渲染 AgentCard 契约", () => {
+    const system = buildSystemPrompt({
+      defaultAgentMarkdown: "# 主代理",
+      enabledSkills: [],
+      enabledToolIds: ["read", "write", "canon_query"],
+      mode: "chapter-write",
+    });
+
+    expect(system).toContain("# 模式：chapter-write");
+    expect(system).toContain("章节生产");
+    expect(system).toContain("canon_query");
+    expect(system).toContain(".project/runs/chapter-NNN.json");
+    expect(system).toContain("chapter-plan -> draft");
   });
 });

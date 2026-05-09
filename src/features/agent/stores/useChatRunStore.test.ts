@@ -218,13 +218,13 @@ describe("useChatRunStore", () => {
     expect(prompt).toContain("把冲突和爽点往前推");
   });
 
-  it("目标模式会持续自动检查并执行到目标完成", async () => {
+  it("YOLO 模式会持续自动检查并执行到目标完成", async () => {
     let callCount = 0;
     streamControl.runPrompt.mockImplementation(async function* () {
       callCount += 1;
       yield {
         type: "text-delta",
-        delta: callCount === 9 ? "目标已完成，已经写回目标文件。" : `第 ${callCount} 轮继续推进。`,
+	        delta: callCount === 9 ? "YOLO目标完成，已经写回目标文件。" : `第 ${callCount} 轮继续推进。`,
       };
     });
 
@@ -251,7 +251,7 @@ describe("useChatRunStore", () => {
       goal: "完成第一章审校并写回文件",
       iteration: 1,
     });
-    expect(streamControl.runPrompt.mock.calls[1]?.[0]?.prompt).toContain("自动检查");
+	    expect(streamControl.runPrompt.mock.calls[1]?.[0]?.prompt).toContain("YOLO 自动检查");
     expect(streamControl.runPrompt.mock.calls[8]?.[0]?.modeContext).toMatchObject({
       goal: "完成第一章审校并写回文件",
       iteration: 9,

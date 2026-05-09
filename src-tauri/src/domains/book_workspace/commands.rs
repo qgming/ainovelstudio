@@ -6,6 +6,7 @@ use crate::domains::book_workspace::data::{
     build_summary, list_books, load_book_by_id, load_book_by_root_path, BookWorkspaceSummary,
     TreeNode, WorkspaceLineResult, WorkspaceSearchMatch,
 };
+use crate::domains::book_workspace::maintenance::ensure_book_workspace_template_db;
 use crate::domains::book_workspace::ops::{
     create_workspace_directory_db, create_workspace_text_file_db, delete_workspace_entry_db,
     move_workspace_entry_db, read_text_file_db, read_text_file_line_db, rename_workspace_entry_db,
@@ -209,6 +210,17 @@ pub fn delete_book_workspace(app: AppHandle, rootPath: String) -> CommandResult<
             )
             .map_err(error_to_string)?;
         Ok(())
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn ensure_book_workspace_template(
+    app: AppHandle,
+    rootPath: String,
+) -> CommandResult<Vec<String>> {
+    with_transaction(&app, |transaction| {
+        ensure_book_workspace_template_db(transaction, &rootPath)
     })
 }
 

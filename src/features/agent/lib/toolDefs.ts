@@ -64,6 +64,12 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "统计文本文件字符/中文/英文/段落等指标。支持单文件 path、多文件 paths、目录递归 dir 三种模式；批量返回每文件统计 + 总和 + 中位字符数。",
   },
   {
+    id: "canon_query",
+    name: "Canon 查询",
+    description:
+      "按人物、地点、伏笔、能力边界或章节线索查询 .project/canon、status、style、chapters 等长篇事实源。",
+  },
+  {
     id: "edit",
     name: "局部编辑",
     description:

@@ -11,7 +11,7 @@ export const DEFAULT_MAIN_AGENT_MARKDOWN = [
   "你是神笔写作客户端的写作总控Agent。优先自己完成任务，在信息充足时直接交付可用内容。",
   "默认使用简体中文，优先给成稿或结构化结论，不输出空泛方法论。",
   "修改已有文件时优先使用 edit 做局部修改，只有确实需要整体替换时才使用 write。",
-  "先理解文件树结构；任务明显匹配技能时，主动调用 skill 获取专项规则和材料。",
+  "先理解文件树结构；任务明显匹配技能时，必须先调用 skill 读取对应 SKILL.md，再执行。",
 ].join("\n");
 
 type BuildSystemPromptInput<M extends AgentMode = AgentMode> = {
@@ -27,9 +27,9 @@ type BuildSystemPromptInput<M extends AgentMode = AgentMode> = {
 };
 
 const SKILL_LOADING_NOTE = [
-  "system 里只保留技能目录。匹配到某个 skill 后，使用 skill 工具按 id 读取完整规则：",
+  "system 里只保留技能目录。任务明显匹配某个 skill 时，执行前必须使用 skill 工具按 id 读取完整规则：",
   '  skill({ action: "read", skillId: "<id>", relativePath: "SKILL.md" })',
-  "再按需读取 references/ 下的文件。不要把目录块当成完整规则使用。",
+  "需要例子、模板或专项方法时，再按需读取 references/ 下的文件。不要把目录块当成完整规则使用。",
 ].join("\n");
 
 // Agent OS 内核：常驻 system 的硬契约。短而硬，不放方法论。
@@ -39,15 +39,17 @@ const AGENT_OS_KERNEL = [
   "",
   "**任务循环（每轮严格按序）**",
   "1. Inspect：定位事实源。不知道路径用 browse；知道关键词用 search；知道路径用 read。",
-  "2. Plan：≥3 步任务用 todo 写短计划；简单任务直接做，不写空计划。",
-  "3. Act：用最小工具完成动作。改已有文件优先 edit；改 JSON 字段优先 json；新建/重命名/删除用 path；只有完整新内容才用 write。",
-  "4. Verify：写回后必要时 read / word_count 复核结果是否落地。",
-  "5. Report：只汇报结果、改动文件、风险或下一步；不复述工具流水，不堆方法论。",
+  "2. Skill Load：任务明显匹配已启用 skill 时，先用 skill 读取对应 SKILL.md；目录块只用于导航。",
+  "3. Plan：≥3 步任务用 todo 写短计划；简单任务直接做，不写空计划。",
+  "4. Act：用最小工具完成动作。改已有文件优先 edit；改 JSON 字段优先 json；新建/重命名/删除用 path；只有完整新内容才用 write。",
+  "5. Verify：写回后必要时 read / word_count 复核结果是否落地。",
+  "6. Report：只汇报结果、改动文件、风险或下一步；不复述工具流水，不堆方法论。",
   "",
   "**必须先用工具读取的场景（不得跳过）**",
   "- 续写、改写、扩写、润色、审稿、分析工作区任意文件",
   "- 查询人物、设定、大纲、章节、状态、连续性",
   "- 创建或修改任何工作区文件（改前必先读当前内容）",
+  "- 执行长篇写作、扫榜、拆文、润色、去 AI 味等已启用 skill 覆盖的任务",
   "- 批量子任务执行",
   "",
   "**允许直接回答（无需读取）**",
@@ -91,11 +93,12 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   web_fetch: "拿到链接后再读正文；支持 full / anchor_range / heading_range；maxChars 默认 8000。",
   read: "已知准确路径用；大文件优先 mode=head/tail/range；按锚点用 anchor_range；按 Markdown 标题块用 heading_range。",
   word_count: "校对字数；单文件 path / 多文件 paths / 目录 dir 三种模式。",
+  canon_query: "查长篇事实源；按人物、地点、伏笔、能力边界或章节线索检索 `.project/canon`、status、style、chapters。",
   edit: "改已有文件首选；先 read 再 edit；action=replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中。",
   write: "整份覆盖；只有已准备好完整新内容才用，缺失目录会自动创建；不要用 write 做局部修改。",
   json: "JSON 文件局部读写首选；action=get/set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；不要用 write 改 JSON 字段。",
   path: "只动结构：create_file / create_folder / rename / move / delete；不写正文。",
-  skill: '先 action="list" 匹配 skillId，再 action="read" relativePath="SKILL.md" 拉规则；执行子任务用 task。',
+  skill: '先 action="list" 匹配 skillId；任务命中 skill 时，执行前必须 action="read" relativePath="SKILL.md" 拉规则；执行子任务用 task。',
 };
 
 function buildToolPromptBlock(enabledToolIds: string[]) {

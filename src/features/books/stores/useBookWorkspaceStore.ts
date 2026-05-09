@@ -5,6 +5,7 @@ import {
   createWorkspaceDirectory,
   createWorkspaceTextFile,
   deleteWorkspaceEntry,
+  ensureBookWorkspaceTemplate,
   getBookWorkspaceSummary,
   getBookWorkspaceSummaryById,
   getStoredWorkspaceSnapshot,
@@ -197,6 +198,10 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     isCurrent = () => true,
     workspaceSummary,
   }: LoadWorkspaceOptions) {
+    await ensureBookWorkspaceTemplate(rootPath);
+    if (!isCurrent()) {
+      return false;
+    }
     const [rootNode, workspace] = await Promise.all([
       readWorkspaceTree(rootPath),
       workspaceSummary ? Promise.resolve(workspaceSummary) : readWorkspaceSummary(rootPath),

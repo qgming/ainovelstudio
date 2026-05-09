@@ -279,6 +279,50 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
+  it("canon_query 只返回长篇事实源范围内的线索", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockSearchWorkspaceContent.mockResolvedValue([
+      {
+        matchType: "content",
+        path: ".project/canon/characters.md",
+        lineNumber: 3,
+        lineText: "沈砚：黑钟持有者。",
+      },
+      {
+        matchType: "content",
+        path: "正文/第001章_章名.md",
+        lineNumber: 8,
+        lineText: "沈砚看见黑钟。",
+      },
+    ]);
+
+    const result = await toolset.canon_query.execute({
+      kind: "canon",
+      query: "沈砚",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      summary: [
+        "找到 1 条与“沈砚”相关的 canon 线索：",
+        "- .project/canon/characters.md:3 沈砚：黑钟持有者。",
+      ].join("\n"),
+      data: {
+        kind: "canon",
+        matches: [
+          {
+            lineNumber: 3,
+            lineText: "沈砚：黑钟持有者。",
+            path: ".project/canon/characters.md",
+            type: "content",
+          },
+        ],
+        query: "沈砚",
+      },
+    });
+  });
+
   it("read 支持读取指定行段", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });

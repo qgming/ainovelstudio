@@ -61,6 +61,7 @@ pub fn run() {
             domains::book_workspace::commands::import_book_zip,
             domains::book_workspace::commands::export_book_zip,
             domains::book_workspace::commands::delete_book_workspace,
+            domains::book_workspace::commands::ensure_book_workspace_template,
             domains::book_workspace::commands::read_workspace_tree,
             domains::book_workspace::commands::read_text_file,
             domains::book_workspace::commands::write_text_file,

@@ -176,6 +176,10 @@ export function deleteBookWorkspace(rootPath: string) {
   return invoke<void>("delete_book_workspace", { rootPath });
 }
 
+export function ensureBookWorkspaceTemplate(rootPath: string) {
+  return invoke<string[]>("ensure_book_workspace_template", { rootPath });
+}
+
 export function readWorkspaceTree(rootPath: string, options?: InvokeCancellationOptions) {
   return invokeWithCancellation<TreeNode>("read_workspace_tree", { rootPath }, options);
 }

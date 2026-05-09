@@ -63,7 +63,7 @@ describe("BookAgentPanel", () => {
     expect(screen.queryByText("read_file")).not.toBeInTheDocument();
   });
 
-  it("目标模式设定目标后在顶部显示目标信息", () => {
+  it("YOLO 模式设定目标后在顶部显示目标信息", () => {
     useAgentStore.setState({
       activeModeId: "autopilot",
       activeSessionId: "session-1",
@@ -74,8 +74,8 @@ describe("BookAgentPanel", () => {
 
     render(<BookAgentPanel width={420} />);
 
-    expect(screen.getByLabelText("当前 Agent 模式")).toHaveTextContent("目标");
-    expect(screen.getByLabelText("当前目标")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前 Agent 模式")).toHaveTextContent("YOLO");
+    expect(screen.getByLabelText("YOLO 目标")).toBeInTheDocument();
     expect(screen.getByText("完成第一章审校并写回文件")).toBeInTheDocument();
     expect(screen.queryByText("目标模式")).not.toBeInTheDocument();
   });

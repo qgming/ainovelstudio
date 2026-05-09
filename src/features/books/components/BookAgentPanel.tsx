@@ -214,7 +214,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       {activeModeId === "autopilot" && autopilotGoal ? (
         <AgentInfoDisplay
           description={autopilotGoal}
-          title="当前目标"
+          title="YOLO 目标"
         />
       ) : null}
       <AgentMessageList messages={run.messages} runStatus={displayRunStatus} />

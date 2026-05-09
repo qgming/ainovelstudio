@@ -1,6 +1,10 @@
+import type { ContextManifest, ContextManifestPolicy } from "./longformTypes";
+
 export const DEFAULT_PROJECT_AGENT_PATH = ".project/AGENTS.md";
+export const DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH = ".project/context-manifest.json";
 export const DEFAULT_PROJECT_README_PATH = ".project/README.md";
 export const DEFAULT_PROJECT_STATUS_PATH = ".project/status";
+const MANIFEST_FILE_LIMIT = 12;
 const STATUS_FILE_LIMIT = 6;
 const STATUS_FILE_PRIORITIES = [
   "latest-plot.json",
@@ -28,10 +32,12 @@ type ProjectTreeNode = {
 };
 
 type LoadProjectContextInput = {
+  activeFilePath?: string | null;
   readFile: (rootPath: string, path: string) => Promise<string>;
   readTree?: (rootPath: string) => Promise<{
     children?: ProjectTreeNode[];
   }>;
+  taskType?: string | null;
   workspaceRootPath: string | null;
 };
 
@@ -64,7 +70,9 @@ function findTreeNodeByPath(
 }
 
 function getStatusFilePriority(path: string) {
-  const index = STATUS_FILE_PRIORITIES.indexOf(getBaseName(path) as (typeof STATUS_FILE_PRIORITIES)[number]);
+  const index = STATUS_FILE_PRIORITIES.indexOf(
+    getBaseName(path) as (typeof STATUS_FILE_PRIORITIES)[number],
+  );
   return index >= 0 ? index : STATUS_FILE_PRIORITIES.length;
 }
 
@@ -81,7 +89,9 @@ function collectStatusJsonPaths(
   const statusChildren = statusNode.children ?? [];
 
   return statusChildren
-    .filter((node) => node.kind === "file" && node.path.toLowerCase().endsWith(".json"))
+    .filter((node) =>
+      node.kind === "file" && node.path.toLowerCase().endsWith(".json")
+    )
     .sort((left, right) =>
       getStatusFilePriority(left.path) - getStatusFilePriority(right.path)
       || left.path.localeCompare(right.path),
@@ -90,9 +100,137 @@ function collectStatusJsonPaths(
     .map((node) => node.path);
 }
 
+function normalizePathList(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeManifestPolicy(value: unknown): ContextManifestPolicy | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const taskType = typeof candidate.taskType === "string" ? candidate.taskType.trim() : "";
+  if (!taskType) return null;
+  return {
+    alwaysInclude: normalizePathList(candidate.alwaysInclude),
+    charBudget: typeof candidate.charBudget === "number" ? candidate.charBudget : 0,
+    fullReadTriggers: normalizePathList(candidate.fullReadTriggers),
+    includeIfActive: normalizePathList(candidate.includeIfActive),
+    priority: typeof candidate.priority === "number" ? candidate.priority : 0,
+    summaryFirst: normalizePathList(candidate.summaryFirst),
+    taskType,
+  };
+}
+
+function parseContextManifest(content: string): ContextManifest | null {
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    const policies = Array.isArray(parsed.policies)
+      ? parsed.policies
+        .map(normalizeManifestPolicy)
+        .filter((item): item is ContextManifestPolicy => item !== null)
+      : [];
+    return {
+      bookName: typeof parsed.bookName === "string" ? parsed.bookName : undefined,
+      policies,
+      version: typeof parsed.version === "number" ? parsed.version : 1,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function chooseManifestPolicies(
+  manifest: ContextManifest | null,
+  taskType?: string | null,
+) {
+  if (!manifest?.policies.length) return [];
+  const normalizedTaskType = taskType?.trim();
+  const matched = normalizedTaskType
+    ? manifest.policies.filter((policy) => policy.taskType === normalizedTaskType)
+    : [];
+  return (matched.length ? matched : manifest.policies)
+    .sort((left, right) => right.priority - left.priority)
+    .slice(0, 2);
+}
+
+function collectManifestPaths(
+  policies: ContextManifestPolicy[],
+  activeFilePath?: string | null,
+) {
+  const paths = new Set<string>();
+  policies.forEach((policy) => {
+    policy.alwaysInclude.forEach((path) => paths.add(path));
+    policy.summaryFirst.forEach((path) => paths.add(path));
+    if (activeFilePath) policy.includeIfActive.forEach((path) => paths.add(path));
+  });
+  if (activeFilePath) paths.add(activeFilePath);
+  return Array.from(paths).slice(0, MANIFEST_FILE_LIMIT);
+}
+
+async function tryReadContextFile(
+  readFile: LoadProjectContextInput["readFile"],
+  workspaceRootPath: string,
+  path: string,
+) {
+  try {
+    const content = await readFile(workspaceRootPath, path);
+    if (!content.trim()) return null;
+    return { content, name: getBaseName(path), path };
+  } catch {
+    return null;
+  }
+}
+
+function pushUniqueContextFile(
+  files: ProjectContextPayload["files"],
+  file: ProjectContextPayload["files"][number] | null,
+) {
+  if (!file || files.some((item) => item.path === file.path)) return;
+  files.push(file);
+}
+
+async function loadManifestContextFiles(params: {
+  activeFilePath?: string | null;
+  files: ProjectContextPayload["files"];
+  manifest: ContextManifest | null;
+  readFile: LoadProjectContextInput["readFile"];
+  taskType?: string | null;
+  workspaceRootPath: string;
+}) {
+  const policyPaths = collectManifestPaths(
+    chooseManifestPolicies(params.manifest, params.taskType),
+    params.activeFilePath,
+  );
+  for (const path of policyPaths) {
+    pushUniqueContextFile(
+      params.files,
+      await tryReadContextFile(params.readFile, params.workspaceRootPath, path),
+    );
+  }
+}
+
+async function loadStatusContextFiles(params: {
+  files: ProjectContextPayload["files"];
+  readFile: LoadProjectContextInput["readFile"];
+  readTree: NonNullable<LoadProjectContextInput["readTree"]>;
+  workspaceRootPath: string;
+}) {
+  const tree = await params.readTree(params.workspaceRootPath);
+  const statusPaths = collectStatusJsonPaths(tree);
+  const statusContents = await Promise.all(
+    statusPaths.map((path) =>
+      tryReadContextFile(params.readFile, params.workspaceRootPath, path)
+    ),
+  );
+  statusContents.forEach((file) => pushUniqueContextFile(params.files, file));
+}
+
 export async function loadProjectContext({
+  activeFilePath,
   readFile,
   readTree,
+  taskType,
   workspaceRootPath,
 }: LoadProjectContextInput): Promise<ProjectContextPayload | null> {
   if (!workspaceRootPath) {
@@ -100,47 +238,44 @@ export async function loadProjectContext({
   }
 
   const files: ProjectContextPayload["files"] = [];
+  let manifest: ContextManifest | null = null;
 
-  try {
-    const content = await readFile(workspaceRootPath, DEFAULT_PROJECT_AGENT_PATH);
-    if (content.trim()) {
-      files.push({
-        content,
-        name: getBaseName(DEFAULT_PROJECT_AGENT_PATH),
-        path: DEFAULT_PROJECT_AGENT_PATH,
-      });
-    }
-  } catch {
-    // ignore missing project agent file so status JSON 仍可作为默认真值层注入
+  pushUniqueContextFile(
+    files,
+    await tryReadContextFile(readFile, workspaceRootPath, DEFAULT_PROJECT_AGENT_PATH),
+  );
+  pushUniqueContextFile(
+    files,
+    await tryReadContextFile(readFile, workspaceRootPath, DEFAULT_PROJECT_README_PATH),
+  );
+
+  const manifestFile = await tryReadContextFile(
+    readFile,
+    workspaceRootPath,
+    DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH,
+  );
+  if (manifestFile) {
+    manifest = parseContextManifest(manifestFile.content);
+    pushUniqueContextFile(files, manifestFile);
   }
 
-  try {
-    const content = await readFile(workspaceRootPath, DEFAULT_PROJECT_README_PATH);
-    if (content.trim()) {
-      files.push({
-        content,
-        name: getBaseName(DEFAULT_PROJECT_README_PATH),
-        path: DEFAULT_PROJECT_README_PATH,
-      });
-    }
-  } catch {
-    // ignore missing project readme file so other default context can continue loading
-  }
+  await loadManifestContextFiles({
+    activeFilePath,
+    files,
+    manifest,
+    readFile,
+    taskType,
+    workspaceRootPath,
+  });
 
   if (readTree) {
     try {
-      const tree = await readTree(workspaceRootPath);
-      const statusPaths = collectStatusJsonPaths(tree);
-      const statusContents = await Promise.all(
-        statusPaths.map(async (path) => ({
-          content: await readFile(workspaceRootPath, path),
-          name: getBaseName(path),
-          path,
-        })),
-      );
-      files.push(
-        ...statusContents.filter((file) => file.content.trim()),
-      );
+      await loadStatusContextFiles({
+        files,
+        readFile,
+        readTree,
+        workspaceRootPath,
+      });
     } catch {
       // ignore status preload failures and keep other default context
     }

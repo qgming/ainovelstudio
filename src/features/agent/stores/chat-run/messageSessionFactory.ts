@@ -4,6 +4,7 @@ import { loadProjectContext } from "@features/agent/lib/projectContext";
 import { createWritingAgentSession } from "@features/agent/lib/session";
 import { derivePlanningState } from "@features/agent/lib/planning";
 import { buildBookWorkspaceTools } from "@features/agent/lib/toolsets/factory";
+import { applyAgentCardToolPolicy } from "@features/agent/lib/agentCards";
 import type { AgentMode, ModeContextMap } from "@features/agent/lib/modeRules";
 import type { AgentMessage, AgentUsage } from "@features/agent/lib/types";
 import type { ChatEntry } from "@features/agent/chat/types";
@@ -43,8 +44,10 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
   const defaultAgentMarkdown = await ensureMainAgentMarkdown();
   const manualContext = await resolveManualContext(params, enabledSkills);
   const projectContext = await loadProjectContext({
+    activeFilePath: workspaceState.activeFilePath,
     readFile: readWorkspaceTextFile,
     readTree: readWorkspaceTree,
+    taskType: params.activeModeId,
     workspaceRootPath: workspaceState.rootPath,
   });
 
@@ -56,7 +59,7 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
     debugLabel: `chat-session:${params.sessionId}`,
     defaultAgentMarkdown,
     enabledSkills,
-    enabledToolIds: getEnabledToolIds(),
+    enabledToolIds: getEnabledToolIds(params.activeModeId),
     manualContext,
     mode: params.activeModeId,
     modeContext: buildModeContext(params),
@@ -103,8 +106,9 @@ function buildModeContext(params: SessionFactoryParams): ModeContextMap[AgentMod
   };
 }
 
-function getEnabledToolIds() {
-  return Object.entries(useAgentSettingsStore.getState().enabledTools)
+function getEnabledToolIds(mode: AgentMode) {
+  const enabledToolIds = Object.entries(useAgentSettingsStore.getState().enabledTools)
     .filter(([, value]) => value)
     .map(([id]) => id);
+  return applyAgentCardToolPolicy(mode, enabledToolIds);
 }
