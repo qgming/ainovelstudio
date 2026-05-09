@@ -266,4 +266,35 @@ describe("leaderboardApi", () => {
 
     expect(mockForward).toHaveBeenCalledTimes(2);
   });
+
+  it("今日番茄总榜当天复用聚合缓存，强制刷新时更新缓存", async () => {
+    mockForward.mockImplementation(({ url }: { url: string }) => {
+      const params = new URL(url).searchParams;
+      const categoryId = Number(params.get("category_id"));
+      const gender = params.get("gender");
+      const type = params.get("rankMold");
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        body: createRankApiJson([
+          createBook({
+            bookId: `merged-${gender}-${type}-${categoryId}`,
+            bookName: `聚合作品${gender}-${type}-${categoryId}`,
+            read_count: String(20_000 - categoryId),
+          }),
+        ]),
+      });
+    });
+
+    const firstBooks = await fetchFanqieOverallLeaderboard();
+    const firstRequestCount = mockForward.mock.calls.length;
+    const secondBooks = await fetchFanqieOverallLeaderboard();
+    const secondRequestCount = mockForward.mock.calls.length;
+    await fetchFanqieOverallLeaderboard(undefined, { forceRefresh: true });
+
+    expect(firstBooks.length).toBeGreaterThan(0);
+    expect(secondBooks).toEqual(firstBooks);
+    expect(secondRequestCount).toBe(firstRequestCount);
+    expect(mockForward.mock.calls.length).toBeGreaterThan(secondRequestCount);
+  });
 });

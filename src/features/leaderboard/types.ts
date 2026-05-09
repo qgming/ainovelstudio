@@ -19,6 +19,7 @@ export interface LeaderboardBook {
   bookId?: string;
   bookName: string;
   category?: string;
+  categoryRank?: number;
   detailUrl?: string;
   rank: number;
   rankPosDiff?: number;

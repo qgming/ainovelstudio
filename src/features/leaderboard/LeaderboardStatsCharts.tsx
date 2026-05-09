@@ -1,5 +1,4 @@
-import { formatCount } from "./leaderboardApi";
-import { InterestSignals, LineSection, SplitCell, SplitGrid } from "./LeaderboardStatsSignals";
+import { LineSection, SplitCell, SplitGrid } from "./LeaderboardStatsSignals";
 import { FocusTopics } from "./LeaderboardTopicOpportunities";
 import { formatPercent, type LeaderboardCategoryStat, type LeaderboardStats } from "./leaderboardStats";
 
@@ -22,8 +21,21 @@ function getChartColor(index: number) {
   return CHART_COLORS[index] ?? `hsl(${(index * 47) % 360} 68% 52%)`;
 }
 
-function getDemandGap(stat: LeaderboardCategoryStat) {
-  return stat.readShare - stat.bookShare;
+function formatScore(value: number) {
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function formatBookTitle(name: string) {
+  if (!name || name === "暂无代表作") return name;
+  return name.startsWith("《") && name.endsWith("》") ? name : `《${name}》`;
+}
+
+function pickTop(stats: LeaderboardStats, key: keyof LeaderboardCategoryStat) {
+  return [...stats.categoryStats].sort((left, right) => {
+    const leftValue = Number(left[key]);
+    const rightValue = Number(right[key]);
+    return rightValue - leftValue || right.readCount - left.readCount;
+  })[0];
 }
 
 function getCategorySlices(stats: LeaderboardStats, valueKey: "bookShare" | "readShare"): ChartSlice[] {
@@ -45,15 +57,19 @@ function CompactMetric({ detail, label, value }: { detail: string; label: string
 }
 
 function MetricsStrip({ stats }: { stats: LeaderboardStats }) {
-  const topGap = [...stats.categoryStats].sort((left, right) => getDemandGap(right) - getDemandGap(left))[0];
+  const newbie = pickTop(stats, "newWriterOpportunityIndex");
+  const trend = pickTop(stats, "hotTrendOpportunityIndex");
+  const stable = pickTop(stats, "stableLongFormOpportunityIndex");
+  const sample = pickTop(stats, "studySampleValueIndex");
+  const risk = pickTop(stats, "riskScore");
   return (
     <section className="border-b border-border bg-panel">
       <div className="grid grid-cols-2 divide-border sm:grid-cols-5">
-        <CompactMetric label="入榜作品" value={`${stats.totalBooks} 本`} detail={`${stats.categoryStats.length} 个子分类`} />
-        <CompactMetric label="总在读数" value={formatCount(stats.totalReadCount)} detail={`平均 ${formatCount(stats.averageReadCount)}`} />
-        <CompactMetric label="头部题材" value={stats.topCategoryName} detail={`阅读占比 ${formatPercent(stats.topCategoryReadShare)}`} />
-        <CompactMetric label="供需缺口" value={topGap?.name ?? "暂无"} detail={topGap ? `+${formatPercent(Math.max(0, getDemandGap(topGap)))}` : "暂无差异"} />
-        <CompactMetric label="前十集中度" value={formatPercent(stats.topTenReadShare)} detail="前十作品阅读份额" />
+        <CompactMetric label="新手友好题材" value={newbie?.name ?? "暂无"} detail={newbie ? `机会 ${formatScore(newbie.newWriterOpportunityIndex)}` : "暂无数据"} />
+        <CompactMetric label="短期热度题材" value={trend?.name ?? "暂无"} detail={trend ? `热度 ${formatScore(trend.hotTrendOpportunityIndex)}` : "暂无数据"} />
+        <CompactMetric label="稳健长篇题材" value={stable?.name ?? "暂无"} detail={stable ? `长线 ${formatScore(stable.stableLongFormOpportunityIndex)}` : "暂无数据"} />
+        <CompactMetric label="拆书样本" value={sample ? formatBookTitle(sample.topBookName) : "暂无"} detail={sample ? `${sample.name} · ${formatScore(sample.studySampleValueIndex)}` : "暂无数据"} />
+        <CompactMetric label="风险预警题材" value={risk?.name ?? "暂无"} detail={risk ? `风险 ${formatScore(risk.riskScore)}` : "暂无数据"} />
       </div>
     </section>
   );
@@ -118,7 +134,8 @@ export function LeaderboardStatsOverview({ stats }: { stats: LeaderboardStats })
   return (
     <>
       <MetricsStrip stats={stats} />
-      <LineSection title="分类占比">
+      <FocusTopics stats={stats} />
+      <LineSection title="样本结构">
         <SplitGrid>
           <SplitCell>
             <PiePanel ariaLabel="子分类数量占比饼状图" slices={bookSlices} title="分类数量占比" />
@@ -128,10 +145,6 @@ export function LeaderboardStatsOverview({ stats }: { stats: LeaderboardStats })
           </SplitCell>
         </SplitGrid>
       </LineSection>
-      <div>
-        <InterestSignals stats={stats} />
-        <FocusTopics stats={stats} />
-      </div>
     </>
   );
 }

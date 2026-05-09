@@ -17,12 +17,14 @@ vi.mock("./leaderboardApi", () => ({
 import { LeaderboardStatsPage } from "./LeaderboardStatsPage";
 
 function createBook(partial: Partial<LeaderboardBook>): LeaderboardBook {
+  const rank = partial.rank ?? 1;
   return {
     abstract: "",
     author: "测试作者",
     bookName: "测试作品",
     category: "都市高武",
-    rank: 1,
+    categoryRank: partial.categoryRank ?? rank,
+    rank,
     readCount: 0,
     status: "连载中",
     wordCount: 100_000,
@@ -62,29 +64,37 @@ describe("LeaderboardStatsPage", () => {
     expect(screen.getByRole("img", { name: "子分类数量占比饼状图" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "子分类在读占比饼状图" })).toBeInTheDocument();
     expect(screen.queryByText("其他分类")).not.toBeInTheDocument();
-    expect(screen.getByText("需求倍率")).toBeInTheDocument();
-    expect(screen.getByText("字数吸量效率")).toBeInTheDocument();
-    expect(screen.getByText("腰部承接力")).toBeInTheDocument();
-    expect(screen.getByText("长线消化力")).toBeInTheDocument();
-    expect(screen.getByLabelText("都市高武 1.13x：1.13x")).toBeInTheDocument();
-    expect(screen.getByText("题材机会")).toBeInTheDocument();
-    expect(screen.getByText("综合机会题材")).toBeInTheDocument();
-    expect(screen.getByText("稳健长线题材")).toBeInTheDocument();
-    expect(screen.getByText("爆款样本价值")).toBeInTheDocument();
-    expect(screen.getByText("低供给高潜力题材")).toBeInTheDocument();
-    expect(screen.getByText(/都市高武 1.2x/)).toBeInTheDocument();
+    expect(screen.queryByText("兴趣信号")).not.toBeInTheDocument();
+    expect(screen.getByText("题材机会榜")).toBeInTheDocument();
+    expect(screen.getAllByText("机会判断").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("热度变化").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("承接结构").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("竞争风险").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("写作空间").length).toBeGreaterThan(0);
+    expect(screen.getByText("代表作")).toBeInTheDocument();
+    expect(screen.getAllByText("综合机会题材").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("新手友好题材").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("短期热度题材").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("稳健长篇题材").length).toBeGreaterThan(0);
+    expect(screen.getByText("拆书样本题材")).toBeInTheDocument();
+    expect(screen.getAllByText("风险预警题材").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/都市高武/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("《都市作品一》").length).toBeGreaterThan(0);
     expect(screen.queryByText("子分类分布明细")).not.toBeInTheDocument();
     expect(screen.queryByText("子分类阅读占比排行")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "综合机会题材说明" }));
-    expect(await screen.findByText("计算公式：机会缺口标准化 * 0.35 + 字数吸量效率标准化 * 0.30 + 长线消化力标准化 * 0.20 - 爆款集中度 * 0.15")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新手友好题材说明" }));
+    expect(await screen.findByText("怎么用")).toBeInTheDocument();
+    expect(await screen.findByText("计算公式：0.22 * 中段阅读占比 + 0.20 * 中段上升率 + 0.18 * 字数吸量 + 0.16 * 前30吸量 + 0.14 * 趋势动能 + 0.10 * 读者份额 - 0.18 * Top1集中度 - 0.10 * Top3集中度")).toBeInTheDocument();
+    expect(screen.queryByText("新作家怎么看")).not.toBeInTheDocument();
+    expect(screen.queryByText("老作家怎么看")).not.toBeInTheDocument();
   });
 
   it("默认统计今日番茄总榜并支持强制刷新", async () => {
     mockFetchFanqieOverallLeaderboard.mockResolvedValue([createBook({ readCount: 100 })]);
 
     renderStatsPage();
-    await screen.findByText("入榜作品");
+    await screen.findAllByText("新手友好题材");
     fireEvent.click(screen.getByRole("button", { name: "刷新统计" }));
 
     await waitFor(() => {

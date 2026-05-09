@@ -99,6 +99,10 @@ function getCacheKey(request: LeaderboardRequest) {
   return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:${request.gender}:${request.type}:${request.categoryId}`;
 }
 
+function getMergedCacheKey(name: string) {
+  return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:merged:${name}`;
+}
+
 function getCacheStorage(): Storage | null {
   try {
     return globalThis.localStorage ?? null;
@@ -123,12 +127,37 @@ function readCachedBooks(request: LeaderboardRequest): LeaderboardBook[] | null 
   }
 }
 
+function readCachedBookList(cacheKey: string, forceRefresh?: boolean): LeaderboardBook[] | null {
+  const storage = getCacheStorage();
+  if (!storage || forceRefresh) return null;
+  const raw = storage.getItem(cacheKey);
+  if (!raw) return null;
+  try {
+    const payload = JSON.parse(raw) as CachePayload;
+    if (payload.version !== CACHE_VERSION || payload.date !== getTodayKey()) return null;
+    return Array.isArray(payload.books) ? payload.books : null;
+  } catch {
+    return null;
+  }
+}
+
 function writeCachedBooks(request: LeaderboardRequest, books: LeaderboardBook[]) {
   const storage = getCacheStorage();
   if (!storage) return;
   const payload: CachePayload = { books, date: getTodayKey(), version: CACHE_VERSION };
   try {
     storage.setItem(getCacheKey(request), JSON.stringify(payload));
+  } catch {
+    // Cache storage is best-effort; fetching should still succeed if quota is full.
+  }
+}
+
+function writeCachedBookList(cacheKey: string, books: LeaderboardBook[]) {
+  const storage = getCacheStorage();
+  if (!storage) return;
+  const payload: CachePayload = { books, date: getTodayKey(), version: CACHE_VERSION };
+  try {
+    storage.setItem(cacheKey, JSON.stringify(payload));
   } catch {
     // Cache storage is best-effort; fetching should still succeed if quota is full.
   }
@@ -245,6 +274,7 @@ function normalizeBook(book: FanqieRankBook, index: number, category?: SubCatego
     bookId,
     bookName: decodeText(book.bookName ?? "未命名作品"),
     category: category?.name ?? decodeText(book.category ?? ""),
+    categoryRank: book.currentPos ?? index + 1,
     detailUrl: bookId ? `${FANQIE_BASE_URL}/page/${bookId}` : undefined,
     rank: book.currentPos ?? index + 1,
     rankPosDiff: typeof book.rankPosDiff === "number" ? book.rankPosDiff : 0,
@@ -396,19 +426,27 @@ function rankMergedBooks(books: LeaderboardBook[], limit?: number) {
 }
 
 export async function fetchOverallLeaderboard(request: LeaderboardRequest): Promise<LeaderboardBook[]> {
+  const cacheKey = getMergedCacheKey(`overall:${request.gender}:${request.type}`);
+  const cachedBooks = readCachedBookList(cacheKey, request.forceRefresh);
+  if (cachedBooks) return typeof request.limit === "number" ? cachedBooks.slice(0, request.limit) : cachedBooks;
   const books = await fetchCategoryPlanBooks({
     categories: getOverallCategories(request.gender),
     forceRefresh: request.forceRefresh,
     gender: request.gender,
     type: request.type,
   });
-  return rankMergedBooks(books, request.limit);
+  const rankedBooks = rankMergedBooks(books);
+  writeCachedBookList(cacheKey, rankedBooks);
+  return typeof request.limit === "number" ? rankedBooks.slice(0, request.limit) : rankedBooks;
 }
 
 export async function fetchFanqieOverallLeaderboard(
   limit?: number,
   options: { forceRefresh?: boolean } = {},
 ): Promise<LeaderboardBook[]> {
+  const cacheKey = getMergedCacheKey("fanqie-overall");
+  const cachedBooks = readCachedBookList(cacheKey, options.forceRefresh);
+  if (cachedBooks) return typeof limit === "number" ? cachedBooks.slice(0, limit) : cachedBooks;
   const plans: CategoryFetchPlan[] = [
     { categories: MALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 1, type: 2 },
     { categories: MALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 1, type: 1 },
@@ -419,5 +457,7 @@ export async function fetchFanqieOverallLeaderboard(
   for (const plan of plans) {
     planBooks.push(await fetchCategoryPlanBooks(plan));
   }
-  return rankMergedBooks(planBooks.flat(), limit);
+  const rankedBooks = rankMergedBooks(planBooks.flat());
+  writeCachedBookList(cacheKey, rankedBooks);
+  return typeof limit === "number" ? rankedBooks.slice(0, limit) : rankedBooks;
 }
