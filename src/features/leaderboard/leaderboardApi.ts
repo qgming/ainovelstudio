@@ -10,8 +10,6 @@ import type { FanqieRankBook, LeaderboardBook, LeaderboardRequest, SubCategory }
 const FANQIE_BASE_URL = "https://fanqienovel.com";
 const FANQIE_APP_ID = "1967";
 const DEFAULT_LIMIT = 30;
-const OVERALL_LIMIT = 120;
-const FANQIE_OVERALL_LIMIT = 180;
 const RANK_LIST_TYPE = "3";
 const CACHE_VERSION = "v2";
 const CACHE_PREFIX = "ainovelstudio:fanqie-leaderboard";
@@ -295,7 +293,7 @@ async function fetchCategoryPlanBooks(plan: CategoryFetchPlan) {
   return categoryBooks.flat();
 }
 
-function rankMergedBooks(books: LeaderboardBook[], limit: number) {
+function rankMergedBooks(books: LeaderboardBook[], limit?: number) {
   const deduped = new Map<string, LeaderboardBook>();
   for (const book of books) {
     const key = getDedupKey(book);
@@ -303,10 +301,10 @@ function rankMergedBooks(books: LeaderboardBook[], limit: number) {
       deduped.set(key, book);
     }
   }
-  return Array.from(deduped.values())
-    .sort((a, b) => b.readCount - a.readCount)
-    .slice(0, limit)
-    .map((book, index) => ({ ...book, rank: index + 1 }));
+  const rankedBooks = Array.from(deduped.values())
+    .sort((a, b) => b.readCount - a.readCount);
+  const visibleBooks = typeof limit === "number" ? rankedBooks.slice(0, limit) : rankedBooks;
+  return visibleBooks.map((book, index) => ({ ...book, rank: index + 1 }));
 }
 
 export async function fetchOverallLeaderboard(request: LeaderboardRequest): Promise<LeaderboardBook[]> {
@@ -316,11 +314,11 @@ export async function fetchOverallLeaderboard(request: LeaderboardRequest): Prom
     gender: request.gender,
     type: request.type,
   });
-  return rankMergedBooks(books, request.limit ?? OVERALL_LIMIT);
+  return rankMergedBooks(books, request.limit);
 }
 
 export async function fetchFanqieOverallLeaderboard(
-  limit: number = FANQIE_OVERALL_LIMIT,
+  limit?: number,
   options: { forceRefresh?: boolean } = {},
 ): Promise<LeaderboardBook[]> {
   const plans: CategoryFetchPlan[] = [

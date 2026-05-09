@@ -1,5 +1,6 @@
-import { RefreshCw } from "lucide-react";
+import { BarChart3, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageShell } from "@shared/components/PageShell";
 import {
   LeaderboardBoardSelector,
@@ -24,6 +25,7 @@ function formatUpdatedAt(date: Date | null) {
 }
 
 export function LeaderboardPage() {
+  const navigate = useNavigate();
   const [boardId, setBoardId] = useState(FANQIE_OVERALL_BOARD_ID);
   const [categoryId, setCategoryId] = useState(String(OVERALL_CATEGORY_ID));
   const [books, setBooks] = useState<LeaderboardBook[]>([]);
@@ -42,6 +44,7 @@ export function LeaderboardPage() {
     [categoryId, selectedBoard.subCategories],
   );
   const selectedCategoryId = Number(categoryId);
+  const canOpenStats = isFanqieOverall || selectedCategoryId === OVERALL_CATEGORY_ID;
 
   const refresh = useCallback(async (forceRefresh = false) => {
     const currentSeq = requestSeq.current + 1;
@@ -90,7 +93,12 @@ export function LeaderboardPage() {
           番茄小说 · {formatUpdatedAt(updatedAt)}
         </div>
       }
-      actions={[{ icon: RefreshCw, label: status === "loading" ? "刷新中..." : "刷新榜单", onClick: () => void refresh(true) }]}
+      actions={[
+        ...(canOpenStats
+          ? [{ icon: BarChart3, label: "数据统计", onClick: () => navigate(`/leaderboard/statistics?board=${boardId}`) }]
+          : []),
+        { icon: RefreshCw, label: status === "loading" ? "刷新中..." : "刷新榜单", onClick: () => void refresh(true) },
+      ]}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
         <div className="shrink-0 border-b border-border bg-panel-subtle px-4 py-3 sm:px-5">

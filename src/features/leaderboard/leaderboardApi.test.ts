@@ -122,7 +122,7 @@ describe("leaderboardApi", () => {
     expect(books[1].readCount).toBe(1);
   });
 
-  it("总榜默认返回合并去重后的前 120 本", async () => {
+  it("总榜默认返回所有子分类合并去重后的作品", async () => {
     mockForward.mockImplementation(({ url }: { url: string }) => {
       const categoryId = Number(new URL(url).searchParams.get("category_id"));
       return Promise.resolve({
@@ -141,12 +141,12 @@ describe("leaderboardApi", () => {
 
     const books = await fetchOverallLeaderboard({ categoryId: -1, gender: 1, type: 2 });
 
-    expect(books).toHaveLength(120);
+    expect(books).toHaveLength(570);
     expect(books[0].rank).toBe(1);
-    expect(books[119].rank).toBe(120);
+    expect(books[569].rank).toBe(570);
   });
 
-  it("番茄总榜会合并四个主榜的所有子分类并取前 180 本", async () => {
+  it("番茄总榜默认合并四个主榜的所有子分类作品", async () => {
     mockForward.mockImplementation(({ url }: { url: string }) => {
       const params = new URL(url).searchParams;
       const categoryId = Number(params.get("category_id"));
@@ -168,7 +168,7 @@ describe("leaderboardApi", () => {
 
     const books = await fetchFanqieOverallLeaderboard();
 
-    expect(books).toHaveLength(180);
+    expect(books).toHaveLength(2220);
     expect(mockForward).toHaveBeenCalledWith(expect.objectContaining({
       url: expect.stringContaining("gender=1"),
     }));
@@ -181,6 +181,32 @@ describe("leaderboardApi", () => {
     expect(mockForward).toHaveBeenCalledWith(expect.objectContaining({
       url: expect.stringContaining("rankMold=1"),
     }));
+  });
+
+  it("番茄总榜支持显式限制合并后的数量", async () => {
+    mockForward.mockImplementation(({ url }: { url: string }) => {
+      const params = new URL(url).searchParams;
+      const categoryId = Number(params.get("category_id"));
+      const gender = params.get("gender");
+      const type = params.get("rankMold");
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        body: createRankApiJson(
+          Array.from({ length: 30 }, (_, index) => createBook({
+            bookId: `book-${gender}-${type}-${categoryId}-${index + 1}`,
+            bookName: `作品${gender}-${type}-${categoryId}-${index + 1}`,
+            currentPos: index + 1,
+            read_count: String(20_000 - categoryId - index),
+          })),
+        ),
+      });
+    });
+
+    const books = await fetchFanqieOverallLeaderboard(180);
+
+    expect(books).toHaveLength(180);
+    expect(books[179].rank).toBe(180);
   });
 
   it("当天缓存命中时复用本地榜单，强制刷新时重新请求", async () => {
