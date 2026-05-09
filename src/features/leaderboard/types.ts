@@ -6,6 +6,7 @@ export interface FanqieRankBook {
   category?: string;
   creationStatus?: string;
   currentPos?: number;
+  rankPosDiff?: number;
   read_count?: string;
   readCount?: string;
   thumbUri?: string;
@@ -20,6 +21,7 @@ export interface LeaderboardBook {
   category?: string;
   detailUrl?: string;
   rank: number;
+  rankPosDiff?: number;
   readCount: number;
   status: "连载中" | "已完结";
   thumbUri?: string;

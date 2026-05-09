@@ -61,13 +61,26 @@ describe("leaderboardApi", () => {
       author: "我",
       bookName: "书",
       detailUrl: "https://fanqienovel.com/page/book-1",
+      rankPosDiff: 0,
       readCount: 1234,
       status: "连载中",
     });
   });
 
+  it("解析接口返回的排行变化", () => {
+    const html = createRankHtml([createBook({ rankPosDiff: -2 })]);
+
+    expect(parseLeaderboardBooks(html)[0]).toMatchObject({
+      rank: 1,
+      rankPosDiff: -2,
+    });
+  });
+
   it("请求单分类榜并处理 HTTP 错误", async () => {
-    mockForward.mockResolvedValueOnce({ ok: false, status: 500, body: "" });
+    mockForward
+      .mockResolvedValueOnce({ ok: false, status: 500, body: "" })
+      .mockResolvedValueOnce({ ok: false, status: 500, body: "" })
+      .mockResolvedValueOnce({ ok: false, status: 500, body: "" });
 
     await expect(fetchLeaderboard({ categoryId: 1014, gender: 1, type: 2 })).rejects.toThrow("HTTP 500");
   });
@@ -76,6 +89,31 @@ describe("leaderboardApi", () => {
     mockForward.mockResolvedValueOnce({ ok: true, status: 200, body: createRankApiJson([]) });
 
     await expect(fetchLeaderboard({ categoryId: 1014, gender: 1, type: 2 })).rejects.toThrow("解析为空");
+  });
+
+  it("遇到 444 会退避重试榜单接口", async () => {
+    mockForward
+      .mockResolvedValueOnce({ ok: false, status: 444, body: "" })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: createRankApiJson([createBook({ bookId: "retry-book" })]),
+      });
+
+    const books = await fetchLeaderboard({ categoryId: 1014, gender: 1, type: 2 });
+
+    expect(books[0]).toMatchObject({ bookId: "retry-book" });
+    expect(mockForward).toHaveBeenCalledTimes(2);
+  });
+
+  it("444 重试耗尽后不会继续请求 HTML 兜底", async () => {
+    mockForward
+      .mockResolvedValueOnce({ ok: false, status: 444, body: "" })
+      .mockResolvedValueOnce({ ok: false, status: 444, body: "" })
+      .mockResolvedValueOnce({ ok: false, status: 444, body: "" });
+
+    await expect(fetchLeaderboard({ categoryId: 1014, gender: 1, type: 2 })).rejects.toThrow("HTTP 444");
+    expect(mockForward).toHaveBeenCalledTimes(3);
   });
 
   it("请求单分类榜默认通过 JSON 接口获取 30 本", async () => {

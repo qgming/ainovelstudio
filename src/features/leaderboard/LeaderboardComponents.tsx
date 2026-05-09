@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, Minus, Trophy } from "lucide-react";
 import { Badge } from "@shared/ui/badge";
 import { Button } from "@shared/ui/button";
 import {
@@ -70,6 +70,30 @@ function RankNumber({ className, value }: { className?: string; value: number })
       )}
     >
       {String(value).padStart(2, "0")}
+    </div>
+  );
+}
+
+function getRankDiffLabel(diff: number) {
+  if (diff > 0) return `上升 ${diff} 名`;
+  if (diff < 0) return `下降 ${Math.abs(diff)} 名`;
+  return "排名无变化";
+}
+
+function RankDiff({ value }: { value?: number }) {
+  const diff = value ?? 0;
+  const Icon = diff > 0 ? ArrowUp : diff < 0 ? ArrowDown : Minus;
+  return (
+    <div
+      aria-label={getRankDiffLabel(diff)}
+      title={getRankDiffLabel(diff)}
+      className={cn(
+        "absolute left-0 top-5 z-10 flex h-5 w-6 items-center justify-center gap-0.5 rounded-none rounded-br-md border border-l-0 border-t-0 bg-panel/95 text-[10px] font-medium tabular-nums shadow-sm",
+        diff > 0 ? "border-emerald-500/20 text-emerald-600" : diff < 0 ? "border-red-500/20 text-red-600" : "border-border text-muted-foreground",
+      )}
+    >
+      <Icon className="h-2.5 w-2.5" aria-hidden="true" />
+      {diff === 0 ? null : <span>{Math.abs(diff)}</span>}
     </div>
   );
 }
@@ -167,6 +191,7 @@ export function LeaderboardBookCard({
         value={book.rank}
         className="absolute left-0 top-0 z-10 h-5 w-6 rounded-none rounded-br-md border-l-0 border-t-0 bg-panel/95 text-[10px] shadow-sm"
       />
+      <RankDiff value={book.rankPosDiff} />
       <button
         type="button"
         aria-label={`查看 ${book.bookName} 详情`}
@@ -233,6 +258,7 @@ export function LeaderboardBookDialog({
                   </p>
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     <DetailStat label="在读数" value={`${formatCount(book.readCount)}在读`} />
+                    <DetailStat label="排行变化" value={getRankDiffLabel(book.rankPosDiff ?? 0)} />
                     <DetailStat label="状态" value={book.status} />
                     <DetailStat label="字数" value={formatWordCount(book.wordCount)} />
                     <DetailStat label="分类" value={displayCategory || "分类未知"} />

@@ -91,7 +91,7 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   search: "找关键词、章节、角色、字段；scope=content 搜正文 / names 搜文件名；matchMode=phrase/all_terms/any_term。",
   web_search: "查平台规则、榜单或外部资料；可用 domains 限制站点；返回链接后再 web_fetch。",
   web_fetch: "拿到链接后再读正文；支持 full / anchor_range / heading_range；maxChars 默认 8000。",
-  fanqie_leaderboard: "查番茄小说榜单首选；可传 board/categoryName/categoryId/rank/rankFrom/rankTo/limit；返回书名、作者、简介、在读数、状态和详情链接。",
+  fanqie_leaderboard: "查番茄小说榜单首选；可传 board/categoryName/categoryId/rank/rankFrom/rankTo/limit；返回书名、作者、简介、在读数、状态、排行变化和详情链接。",
   read: "已知准确路径用；大文件优先 mode=head/tail/range；按锚点用 anchor_range；按 Markdown 标题块用 heading_range。",
   word_count: "校对字数；单文件 path / 多文件 paths / 目录 dir 三种模式。",
   canon_query: "查长篇事实源；按人物、地点、伏笔、能力边界或章节线索检索 `.project/canon`、status、style、chapters。",

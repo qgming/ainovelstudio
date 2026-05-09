@@ -11,8 +11,12 @@ const FANQIE_BASE_URL = "https://fanqienovel.com";
 const FANQIE_APP_ID = "1967";
 const DEFAULT_LIMIT = 30;
 const RANK_LIST_TYPE = "3";
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CACHE_PREFIX = "ainovelstudio:fanqie-leaderboard";
+const FANQIE_CATEGORY_CONCURRENCY = 2;
+const FANQIE_REQUEST_SPACING_MS = 250;
+const FANQIE_MAX_RETRIES = 2;
+const FANQIE_RETRY_BASE_DELAY_MS = 900;
 
 type CategoryFetchPlan = {
   categories: SubCategory[];
@@ -40,6 +44,17 @@ type CachePayload = {
   date: string;
   version: string;
 };
+
+type FanqieForwardRequest = Parameters<typeof forwardProviderRequestViaTauri>[0];
+
+let nextFanqieRequestAt = 0;
+
+class FanqieHttpError extends Error {
+  constructor(public readonly status: number) {
+    super(`番茄排行榜请求失败：HTTP ${status}`);
+    this.name = "FanqieHttpError";
+  }
+}
 
 export function buildFanqieRankUrl(request: LeaderboardRequest) {
   return `${FANQIE_BASE_URL}/rank/${request.gender}_${request.type}_${request.categoryId}`;
@@ -119,6 +134,54 @@ function writeCachedBooks(request: LeaderboardRequest, books: LeaderboardBook[])
   }
 }
 
+function isTestMode() {
+  return import.meta.env.MODE === "test";
+}
+
+function delay(ms: number) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
+}
+
+function getRequestSpacingMs() {
+  return isTestMode() ? 0 : FANQIE_REQUEST_SPACING_MS;
+}
+
+function getRetryDelayMs(attempt: number) {
+  return isTestMode() ? 0 : FANQIE_RETRY_BASE_DELAY_MS * 2 ** attempt;
+}
+
+async function waitForFanqieRequestSlot() {
+  const spacing = getRequestSpacingMs();
+  if (spacing <= 0) return;
+  const now = Date.now();
+  const waitMs = Math.max(0, nextFanqieRequestAt - now);
+  nextFanqieRequestAt = Math.max(now, nextFanqieRequestAt) + spacing;
+  await delay(waitMs);
+}
+
+function shouldRetryFanqieStatus(status: number) {
+  return status === 429 || status === 444 || status >= 500;
+}
+
+function isRateLimitedError(error: unknown) {
+  return error instanceof FanqieHttpError && (error.status === 429 || error.status === 444);
+}
+
+async function forwardFanqieRequest(request: FanqieForwardRequest) {
+  for (let attempt = 0; attempt <= FANQIE_MAX_RETRIES; attempt += 1) {
+    await waitForFanqieRequestSlot();
+    const response = await forwardProviderRequestViaTauri(request);
+    if (response.ok || !shouldRetryFanqieStatus(response.status) || attempt >= FANQIE_MAX_RETRIES) {
+      return response;
+    }
+    await delay(getRetryDelayMs(attempt));
+  }
+  return forwardProviderRequestViaTauri(request);
+}
+
 function extractJsonObject(source: string, startIndex: number): string | null {
   let depth = 0;
   let inString = false;
@@ -184,6 +247,7 @@ function normalizeBook(book: FanqieRankBook, index: number, category?: SubCatego
     category: category?.name ?? decodeText(book.category ?? ""),
     detailUrl: bookId ? `${FANQIE_BASE_URL}/page/${bookId}` : undefined,
     rank: book.currentPos ?? index + 1,
+    rankPosDiff: typeof book.rankPosDiff === "number" ? book.rankPosDiff : 0,
     readCount,
     status: book.creationStatus === "1" ? "连载中" : "已完结",
     thumbUri: book.thumbUri,
@@ -192,7 +256,7 @@ function normalizeBook(book: FanqieRankBook, index: number, category?: SubCatego
 }
 
 async function fetchRankHtml(request: LeaderboardRequest) {
-  const response = await forwardProviderRequestViaTauri({
+  const response = await forwardFanqieRequest({
     headers: {
       Accept: "text/html,application/xhtml+xml",
       "Cache-Control": "no-cache",
@@ -201,12 +265,12 @@ async function fetchRankHtml(request: LeaderboardRequest) {
     method: "GET",
     url: buildFanqieRankUrl(request),
   });
-  if (!response.ok) throw new Error(`番茄排行榜请求失败：HTTP ${response.status}`);
+  if (!response.ok) throw new FanqieHttpError(response.status);
   return response.body;
 }
 
 async function fetchRankApiBooks(request: LeaderboardRequest) {
-  const response = await forwardProviderRequestViaTauri({
+  const response = await forwardFanqieRequest({
     headers: {
       Accept: "application/json,text/plain,*/*",
       "Cache-Control": "no-cache",
@@ -215,7 +279,7 @@ async function fetchRankApiBooks(request: LeaderboardRequest) {
     method: "GET",
     url: buildFanqieRankApiUrl(request),
   });
-  if (!response.ok) throw new Error(`番茄排行榜请求失败：HTTP ${response.status}`);
+  if (!response.ok) throw new FanqieHttpError(response.status);
   const payload = JSON.parse(response.body) as RankApiResponse;
   if (payload.code !== 0) throw new Error(payload.message || "番茄排行榜接口返回异常。");
   return payload.data?.book_list ?? [];
@@ -240,6 +304,7 @@ async function fetchRankBooks(request: LeaderboardRequest, category?: SubCategor
     }
   } catch (error) {
     apiError = error;
+    if (isRateLimitedError(error)) throw error;
   }
 
   try {
@@ -279,8 +344,10 @@ function getDedupKey(book: LeaderboardBook) {
 }
 
 async function fetchCategoryPlanBooks(plan: CategoryFetchPlan) {
-  const categoryBooks = await Promise.all(
-    plan.categories.map(async (category) => {
+  const categoryBooks = await mapWithConcurrency(
+    plan.categories,
+    FANQIE_CATEGORY_CONCURRENCY,
+    async (category) => {
       return fetchRankBooks({
         categoryId: category.id,
         forceRefresh: plan.forceRefresh,
@@ -288,9 +355,30 @@ async function fetchCategoryPlanBooks(plan: CategoryFetchPlan) {
         limit: DEFAULT_LIMIT,
         type: plan.type,
       }, category);
-    }),
+    },
   );
   return categoryBooks.flat();
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+) {
+  const results: R[] = [];
+  let nextIndex = 0;
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(items[currentIndex]);
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.min(concurrency, items.length) },
+    runWorker,
+  ));
+  return results;
 }
 
 function rankMergedBooks(books: LeaderboardBook[], limit?: number) {
@@ -327,6 +415,9 @@ export async function fetchFanqieOverallLeaderboard(
     { categories: FEMALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 0, type: 2 },
     { categories: FEMALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 0, type: 1 },
   ];
-  const planBooks = await Promise.all(plans.map(fetchCategoryPlanBooks));
+  const planBooks: LeaderboardBook[][] = [];
+  for (const plan of plans) {
+    planBooks.push(await fetchCategoryPlanBooks(plan));
+  }
   return rankMergedBooks(planBooks.flat(), limit);
 }

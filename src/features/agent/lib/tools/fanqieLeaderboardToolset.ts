@@ -89,10 +89,17 @@ function buildToolData(
     categoryId: category.id,
     books: books.map((book) => ({
       ...book,
+      rankPosDiffText: formatRankPosDiff(book.rankPosDiff ?? 0),
       readCountText: formatCount(book.readCount),
       wordCountText: book.wordCount > 0 ? `${formatCount(book.wordCount)}字` : "字数未知",
     })),
   };
+}
+
+function formatRankPosDiff(diff: number) {
+  if (diff > 0) return `上升 ${diff} 名`;
+  if (diff < 0) return `下降 ${Math.abs(diff)} 名`;
+  return "排名无变化";
 }
 
 export function createFanqieLeaderboardTools(): Record<string, AgentTool> {

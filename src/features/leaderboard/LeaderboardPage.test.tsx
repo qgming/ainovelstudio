@@ -78,6 +78,7 @@ describe("LeaderboardPage", () => {
     expect(screen.getByText("男频阅读榜")).toBeInTheDocument();
     expect(await screen.findByText("测试作品")).toBeInTheDocument();
     expect(screen.queryByText("一部适合拆解选题趋势的作品。")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("排名无变化")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "查看 测试作品 详情" }));
     expect(await screen.findByText("今日番茄总榜 · 都市高武 · 第 1 名")).toBeInTheDocument();

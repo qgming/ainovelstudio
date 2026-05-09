@@ -7,7 +7,7 @@ export function createReadToolBuilders(runTool: ToolRunner): Record<string, Tool
     fanqie_leaderboard: (toolName, tool) =>
       defineTool({
         description:
-          "读取番茄小说排行榜，支持男频/女频、阅读榜/新书榜、分类或总榜，并可按具体排名或排名范围返回书名、作者、简介、在读数、字数、状态和详情链接。",
+          "读取番茄小说排行榜，支持男频/女频、阅读榜/新书榜、分类或总榜，并可按具体排名或排名范围返回书名、作者、简介、在读数、字数、状态、排行变化和详情链接。",
         inputSchema: z.object({
           board: z
             .enum(["fanqie-overall", "male-reading", "male-new", "female-reading", "female-new"])
