@@ -16,12 +16,24 @@ function normalizePlanItemStatus(value: unknown): PlanItemStatus {
     : "pending";
 }
 
+function parseTodoItems(items: unknown) {
+  if (typeof items !== "string") {
+    return items;
+  }
+  try {
+    return JSON.parse(items);
+  } catch {
+    return items;
+  }
+}
+
 export function normalizeTodoItems(items: unknown): PlanItem[] {
-  if (!Array.isArray(items)) {
+  const parsedItems = parseTodoItems(items);
+  if (!Array.isArray(parsedItems)) {
     throw new Error("todo.items 必须是数组。");
   }
 
-  const validated = items.map((item, index) => {
+  const validated = parsedItems.map((item, index) => {
     if (!item || typeof item !== "object") {
       throw new Error(`todo.items[${index}] 必须是对象。`);
     }

@@ -175,7 +175,7 @@ export function createLocalResourceToolset({
     todo: {
       description: "更新当前会话中的待办计划",
       execute: async (input) => {
-        const items = normalizeTodoItems(input.items);
+        const items = normalizeTodoItems(input.items ?? input.todos);
         const rendered = renderPlanItems(items);
         return ok(rendered || "当前计划已清空。", {
           items,

@@ -80,6 +80,7 @@ vi.mock("./providerApi", () => ({
 }));
 
 import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./tools";
+import { createInteractionToolBuilders } from "./ai-sdk-tools/interactionBuilders";
 import { searxngSearchService } from "./tools/searxngSearchService";
 
 describe("createWorkspaceToolset", () => {
@@ -1442,6 +1443,48 @@ describe("createLocalResourceToolset", () => {
         ],
       }),
     ).rejects.toThrow("Only one item can be in_progress");
+  });
+
+  it("todo 工具兼容 todos 字段和字符串化数组", async () => {
+    const toolset = createLocalResourceToolset();
+
+    const result = await toolset.todo.execute({
+      todos: JSON.stringify([
+        { content: "Inspect workspace", status: "completed" },
+        { activeForm: "正在修复 todo", content: "Patch todo tool", status: "in_progress" },
+      ]),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        items: [
+          { activeForm: "", content: "Inspect workspace", status: "completed" },
+          { activeForm: "正在修复 todo", content: "Patch todo tool", status: "in_progress" },
+        ],
+      },
+    });
+  });
+
+  it("todo AI schema 会把 todos 字符串预处理为 items 数组", () => {
+    const builders = createInteractionToolBuilders(async (_toolName, _tool, input) => ({
+      ok: true,
+      summary: "ok",
+      data: input,
+    }));
+    const tool = builders.todo("todo", { description: "todo", execute: vi.fn() });
+
+    const parsed = (tool as { inputSchema: { parse: (input: unknown) => unknown } }).inputSchema.parse({
+      todos: JSON.stringify([
+        { content: "Inspect workspace", status: "in_progress", activeForm: "正在检查" },
+      ]),
+    });
+
+    expect(parsed).toEqual({
+      items: [
+        { activeForm: "正在检查", content: "Inspect workspace", status: "in_progress" },
+      ],
+    });
   });
 
   it("ask 工具会自动追加用户输入选项并返回结构化答案", async () => {

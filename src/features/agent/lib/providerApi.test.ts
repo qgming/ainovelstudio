@@ -81,6 +81,33 @@ describe("streamProviderRequestViaTauri", () => {
     await expect(readResponseText(response)).resolves.toBe("hello world");
   });
 
+  it("兼容后端旧版 request_id 事件字段", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        request_id: requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+      emitProviderStream({ type: "chunk", request_id: requestId, chunk: Array.from(new TextEncoder().encode("ok")) });
+      emitProviderStream({ type: "end", request_id: requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: "{}",
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(readResponseText(response)).resolves.toBe("ok");
+  });
+
   it("abort 时取消后端流式请求", async () => {
     mockInvoke.mockResolvedValue(undefined);
     const abortController = new AbortController();

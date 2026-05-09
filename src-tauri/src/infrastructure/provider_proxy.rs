@@ -52,7 +52,7 @@ pub struct ProviderHttpResponse {
 }
 
 #[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "type")]
 pub enum ProviderStreamEvent {
     Start {
         request_id: String,

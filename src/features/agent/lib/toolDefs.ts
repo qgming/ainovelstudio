@@ -19,7 +19,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "todo",
     name: "待办计划",
     description:
-      "更新当前会话的显式计划状态；同一时间最多保留一个进行中的步骤；可选 phase 字段标记长链路阶段。",
+      "更新当前会话的显式计划状态；参数使用 items 数组；同一时间最多保留一个进行中的步骤；可选 phase 字段标记长链路阶段。",
   },
   {
     id: "task",

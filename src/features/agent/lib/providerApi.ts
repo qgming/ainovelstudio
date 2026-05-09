@@ -41,6 +41,7 @@ type ProviderStreamEvent =
   | {
       type: "start";
       requestId: string;
+      request_id?: string;
       ok: boolean;
       status: number;
       headers: Record<string, string>;
@@ -48,15 +49,18 @@ type ProviderStreamEvent =
   | {
       type: "chunk";
       requestId: string;
+      request_id?: string;
       chunk: number[];
     }
   | {
       type: "end";
       requestId: string;
+      request_id?: string;
     }
   | {
       type: "error";
       requestId: string;
+      request_id?: string;
       message: string;
     };
 
@@ -66,6 +70,10 @@ function createProviderStreamId() {
 
 async function cancelProviderStream(requestId: string) {
   await invoke<void>("cancel_provider_stream", { requestId }).catch(() => undefined);
+}
+
+function getProviderStreamRequestId(payload: ProviderStreamEvent) {
+  return payload.requestId ?? payload.request_id;
 }
 
 export async function streamProviderRequestViaTauri(
@@ -119,7 +127,7 @@ export async function streamProviderRequestViaTauri(
     void (async () => {
       unlisten = await listen<ProviderStreamEvent>("provider-stream", (event) => {
         const payload = event.payload;
-        if (payload.requestId !== requestId) return;
+        if (getProviderStreamRequestId(payload) !== requestId) return;
 
         if (payload.type === "start") {
           hasStarted = true;

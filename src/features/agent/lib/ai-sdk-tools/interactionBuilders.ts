@@ -2,6 +2,49 @@ import { z } from "zod";
 import { defineTool } from "../modelGateway";
 import type { ToolBuilder, ToolRunner } from "./types";
 
+const todoItemSchema = z.object({
+  activeForm: z
+    .string()
+    .optional()
+    .describe("当步骤处于进行中时，更自然的进行时描述。"),
+  content: z.string().min(1).describe("这一步要做什么。"),
+  status: z
+    .enum(["pending", "in_progress", "completed"])
+    .default("pending"),
+  phase: z
+    .string()
+    .optional()
+    .describe(
+      "可选：所属阶段标签。建议网文链路使用 plot / bible / outline / chapter / write / review / polish 等短词。",
+    ),
+});
+
+function parseTodoItemsInput(value: unknown) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+const todoInputSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const input = value as Record<string, unknown>;
+  return {
+    ...input,
+    items: parseTodoItemsInput(input.items ?? input.todos),
+  };
+}, z.object({
+  items: z
+    .array(todoItemSchema)
+    .describe("当前整份计划。允许整份重写。兼容 todos 字段和字符串化 JSON 数组。"),
+}));
+
 export function createInteractionToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
     ask: (toolName, tool) =>
@@ -60,28 +103,7 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
       defineTool({
         description:
           "更新当前会话里的短计划，并保持同一时间最多一个 in_progress。可选 phase 字段标记长链路阶段（如 plot/bible/outline/chapter/write/review/polish）。",
-        inputSchema: z.object({
-          items: z
-            .array(
-              z.object({
-                activeForm: z
-                  .string()
-                  .optional()
-                  .describe("当步骤处于进行中时，更自然的进行时描述。"),
-                content: z.string().min(1).describe("这一步要做什么。"),
-                status: z
-                  .enum(["pending", "in_progress", "completed"])
-                  .default("pending"),
-                phase: z
-                  .string()
-                  .optional()
-                  .describe(
-                    "可选：所属阶段标签。建议网文链路使用 plot / bible / outline / chapter / write / review / polish 等短词。",
-                  ),
-              }),
-            )
-            .describe("当前整份计划。允许整份重写。"),
-        }),
+        inputSchema: todoInputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
