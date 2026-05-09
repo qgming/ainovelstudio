@@ -42,8 +42,7 @@ fn build_embedded_const(root: &Path, const_name: &str) -> String {
         let relative_path = normalize_path(relative);
         let absolute_path = normalize_path(&absolute);
         lines.push(format!(
-            "    EmbeddedTextFile {{ path: {:?}, content: include_str!(r#\"{}\"#) }},",
-            relative_path, absolute_path
+            "    EmbeddedTextFile {{ path: {relative_path:?}, content: include_str!(r#\"{absolute_path}\"#) }},"
         ));
     }
 

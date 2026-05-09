@@ -189,14 +189,13 @@ npm run build:android
 ```text
 .
 ├─ src/                     React 前端
-│  ├─ pages/                页面壳（路由参数解析 + 顶层组合）
-│  ├─ components/           UI 组件（按 feature 划分；common/ 收纳 LoadingBlock / ErrorBlock 等）
-│  ├─ hooks/                跨组件复用的状态与副作用（按 feature 划分子目录）
-│  ├─ stores/               Zustand 状态管理（仅状态 + actions，不构造 toolset）
-│  ├─ lib/                  业务规则与纯函数：agent / workflow / bookWorkspace / chat
+│  ├─ app/                  AppShell、路由、启动副作用、应用级组件
+│  ├─ shared/               通用 UI、通用组件、hooks、utils、platform
+│  ├─ features/             按业务域组织 books / agent / skills / settings / update
+│  ├─ assets/               前端静态资源
 │  └─ test/                 前端测试初始化
 ├─ src-tauri/               Tauri + Rust 后端
-│  ├─ src/                  本地命令、数据库、工作流、数据管理
+│  ├─ src/                  app / infrastructure / domains 分层
 │  ├─ resources/            内置 agents / skills / workflows / config
 │  └─ icons/                应用图标资源
 ├─ public/                  静态资源
@@ -207,13 +206,19 @@ npm run build:android
 
 为了保持高内聚低耦合，前端代码按以下层级组织：
 
-- `pages/` —— 路由壳：解析路由参数、装载顶层容器；不放业务规则。
-- `components/<feature>/` —— 受控展示组件；通用块（加载、错误、Toast、BusyButton）放在 `components/common/` 与 `components/ui/`。
-- `hooks/<feature>/` —— 跨组件复用的状态与副作用；如 `useBookPanelResize`。
-- `lib/<feature>/` —— 业务规则、纯函数、与 Tauri/AI SDK 的对接；纯函数优先放这里以便单测。
-- `stores/` —— Zustand store；仅持状态字段与 actions，不直接构造 agent toolset。
+- `app/` —— 应用壳、路由、全局启动副作用、应用级组件。
+- `shared/` —— 跨业务域复用的 UI primitives、通用组件、hooks、utils 与平台判断。
+- `features/<domain>/` —— 业务域内聚合页面、组件、store、API 适配层、类型和纯函数。
+- `features/<domain>/index.ts` —— 只导出跨域需要的公共接口，业务域内部优先使用邻近文件相对导入。
+- `@app/*`、`@features/*`、`@shared/*` —— 跨目录 import 的标准别名；避免继续引入深层 `../../..`。
 
-Agent 工具集统一通过 `lib/agent/toolsets/factory.ts` 装配，写作模式（chatRunStore）与工作流引擎共用同一组工厂，避免散落重复。
+Agent 工具集统一通过 `features/agent/lib/toolsets/factory.ts` 装配，写作模式（useChatRunStore）与工作流引擎共用同一组工厂，避免散落重复。
+
+Rust 后端按职责分为：
+
+- `app/` —— 应用控制、取消注册表等启动期能力。
+- `infrastructure/` —— 数据库、嵌入资源、provider proxy、工作区路径/编码等基础设施。
+- `domains/` —— book_workspace、chat、skills、data_sync、usage 等业务域；Tauri command 名称保持稳定。
 
 
 ## 适合的使用场景
