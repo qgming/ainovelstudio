@@ -1,20 +1,16 @@
 <p align="center">
-  <img src="src-tauri/icons/icon.png" alt="神笔写作 Logo" width="120" height="120" />
+  <img src="src-tauri/icons/icon.png" alt="神笔写作 Logo" width="116" height="116" />
 </p>
 
 <h1 align="center">神笔写作</h1>
 
 <p align="center">
-  面向网文、长篇连载与 AI 协同创作的本地优先写作工作台
+  本地优先的 AI 小说创作工作台，为长篇连载、短篇拆解、设定管理和 Agent 协同写作而生。
 </p>
 
 <p align="center">
-  把书籍工作区、Agent、Skill、Workflow、模型配置、数据备份与 WebDAV 云备份整合进一个桌面应用
-</p>
-
-<p align="center">
-  <a href="https://github.com/qgming/ainovelstudio">
-    <img src="https://img.shields.io/github/stars/qgming/ainovelstudio?style=for-the-badge&logo=github&label=Stars" alt="GitHub Stars" />
+  <a href="https://github.com/qgming/ainovelstudio/releases/latest">
+    <img src="https://img.shields.io/badge/Download-最新版本-0f172a?style=for-the-badge" alt="Download latest release" />
   </a>
   <img src="https://img.shields.io/badge/Version-0.2.5-111827?style=for-the-badge" alt="Version 0.2.5" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
@@ -23,232 +19,220 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri 2" />
   <img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" alt="React 19" />
-  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
-  <img src="https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite 7" />
   <img src="https://img.shields.io/badge/SQLite-Local%20First-0F80CC?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite Local First" />
   <img src="https://img.shields.io/badge/AI%20SDK-Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel AI SDK" />
 </p>
 
 <p align="center">
-  <a href="#快速开始"><strong>快速开始</strong></a> ·
+  <img src="https://img.shields.io/badge/AI-Agent%20Workspace-111827?style=flat-square" alt="AI Agent Workspace" />
+  <img src="https://img.shields.io/badge/Mode-Collab%20%7C%20YOLO-7c3aed?style=flat-square" alt="Collab and YOLO modes" />
+  <img src="https://img.shields.io/badge/Canon-Longform%20Memory-b45309?style=flat-square" alt="Longform Canon Memory" />
+  <img src="https://img.shields.io/badge/Backup-ZIP%20%7C%20WebDAV-475569?style=flat-square" alt="ZIP and WebDAV backup" />
+</p>
+
+<p align="center">
+  <a href="#下载与安装"><strong>下载</strong></a> ·
+  <a href="#为什么用神笔写作"><strong>产品亮点</strong></a> ·
   <a href="#核心能力"><strong>核心能力</strong></a> ·
-  <a href="#内置资源"><strong>内置资源</strong></a> ·
-  <a href="#项目结构"><strong>项目结构</strong></a> ·
-  <a href="#模型接入"><strong>模型接入</strong></a>
+  <a href="#模型接入"><strong>模型接入</strong></a> ·
+  <a href="#开发者"><strong>开发者</strong></a>
 </p>
 
 ---
 
-## 概览
+## 一句话介绍
 
-`AiNovelStudio` 服务于小说创作的完整链路：从书籍结构管理、正文写作、设定维护，到代理调度、技能复用、工作流自动化和本地数据同步，全部在同一个应用内完成。
+神笔写作把“小说文件夹、AI Agent、写作技能、设定事实源、模型配置、备份同步”放进一个本地应用里。它适合用来管理一部长篇小说，也适合用来拆文、扫榜、润色、整理设定和让 AI 按目标持续推进写作任务。
 
-<table>
-  <tr>
-    <td width="25%" valign="top">
-      <strong>本地优先</strong><br />
-      SQLite + 本地资源目录管理书籍、代理、技能与工作流
-    </td>
-    <td width="25%" valign="top">
-      <strong>AI 协同写作</strong><br />
-      在书籍工作区内直接调用 Agent，结合上下文持续创作
-    </td>
-    <td width="25%" valign="top">
-      <strong>流程自动化</strong><br />
-      把规划、写作、审校、润稿、回写设定串成可重复执行的工作流
-    </td>
-    <td width="25%" valign="top">
-      <strong>同步与备份</strong><br />
-      支持完整备份 ZIP 与 WebDAV 云端备份
-    </td>
-  </tr>
-</table>
+它的重点很明确：让作者掌控项目事实源，让 AI 读到该读的文件、使用该用的技能、把结果写回真实工作区。
+
+## 下载与安装
+
+| 平台 | 安装包 |
+| --- | --- |
+| Windows x64 | [下载 EXE](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.2.5_windows_x64.exe) |
+| Android arm64 | [下载 APK](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.2.5_android_arm64.apk) |
+
+更多版本记录见 [Releases](https://github.com/qgming/ainovelstudio/releases)。
+
+## 为什么用神笔写作
+
+### 为小说项目设计
+
+神笔写作的第一屏就是书籍工作区。你可以把章节、设定、状态文件、素材和项目规则放在同一个书籍目录中，用文件树管理，用编辑器写作，用 Agent 在右侧协作。
+
+### 本地优先，作品在你手里
+
+书籍和应用数据保存在本地。应用支持完整备份 ZIP，也支持 WebDAV 云备份，适合在本地创作和跨设备恢复之间取得平衡。
+
+### Agent 在工作区里行动
+
+Agent 可以读取当前书籍结构、指定文件、启用的技能和项目规则。它能搜索、读取、编辑、写入、查 canon、统计字数，也能通过 `todo` 维护任务计划。
+
+### 长篇创作有事实源
+
+`.project/canon`、项目状态、章节线索和风格信息可以作为长篇事实源。Agent 在处理人物、地点、伏笔、能力边界和连续性时，可以先查事实源，再生成或修改内容。
+
+### 可切换协作强度
+
+普通协作模式适合边聊边改。YOLO 模式适合给出明确目标后，让 Agent 连续读取、执行、检查和回写，直到目标完成或遇到真实阻塞。
 
 ## 核心能力
 
-- 本地书籍工作区：以文件树管理一本书，支持新建、重命名、删除、自动保存和持续编辑，并把 `.project/AGENTS.md`、`.project/项目状态.json` 等项目元数据统一收纳到 `.project/`。
-- 书架与书籍包：支持创建书籍、导入 `.zip` 书籍包、导出标准书籍包。
-- Agent 面板：在书籍工作区内直接发起对话，结合当前文件、工作区结构、技能和代理资源完成写作或编辑任务。
-- 技能库：支持内置技能、ZIP 导入、自建技能工作区，以及技能启停管理。
-- 代理库：支持内置代理、ZIP 导入、自建代理模板，以及代理启停管理。
-- 工作流引擎：把书籍、代理和步骤编排成可重复运行的多节点流程，支持运行、暂停、继续、查看历史与节点执行结果。
-- 模型设置：配置任意 OpenAI-compatible 接口，内置常见供应商地址推荐与连接测试。
-- 数据管理：支持完整备份导入导出与 WebDAV 云备份，覆盖书籍、技能、代理、工作流、模型配置、主代理 AGENTS 与数据同步设置。
-- 用量统计：记录请求数、Token 和模型维度的使用日志。
-- 工具库：按工具维度控制 Agent 会话可用能力。
+| 能力 | 说明 |
+| --- | --- |
+| 书籍工作区 | 创建、打开、导入、导出书籍；用文件树管理章节、设定和项目文件 |
+| 本地编辑器 | 支持 Markdown / 文本编辑，文件切换后自动保存 |
+| Agent 写作面板 | 在书籍内直接对话，支持当前文件、手动选择文件和技能上下文 |
+| YOLO 自动执行 | 围绕目标连续推进，多轮执行、检查和回写 |
+| Canon 查询 | 查询 `.project/canon`、状态、风格、章节线索，减少长篇设定漂移 |
+| Skill 技能库 | 内置长篇写作、拆文、扫榜、去 AI 味、短篇分析等专项技能 |
+| 工具权限 | 控制 Agent 可用的读取、搜索、编辑、写入、网页检索、任务派发等工具 |
+| 模型设置 | 支持 OpenAI-compatible 接口、模型测试、供应商推荐和 reasoning 参数开关 |
+| 用量统计 | 查看请求数、token、模型调用和会话上下文占用 |
+| 数据备份 | 支持完整 ZIP 备份恢复和 WebDAV 云备份 |
+| 自动更新 | Windows 支持 updater 清单与签名安装包，应用内可检查新版本 |
 
-## 内置资源
+## 内置技能
 
-<table>
-  <tr>
-    <td width="33%" valign="top">
-      <strong>7 个内置代理</strong><br /><br />
-      <code>连载作者</code><br />
-      <code>章节编辑</code><br />
-      <code>总编</code><br />
-      <code>设定编辑</code><br />
-      <code>大纲编辑</code><br />
-      <code>润稿编辑</code><br />
-      <code>审校编辑</code>
-    </td>
-    <td width="33%" valign="top">
-      <strong>8 个内置技能</strong><br /><br />
-      <code>chapter-planner</code><br />
-      <code>continuity-check</code><br />
-      <code>humanizer</code><br />
-      <code>outline-manager</code><br />
-      <code>plot-planner</code><br />
-      <code>story-bible</code><br />
-      <code>story-state</code><br />
-      <code>story-writer</code>
-    </td>
-    <td width="33%" valign="top">
-      <strong>2 个内置工作流</strong><br /><br />
-      <code>全自动写小说</code><br />
-      <code>自动生成番茄短篇</code>
-    </td>
-  </tr>
-</table>
+当前内置 7 个写作技能，覆盖小说创作常见任务：
 
-## 技术栈
+| 技能 | 用途 |
+| --- | --- |
+| `story-long-write` | 长篇小说写作、续写、章节推进 |
+| `story-long-analyze` | 长篇拆文、结构分析、人物与节奏分析 |
+| `story-long-scan` | 扫榜、题材研究、长篇市场观察 |
+| `story-short-write` | 短篇写作与成稿 |
+| `story-short-analyze` | 短篇结构拆解与复盘 |
+| `story-short-scan` | 短篇题材与案例扫描 |
+| `story-deslop` | 去 AI 味、润色、压缩、增强人味表达 |
 
-- `Tauri 2`
-- `React 19`
-- `TypeScript`
-- `Vite 7`
-- `Tailwind CSS 4`
-- `shadcn/ui`
-- `Zustand`
-- `Vercel AI SDK`
-- `Rust + rusqlite`
-- `SQLite`
+Agent 在遇到明显匹配技能的任务时，会先读取对应 `SKILL.md`，再按技能流程执行。
 
-## 快速开始
+## 典型工作流
 
-### 环境依赖
+### 写长篇
 
-- `Node.js 20+`
-- `npm`
-- `Rust stable`
-- Tauri 对应平台构建环境
+1. 新建一本书。
+2. 在文件树里整理 `章节/`、`设定/`、`.project/canon/`。
+3. 配置模型 API。
+4. 打开 Agent 面板，让它读当前章节和设定。
+5. 用普通模式协作修改，或用 YOLO 模式让它按目标推进。
 
-### 安装依赖
+### 拆一本书
 
-```bash
-npm install
-```
+1. 导入或整理章节文本。
+2. 启用 `story-long-analyze`。
+3. 让 Agent 读取章节、抽样分析结构、人物、设定、节奏。
+4. 输出分段细纲、总纲和设定文档。
 
-### 启动前端开发环境
+### 做备份
 
-```bash
-npm run dev
-```
-
-### 启动 Tauri 桌面开发模式
-
-```bash
-npm run tauri -- dev
-```
-
-## 测试
-
-运行主测试集：
-
-```bash
-npm test
-```
-
-运行集成测试：
-
-```bash
-npm run test:integration
-```
-
-## 构建
-
-前端构建：
-
-```bash
-npm run build
-```
-
-Windows EXE：
-
-```bash
-npm run build:exe
-```
-
-Android APK：
-
-```bash
-npm run build:android
-```
-
-## 项目结构
-
-```text
-.
-├─ src/                     React 前端
-│  ├─ app/                  AppShell、路由、启动副作用、应用级组件
-│  ├─ shared/               通用 UI、通用组件、hooks、utils、platform
-│  ├─ features/             按业务域组织 books / agent / skills / settings / update
-│  ├─ assets/               前端静态资源
-│  └─ test/                 前端测试初始化
-├─ src-tauri/               Tauri + Rust 后端
-│  ├─ src/                  app / infrastructure / domains 分层
-│  ├─ resources/            内置 agents / skills / workflows / config
-│  └─ icons/                应用图标资源
-├─ public/                  静态资源
-└─ README.md
-```
-
-## 目录分层约定
-
-为了保持高内聚低耦合，前端代码按以下层级组织：
-
-- `app/` —— 应用壳、路由、全局启动副作用、应用级组件。
-- `shared/` —— 跨业务域复用的 UI primitives、通用组件、hooks、utils 与平台判断。
-- `features/<domain>/` —— 业务域内聚合页面、组件、store、API 适配层、类型和纯函数。
-- `features/<domain>/index.ts` —— 只导出跨域需要的公共接口，业务域内部优先使用邻近文件相对导入。
-- `@app/*`、`@features/*`、`@shared/*` —— 跨目录 import 的标准别名；避免继续引入深层 `../../..`。
-
-Agent 工具集统一通过 `features/agent/lib/toolsets/factory.ts` 装配，写作模式（useChatRunStore）与工作流引擎共用同一组工厂，避免散落重复。
-
-Rust 后端按职责分为：
-
-- `app/` —— 应用控制、取消注册表等启动期能力。
-- `infrastructure/` —— 数据库、嵌入资源、provider proxy、工作区路径/编码等基础设施。
-- `domains/` —— book_workspace、chat、skills、data_sync、usage 等业务域；Tauri command 名称保持稳定。
-
-
-## 适合的使用场景
-
-- 管理一部长篇小说的章节、设定、状态文件和写作过程。
-- 把“规划 -> 写作 -> 审校 -> 润稿 -> 回写设定”串成自动化创作流程。
-- 沉淀可复用的 Agent、Skill、Workflow 包，并通过 ZIP 分发给其他项目。
-- 在本地优先的数据环境里完成创作，同时通过 WebDAV 做跨设备云备份。
+1. 在设置页打开数据管理。
+2. 导出完整 ZIP 备份。
+3. 配置 WebDAV 后，可上传或下载云端备份。
 
 ## 模型接入
 
-应用当前以 OpenAI-compatible API 为核心接入方式，设置页内已经提供以下供应商的快捷推荐地址：
+神笔写作以 OpenAI-compatible API 为核心接入方式。设置页提供常见供应商地址推荐，并支持连接测试。
 
-- `OpenAI`
-- `Claude`
-- `Gemini`
-- `DeepSeek`
-- `Qwen`
-- `智谱 AI`
-- `Moonshot AI`
-- `MiniMax`
-- `硅基流动`
-- `OpenRouter`
-- `腾讯`
-- `ByteDance`
-- `小米 MiMo`
-- `LongCat`
+已内置快捷推荐：
 
-## 数据说明
+- OpenAI
+- Claude
+- Gemini
+- DeepSeek
+- Qwen
+- 智谱 AI
+- Moonshot AI
+- MiniMax
+- 硅基流动
+- OpenRouter
+- 腾讯
+- ByteDance
+- 小米 MiMo
+- LongCat
 
-- 书籍、技能、代理、工作流和应用状态由本地数据库与资源目录共同管理。
-- 应用支持导出完整备份 ZIP，并恢复为完整客户端状态，包含模型配置、主代理 AGENTS、工具开关和页面偏好。
-- WebDAV 云备份以完整数据包为单位进行上传和下载，跨设备恢复时沿用同一份备份范围。
+支持配置：
+
+- Base URL
+- API Key
+- Model
+- reasoning_effort 开关与强度
+- OpenCode beta 兼容请求头
+
+## 数据与隐私
+
+- 书籍、技能、设置和应用状态以本地数据库与本地资源目录为主。
+- 模型请求会发送你选择给 Agent 的上下文，包括当前对话、选中的文件内容、技能规则和必要的项目结构。
+- WebDAV 备份只在你配置并主动使用时上传。
+- API Key 存储在本地应用设置中，请自行保护设备和备份文件。
+
+## 更新日志
+
+- [v0.2.5](docs/releases/v0.2.5.md)：Agent 核心重构、YOLO、Canon、流式模型代理、todo 稳定性修复、双端发布。
+- [v0.2.4](docs/releases/v0.2.4.md)：模型推理开关默认安全值、会话上下文面板、工作流判断容错。
+- [历史版本](docs/releases)
+
+## 开发者
+
+### 技术栈
+
+- Tauri 2
+- React 19
+- TypeScript 5.8
+- Vite 7
+- Tailwind CSS 4
+- Zustand
+- Vercel AI SDK
+- Rust + SQLite
+
+### 本地启动
+
+```bash
+npm install
+npm run tauri -- dev
+```
+
+### 测试
+
+```bash
+npm test
+npx tsc --noEmit
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+### 打包
+
+```bash
+npm run build:exe
+npm run build:android
+```
+
+### 项目结构
+
+```text
+.
+├─ src/
+│  ├─ app/                  应用壳、路由、启动副作用
+│  ├─ features/             books / agent / skills / settings / update
+│  ├─ shared/               通用 UI、hooks、utils
+│  └─ assets/               前端静态资源
+├─ src-tauri/
+│  ├─ src/                  app / domains / infrastructure
+│  ├─ resources/skills      内置技能
+│  ├─ resources/config      默认 AGENTS 规则
+│  └─ icons/                应用图标
+├─ docs/releases/           版本更新日志
+├─ scripts/                 发布打包辅助脚本
+└─ release-packages/        本地发布产物
+```
+
+## 适合谁
+
+- 正在写长篇连载，需要管理章节、设定、伏笔和连续性的作者。
+- 经常拆文、扫榜、分析题材，希望把分析结果沉淀成可复用文档的创作者。
+- 想用 AI 写作，但希望 AI 尊重本地文件和项目事实源的用户。
+- 需要 Windows 桌面端与 Android 安装包的个人创作工作流。
+
+神笔写作的目标是让 AI 成为书籍工作区里的执行者，而作品结构、事实源和最终决定仍掌握在作者手里。
