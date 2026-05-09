@@ -6,7 +6,7 @@ import type { AgentPart, AgentUsage } from "../types";
 import type { AgentSessionEvent } from "./events";
 import { mapStreamPart, updateStepState, type StepStreamState } from "./streamParts";
 
-const DEFAULT_MAX_AGENT_STEPS = 40;
+const DEFAULT_MAX_AGENT_STEPS = 100;
 
 export type AgentLoopContext = {
   messages: ModelMessage[];
@@ -17,7 +17,7 @@ export type AgentLoopContext = {
 export type AgentLoopConfig = {
   abortSignal?: AbortSignal;
   emit?: (event: AgentSessionEvent) => void;
-  maxSteps?: number;
+  maxSteps?: number | null;
   onUsage?: (usage: AgentUsage) => void;
   providerConfig: AgentProviderConfig;
   sessionId?: string;
@@ -26,10 +26,43 @@ export type AgentLoopConfig = {
   takeSteeringMessages?: () => string[];
 };
 
+type AgentStepParams = {
+  abortSignal?: AbortSignal;
+  emit?: (event: AgentSessionEvent) => void;
+  eventMessage: ReturnType<typeof createAssistantEventMessage>;
+  messages: ModelMessage[];
+  providerConfig: AgentProviderConfig;
+  streamFn: typeof streamAgentText;
+  system: string;
+  tools?: ToolSet;
+  turnId: string;
+  onUsage?: (usage: AgentUsage) => void;
+};
+
+type AgentStepResult = {
+  finishReason?: string;
+};
+
 function appendUserMessages(messages: ModelMessage[], prompts: string[]) {
   prompts.forEach((prompt) => {
     messages.push({ role: "user", content: prompt });
   });
+}
+
+function appendUserMessagesAndCheck(messages: ModelMessage[], prompts: string[]) {
+  appendUserMessages(messages, prompts);
+  return prompts.length > 0;
+}
+
+function normalizeMaxSteps(maxSteps: number | null | undefined) {
+  if (maxSteps === null) return null;
+  if (typeof maxSteps === "number" && maxSteps > 0) return maxSteps;
+  return DEFAULT_MAX_AGENT_STEPS;
+}
+
+function assertStepBudget(stepsSinceUserMessage: number, maxSteps: number | null) {
+  if (maxSteps === null || stepsSinceUserMessage < maxSteps) return;
+  throw new Error(`Agent 达到最大单步次数 ${maxSteps}，已停止以避免无限循环。`);
 }
 
 function createAssistantEventMessage(turnId: string) {
@@ -66,55 +99,78 @@ async function collectFinishReason(
   return withAbort(abortSignal, () => result.finishReasonPromise as Promise<string>);
 }
 
+async function* runAgentStep(params: AgentStepParams): AsyncGenerator<AgentPart, AgentStepResult> {
+  params.emit?.({ type: "turn_start", prompt: "", turnId: params.turnId });
+  params.emit?.({ type: "message_start", message: params.eventMessage });
+
+  const result = params.streamFn({
+    abortSignal: params.abortSignal,
+    messages: params.messages,
+    providerConfig: params.providerConfig,
+    singleStep: true,
+    system: params.system,
+    tools: params.tools,
+  });
+  const state: StepStreamState = { sawToolResult: false };
+
+  for await (const streamPart of result.fullStream) {
+    updateStepState(streamPart, state);
+    const part = mapStreamPart(streamPart);
+    if (!part) continue;
+    params.eventMessage.parts.push(part);
+    emitPartEvents(part, params.eventMessage.id, params.emit);
+    yield part;
+  }
+
+  const usage = await collectStepUsage(result, params.abortSignal);
+  if (usage) params.onUsage?.(usage);
+  params.messages.push(...await collectResponseMessages(result, params.abortSignal));
+  const finishReason = await collectFinishReason(result, state, params.abortSignal);
+  params.emit?.({ type: "message_end", message: params.eventMessage });
+  params.emit?.({ type: "turn_end", finishReason, turnId: params.turnId, usage });
+  return { finishReason };
+}
+
 export async function* agentLoop(
   context: AgentLoopContext,
   config: AgentLoopConfig,
 ): AsyncGenerator<AgentPart> {
   const streamFn = config.streamFn ?? streamAgentText;
   const messages = [...context.messages];
-  const maxSteps = config.maxSteps ?? DEFAULT_MAX_AGENT_STEPS;
+  const maxSteps = normalizeMaxSteps(config.maxSteps);
+  let totalSteps = 0;
+  let stepsSinceUserMessage = 0;
 
   config.emit?.({ type: "agent_start", sessionId: config.sessionId });
-  for (let step = 0; step < maxSteps; step += 1) {
-    const turnId = `${Date.now()}-${step + 1}`;
+  while (true) {
+    assertStepBudget(stepsSinceUserMessage, maxSteps);
+    totalSteps += 1;
+    stepsSinceUserMessage += 1;
+    const turnId = `${Date.now()}-${totalSteps}`;
     const eventMessage = createAssistantEventMessage(turnId);
-    config.emit?.({ type: "turn_start", prompt: "", turnId });
-    config.emit?.({ type: "message_start", message: eventMessage });
-
-    const result = streamFn({
+    const { finishReason } = yield* runAgentStep({
       abortSignal: config.abortSignal,
+      emit: config.emit,
+      eventMessage,
       messages,
+      onUsage: config.onUsage,
       providerConfig: config.providerConfig,
-      singleStep: true,
+      streamFn,
       system: context.system,
       tools: context.tools,
+      turnId,
     });
-    const state: StepStreamState = { sawToolResult: false };
-
-    for await (const streamPart of result.fullStream) {
-      updateStepState(streamPart, state);
-      const part = mapStreamPart(streamPart);
-      if (!part) continue;
-      eventMessage.parts.push(part);
-      emitPartEvents(part, eventMessage.id, config.emit);
-      yield part;
-    }
-
-    const usage = await collectStepUsage(result, config.abortSignal);
-    if (usage) config.onUsage?.(usage);
-    messages.push(...await collectResponseMessages(result, config.abortSignal));
-    const finishReason = await collectFinishReason(result, state, config.abortSignal);
-    config.emit?.({ type: "message_end", message: eventMessage });
-    config.emit?.({ type: "turn_end", finishReason, turnId, usage });
 
     if (finishReason === "tool-calls") {
-      appendUserMessages(messages, config.takeSteeringMessages?.() ?? []);
+      const steeringMessages = config.takeSteeringMessages?.() ?? [];
+      if (appendUserMessagesAndCheck(messages, steeringMessages)) stepsSinceUserMessage = 0;
       continue;
     }
 
     const lateSteering = config.takeSteeringMessages?.() ?? [];
     if (lateSteering.length > 0) {
       appendUserMessages(messages, lateSteering);
+      stepsSinceUserMessage = 0;
       continue;
     }
 
@@ -123,10 +179,8 @@ export async function* agentLoop(
       config.emit?.({ type: "agent_end", sessionId: config.sessionId });
       return;
     }
-    appendUserMessages(messages, followUps);
+    if (appendUserMessagesAndCheck(messages, followUps)) stepsSinceUserMessage = 0;
   }
-
-  throw new Error(`Agent 达到最大单步次数 ${maxSteps}，已停止以避免无限循环。`);
 }
 
 function emitPartEvents(

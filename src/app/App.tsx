@@ -22,6 +22,9 @@ const SkillDetailPage = lazy(() =>
 const SkillsPage = lazy(() =>
   import("@features/skills/pages/SkillsPage").then((module) => ({ default: module.SkillsPage })),
 );
+const LeaderboardPage = lazy(() =>
+  import("@features/leaderboard/LeaderboardPage").then((module) => ({ default: module.LeaderboardPage })),
+);
 function AppRouteLoadingState() {
   return (
     <section className="editor-shell flex h-full min-h-0 items-center justify-center px-6 text-sm text-muted-foreground">
@@ -86,6 +89,7 @@ function AppShell() {
                 <Route path="/books/:bookId" element={<BookWorkspaceRoute />} />
                 <Route path="/skills" element={<SkillsPage />} />
                 <Route path="/skills/:skillId" element={<SkillDetailPage />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
                 <Route path="/setting" element={<SettingPage />} />
                 <Route path="/setting/:sectionKey" element={<SettingPage />} />
               </Routes>

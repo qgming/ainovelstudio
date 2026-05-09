@@ -1,4 +1,4 @@
-import { Download, FileText, Settings, Sun, Moon, Sparkles, type LucideIcon } from "lucide-react";
+import { Download, FileText, Settings, Sun, Moon, Sparkles, Trophy, type LucideIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { NavLink, useLocation, useMatch, useResolvedPath } from "react-router-dom";
 import { cn } from "@shared/utils";
@@ -22,6 +22,7 @@ const DESKTOP_SIDEBAR_ICON_CLASS = "size-5";
 const primaryItems: NavItem[] = [
   { to: "/", label: "首页", Icon: FileText, end: true },
   { to: "/skills", label: "技能", Icon: Sparkles },
+  { to: "/leaderboard", label: "排行榜", Icon: Trophy },
 ];
 
 const secondaryItems: NavItem[] = [{ to: "/setting", label: "设置", Icon: Settings }];

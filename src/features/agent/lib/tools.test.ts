@@ -81,7 +81,12 @@ vi.mock("./providerApi", () => ({
 
 import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./tools";
 import { createInteractionToolBuilders } from "./ai-sdk-tools/interactionBuilders";
+import { createReadToolBuilders } from "./ai-sdk-tools/readBuilders";
 import { searxngSearchService } from "./tools/searxngSearchService";
+
+function createFanqieRankApiJson(bookList: unknown[]) {
+  return JSON.stringify({ code: 0, data: { book_list: bookList } });
+}
 
 describe("createWorkspaceToolset", () => {
   beforeEach(() => {
@@ -106,6 +111,7 @@ describe("createWorkspaceToolset", () => {
     mockWriteAgentFileContent.mockReset();
     mockWriteSkillFileContent.mockReset();
     mockWriteWorkspaceTextFile.mockReset();
+    localStorage.clear();
     searxngSearchService.setInstances([
       "https://search-a.example",
       "https://search-b.example",
@@ -1366,6 +1372,197 @@ describe("createGlobalToolset", () => {
           },
         ],
       },
+    });
+  });
+
+  it("fanqie_leaderboard 可按分类和排名范围读取榜单作品", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: createFanqieRankApiJson([
+        {
+          abstract: "第一名简介",
+          author: "作者甲",
+          bookId: "book-1",
+          bookName: "第一名作品",
+          creationStatus: "1",
+          currentPos: 1,
+          read_count: "12.5万",
+          wordNumber: "300000",
+        },
+        {
+          abstract: "第二名简介",
+          author: "作者乙",
+          bookId: "book-2",
+          bookName: "第二名作品",
+          creationStatus: "0",
+          currentPos: 2,
+          read_count: "9,876",
+          wordNumber: "450000",
+        },
+      ]),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.fanqie_leaderboard.execute({
+      board: "male-reading",
+      categoryName: "都市高武",
+      rankFrom: 2,
+      rankTo: 2,
+    });
+
+    expect(mockForwardProviderRequestViaTauri).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
+        Accept: "application/json,text/plain,*/*",
+      }),
+      method: "GET",
+      url: expect.stringContaining("https://fanqienovel.com/api/rank/category/list?"),
+    });
+    expect(mockForwardProviderRequestViaTauri).toHaveBeenCalledWith(expect.objectContaining({
+      url: expect.stringContaining("category_id=1014"),
+    }));
+    expect(result).toMatchObject({
+      ok: true,
+      summary: "已读取男频阅读榜 · 都市高武，第 2 名，共 1 本。",
+      data: {
+        board: "男频阅读榜",
+        category: "都市高武",
+        books: [
+          {
+            abstract: "第二名简介",
+            author: "作者乙",
+            bookName: "第二名作品",
+            rank: 2,
+            readCount: 9876,
+            status: "已完结",
+          },
+        ],
+      },
+    });
+  });
+
+  it("fanqie_leaderboard 默认读取 30 本分类榜单作品", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: createFanqieRankApiJson(
+        Array.from({ length: 35 }, (_, index) => ({
+          author: `作者${index + 1}`,
+          bookId: `book-${index + 1}`,
+          bookName: `作品${index + 1}`,
+          creationStatus: "1",
+          currentPos: index + 1,
+          read_count: String(10_000 - index),
+          wordNumber: "300000",
+        })),
+      ),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.fanqie_leaderboard.execute({
+      board: "male-reading",
+      categoryName: "都市高武",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      summary: "已读取男频阅读榜 · 都市高武，第 1-30 名，共 30 本。",
+    });
+    expect((result.data as { books: unknown[] }).books).toHaveLength(30);
+  });
+
+  it("fanqie_leaderboard 支持读取总榜前 120 名", async () => {
+    mockForwardProviderRequestViaTauri.mockImplementation(({ url }: { url: string }) => {
+      const categoryId = Number(new URL(url).searchParams.get("category_id"));
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: {},
+        body: createFanqieRankApiJson(
+          Array.from({ length: 30 }, (_, index) => ({
+            author: `作者${categoryId}-${index + 1}`,
+            bookId: `book-${categoryId}-${index + 1}`,
+            bookName: `作品${categoryId}-${index + 1}`,
+            creationStatus: "1",
+            currentPos: index + 1,
+            read_count: String(20_000 - categoryId - index),
+            wordNumber: "300000",
+          })),
+        ),
+      });
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.fanqie_leaderboard.execute({
+      board: "male-reading",
+      categoryName: "总榜",
+      limit: 120,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      summary: "已读取男频阅读榜 · 总榜，第 1-120 名，共 120 本。",
+    });
+    expect((result.data as { books: unknown[] }).books).toHaveLength(120);
+  });
+
+  it("fanqie_leaderboard 默认读取今日番茄总榜前 180 名", async () => {
+    mockForwardProviderRequestViaTauri.mockImplementation(({ url }: { url: string }) => {
+      const params = new URL(url).searchParams;
+      const categoryId = Number(params.get("category_id"));
+      const gender = params.get("gender");
+      const type = params.get("rankMold");
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: {},
+        body: createFanqieRankApiJson(
+          Array.from({ length: 30 }, (_, index) => ({
+            author: `作者${gender}-${type}-${categoryId}-${index + 1}`,
+            bookId: `book-${gender}-${type}-${categoryId}-${index + 1}`,
+            bookName: `作品${gender}-${type}-${categoryId}-${index + 1}`,
+            creationStatus: "1",
+            currentPos: index + 1,
+            read_count: String(30_000 - categoryId - index),
+            wordNumber: "300000",
+          })),
+        ),
+      });
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.fanqie_leaderboard.execute({});
+
+    expect(result).toMatchObject({
+      ok: true,
+      summary: "已读取今日番茄总榜，第 1-180 名，共 180 本。",
+    });
+    expect((result.data as { books: unknown[] }).books).toHaveLength(180);
+  });
+
+  it("fanqie_leaderboard AI schema 支持具体排名查询参数", () => {
+    const builders = createReadToolBuilders(async (_toolName, _tool, input) => ({
+      ok: true,
+      summary: "ok",
+      data: input,
+    }));
+    const tool = builders.fanqie_leaderboard("fanqie_leaderboard", {
+      description: "fanqie",
+      execute: vi.fn(),
+    });
+
+    const parsed = (tool as { inputSchema: { parse: (input: unknown) => unknown } }).inputSchema.parse({
+      board: "female-new",
+      categoryName: "快穿",
+      rank: 3,
+    });
+
+    expect(parsed).toMatchObject({
+      board: "female-new",
+      categoryName: "快穿",
+      rank: 3,
     });
   });
 });

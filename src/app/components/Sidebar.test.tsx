@@ -50,7 +50,7 @@ describe("Sidebar", () => {
     });
   });
 
-  it("主导航只保留首页和技能入口", () => {
+  it("主导航包含首页、技能和排行榜入口", () => {
     renderSidebar();
 
     const labels = screen
@@ -58,7 +58,7 @@ describe("Sidebar", () => {
       .map((link) => link.getAttribute("aria-label"))
       .filter(Boolean);
 
-    expect(labels.slice(0, 3)).toEqual(["首页", "技能", "设置"]);
+    expect(labels.slice(0, 4)).toEqual(["首页", "技能", "排行榜", "设置"]);
   });
 
   it("桌面侧边栏只保留主题按钮和导航入口", () => {
@@ -116,6 +116,7 @@ describe("Sidebar", () => {
     expect(await screen.findByRole("navigation", { name: "主导航" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "首页" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "技能" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "排行榜" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "设置" })).toBeInTheDocument();
   });
 

@@ -73,5 +73,64 @@ describe("agentLoop", () => {
       content: "把节奏拉快",
     });
   });
-});
 
+  it("默认单步上限是 100", async () => {
+    const streamFn = vi.fn(() => streamResult([], "tool-calls", []));
+
+    await expect(async () => {
+      for await (const _part of agentLoop(
+        { messages: [{ role: "user", content: "循环" }], system: "test" },
+        { providerConfig: { apiKey: "k", baseURL: "u", model: "m" }, streamFn: streamFn as never },
+      )) {
+        // drain stream
+      }
+    }).rejects.toThrow("Agent 达到最大单步次数 100");
+
+    expect(streamFn).toHaveBeenCalledTimes(100);
+  });
+
+  it("null 单步上限允许调用方使用无限上限", async () => {
+    const streamFn = vi
+      .fn()
+      .mockReturnValueOnce(streamResult([], "tool-calls", []))
+      .mockReturnValueOnce(streamResult([], "tool-calls", []))
+      .mockReturnValueOnce(streamResult([{ type: "text-delta", id: "text-1", text: "完成" }]));
+
+    for await (const _part of agentLoop(
+      { messages: [{ role: "user", content: "循环到完成" }], system: "test" },
+      { maxSteps: null, providerConfig: { apiKey: "k", baseURL: "u", model: "m" }, streamFn: streamFn as never },
+    )) {
+      // drain stream
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(3);
+  });
+
+  it("用户续跑消息会重置单步计数", async () => {
+    const streamFn = vi
+      .fn()
+      .mockReturnValueOnce(streamResult([], "tool-calls", []))
+      .mockReturnValueOnce(streamResult([], "tool-calls", []))
+      .mockReturnValueOnce(streamResult([], "tool-calls", []))
+      .mockReturnValueOnce(streamResult([{ type: "text-delta", id: "text-1", text: "完成" }]));
+    let delivered = false;
+
+    for await (const _part of agentLoop(
+      { messages: [{ role: "user", content: "循环" }], system: "test" },
+      {
+        maxSteps: 2,
+        providerConfig: { apiKey: "k", baseURL: "u", model: "m" },
+        streamFn: streamFn as never,
+        takeSteeringMessages: () => {
+          if (delivered || streamFn.mock.calls.length < 2) return [];
+          delivered = true;
+          return ["继续"];
+        },
+      },
+    )) {
+      // drain stream
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(4);
+  });
+});

@@ -4,6 +4,71 @@ import type { ToolBuilder, ToolRunner } from "./types";
 
 export function createReadToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
+    fanqie_leaderboard: (toolName, tool) =>
+      defineTool({
+        description:
+          "读取番茄小说排行榜，支持男频/女频、阅读榜/新书榜、分类或总榜，并可按具体排名或排名范围返回书名、作者、简介、在读数、字数、状态和详情链接。",
+        inputSchema: z.object({
+          board: z
+            .enum(["fanqie-overall", "male-reading", "male-new", "female-reading", "female-new"])
+            .optional()
+            .describe("主榜 ID。fanqie-overall=今日番茄总榜；未传筛选参数时默认 fanqie-overall。"),
+          gender: z
+            .union([z.literal(0), z.literal(1)])
+            .optional()
+            .describe("可选。0=女频，1=男频。board 已传时忽略。"),
+          type: z
+            .union([z.literal(1), z.literal(2)])
+            .optional()
+            .describe("可选。1=新书榜，2=阅读榜。board 已传时忽略。"),
+          categoryId: z
+            .number()
+            .int()
+            .optional()
+            .describe("分类 ID；-1 表示总榜。优先级高于 categoryName。"),
+          categoryName: z
+            .string()
+            .optional()
+            .describe("分类名称，如 都市高武、快穿、总榜。未传默认总榜。"),
+          rank: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("查询单个具体排名，如第 3 名。传 rank 时忽略 rankFrom/rankTo/limit。"),
+          rankFrom: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("排名范围起点，默认 1。"),
+          rankTo: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("排名范围终点。未传时使用 rankFrom + limit - 1。"),
+          limit: z
+            .number()
+            .int()
+            .positive()
+            .max(180)
+            .optional()
+            .describe("最多返回多少本，默认 30，最大 180。"),
+          forceRefresh: z
+            .boolean()
+            .optional()
+            .describe("是否绕过今日缓存强制刷新。默认 false。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
     web_search: (toolName, tool) =>
       defineTool({
         description:

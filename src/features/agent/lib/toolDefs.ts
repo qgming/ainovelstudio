@@ -52,6 +52,12 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "读取指定网页正文并提取标题和主要文本；适合在搜索后继续展开阅读具体内容。",
   },
   {
+    id: "fanqie_leaderboard",
+    name: "番茄排行榜",
+    description:
+      "读取番茄小说排行榜；支持男频/女频、阅读榜/新书榜、分类/总榜、具体排名或排名范围，返回书名、简介、在读数等结构化信息。",
+  },
+  {
     id: "read",
     name: "读取文件",
     description:

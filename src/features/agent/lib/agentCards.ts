@@ -30,7 +30,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     modelPresetId: null,
     name: "YOLO 全自动目标",
     reasoningEffort: "xhigh",
-    tools: ["todo", "browse", "read", "search", "web_search", "web_fetch", "skill", "task", "edit", "write", "json", "path", "word_count", "canon_query"],
+    tools: ["todo", "browse", "read", "search", "web_search", "web_fetch", "fanqie_leaderboard", "skill", "task", "edit", "write", "json", "path", "word_count", "canon_query"],
     writeScopes: ["正文/", "大纲/", "设定/", ".project/runs/", ".project/chapters/", ".project/status/", ".project/canon/", ".project/style/", ".project/evals/", ".project/MEMORY/"],
   },
   {
@@ -52,7 +52,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     modelPresetId: null,
     name: "严格工作流",
     reasoningEffort: "xhigh",
-    tools: ["ask", "todo", "browse", "read", "search", "skill", "task", "edit", "write", "json", "path", "word_count", "canon_query"],
+    tools: ["ask", "todo", "browse", "read", "search", "fanqie_leaderboard", "skill", "task", "edit", "write", "json", "path", "word_count", "canon_query"],
     writeScopes: ["正文/", "大纲/", ".project/runs/", ".project/chapters/", ".project/status/", ".project/canon/", ".project/style/", ".project/evals/"],
   },
   {
@@ -72,7 +72,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     modelPresetId: null,
     name: "长篇立项",
     reasoningEffort: "xhigh",
-    tools: ["ask", "todo", "browse", "read", "search", "web_search", "web_fetch", "skill", "task", "edit", "json", "path"],
+    tools: ["ask", "todo", "browse", "read", "search", "web_search", "web_fetch", "fanqie_leaderboard", "skill", "task", "edit", "json", "path"],
     writeScopes: [".project/README.md", ".project/MEMORY/", "设定/", "大纲/"],
   },
   {

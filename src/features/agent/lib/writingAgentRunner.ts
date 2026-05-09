@@ -9,6 +9,7 @@ import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 import { throwIfAborted } from "./asyncUtils";
 import { agentLoop } from "./core/loop";
 import { createAsyncQueue } from "./core/partQueue";
+import { resolveAgentStepLimit } from "./core/stepLimits";
 import { createScopedAskUser } from "./askRuntime";
 import { createTaskTool } from "./taskTool";
 import type { AgentSessionEvent } from "./core/events";
@@ -147,6 +148,7 @@ export async function* runWritingAgent({
         {
           abortSignal,
           emit,
+          maxSteps: resolveAgentStepLimit(toolContext.mode),
           onUsage: toolContext.onUsage,
           providerConfig: toolContext.providerConfig,
           streamFn: toolContext.streamFn ?? streamAgentText,
