@@ -251,7 +251,7 @@ function buildSubagentTimeline(parts: AgentPart[]) {
   return timeline;
 }
 
-export function AgentPartRenderer({ part }: { part: AgentPart }) {
+export function AgentPartRenderer({ part, renderMarkdown = true }: { part: AgentPart; renderMarkdown?: boolean }) {
   if (part.type === "placeholder") {
     return (
       <div className="inline-flex items-center gap-2 text-sm text-inherit opacity-80">
@@ -266,6 +266,9 @@ export function AgentPartRenderer({ part }: { part: AgentPart }) {
   }
 
   if (part.type === "text") {
+    if (!renderMarkdown) {
+      return <div className="whitespace-pre-wrap break-words text-sm leading-6 text-inherit">{part.text}</div>;
+    }
     return <MarkdownText text={part.text} />;
   }
 

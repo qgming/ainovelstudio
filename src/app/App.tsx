@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "@app/components/Sidebar";
@@ -55,7 +54,7 @@ function AppShell() {
 
     void appWindow.onCloseRequested(async (event) => {
       event.preventDefault();
-      await invoke("terminate_application");
+      await appWindow.hide();
     }).then((dispose) => {
       if (disposed) {
         dispose();

@@ -1,6 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { forwardProviderRequestViaTauri } from "./providerApi";
+import { streamProviderRequestViaTauri } from "./providerApi";
 
 const OPENCODE_CLIENT = "cli";
 const OPENCODE_PROJECT = "global";
@@ -53,19 +53,14 @@ function createTauriProviderFetch(providerConfig: AgentProviderConfig) {
     const body = await readForwardBody(
       init?.body ?? (request.method === "GET" || request.method === "HEAD" ? undefined : request.body),
     );
-    const response = await forwardProviderRequestViaTauri({
+    return streamProviderRequestViaTauri({
       baseUrl: providerConfig.baseURL,
       method: request.method,
       mode: "provider",
       headers: Object.fromEntries(request.headers.entries()),
       body,
       url: request.url,
-    });
-
-    return new Response(response.body, {
-      headers: response.headers,
-      status: response.status,
-    });
+    }, init?.signal ?? request.signal);
   };
 }
 

@@ -5,6 +5,8 @@ import type { ChatSessionSummary } from "@features/agent/chat/types";
 import { applyPersistedSummary, formatAgentError } from "./helpers";
 import type { ChatRunStoreAccess } from "./runtimeTypes";
 
+const RUNNING_PERSIST_DELAY_MS = 2000;
+
 type AssistantPersistorParams = ChatRunStoreAccess & {
   assistantMessageId: string;
   currentBookId: () => string;
@@ -52,7 +54,7 @@ export function createAssistantPersistor(params: AssistantPersistorParams) {
       timer = setTimeout(() => {
         timer = null;
         chain = chain.then(() => flush(params.resolveStatus()));
-      }, 350);
+      }, RUNNING_PERSIST_DELAY_MS);
     },
     wait: () => chain,
   };

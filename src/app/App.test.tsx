@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockInvoke, mockWindow } = vi.hoisted(() => ({
-  mockInvoke: vi.fn(),
-  mockWindow: {
-    close: vi.fn(),
-    destroy: vi.fn(),
-    isMaximized: vi.fn().mockResolvedValue(false),
+	const { mockInvoke, mockWindow } = vi.hoisted(() => ({
+	  mockInvoke: vi.fn(),
+	  mockWindow: {
+	    close: vi.fn(),
+	    destroy: vi.fn(),
+	    hide: vi.fn(),
+	    isMaximized: vi.fn().mockResolvedValue(false),
     maximize: vi.fn(),
     minimize: vi.fn(),
     onCloseRequested: vi.fn().mockResolvedValue(() => {}),
@@ -147,6 +148,8 @@ describe("App shell", () => {
     });
     mockWindow.close.mockReset();
     mockWindow.destroy.mockReset();
+    mockWindow.hide.mockReset();
+    mockWindow.hide.mockResolvedValue(undefined);
     mockWindow.isMaximized.mockReset();
     mockWindow.isMaximized.mockResolvedValue(false);
     mockWindow.maximize.mockReset();
@@ -205,7 +208,7 @@ describe("App shell", () => {
     expect(mockWindow.maximize).toHaveBeenCalledTimes(1);
     expect(mockWindow.unmaximize).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith("terminate_application");
+      expect(mockInvoke).toHaveBeenCalledWith("hide_main_window");
     });
 
     await waitFor(() => {
@@ -213,7 +216,7 @@ describe("App shell", () => {
     });
   });
 
-  it("关闭请求会直接退出应用", async () => {
+  it("关闭请求会隐藏窗口并保持后台运行", async () => {
     let closeHandler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined;
     mockWindow.onCloseRequested.mockImplementation(async (handler: (event: { preventDefault: () => void }) => Promise<void>) => {
       closeHandler = handler;
@@ -230,7 +233,8 @@ describe("App shell", () => {
     await closeHandler?.({ preventDefault });
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(mockInvoke).toHaveBeenCalledWith("terminate_application");
+    expect(mockWindow.hide).toHaveBeenCalledTimes(1);
+    expect(mockInvoke).not.toHaveBeenCalledWith("terminate_application");
   });
 
   it("Android 环境不会挂载桌面标题栏和关闭拦截", async () => {

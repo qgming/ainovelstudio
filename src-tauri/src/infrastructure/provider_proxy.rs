@@ -2,6 +2,8 @@ use super::provider_forward::{
     build_forward_headers, validate_forward_request, ForwardProviderRequest,
     ForwardProviderResponse, FORWARD_REQUEST_TIMEOUT_SECS,
 };
+use crate::app::ToolCancellationRegistry;
+use futures_util::StreamExt;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     Url,
@@ -11,6 +13,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::time::Duration;
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 type CommandResult<T> = Result<T, String>;
@@ -46,6 +49,28 @@ pub struct ProviderHttpResponse {
     ok: bool,
     status: u16,
     body: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum ProviderStreamEvent {
+    Start {
+        request_id: String,
+        ok: bool,
+        status: u16,
+        headers: HashMap<String, String>,
+    },
+    Chunk {
+        request_id: String,
+        chunk: Vec<u8>,
+    },
+    End {
+        request_id: String,
+    },
+    Error {
+        request_id: String,
+        message: String,
+    },
 }
 
 fn create_opencode_id(prefix: &str) -> String {
@@ -221,4 +246,105 @@ pub async fn forward_provider_request(
         headers,
         body,
     })
+}
+
+#[tauri::command]
+pub async fn stream_provider_request(
+    app: AppHandle,
+    request: ForwardProviderRequest,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<()> {
+    let request_id = request
+        .request_id
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "流式请求缺少 requestId。".to_string())?;
+    registry.begin(Some(&request_id));
+
+    let result = stream_provider_request_inner(&app, request, &request_id, &registry).await;
+    registry.finish(Some(&request_id));
+    if let Err(message) = result {
+        emit_stream_event(&app, ProviderStreamEvent::Error {
+            request_id,
+            message,
+        });
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn cancel_provider_stream(
+    requestId: String,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<()> {
+    registry.cancel(&requestId);
+    Ok(())
+}
+
+async fn stream_provider_request_inner(
+    app: &AppHandle,
+    request: ForwardProviderRequest,
+    request_id: &str,
+    registry: &ToolCancellationRegistry,
+) -> CommandResult<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(FORWARD_REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let method = reqwest::Method::from_bytes(request.method.trim().as_bytes())
+        .map_err(|error| error.to_string())?;
+    let url = Url::parse(request.url.trim()).map_err(|error| error.to_string())?;
+    let mode = validate_forward_request(&request, &method, &url)?;
+    let mut request_builder = client
+        .request(method, url)
+        .headers(build_forward_headers(request.headers, &mode)?);
+
+    if let Some(body) = request.body {
+        request_builder = request_builder.body(body);
+    }
+
+    registry.check(Some(request_id))?;
+    let response = request_builder
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status().as_u16();
+    let ok = response.status().is_success();
+    let headers = response
+        .headers()
+        .iter()
+        .filter_map(|(key, value)| {
+            value
+                .to_str()
+                .ok()
+                .map(|parsed| (key.to_string(), parsed.to_string()))
+        })
+        .collect::<HashMap<_, _>>();
+
+    emit_stream_event(app, ProviderStreamEvent::Start {
+        request_id: request_id.to_string(),
+        ok,
+        status,
+        headers,
+    });
+
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        registry.check(Some(request_id))?;
+        let chunk = chunk.map_err(|error| error.to_string())?;
+        emit_stream_event(app, ProviderStreamEvent::Chunk {
+            request_id: request_id.to_string(),
+            chunk: chunk.to_vec(),
+        });
+    }
+
+    emit_stream_event(app, ProviderStreamEvent::End {
+        request_id: request_id.to_string(),
+    });
+    Ok(())
+}
+
+fn emit_stream_event(app: &AppHandle, payload: ProviderStreamEvent) {
+    let _ = app.emit("provider-stream", payload);
 }

@@ -2,27 +2,82 @@ mod app;
 mod domains;
 mod infrastructure;
 
-use crate::app::{terminate_application, ToolCancellationRegistry};
+use crate::app::{hide_main_window, terminate_application, ToolCancellationRegistry};
+#[cfg(desktop)]
+use crate::app::show_main_window;
+#[cfg(desktop)]
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager,
+};
+
+#[cfg(desktop)]
+const TRAY_SHOW_ID: &str = "show_main_window";
+#[cfg(desktop)]
+const TRAY_QUIT_ID: &str = "quit_application";
+
+#[cfg(desktop)]
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "显示主窗口", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let mut tray_builder = TrayIconBuilder::new()
+        .tooltip("神笔写作")
+        .menu(&menu)
+        .show_menu_on_left_click(false);
+    if let Some(icon) = app.default_window_icon() {
+        tray_builder = tray_builder.icon(icon.clone());
+    }
+    tray_builder.build(app)?;
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(ToolCancellationRegistry::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
 
     #[cfg(desktop)]
-    {
-        builder = builder
-            .plugin(tauri_plugin_process::init())
-            .plugin(tauri_plugin_updater::Builder::new().build());
-    }
+    let builder = builder
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+
+    #[cfg(desktop)]
+    let builder = builder
+        .setup(|app| {
+            crate::infrastructure::db::open_database(app.handle())
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+            setup_tray(app.handle())?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_SHOW_ID => show_main_window(app),
+            TRAY_QUIT_ID => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                }
+            ) {
+                show_main_window(&tray.app_handle());
+            }
+        });
 
     builder
         .invoke_handler(tauri::generate_handler![
             domains::book_workspace::commands::cancel_tool_request,
             domains::book_workspace::commands::cancel_tool_requests,
             terminate_application,
+            hide_main_window,
             domains::chat::commands::initialize_chat_storage,
             domains::chat::commands::create_chat_session,
             domains::chat::commands::switch_chat_session,
@@ -43,6 +98,8 @@ pub fn run() {
             infrastructure::provider_proxy::fetch_provider_models,
             infrastructure::provider_proxy::probe_provider_connection,
             infrastructure::provider_proxy::forward_provider_request,
+            infrastructure::provider_proxy::stream_provider_request,
+            infrastructure::provider_proxy::cancel_provider_stream,
             domains::chat::default_agent_config::initialize_default_agent_config,
             domains::chat::default_agent_config::read_default_agent_config,
             domains::chat::default_agent_config::write_default_agent_config,

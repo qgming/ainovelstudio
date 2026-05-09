@@ -25,6 +25,8 @@ pub struct ForwardProviderRequest {
     pub(crate) mode: Option<String>,
     #[serde(default)]
     pub(crate) body: Option<String>,
+    #[serde(default, rename = "requestId")]
+    pub(crate) request_id: Option<String>,
     pub(crate) url: String,
 }
 

@@ -194,6 +194,42 @@ describe("useChatRunStore", () => {
     expect(useAgentStore.getState().run.status).toBe("completed");
   });
 
+  it("会批量合并密集 text-delta，避免每个 token 都触发 UI 更新", async () => {
+    streamControl.runPrompt.mockImplementation(async function* () {
+      for (let index = 0; index < 100; index += 1) {
+        yield { type: "text-delta", delta: "字" };
+      }
+    });
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "生成长文本",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    let assistantTextUpdates = 0;
+    const unsubscribe = useAgentStore.subscribe((state) => {
+      const latest = state.run.messages.at(-1);
+      const text = latest?.parts.find((part) => part.type === "text");
+      if (text?.type === "text") assistantTextUpdates += 1;
+    });
+
+    await useAgentStore.getState().sendMessage();
+    unsubscribe();
+
+    const latest = useAgentStore.getState().run.messages.at(-1);
+    const text = latest?.parts.find((part) => part.type === "text");
+    expect(text).toEqual({ type: "text", text: "字".repeat(100) });
+    expect(assistantTextUpdates).toBeLessThan(10);
+  });
+
   it("coachMessage 会发送只针对执行状态的鞭策提示词", async () => {
     useAgentStore.setState({
       activeSessionId: "session-1",

@@ -1,12 +1,17 @@
 use crate::domains::book_workspace::run_book_migrations;
 use rusqlite::{params, Connection, OptionalExtension};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 type CommandResult<T> = Result<T, String>;
 const ACTIVE_SESSION_KEY_PREFIX: &str = "chat.active_session_id.";
+const SQLITE_BUSY_TIMEOUT_MS: u64 = 5000;
+
+static MIGRATED_DATABASES: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
@@ -290,7 +295,24 @@ fn ensure_chat_sessions_book_id_column(connection: &Connection) -> CommandResult
 
 pub fn open_database(app: &AppHandle) -> CommandResult<Connection> {
     let db_path = ensure_database_directory(app)?.join("app.db");
-    let connection = Connection::open(db_path).map_err(error_to_string)?;
-    run_migrations(&connection)?;
+    let connection = Connection::open(&db_path).map_err(error_to_string)?;
+    connection
+        .busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
+        .map_err(error_to_string)?;
+    run_migrations_once(&connection, db_path)?;
     Ok(connection)
+}
+
+fn run_migrations_once(connection: &Connection, db_path: PathBuf) -> CommandResult<()> {
+    let migrated = MIGRATED_DATABASES.get_or_init(|| Mutex::new(HashSet::new()));
+    let mut migrated_paths = migrated
+        .lock()
+        .map_err(|_| "数据库迁移状态访问失败。".to_string())?;
+    if migrated_paths.contains(&db_path) {
+        return Ok(());
+    }
+
+    run_migrations(connection)?;
+    migrated_paths.insert(db_path);
+    Ok(())
 }

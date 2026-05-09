@@ -64,6 +64,8 @@ class MessageRunner {
   private latestUsage: AgentUsage | null = null;
   private providerConfig = useAgentSettingsStore.getState().config;
   private readonly initialSessionId: string | null;
+  private pendingStreamParts: AgentPart[] = [];
+  private streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private sessionId: string | null;
 
   constructor(private readonly params: MessageRunnerParams) {
@@ -175,21 +177,62 @@ class MessageRunner {
 
     for await (const part of writingSession.prompt(this.context.nextInput)) {
       if (!this.isCurrentRun()) return;
-      this.mergePart(part as AgentPart);
+      this.queueStreamPart(part as AgentPart);
     }
+    this.flushStreamParts();
   }
-  private mergePart(part: AgentPart) {
+
+  private queueStreamPart(part: AgentPart) {
+    this.pendingStreamParts.push(part);
+    if (part.type !== "text-delta") {
+      this.flushStreamParts();
+      return;
+    }
+    if (this.streamFlushTimer) return;
+    this.streamFlushTimer = setTimeout(() => {
+      this.streamFlushTimer = null;
+      this.flushStreamParts();
+    }, 50);
+  }
+
+  private flushStreamParts() {
+    if (this.streamFlushTimer) {
+      clearTimeout(this.streamFlushTimer);
+      this.streamFlushTimer = null;
+    }
+    const parts = this.compactPendingStreamParts();
+    if (parts.length === 0) return;
+    this.mergeParts(parts);
+  }
+
+  private compactPendingStreamParts() {
+    const compacted: AgentPart[] = [];
+    for (const part of this.pendingStreamParts) {
+      const previous = compacted[compacted.length - 1];
+      if (part.type === "text-delta" && previous?.type === "text-delta") {
+        compacted[compacted.length - 1] = { type: "text-delta", delta: previous.delta + part.delta };
+        continue;
+      }
+      compacted.push(part);
+    }
+    this.pendingStreamParts = [];
+    return compacted;
+  }
+
+  private mergeParts(parts: AgentPart[]) {
     const sessionId = this.sessionId as string;
     this.params.set((state) => {
       if (state.activeRunRequestId !== this.context.runRequestId) return state;
       const messages = [...(state.messagesBySession[sessionId] ?? [])];
       const lastMessage = messages[messages.length - 1];
       if (lastMessage?.role !== "assistant") return state;
-      messages[messages.length - 1] = { ...lastMessage, parts: mergePart(lastMessage.parts, part) };
+      const mergedParts = parts.reduce((current, part) => mergePart(current, part), lastMessage.parts);
+      const lastPart = parts[parts.length - 1] as AgentPart;
+      messages[messages.length - 1] = { ...lastMessage, parts: mergedParts };
       this.latestMessages = messages;
       this.latestEntries = replaceMessageEntry(this.latestEntries, messages[messages.length - 1]);
       this.persistor.schedule();
-      return buildStreamPatch(state, sessionId, part, this.runPatchContext());
+      return buildStreamPatch(state, sessionId, lastPart, this.runPatchContext());
     });
   }
 
@@ -205,6 +248,7 @@ class MessageRunner {
   }
 
   private async finishCompletedRun() {
+    this.flushStreamParts();
     this.params.sessionSlot.clear();
     this.persistor.clearTimer();
     await this.persistor.wait();
@@ -247,6 +291,7 @@ class MessageRunner {
   }
 
   private async handleError(error: unknown) {
+    this.flushStreamParts();
     this.params.sessionSlot.clear();
     this.persistor.clearTimer();
     await this.persistor.wait();

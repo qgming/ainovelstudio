@@ -649,4 +649,38 @@ describe("AgentMessageList", () => {
     expect(screen.queryByText("正在思考")).not.toBeInTheDocument();
     expect(screen.getByText("read_file")).toBeInTheDocument();
   });
+
+  it("运行中的最后一条 assistant 文本使用轻量纯文本渲染", () => {
+    render(
+      <AgentMessageList
+        runStatus="running"
+        messages={[
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [{ type: "text", text: "**仍在输出**" }],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("**仍在输出**").tagName).toBe("DIV");
+    expect(screen.queryByText("仍在输出")).not.toBeInTheDocument();
+  });
+
+  it("长会话只渲染最近消息并显示折叠提示", () => {
+    const messages = Array.from({ length: 90 }, (_, index) => ({
+      id: `message-${index}`,
+      role: "assistant" as const,
+      author: "主代理",
+      parts: [{ type: "text" as const, text: `消息 ${index}` }],
+    }));
+
+    render(<AgentMessageList runStatus="completed" messages={messages} />);
+
+    expect(screen.getByText("已折叠 10 条较早消息，当前仅渲染最近 80 条以保持长时间运行流畅。")).toBeInTheDocument();
+    expect(screen.queryByText("消息 0")).not.toBeInTheDocument();
+    expect(screen.getByText("消息 89")).toBeInTheDocument();
+  });
 });
