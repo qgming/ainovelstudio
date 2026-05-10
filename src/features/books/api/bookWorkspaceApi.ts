@@ -140,6 +140,14 @@ export function pickWorkspaceDirectory() {
   return invoke<string | null>("pick_book_directory");
 }
 
+export function openBookFolder(rootPath: string) {
+  return invoke<void>("open_book_folder", { rootPath });
+}
+
+export function syncBookFolderToWorkspace(rootPath: string) {
+  return invoke<boolean>("sync_book_folder_to_workspace", { rootPath });
+}
+
 export function listBookWorkspaces() {
   return invoke<BookWorkspaceSummary[]>("list_book_workspaces").then((summaries) => {
     cacheBookWorkspaceSummaries(summaries);

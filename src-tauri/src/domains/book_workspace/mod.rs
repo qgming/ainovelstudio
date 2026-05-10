@@ -4,6 +4,8 @@ pub(crate) mod archive;
 pub(crate) mod commands;
 pub(crate) mod data;
 pub(crate) mod maintenance;
+#[cfg(desktop)]
+pub(crate) mod mirror;
 pub(crate) mod ops;
 pub(crate) mod templates;
 pub(crate) mod tree;

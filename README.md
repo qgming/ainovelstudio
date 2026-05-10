@@ -12,7 +12,7 @@
   <a href="https://github.com/qgming/ainovelstudio/releases/latest">
     <img src="https://img.shields.io/badge/Download-最新版本-0f172a?style=for-the-badge" alt="Download latest release" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.2.5-111827?style=for-the-badge" alt="Version 0.2.5" />
+  <img src="https://img.shields.io/badge/Version-0.2.6-111827?style=for-the-badge" alt="Version 0.2.6" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 
@@ -50,8 +50,8 @@
 
 | 平台 | 安装包 |
 | --- | --- |
-| Windows x64 | [下载 EXE](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.2.5_windows_x64.exe) |
-| Android arm64 | [下载 APK](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.2.5_android_arm64.apk) |
+| Windows x64 | [下载 EXE](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.2.6_windows_x64.exe) |
+| Android arm64 | [下载 APK](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.2.6_android_arm64.apk) |
 
 更多版本记录见 [Releases](https://github.com/qgming/ainovelstudio/releases)。
 
@@ -170,6 +170,7 @@ Agent 在遇到明显匹配技能的任务时，会先读取对应 `SKILL.md`，
 
 ## 更新日志
 
+- [v0.2.6](docs/releases/v0.2.6.md)：桌面端文件夹镜像同步、目录栏系统资源管理器入口、网文大白话规则、Agent 流式失败自动续跑。
 - [v0.2.5](docs/releases/v0.2.5.md)：Agent 核心重构、YOLO、Canon、流式模型代理、todo 稳定性修复、双端发布。
 - [v0.2.4](docs/releases/v0.2.4.md)：模型推理开关默认安全值、会话上下文面板、工作流判断容错。
 - [历史版本](docs/releases)

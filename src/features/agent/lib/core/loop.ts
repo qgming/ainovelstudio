@@ -4,6 +4,15 @@ import { withAbort } from "../asyncUtils";
 import { streamAgentText } from "../modelGateway";
 import type { AgentPart, AgentUsage } from "../types";
 import type { AgentSessionEvent } from "./events";
+import {
+  appendRetryPrompt,
+  buildFailureReport,
+  createFailureRecord,
+  createRetryState,
+  isAbortError,
+  MAX_CONSECUTIVE_AI_REQUEST_FAILURES,
+  type RetryState,
+} from "./retry";
 import { mapStreamPart, updateStepState, type StepStreamState } from "./streamParts";
 
 const DEFAULT_MAX_AGENT_STEPS = 100;
@@ -41,6 +50,16 @@ type AgentStepParams = {
 
 type AgentStepResult = {
   finishReason?: string;
+};
+
+type RunStepWithRetryParams = {
+  config: AgentLoopConfig;
+  context: AgentLoopContext;
+  eventMessage: ReturnType<typeof createAssistantEventMessage>;
+  messages: ModelMessage[];
+  retryState: RetryState;
+  streamFn: typeof streamAgentText;
+  turnId: string;
 };
 
 function appendUserMessages(messages: ModelMessage[], prompts: string[]) {
@@ -131,6 +150,53 @@ async function* runAgentStep(params: AgentStepParams): AsyncGenerator<AgentPart,
   return { finishReason };
 }
 
+async function* runStepWithRetry(
+  params: RunStepWithRetryParams,
+): AsyncGenerator<AgentPart, AgentStepResult & { shouldRetry: boolean }> {
+  try {
+    const stepResult = yield* runAgentStep({
+      abortSignal: params.config.abortSignal,
+      emit: params.config.emit,
+      eventMessage: params.eventMessage,
+      messages: params.messages,
+      onUsage: params.config.onUsage,
+      providerConfig: params.config.providerConfig,
+      streamFn: params.streamFn,
+      system: params.context.system,
+      tools: params.context.tools,
+      turnId: params.turnId,
+    });
+    params.retryState.consecutiveFailures = 0;
+    params.retryState.failureHistory = [];
+    return { ...stepResult, shouldRetry: false };
+  } catch (error) {
+    if (isAbortError(error, params.config.abortSignal)) throw error;
+    const failure = recordStepFailure(error, params);
+    if (params.retryState.consecutiveFailures >= MAX_CONSECUTIVE_AI_REQUEST_FAILURES) {
+      throw new Error(buildFailureReport(params.retryState.failureHistory, params.config.providerConfig), {
+        cause: error,
+      });
+    }
+    appendRetryPrompt(params.messages, failure);
+    return { shouldRetry: true };
+  }
+}
+
+function recordStepFailure(error: unknown, params: RunStepWithRetryParams) {
+  const retryState = params.retryState;
+  retryState.consecutiveFailures += 1;
+  const failure = createFailureRecord({
+    attempt: retryState.consecutiveFailures,
+    error,
+    partsGenerated: params.eventMessage.parts.length,
+    turnId: params.turnId,
+  });
+  retryState.failureHistory = [...retryState.failureHistory, failure];
+  params.config.emit?.({ type: "message_end", message: params.eventMessage });
+  params.config.emit?.({ type: "turn_end", finishReason: "auto-retry", turnId: params.turnId, usage: null });
+  return failure;
+}
+
 export async function* agentLoop(
   context: AgentLoopContext,
   config: AgentLoopConfig,
@@ -138,6 +204,7 @@ export async function* agentLoop(
   const streamFn = config.streamFn ?? streamAgentText;
   const messages = [...context.messages];
   const maxSteps = normalizeMaxSteps(config.maxSteps);
+  const retryState = createRetryState();
   let totalSteps = 0;
   let stepsSinceUserMessage = 0;
 
@@ -148,18 +215,20 @@ export async function* agentLoop(
     stepsSinceUserMessage += 1;
     const turnId = `${Date.now()}-${totalSteps}`;
     const eventMessage = createAssistantEventMessage(turnId);
-    const { finishReason } = yield* runAgentStep({
-      abortSignal: config.abortSignal,
-      emit: config.emit,
+    const { finishReason, shouldRetry } = yield* runStepWithRetry({
+      config,
+      context,
       eventMessage,
       messages,
-      onUsage: config.onUsage,
-      providerConfig: config.providerConfig,
+      retryState,
       streamFn,
-      system: context.system,
-      tools: context.tools,
       turnId,
     });
+
+    if (shouldRetry) {
+      stepsSinceUserMessage = 0;
+      continue;
+    }
 
     if (finishReason === "tool-calls") {
       const steeringMessages = config.takeSteeringMessages?.() ?? [];

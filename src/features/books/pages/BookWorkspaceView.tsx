@@ -25,7 +25,7 @@ import { BookWorkspaceEmptyState } from "@features/books/components/BookWorkspac
 import { BookshelfDialog } from "@features/books/components/BookshelfDialog";
 import { ConfirmDialog } from "@shared/components/dialogs/ConfirmDialog";
 import { PromptDialog } from "@shared/components/dialogs/PromptDialog";
-import { getStoredWorkspaceSnapshot } from "@features/books/api/bookWorkspaceApi";
+import { getStoredWorkspaceSnapshot, openBookFolder } from "@features/books/api/bookWorkspaceApi";
 import { getBaseName } from "@features/books/lib/paths";
 import type { TreeNode } from "@features/books/types";
 import { useIsMobile } from "@shared/hooks/useMobile";
@@ -79,7 +79,6 @@ export function BookWorkspaceView({
   const closeBookshelf = useBookWorkspaceStore((state) => state.closeBookshelf);
   const closeConfirm = useBookWorkspaceStore((state) => state.closeConfirm);
   const closePrompt = useBookWorkspaceStore((state) => state.closePrompt);
-  const toggleAllDirectories = useBookWorkspaceStore((state) => state.toggleAllDirectories);
   const confirmDelete = useBookWorkspaceStore((state) => state.confirmDelete);
   const confirmState = useBookWorkspaceStore((state) => state.confirmState);
   const dismissError = useBookWorkspaceStore((state) => state.dismissError);
@@ -126,6 +125,7 @@ export function BookWorkspaceView({
   } = useBookPanelResize();
 
   const [mobileActiveTab, setMobileActiveTab] = useState<MobileBookTab>("editor");
+  const [externalErrorMessage, setExternalErrorMessage] = useState<string | null>(null);
   const routeLoadingBookIdRef = useRef<string | null>(null);
 
   // —— 派生状态 ——
@@ -196,6 +196,17 @@ export function BookWorkspaceView({
     }
   }
 
+  async function openRootFolder(rootPath: string) {
+    try {
+      setExternalErrorMessage(null);
+      await openBookFolder(rootPath);
+    } catch (error) {
+      setExternalErrorMessage(
+        error instanceof Error ? error.message : "打开系统文件资源管理器失败。",
+      );
+    }
+  }
+
   function renderDesktopWorkspace() {
     if (!resolvedRootNode) return null;
     return (
@@ -216,11 +227,11 @@ export function BookWorkspaceView({
               activeFilePath={activeFilePath}
               busy={isBusy}
               expandedPaths={expandedPaths}
-              onToggleAll={toggleAllDirectories}
               onCreateFile={openCreateFileDialog}
               onCreateFolder={openCreateFolderDialog}
               onDelete={requestDelete}
               onNavigateHome={navigateHome}
+              onOpenRootFolder={(rootPath) => void openRootFolder(rootPath)}
               onRefresh={() => void refreshWorkspace()}
               onRename={openRenameDialog}
               onSelectFile={(path) => void selectFile(path)}
@@ -270,7 +281,6 @@ export function BookWorkspaceView({
       activeFilePath,
       busy: isBusy,
       expandedPaths,
-      onToggleAll: toggleAllDirectories,
       onCreateFile: openCreateFileDialog,
       onCreateFolder: openCreateFolderDialog,
       onDelete: requestDelete,
@@ -342,17 +352,22 @@ export function BookWorkspaceView({
     );
   }
 
+  const visibleErrorMessage = errorMessage ?? externalErrorMessage;
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-panel-subtle">
-      {errorMessage ? (
+      {visibleErrorMessage ? (
         <div className="mx-6 mt-4 flex shrink-0 items-start justify-between gap-4 rounded-md border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <div className="flex items-start gap-3">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>{errorMessage}</p>
+            <p>{visibleErrorMessage}</p>
           </div>
           <button
             type="button"
-            onClick={dismissError}
+            onClick={() => {
+              dismissError();
+              setExternalErrorMessage(null);
+            }}
             className="shrink-0 px-2 py-1 text-xs font-medium transition hover:opacity-80"
           >
             关闭

@@ -14,6 +14,7 @@ import {
   readWorkspaceTree,
   renameWorkspaceEntry,
   setStoredWorkspaceSnapshot,
+  syncBookFolderToWorkspace,
   writeWorkspaceTextFile,
 } from "@features/books/api/bookWorkspaceApi";
 import { getCachedBookWorkspaceSummary } from "@features/books/lib/summaryCache";
@@ -378,6 +379,11 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       const isCurrent = createWorkspaceLoadGuard();
       try {
         set({ errorMessage: null, isBusy: true });
+
+        await syncBookFolderToWorkspace(rootPath);
+        if (!isCurrent()) {
+          return;
+        }
 
         if (isDirty && activeFilePath) {
           await writeWorkspaceTextFile(rootPath, activeFilePath, draftContent);

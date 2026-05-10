@@ -1,14 +1,12 @@
 import {
   ChevronRight,
   FilePlus2,
+  FolderOpen,
   FolderPlus,
-  Maximize2,
-  Minimize2,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@shared/ui/button";
 import { PanelBody, PanelHeader, PanelToolbar } from "@shared/ui/panel";
-import { collectAllDirectoryPaths } from "@features/books/lib/tree";
 import { BookTreeItem } from "./BookTreeItem";
 import type { TreeNode } from "@features/books/types";
 
@@ -16,11 +14,11 @@ type BookTreePanelProps = {
   activeFilePath: string | null;
   busy?: boolean;
   expandedPaths: string[];
-  onToggleAll: () => void;
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (node: TreeNode) => void;
   onNavigateHome: () => void;
+  onOpenRootFolder?: (rootPath: string) => void;
   onRefresh: () => void;
   onRename: (node: TreeNode) => void;
   onSelectFile: (path: string) => void;
@@ -28,6 +26,19 @@ type BookTreePanelProps = {
   rootNode: TreeNode;
   width?: number | string;
 };
+
+function getToolbarButtonTitle(ariaLabel: string) {
+  if (ariaLabel === "刷新当前书籍") {
+    return "刷新当前书籍 — 重新读取当前书籍的文件结构";
+  }
+  if (ariaLabel === "在系统文件资源管理器中打开书籍文件夹") {
+    return "在系统文件资源管理器中打开书籍文件夹 — 方便直接添加、删除或整理文件";
+  }
+  if (ariaLabel === "在书籍根目录中新建文件夹") {
+    return "在书籍根目录中新建文件夹 — 在当前书籍根目录创建新文件夹";
+  }
+  return "在书籍根目录中新建文件 — 在当前书籍根目录创建新文件";
+}
 
 function ToolbarButton({
   ariaLabel,
@@ -44,17 +55,7 @@ function ToolbarButton({
     <Button
       type="button"
       aria-label={ariaLabel}
-      title={
-        ariaLabel === "刷新当前书籍"
-          ? "刷新当前书籍 — 重新读取当前书籍的文件结构"
-          : ariaLabel === "折叠全部文件夹"
-            ? "折叠全部文件夹 — 一次收起当前书籍中的全部目录"
-            : ariaLabel === "展开全部文件夹"
-              ? "展开全部文件夹 — 一次展开当前书籍中的全部目录"
-              : ariaLabel === "在书籍根目录中新建文件夹"
-                ? "在书籍根目录中新建文件夹 — 在当前书籍根目录创建新文件夹"
-                : "在书籍根目录中新建文件 — 在当前书籍根目录创建新文件"
-      }
+      title={getToolbarButtonTitle(ariaLabel)}
       disabled={busy}
       onClick={onClick}
       variant="ghost"
@@ -98,11 +99,11 @@ export function BookTreePanel({
   activeFilePath,
   busy = false,
   expandedPaths,
-  onToggleAll,
   onCreateFile,
   onCreateFolder,
   onDelete,
   onNavigateHome,
+  onOpenRootFolder,
   onRefresh,
   onRename,
   onSelectFile,
@@ -110,11 +111,6 @@ export function BookTreePanel({
   rootNode,
   width,
 }: BookTreePanelProps) {
-  const allDirectoryPaths = collectAllDirectoryPaths(rootNode);
-  const isFullyExpanded =
-    allDirectoryPaths.length > 0 &&
-    allDirectoryPaths.every((path) => expandedPaths.includes(path));
-
   return (
     <aside
       style={width ? { width } : undefined}
@@ -136,17 +132,15 @@ export function BookTreePanel({
               className={["h-4 w-4", busy ? "animate-spin" : ""].join(" ")}
             />
           </ToolbarButton>
-          <ToolbarButton
-            ariaLabel={isFullyExpanded ? "折叠全部文件夹" : "展开全部文件夹"}
-            busy={busy}
-            onClick={onToggleAll}
-          >
-            {isFullyExpanded ? (
-              <Minimize2 className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
-            )}
-          </ToolbarButton>
+          {onOpenRootFolder ? (
+            <ToolbarButton
+              ariaLabel="在系统文件资源管理器中打开书籍文件夹"
+              busy={busy}
+              onClick={() => onOpenRootFolder(rootNode.path)}
+            >
+              <FolderOpen className="h-4 w-4" />
+            </ToolbarButton>
+          ) : null}
           <ToolbarButton
             ariaLabel="在书籍根目录中新建文件夹"
             busy={busy}

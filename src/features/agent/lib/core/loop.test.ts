@@ -16,6 +16,20 @@ function streamResult(parts: unknown[], finishReason?: string, responseMessages:
   };
 }
 
+function streamFailure(message: string, parts: unknown[] = []) {
+  return {
+    finishReasonPromise: Promise.resolve("stop"),
+    fullStream: (async function* () {
+      for (const part of parts) {
+        yield part;
+      }
+      throw new Error(message);
+    })(),
+    responseMessagesPromise: Promise.resolve([]),
+    usagePromise: Promise.resolve(null),
+  };
+}
+
 describe("agentLoop", () => {
   it("工具结果后会继续下一次模型调用", async () => {
     const streamFn = vi
@@ -132,5 +146,53 @@ describe("agentLoop", () => {
     }
 
     expect(streamFn).toHaveBeenCalledTimes(4);
+  });
+
+  it("AI 请求连续失败未满 5 次时会自动续跑", async () => {
+    const messageSnapshots: ModelMessage[][] = [];
+    const responses = [
+      streamFailure("error decoding response body"),
+      streamFailure("No output generated. Check the stream for errors."),
+      streamFailure("fetch failed"),
+      streamFailure("stream closed"),
+      streamResult([{ type: "text-delta", id: "text-1", text: "续跑完成" }]),
+    ];
+    const streamFn = vi.fn((input: { messages: ModelMessage[] }) => {
+      messageSnapshots.push([...input.messages]);
+      return responses.shift();
+    });
+
+    const parts: AgentPart[] = [];
+    for await (const part of agentLoop(
+      { messages: [{ role: "user", content: "继续写" }], system: "test" },
+      { providerConfig: { apiKey: "k", baseURL: "u", model: "m" }, streamFn: streamFn as never },
+    )) {
+      parts.push(part);
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(5);
+    expect(messageSnapshots[1]?.at(-1)?.content).toContain("连续第 1 次短暂失败");
+    expect(messageSnapshots[4]?.at(-1)?.content).toContain("连续第 4 次短暂失败");
+    expect(parts.at(-1)).toEqual({ type: "text-delta", delta: "续跑完成" });
+  });
+
+  it("AI 请求连续失败 5 次时会抛出详细失败报告", async () => {
+    const streamFn = vi.fn(() =>
+      streamFailure("error decoding response body", [{ type: "text-delta", id: "text-1", text: "半截" }]),
+    );
+
+    await expect(async () => {
+      for await (const _part of agentLoop(
+        { messages: [{ role: "user", content: "继续写" }], system: "test" },
+        {
+          providerConfig: { apiKey: "k", baseURL: "https://example.test", model: "test-model" },
+          streamFn: streamFn as never,
+        },
+      )) {
+        // drain stream
+      }
+    }).rejects.toThrow(/连续 5 次 AI 请求失败[\s\S]*模型：test-model[\s\S]*已生成片段数：1/);
+
+    expect(streamFn).toHaveBeenCalledTimes(5);
   });
 });

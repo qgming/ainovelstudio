@@ -294,21 +294,15 @@ describe("BookWorkspaceView", () => {
     expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
   });
 
-  it("支持刷新当前书籍以及单按钮切换全部展开和全部收起", async () => {
+  it("支持刷新当前书籍且顶部不再显示全部展开收起按钮", async () => {
     renderBookWorkspaceView();
 
     fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
     fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
 
     expect(await screen.findByText("第一卷")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "展开全部文件夹" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "展开全部文件夹" }));
-    expect(screen.getByRole("button", { name: "折叠全部文件夹" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "折叠全部文件夹" }));
-    expect(screen.queryByText("第一卷")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "展开全部文件夹" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "展开全部文件夹" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "折叠全部文件夹" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "刷新当前书籍" }));
 
@@ -318,6 +312,21 @@ describe("BookWorkspaceView", () => {
     });
 
     expect(await screen.findByText("第一卷")).toBeInTheDocument();
+  });
+
+  it("桌面端可以从目录栏顶部用系统文件资源管理器打开书籍文件夹", async () => {
+    renderBookWorkspaceView();
+
+    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "在系统文件资源管理器中打开书籍文件夹",
+      }),
+    );
+
+    expect(mockInvoke).toHaveBeenCalledWith("open_book_folder", { rootPath });
   });
 
   it("编辑区顶部保存按钮使用纯图标工具栏样式", async () => {
@@ -350,6 +359,11 @@ describe("BookWorkspaceView", () => {
     expect(screen.queryByTestId("book-workspace-panels")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "目录" }));
+    expect(
+      screen.queryByRole("button", {
+        name: "在系统文件资源管理器中打开书籍文件夹",
+      }),
+    ).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
     fireEvent.click(await screen.findByRole("button", { name: "第001章_待命名.md" }));
 
