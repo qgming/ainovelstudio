@@ -764,6 +764,180 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
+  it("json 支持创建 JSON 文件并格式化初始值", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("missing"));
+
+    const result = await toolset.json.execute({
+      action: "create",
+      path: ".project/status/new-state.json",
+      value: { progress: { currentChapter: 1 } },
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      ".project/status/new-state.json",
+      [
+        "{",
+        '  "progress": {',
+        '    "currentChapter": 1',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(result).toEqual({
+      ok: true,
+      summary: "已创建 JSON 文件 .project/status/new-state.json。",
+      data: {
+        action: "create",
+        path: ".project/status/new-state.json",
+        value: { progress: { currentChapter: 1 } },
+      },
+    });
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+  });
+
+  it("json 支持读取结构概览而不返回完整 JSON", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
+      characters: [{ name: "林燃", goal: "逃离北城" }],
+      progress: { currentChapter: 3 },
+    }, null, 2));
+
+    const result = await toolset.json.execute({
+      action: "overview",
+      maxDepth: 1,
+      path: ".project/status/project-state.json",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.summary).toBe("已读取 .project/status/project-state.json 中 / 的 JSON 结构概览。");
+    expect(result.data).toMatchObject({
+      action: "overview",
+      entries: [
+        { keyCount: 2, pointer: "/", type: "object" },
+        { length: 1, pointer: "/characters", type: "array" },
+        { keyCount: 1, pointer: "/progress", type: "object" },
+      ],
+      path: ".project/status/project-state.json",
+      pointer: "/",
+    });
+  });
+
+  it("json overview 对采样省略的结构会标记 truncated", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    const manyKeys = Object.fromEntries(
+      Array.from({ length: 50 }, (_, index) => [`key${index}`, index]),
+    );
+    mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify(manyKeys, null, 2));
+
+    const result = await toolset.json.execute({
+      action: "overview",
+      maxDepth: 1,
+      path: ".project/status/project-state.json",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        entryCount: 41,
+        truncated: true,
+      },
+    });
+  });
+
+  it("json 支持按 key/value 搜索并返回 JSON Pointer", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
+      characters: [{ name: "林燃", goal: "逃离北城" }],
+      progress: { currentChapter: 3 },
+    }, null, 2));
+
+    const result = await toolset.json.execute({
+      action: "search",
+      path: ".project/status/project-state.json",
+      query: "林燃",
+      searchIn: "value",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        action: "search",
+        matchCount: 1,
+        matches: [
+          {
+            match: "value",
+            pointer: "/characters/0/name",
+            type: "string",
+            value: "林燃",
+          },
+        ],
+      },
+    });
+  });
+
+  it("json search 命中数量上限时会标记 truncated", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
+      a: "林燃",
+      b: "林燃",
+      c: "林燃",
+    }, null, 2));
+
+    const result = await toolset.json.execute({
+      action: "search",
+      limit: 2,
+      path: ".project/status/project-state.json",
+      query: "林燃",
+      searchIn: "value",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        matchCount: 2,
+        truncated: true,
+      },
+    });
+  });
+
+  it("json get 默认会截断超长返回值", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
+      content: "长文本".repeat(200),
+    }, null, 2));
+
+    const result = await toolset.json.execute({
+      action: "get",
+      maxChars: 80,
+      path: "正文/第一章.json",
+      pointer: "/content",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        action: "get",
+        path: "正文/第一章.json",
+        pointer: "/content",
+        value: {
+          truncated: true,
+          type: "string",
+        },
+      },
+    });
+  });
+
   it("json 支持批量执行多个局部操作并只写回一次", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
@@ -832,6 +1006,56 @@ describe("createWorkspaceToolset", () => {
         ],
         operationsApplied: 4,
         path: "正文/创作状态追踪器.json",
+      },
+    });
+  });
+
+  it("json batch 支持模板补齐和历史追加", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      '{\n  "progress": {},\n  "recentUpdates": []\n}\n',
+    );
+
+    const result = await toolset.json.execute({
+      action: "batch",
+      operations: [
+        { action: "ensure_template", pointer: "/progress", value: { currentChapter: 1 } },
+        {
+          action: "history_append",
+          pointer: "/recentUpdates",
+          timestamp: "2026-05-11T01:00:00+08:00",
+          value: { note: "初始化状态" },
+        },
+      ],
+      path: ".project/status/project-state.json",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      ".project/status/project-state.json",
+      [
+        "{",
+        '  "progress": {',
+        '    "currentChapter": 1',
+        "  },",
+        '  "recentUpdates": [',
+        "    {",
+        '      "note": "初始化状态",',
+        '      "updatedAt": "2026-05-11T01:00:00+08:00"',
+        "    }",
+        "  ]",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        action: "batch",
+        operationsApplied: 2,
       },
     });
   });

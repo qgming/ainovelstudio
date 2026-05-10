@@ -18,7 +18,8 @@ const STATUS_FILE_PRIORITIES = [
 export type ProjectContextPayload = {
   source: string;
   files: Array<{
-    content: string;
+    content?: string;
+    description?: string;
     name: string;
     path: string;
   }>;
@@ -74,6 +75,24 @@ function getStatusFilePriority(path: string) {
     getBaseName(path) as (typeof STATUS_FILE_PRIORITIES)[number],
   );
   return index >= 0 ? index : STATUS_FILE_PRIORITIES.length;
+}
+
+function getJsonContextDescription(path: string) {
+  const name = getBaseName(path);
+  const descriptions: Record<string, string> = {
+    "character-state.json": "人物状态真值层，通常记录角色当前位置、关系、动机、伤势、能力、秘密与阶段性变化。",
+    "continuity-index.json": "连续性索引，通常记录伏笔、承接点、未解决事项、时间线和容易前后矛盾的事实。",
+    "factory-index.json": "生产索引，通常记录章节生产、资料生成、批量任务或工厂化流程的入口信息。",
+    "latest-plot.json": "最新剧情状态，通常记录当前章节、主线目标、近期事件、下一步推进方向和关键冲突。",
+    "project-state.json": "项目级状态，通常记录整本书的当前阶段、整体目标、运行状态和重要约束。",
+    "system-state.json": "系统/世界状态，通常记录世界观规则、组织局势、能力体系、资源变化和外部环境。",
+  };
+
+  if (path === DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH) {
+    return "上下文策略文件，程序已读取用于决定默认上下文；需要查看策略细节时再按路径 read。";
+  }
+
+  return descriptions[name] ?? "JSON 结构化资料文件，默认只注入路径；需要字段细节时再按路径 read。";
 }
 
 function collectStatusJsonPaths(
@@ -164,7 +183,6 @@ function collectManifestPaths(
     policy.summaryFirst.forEach((path) => paths.add(path));
     if (activeFilePath) policy.includeIfActive.forEach((path) => paths.add(path));
   });
-  if (activeFilePath) paths.add(activeFilePath);
   return Array.from(paths).slice(0, MANIFEST_FILE_LIMIT);
 }
 
@@ -180,6 +198,15 @@ async function tryReadContextFile(
   } catch {
     return null;
   }
+}
+
+function createPathOnlyContextFile(path: string): ProjectContextPayload["files"][number] {
+  const isJson = path.toLowerCase().endsWith(".json");
+  return {
+    description: isJson ? getJsonContextDescription(path) : undefined,
+    name: getBaseName(path),
+    path,
+  };
 }
 
 function pushUniqueContextFile(
@@ -212,18 +239,14 @@ async function loadManifestContextFiles(params: {
 
 async function loadStatusContextFiles(params: {
   files: ProjectContextPayload["files"];
-  readFile: LoadProjectContextInput["readFile"];
   readTree: NonNullable<LoadProjectContextInput["readTree"]>;
   workspaceRootPath: string;
 }) {
   const tree = await params.readTree(params.workspaceRootPath);
   const statusPaths = collectStatusJsonPaths(tree);
-  const statusContents = await Promise.all(
-    statusPaths.map((path) =>
-      tryReadContextFile(params.readFile, params.workspaceRootPath, path)
-    ),
+  statusPaths.forEach((path) =>
+    pushUniqueContextFile(params.files, createPathOnlyContextFile(path))
   );
-  statusContents.forEach((file) => pushUniqueContextFile(params.files, file));
 }
 
 export async function loadProjectContext({
@@ -256,7 +279,7 @@ export async function loadProjectContext({
   );
   if (manifestFile) {
     manifest = parseContextManifest(manifestFile.content);
-    pushUniqueContextFile(files, manifestFile);
+    pushUniqueContextFile(files, createPathOnlyContextFile(manifestFile.path));
   }
 
   await loadManifestContextFiles({
@@ -272,7 +295,6 @@ export async function loadProjectContext({
     try {
       await loadStatusContextFiles({
         files,
-        readFile,
         readTree,
         workspaceRootPath,
       });

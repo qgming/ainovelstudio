@@ -7,18 +7,21 @@ export function createDataToolBuilders(runTool: ToolRunner): Record<string, Tool
     json: (toolName, tool) =>
       defineTool({
         description:
-          "读取或局部更新 JSON。优先用它改字段、对象和数组；支持模板补齐、历史追加和 patch；多步变更优先 action=batch 或 patch，一次写回。",
+          "读取、搜索、创建或局部更新 JSON。大 JSON 先 overview/search，再 get 精确 pointer；多步变更优先 batch 或 patch，一次写回。",
         inputSchema: z.object({
           action: z
             .enum([
               "append",
               "batch",
+              "create",
               "delete",
               "ensure_template",
               "get",
               "history_append",
               "merge",
+              "overview",
               "patch",
+              "search",
               "set",
               "text_append",
             ])
@@ -34,7 +37,10 @@ export function createDataToolBuilders(runTool: ToolRunner): Record<string, Tool
                   .enum(["add", "copy", "move", "remove", "replace", "test"])
                   .describe("RFC 6902 风格的 patch 动作。"),
                 path: z.string().describe("patch 目标 JSON Pointer。"),
-                value: z.unknown().optional().describe("add / replace / test 时使用的值。"),
+                value: z
+                  .unknown()
+                  .optional()
+                  .describe("add / replace / test 时使用的值。"),
               }),
             )
             .optional()
@@ -43,39 +49,91 @@ export function createDataToolBuilders(runTool: ToolRunner): Record<string, Tool
             .array(
               z.object({
                 action: z
-                  .enum(["append", "delete", "merge", "set", "text_append"])
+                  .enum([
+                    "append",
+                    "delete",
+                    "ensure_template",
+                    "history_append",
+                    "merge",
+                    "set",
+                    "text_append",
+                  ])
                   .describe("batch 中的单步动作。"),
+                limit: z
+                  .number()
+                  .int()
+                  .positive()
+                  .optional()
+                  .describe("batch 中 history_append 的历史数组保留上限。"),
                 pointer: z
                   .string()
                   .optional()
-                  .describe(
-                    "batch 中该步操作的 JSON Pointer。空字符串表示根节点。",
-                  ),
-                value: z
-                  .unknown()
-                  .optional()
-                  .describe("append / merge / set 时要写入的新值。"),
+                  .describe("batch 中该步操作的 JSON Pointer。空字符串表示根节点。"),
                 separator: z
                   .string()
                   .optional()
                   .describe("仅在 batch 的 text_append 时使用。追加文本前插入的分隔符。"),
+                timestamp: z
+                  .string()
+                  .optional()
+                  .describe("batch 中 history_append 的写入时间。"),
+                timestampField: z
+                  .string()
+                  .optional()
+                  .describe("batch 中 history_append 的时间字段名，默认 updatedAt。"),
+                value: z
+                  .unknown()
+                  .optional()
+                  .describe("append / merge / set 时要写入的新值。"),
               }),
             )
             .optional()
             .describe("仅在 action=batch 时使用。按顺序依次执行的操作列表。"),
+          caseSensitive: z
+            .boolean()
+            .optional()
+            .describe("仅在 action=search 时使用。是否区分大小写。"),
           limit: z
             .number()
             .int()
             .positive()
             .optional()
-            .describe("仅在 action=history_append 时使用。限制历史数组最大保留条数。"),
+            .describe("history_append 的历史数组最大保留条数；search 的最大匹配数。"),
+          maxChars: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("读取或写入后返回 value 的最大字符数，默认 4000，超出会返回 preview。"),
+          maxDepth: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe("仅在 action=overview 时使用。结构概览递归深度，默认 2。"),
+          maxEntries: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("仅在 action=overview 时使用。最多返回多少个结构节点，默认 80。"),
+          overwrite: z
+            .boolean()
+            .optional()
+            .describe("仅在 action=create 时使用。目标文件存在时是否覆盖，默认 false。"),
           path: z.string().describe("目标 JSON 文件的相对工作区路径。"),
           pointer: z
             .string()
             .optional()
-            .describe(
-              "JSON Pointer。空字符串表示根节点，例如 /stage、/chapters/0/title。",
-            ),
+            .describe("JSON Pointer。空字符串表示根节点，例如 /stage、/chapters/0/title。"),
+          query: z
+            .string()
+            .optional()
+            .describe("仅在 action=search 时使用。要搜索的 key 或 value 文本。"),
+          searchIn: z
+            .enum(["all", "key", "value"])
+            .optional()
+            .describe("仅在 action=search 时使用。搜索 key、value 或两者。"),
           separator: z
             .string()
             .optional()

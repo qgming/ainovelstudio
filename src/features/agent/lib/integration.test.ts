@@ -584,10 +584,8 @@ describe("agent session (streaming)", () => {
     expect(request.messages[1]).toEqual({
       role: "assistant",
       content: [
-        "工具调用 [call-history-1] read",
+        "工具执行：read，对象：设定/人物.md，结果：成功。",
         '输入摘要：{"path":"设定/人物.md"}',
-        "",
-        "工具结果 [call-history-1] read",
         "输出摘要：主角：林燃；目标：逃离北城",
         "",
         "我已经提炼出主角目标。",
@@ -625,8 +623,8 @@ describe("agent session (streaming)", () => {
     }
 
     const request = mockStreamFn.mock.calls[0][0];
-    expect(request.system).toContain("## s02 已启用工具");
-    expect(request.system).toContain("## s04b 主代理人设");
+    expect(request.system).toContain("## s00 主代理人设");
+    expect(request.system).toContain("## s03 已启用工具");
     expect(request.system).toContain("# 自定义主代理");
     expect(request.system).not.toContain(DEFAULT_MAIN_AGENT_MARKDOWN);
     expect(request.messages[0].content).toContain("# 当前轮上下文");
@@ -671,7 +669,6 @@ describe("agent session (streaming)", () => {
           {
             path: "设定/人物.md",
             name: "人物.md",
-            content: "主角：林燃\n目标：逃离北城",
           },
         ],
       },
@@ -694,8 +691,9 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("### 手动指定技能");
     expect(request.messages[0].content).toContain("剧情规划：拆解冲突和节奏。");
     expect(request.messages[0].content).toContain("### 手动指定文件");
-    expect(request.messages[0].content).toContain("#### 人物.md");
-    expect(request.messages[0].content).toContain("主角：林燃");
+    expect(request.messages[0].content).toContain("- 设定/人物.md");
+    expect(request.messages[0].content).toContain("系统不会自动注入文件正文");
+    expect(request.messages[0].content).not.toContain("主角：林燃");
     expect(request.messages[0].content).toContain("## s16 用户请求");
   });
 

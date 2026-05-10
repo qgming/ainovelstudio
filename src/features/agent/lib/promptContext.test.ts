@@ -31,14 +31,18 @@ describe("prompt context", () => {
     vi.useRealTimers();
   });
 
-  it("system prompt 注入 Agent OS Kernel 与任务循环", () => {
+  it("system prompt 前置主代理人设，并注入 Agent OS Kernel 与任务循环", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [createSkill()],
       enabledToolIds: [],
     });
 
-    expect(system).toContain("## s00 Agent OS 内核");
+    expect(system).toContain("## s00 主代理人设");
+    expect(system).toContain("## s01 Agent OS 内核");
+    expect(system.indexOf("## s00 主代理人设")).toBeLessThan(
+      system.indexOf("## s01 Agent OS 内核"),
+    );
     expect(system).toContain("Inspect");
     expect(system).toContain("Plan");
     expect(system).toContain("Verify");
@@ -83,12 +87,14 @@ describe("prompt context", () => {
       enabledToolIds: [],
     });
 
-    expect(system).toContain("## s03 已启用技能");
+    expect(system).toContain("## s04 已启用技能");
     expect(system).toContain("system 里只保留技能目录");
     expect(system).toContain("执行前必须");
     expect(system).toContain("SKILL.md");
     expect(system).toContain("### 技能：代码审查");
     expect(system).toContain("用于审查代码改动的检查清单");
+    expect(system).toContain("- 可读参考：");
+    expect(system).toContain("  - references/checklist.md");
     expect(system).not.toContain("这里是很长的完整 skill 正文");
     expect(system).not.toContain("TOOLS.md");
     expect(system).not.toContain("MEMORY.md");
@@ -101,15 +107,14 @@ describe("prompt context", () => {
       enabledToolIds: [],
     });
 
-    expect(system).not.toContain("## s05 临时 Subagent");
+    expect(system).not.toContain("## s06 临时 Subagent");
   });
 
-  it("手动指定的大文件会裁剪成摘录并提示按需读取全文", () => {
-    const content = `开头内容\n${"中间内容 ".repeat(2000)}\n结尾内容`;
+  it("手动指定文件只注入路径，不注入正文", () => {
     const prompt = buildUserTurnContent({
       activeFilePath: "设定/人物.md",
       manualContext: {
-        files: [{ content, name: "人物.md", path: "设定/人物.md" }],
+        files: [{ name: "人物.md", path: "设定/人物.md" }],
         skills: [],
       },
       prompt: "继续写这一章",
@@ -117,11 +122,8 @@ describe("prompt context", () => {
     });
 
     expect(prompt).toContain("### 手动指定文件");
-    expect(prompt).toContain("已裁剪摘录");
-    expect(prompt).toContain("如需全文请再用 read 读取");
-    expect(prompt).toContain("开头内容");
-    expect(prompt).toContain("结尾内容");
-    expect(prompt).toContain("…（中间省略）…");
+    expect(prompt).toContain("- 设定/人物.md");
+    expect(prompt).toContain("系统不会自动注入文件正文");
   });
 
   it("用户上下文会注入当前系统日期到年月日", () => {
@@ -152,7 +154,7 @@ describe("prompt context", () => {
           path: ".project/README.md",
         },
         {
-          content: '{"chapter": 12, "goal": "推进试炼"}',
+          description: "最新剧情状态，通常记录当前章节、主线目标、近期事件、下一步推进方向和关键冲突。",
           name: "latest-plot.json",
           path: ".project/status/latest-plot.json",
         },
@@ -172,6 +174,9 @@ describe("prompt context", () => {
     expect(prompt).toContain(".project/status/latest-plot.json");
     expect(prompt).toContain("先看设定再动笔");
     expect(prompt).toContain("核心冲突：逃出试炼场");
+    expect(prompt).toContain("仅路径提示");
+    expect(prompt).toContain("最新剧情状态");
+    expect(prompt).not.toContain("推进试炼");
   });
 
   it("book 模式渲染图书工作区契约与项目入口", () => {
@@ -184,7 +189,7 @@ describe("prompt context", () => {
 
     expect(system).toContain("# 模式：BOOK");
     expect(system).toContain(".project/AGENTS.md");
-    expect(system).toContain("## s05 临时 Subagent");
+    expect(system).toContain("## s06 临时 Subagent");
   });
 
   it("autopilot 模式渲染 YOLO 契约与目标上下文", () => {

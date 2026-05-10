@@ -9,7 +9,7 @@ describe("manual turn context", () => {
     });
   });
 
-  it("解析手动选择的技能与文件内容", async () => {
+  it("解析手动选择的技能与文件路径，不读取文件内容", async () => {
     const readFile = vi.fn(async (_rootPath: string, path: string) => `FILE:${path}`);
 
     const result = await resolveManualTurnContext({
@@ -51,17 +51,14 @@ describe("manual turn context", () => {
     ]);
     expect(result.files).toEqual([
       {
-        content: "ACTIVE_DRAFT",
         name: "第一章.md",
         path: "章节/第一章.md",
       },
       {
-        content: "FILE:设定/人物.md",
         name: "人物.md",
         path: "设定/人物.md",
       },
     ]);
-    expect(readFile).toHaveBeenCalledTimes(1);
-    expect(readFile).toHaveBeenCalledWith("C:/books/北境余烬", "设定/人物.md");
+    expect(readFile).not.toHaveBeenCalled();
   });
 });

@@ -3,12 +3,15 @@ import { isPlainObject } from "./shared";
 export type JsonAction =
   | "append"
   | "batch"
+  | "create"
   | "delete"
   | "ensure_template"
   | "get"
   | "history_append"
   | "merge"
+  | "overview"
   | "patch"
+  | "search"
   | "set"
   | "text_append";
 
@@ -19,6 +22,8 @@ export type JsonPatchOperation = {
   value?: unknown;
 };
 
+export type JsonSearchIn = "all" | "key" | "value";
+
 type JsonObject = Record<string, unknown>;
 type JsonContainer = unknown[] | JsonObject;
 
@@ -26,11 +31,14 @@ export function normalizeJsonAction(value: unknown): JsonAction {
   if (
     value === "append" ||
     value === "batch" ||
+    value === "create" ||
     value === "delete" ||
     value === "ensure_template" ||
     value === "history_append" ||
     value === "merge" ||
+    value === "overview" ||
     value === "patch" ||
+    value === "search" ||
     value === "set" ||
     value === "text_append"
   ) {
@@ -50,6 +58,178 @@ function detectLineEnding(contents: string) {
 
 export function cloneJsonValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function getJsonType(value: unknown) {
+  if (Array.isArray(value)) return "array";
+  if (value === null) return "null";
+  return typeof value;
+}
+
+export function compactJsonForTool(value: unknown, maxChars = 4000) {
+  const rendered = JSON.stringify(value, null, 2) ?? String(value);
+  if (rendered.length <= maxChars) return cloneJsonValue(value);
+  return {
+    omittedChars: rendered.length - maxChars,
+    preview: `${rendered.slice(0, maxChars).trimEnd()}…`,
+    truncated: true,
+    type: getJsonType(value),
+  };
+}
+
+function joinJsonPointer(base: string, segment: string) {
+  const encoded = segment.replace(/~/g, "~0").replace(/\//g, "~1");
+  return `${base === "/" ? "" : base}/${encoded}` || "/";
+}
+
+function summarizeJsonNode(pointer: string, value: unknown) {
+  if (Array.isArray(value)) {
+    return { length: value.length, pointer, type: "array" };
+  }
+  if (isPlainObject(value)) {
+    const keys = Object.keys(value);
+    return {
+      keyCount: keys.length,
+      keys: keys.slice(0, 20),
+      pointer,
+      type: "object",
+    };
+  }
+  return {
+    pointer,
+    type: getJsonType(value),
+    value: compactJsonForTool(value, 240),
+  };
+}
+
+export function buildJsonOverview(root: unknown, options?: {
+  maxDepth?: number;
+  maxEntries?: number;
+  pointer?: string;
+}) {
+  const maxDepth = Math.max(0, Math.trunc(options?.maxDepth ?? 2));
+  const maxEntries = Math.max(1, Math.trunc(options?.maxEntries ?? 80));
+  const entries: ReturnType<typeof summarizeJsonNode>[] = [];
+  const queue = [{ depth: 0, pointer: options?.pointer || "/", value: root }];
+  let truncated = false;
+
+  while (queue.length > 0 && entries.length < maxEntries) {
+    const current = queue.shift()!;
+    entries.push(summarizeJsonNode(current.pointer, current.value));
+    if (current.depth >= maxDepth) continue;
+    const value = current.value;
+    if (Array.isArray(value)) {
+      truncated ||= value.length > 20;
+      value.slice(0, 20).forEach((item, index) =>
+        queue.push({
+          depth: current.depth + 1,
+          pointer: joinJsonPointer(current.pointer, String(index)),
+          value: item,
+        }),
+      );
+    } else if (isPlainObject(value)) {
+      const childEntries = Object.entries(value);
+      truncated ||= childEntries.length > 40;
+      childEntries.slice(0, 40).forEach(([key, item]) =>
+        queue.push({
+          depth: current.depth + 1,
+          pointer: joinJsonPointer(current.pointer, key),
+          value: item,
+        }),
+      );
+    }
+  }
+
+  return { entries, entryCount: entries.length, truncated: truncated || queue.length > 0 };
+}
+
+function valueMatchesJsonSearch(value: unknown, query: string, caseSensitive: boolean) {
+  const rendered = typeof value === "string" ? value : JSON.stringify(value);
+  const source = caseSensitive ? rendered ?? "" : (rendered ?? "").toLowerCase();
+  const needle = caseSensitive ? query : query.toLowerCase();
+  return source.includes(needle);
+}
+
+export function searchJson(root: unknown, options: {
+  caseSensitive?: boolean;
+  limit?: number;
+  pointer?: string;
+  query: string;
+  searchIn?: JsonSearchIn;
+}) {
+  const limit = Math.max(1, Math.trunc(options.limit ?? 30));
+  const searchIn = options.searchIn ?? "all";
+  const matches: Array<{
+    key?: string;
+    match: "key" | "value";
+    pointer: string;
+    type: string;
+    value?: unknown;
+  }> = [];
+  const queue = [{ pointer: options.pointer || "/", value: root }];
+  let truncated = false;
+
+  while (queue.length > 0 && matches.length < limit) {
+    const current = queue.shift()!;
+    const value = current.value;
+    const isContainer = Array.isArray(value) || isPlainObject(value);
+    if (
+      !isContainer &&
+      searchIn !== "key" &&
+      valueMatchesJsonSearch(value, options.query, Boolean(options.caseSensitive))
+    ) {
+      matches.push({
+        match: "value",
+        pointer: current.pointer,
+        type: getJsonType(value),
+        value: compactJsonForTool(value, 360),
+      });
+    }
+    const entries = Array.isArray(value)
+      ? value.map((item, index) => [String(index), item] as const)
+      : isPlainObject(value)
+        ? Object.entries(value)
+        : [];
+    for (const [key, item] of entries) {
+      const pointer = joinJsonPointer(current.pointer, key);
+      const keySource = options.caseSensitive ? key : key.toLowerCase();
+      const query = options.caseSensitive ? options.query : options.query.toLowerCase();
+      if (searchIn !== "value" && keySource.includes(query)) {
+        matches.push({
+          key,
+          match: "key",
+          pointer,
+          type: getJsonType(item),
+          value: compactJsonForTool(item, 360),
+        });
+      }
+      if (Array.isArray(item) || isPlainObject(item)) {
+        queue.push({ pointer, value: item });
+      } else if (
+        searchIn !== "key" &&
+        valueMatchesJsonSearch(item, options.query, Boolean(options.caseSensitive))
+      ) {
+        matches.push({
+          match: "value",
+          pointer,
+          type: getJsonType(item),
+          value: compactJsonForTool(item, 360),
+        });
+      }
+      if (matches.length >= limit) {
+        truncated = true;
+        break;
+      }
+    }
+  }
+
+  return {
+    limit,
+    matchCount: matches.length,
+    matches,
+    query: options.query,
+    truncated: truncated || queue.length > 0,
+  };
 }
 
 export function parseJsonDocument(contents: string, path: string) {

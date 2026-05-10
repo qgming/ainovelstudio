@@ -8,7 +8,7 @@ import {
 } from "./projectContext";
 
 describe("project context", () => {
-  it("读取工作区默认的 .project/AGENTS.md、.project/README.md 和状态真值层 JSON", async () => {
+  it("读取工作区默认的 .project/AGENTS.md、.project/README.md，并仅列出状态 JSON 路径", async () => {
     const readFile = vi.fn().mockResolvedValue("# 项目规则");
     const readTree = vi.fn().mockResolvedValue({
       children: [
@@ -74,7 +74,7 @@ describe("project context", () => {
           path: ".project/README.md",
         },
         {
-          content: '{"chapter": 12}',
+          description: "最新剧情状态，通常记录当前章节、主线目标、近期事件、下一步推进方向和关键冲突。",
           name: "latest-plot.json",
           path: ".project/status/latest-plot.json",
         },
@@ -91,7 +91,7 @@ describe("project context", () => {
     expect(context).toBeNull();
   });
 
-	  it("缺少 AGENTS 时仍会回退到状态 JSON 作为默认上下文", async () => {
+	  it("缺少 AGENTS 时仍会回退到状态 JSON 路径作为默认上下文", async () => {
 	    const readFile = vi.fn().mockImplementation(async (_rootPath: string, path: string) => {
 	      if (
 	        path === DEFAULT_PROJECT_AGENT_PATH ||
@@ -132,14 +132,14 @@ describe("project context", () => {
       workspaceRootPath: "C:/books/北境余烬",
     });
 
-    expect(context).toEqual({
-      source: "项目默认上下文",
-      files: [
-        {
-          content: '{"arc":"trial"}',
-          name: "project-state.json",
-          path: ".project/status/project-state.json",
-        },
+	    expect(context).toEqual({
+	      source: "项目默认上下文",
+	      files: [
+	        {
+	          description: "项目级状态，通常记录整本书的当前阶段、整体目标、运行状态和重要约束。",
+	          name: "project-state.json",
+	          path: ".project/status/project-state.json",
+	        },
       ],
     });
   });
@@ -169,7 +169,7 @@ describe("project context", () => {
 	    });
 	  });
 
-  it("按 context manifest 注入任务策略文件和当前激活文件", async () => {
+  it("按 context manifest 注入任务策略文件，不注入当前激活文件正文", async () => {
     const manifest = {
       policies: [
         {
@@ -210,15 +210,20 @@ describe("project context", () => {
       workspaceRootPath: "C:/books/北境余烬",
     });
 
-    expect(context?.files.map((file) => file.path)).toEqual([
-      ".project/AGENTS.md",
-      ".project/README.md",
-      ".project/context-manifest.json",
-      ".project/style/voice.md",
-      ".project/canon/README.md",
-      ".project/chapters/README.md",
-      "大纲/大纲.md",
-      "正文/第001章_章名.md",
-    ]);
-  });
+	    expect(context?.files.map((file) => file.path)).toEqual([
+	      ".project/AGENTS.md",
+	      ".project/README.md",
+	      ".project/context-manifest.json",
+	      ".project/style/voice.md",
+	      ".project/canon/README.md",
+	      ".project/chapters/README.md",
+	      "大纲/大纲.md",
+	    ]);
+	    expect(
+	      context?.files.find((file) => file.path === ".project/context-manifest.json")?.content,
+	    ).toBeUndefined();
+	    expect(
+	      context?.files.find((file) => file.path === ".project/context-manifest.json")?.description,
+	    ).toContain("上下文策略文件");
+	  });
 });

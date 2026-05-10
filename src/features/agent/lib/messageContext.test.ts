@@ -34,7 +34,7 @@ describe("buildConversationMessages", () => {
     expect(messages[20]).toEqual({ role: "user", content: "当前问题" });
   });
 
-  it("assistant 历史会保留 toolCallId 语义，并优先使用输出摘要而不是完整原始结果", async () => {
+  it("assistant 历史会保留 reasoning，并把工具历史压成一句执行记录", async () => {
     const messages = await buildConversationMessages(
       [
         {
@@ -42,6 +42,11 @@ describe("buildConversationMessages", () => {
           role: "assistant",
           author: "主代理",
           parts: [
+            {
+              type: "reasoning",
+              summary: "判断需要先读取设定。",
+              detail: "用户要求续写，必须确认人物目标。",
+            },
             {
               type: "tool-call",
               toolName: "read_file",
@@ -61,10 +66,10 @@ describe("buildConversationMessages", () => {
     expect(messages[0]).toEqual({
       role: "assistant",
       content: [
-        "工具调用 [call-1] read_file",
-        "输入摘要：{\"path\":\"设定.md\"}",
+        "思考摘要：判断需要先读取设定；用户要求续写，必须确认人物目标。",
         "",
-        "工具结果 [call-1] read_file",
+        "工具执行：read_file，对象：设定.md，结果：成功。",
+        "输入摘要：{\"path\":\"设定.md\"}",
         "输出摘要：主角：林燃；目标：逃离北城",
         "",
         "我已整理完关键设定。",
@@ -96,7 +101,7 @@ describe("buildConversationMessages", () => {
 
     expect(messages[0]).toEqual({
       role: "assistant",
-      content: "工具结果 [] read_file\n输出摘要：读取失败\n校验异常：toolCallId 缺失。",
+      content: "工具执行：read_file，对象：未记录目标，结果：失败，异常：toolCallId 缺失。\n输出摘要：读取失败",
     });
   });
 

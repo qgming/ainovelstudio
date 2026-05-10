@@ -93,12 +93,12 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     description:
       "整文件覆盖写入；适合你已经准备好完整内容时使用，缺失目录会自动创建。",
   },
-  {
-    id: "json",
-    name: "JSON 数据",
-    description:
-      "按 JSON Pointer 读取或局部更新 JSON 内容；适合改字段、补齐模板、向字符串或数组追加内容、执行 patch 和维护状态数组。",
-  },
+	  {
+	    id: "json",
+	    name: "JSON 数据",
+	    description:
+	      "按 JSON Pointer 概览、搜索、读取、创建或局部更新 JSON；适合维护状态文件、改字段、补模板、追加历史和批量 patch。",
+	  },
   {
     id: "path",
     name: "路径操作",

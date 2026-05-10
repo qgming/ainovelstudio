@@ -1,8 +1,10 @@
 import {
   appendJsonValueAtPointer,
   appendJsonTextAtPointer,
+  appendJsonHistoryAtPointer,
   cloneJsonValue,
   deleteJsonValueAtPointer,
+  ensureJsonTemplateAtPointer,
   getJsonValueAtPointer,
   mergeJsonValueAtPointer,
   normalizeJsonAction,
@@ -12,9 +14,12 @@ import {
 } from "./json";
 
 export type JsonBatchOperation = {
-  action: Exclude<JsonAction, "batch" | "get">;
+  action: Exclude<JsonAction, "batch" | "create" | "get" | "overview" | "patch" | "search">;
+  limit?: number;
   pointer?: string;
   separator?: string;
+  timestamp?: string;
+  timestampField?: string;
   value?: unknown;
 };
 
@@ -38,20 +43,26 @@ export function normalizeJsonBatchOperation(
   if (
     action !== "append" &&
     action !== "delete" &&
+    action !== "ensure_template" &&
+    action !== "history_append" &&
     action !== "merge" &&
     action !== "set" &&
     action !== "text_append"
   ) {
     throw new Error(
-      `json.batch 第 ${index + 1} 项 action 仅支持 set / merge / append / text_append / delete。`,
+      `json.batch 第 ${index + 1} 项 action 仅支持 set / merge / append / text_append / ensure_template / history_append / delete。`,
     );
   }
 
   return {
     action,
+    limit: typeof record.limit === "number" ? record.limit : undefined,
     pointer: "pointer" in record ? String(record.pointer ?? "") : undefined,
     separator:
       "separator" in record ? String(record.separator ?? "") : undefined,
+    timestamp: "timestamp" in record ? String(record.timestamp ?? "") : undefined,
+    timestampField:
+      "timestampField" in record ? String(record.timestampField ?? "") : undefined,
     value: record.value,
   };
 }
@@ -108,6 +119,26 @@ export function applyJsonOperation(
   if (operation.action === "text_append") {
     const nextRoot = appendJsonTextAtPointer(root, segments, operation.value, {
       separator: operation.separator,
+    });
+    return {
+      result: createValueResult(operation.action, normalizedPointer, nextRoot, segments),
+      root: nextRoot,
+    };
+  }
+
+  if (operation.action === "ensure_template") {
+    const nextRoot = ensureJsonTemplateAtPointer(root, segments, operation.value);
+    return {
+      result: createValueResult(operation.action, normalizedPointer, nextRoot, segments),
+      root: nextRoot,
+    };
+  }
+
+  if (operation.action === "history_append") {
+    const nextRoot = appendJsonHistoryAtPointer(root, segments, operation.value, {
+      limit: operation.limit,
+      timestamp: operation.timestamp,
+      timestampField: operation.timestampField,
     });
     return {
       result: createValueResult(operation.action, normalizedPointer, nextRoot, segments),

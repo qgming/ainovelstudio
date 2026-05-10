@@ -4,51 +4,81 @@ import { compactText, truncateText } from "./text";
 import {
   MAX_ASSISTANT_MESSAGE_CHARS,
   MAX_COMPACT_MESSAGE_CHARS,
-  MAX_COMPACT_TOOL_PREVIEW_CHARS,
+  MAX_TOOL_TARGET_CHARS,
   MAX_TOOL_PREVIEW_CHARS,
   MAX_USER_MESSAGE_CHARS,
   type SerializationMode,
   type SerializedHistoryMessage,
 } from "./types";
 
-function formatToolOutput(
-  part: Extract<AgentPart, { type: "tool-result" }>,
-  maxChars: number,
-) {
-  return truncateText(part.outputSummary, maxChars);
+type ToolLikePart = Extract<AgentPart, { type: "tool-call" | "tool-result" }>;
+
+function stripTrailingSentencePunctuation(value: string) {
+  return value.replace(/[。！？.!?；;，,：:]+$/u, "").trim();
 }
 
-function serializeToolCall(
-  part: Extract<AgentPart, { type: "tool-call" }>,
-  maxChars: number,
-) {
-  return [
-    `工具调用 [${part.toolCallId}] ${part.toolName}`,
-    compactText(part.inputSummary)
-      ? `输入摘要：${truncateText(part.inputSummary, maxChars)}`
-      : null,
-    compactText(part.validationError ?? "")
-      ? `校验异常：${compactText(part.validationError ?? "")}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+function formatStatus(status: ToolLikePart["status"], hasError: boolean) {
+  if (hasError || status === "failed") return "失败";
+  if (status === "completed") return "成功";
+  if (status === "awaiting_user") return "等待用户";
+  if (status === "running") return "执行中";
+  return "未执行";
 }
 
-function serializeToolResult(
-  part: Extract<AgentPart, { type: "tool-result" }>,
-  maxChars: number,
+function extractToolTarget(part: ToolLikePart) {
+  const paths = extractPathsFromToolPart(part);
+  if (paths.length > 0) {
+    return paths.slice(0, 3).join(", ");
+  }
+
+  if (part.type === "tool-call") {
+    const input = compactText(part.inputSummary);
+    if (input) return truncateText(input, MAX_TOOL_TARGET_CHARS);
+  }
+
+  return "未记录目标";
+}
+
+function serializeToolExecution(
+  part: ToolLikePart,
+  result?: ToolLikePart,
+  mode: SerializationMode = "detailed",
 ) {
-  const output = formatToolOutput(part, maxChars);
+  const error = compactText(result?.validationError ?? part.validationError ?? "");
+  const status = formatStatus(result?.status ?? part.status, Boolean(error));
+  const suffix = error
+    ? `，异常：${stripTrailingSentencePunctuation(truncateText(error, MAX_TOOL_TARGET_CHARS))}`
+    : "";
+  const line = `工具执行：${part.toolName}，对象：${extractToolTarget(part)}，结果：${status}${suffix}。`;
+  if (mode === "compact") return line;
+
+  const input = part.type === "tool-call"
+    ? truncateText(compactText(part.inputSummary), MAX_TOOL_TARGET_CHARS)
+    : "";
+  const outputSource =
+    result && "outputSummary" in result
+      ? result.outputSummary ?? ""
+      : "outputSummary" in part
+        ? part.outputSummary ?? ""
+        : "";
+  const output = truncateText(compactText(outputSource), MAX_TOOL_PREVIEW_CHARS);
   return [
-    `工具结果 [${part.toolCallId}] ${part.toolName}`,
+    line,
+    input ? `输入摘要：${input}` : null,
     output ? `输出摘要：${output}` : null,
-    compactText(part.validationError ?? "")
-      ? `校验异常：${compactText(part.validationError ?? "")}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].filter(Boolean).join("\n");
+}
+
+function serializeReasoning(
+  part: Extract<AgentPart, { type: "reasoning" }>,
+  maxChars: number,
+) {
+  const summary = compactText(part.summary);
+  const detail = compactText(part.detail);
+  const content = summary && detail && summary !== detail
+    ? `${stripTrailingSentencePunctuation(summary)}；${detail}`
+    : summary || detail;
+  return content ? `思考摘要：${truncateText(content, maxChars)}` : null;
 }
 
 function hasExplicitToolResult(
@@ -90,14 +120,35 @@ function normalizeAssistantParts(parts: AgentPart[]) {
   });
 }
 
+function findMatchingToolResult(parts: AgentPart[], startIndex: number) {
+  const part = parts[startIndex];
+  if (!part || part.type !== "tool-call") return undefined;
+  return parts.slice(startIndex + 1).find(
+    (candidate): candidate is ToolLikePart =>
+      candidate.type === "tool-result"
+      && candidate.toolCallId === part.toolCallId
+      && candidate.toolName === part.toolName,
+  );
+}
+
+function hasPreviousToolCall(parts: AgentPart[], currentIndex: number) {
+  const part = parts[currentIndex];
+  if (!part || part.type !== "tool-result") return false;
+  return parts.slice(0, currentIndex).some((candidate) =>
+    candidate.type === "tool-call"
+    && candidate.toolCallId === part.toolCallId
+    && candidate.toolName === part.toolName
+  );
+}
+
 function serializeAgentPart(
   part: AgentPart,
   mode: SerializationMode,
+  parts: AgentPart[],
+  index: number,
 ): string | null {
   const textLimit =
     mode === "compact" ? MAX_COMPACT_MESSAGE_CHARS : MAX_ASSISTANT_MESSAGE_CHARS;
-  const toolLimit =
-    mode === "compact" ? MAX_COMPACT_TOOL_PREVIEW_CHARS : MAX_TOOL_PREVIEW_CHARS;
 
   switch (part.type) {
     case "placeholder":
@@ -106,11 +157,11 @@ function serializeAgentPart(
     case "text":
       return truncateText(part.text, textLimit) || null;
     case "reasoning":
-      return null;
+      return serializeReasoning(part, textLimit);
     case "tool-call":
-      return serializeToolCall(part, toolLimit);
+      return serializeToolExecution(part, findMatchingToolResult(parts, index), mode);
     case "tool-result":
-      return serializeToolResult(part, toolLimit);
+      return hasPreviousToolCall(parts, index) ? null : serializeToolExecution(part, undefined, mode);
     case "ask-user":
       return null;
     case "subagent":
@@ -175,13 +226,15 @@ function serializeCompactAgentMessage(message: AgentMessage): SerializedHistoryM
       if (part.type === "text") {
         return [truncateText(part.text, MAX_COMPACT_MESSAGE_CHARS)];
       }
+      if (part.type === "reasoning") {
+        return [serializeReasoning(part, MAX_COMPACT_MESSAGE_CHARS)];
+      }
       if (part.type === "subagent") {
         return [truncateText([part.summary, part.detail ?? ""].filter(Boolean).join(" "), MAX_COMPACT_MESSAGE_CHARS)];
       }
       return [];
     })
-    .filter(Boolean);
-
+    .filter((item): item is string => Boolean(item));
   const content = [
     toolNames.length > 0
       ? `较早工具活动已折叠：${toolNames.join(", ")}。${paths.length > 0 ? `涉及路径：${paths.slice(0, 3).join(", ")}。` : ""}`
@@ -220,7 +273,7 @@ export function serializeAgentMessage(
     ? normalizeAssistantParts(message.parts)
     : message.parts;
   const serializedParts = normalizedParts
-    .map((part) => serializeAgentPart(part, "detailed"))
+    .map((part, index) => serializeAgentPart(part, "detailed", normalizedParts, index))
     .filter((part): part is string => Boolean(part?.trim()));
   const dedupedParts = serializedParts.filter(
     (part, index) => index === 0 || part !== serializedParts[index - 1],

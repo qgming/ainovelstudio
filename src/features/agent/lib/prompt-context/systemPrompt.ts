@@ -34,34 +34,28 @@ const SKILL_LOADING_NOTE = [
 
 // Agent OS 内核：常驻 system 的硬契约。短而硬，不放方法论。
 const AGENT_OS_KERNEL = [
-  "你是一个面向写作工作区的 Agent，不是纯聊天助手。",
-  "工作区文件、工具结果是事实源；对话历史与模型记忆不是事实。",
+  "工作区文件、工具结果是事实源；历史工具执行记录是可复用的执行轨迹。",
   "",
   "**任务循环（每轮严格按序）**",
-  "1. Inspect：定位事实源。不知道路径用 browse；知道关键词用 search；知道路径用 read。",
-  "2. Skill Load：任务明显匹配已启用 skill 时，先用 skill 读取对应 SKILL.md；目录块只用于导航。",
-  "3. Plan：≥3 步任务用 todo 写短计划；简单任务直接做，不写空计划。",
-  "4. Act：用最小工具完成动作。改已有文件优先 edit；改 JSON 字段优先 json；新建/重命名/删除用 path；只有完整新内容才用 write。",
-  "5. Verify：写回后必要时 read / word_count 复核结果是否落地。",
-  "6. Report：只汇报结果、改动文件、风险或下一步；不复述工具流水，不堆方法论。",
+  "1. Inspect：先检查当前轮已注入上下文、历史工具执行记录和项目默认上下文；资料不足或需要最新文件事实时再调用工具。不知道路径用 browse；知道关键词用 search；知道路径用 read。",
+  "2. Plan：≥3 步任务用 todo 写短计划；简单任务直接做。",
+  "3. Act：用已启用工具执行最小必要动作。",
+  "4. Verify：写回或关键判断后，用最小读取、字数统计或工具结果核对。",
+  "5. Report：汇报结果、改动文件、风险或下一步。",
   "",
-  "**必须先用工具读取的场景（不得跳过）**",
-  "- 续写、改写、扩写、润色、审稿、分析工作区任意文件",
-  "- 查询人物、设定、大纲、章节、状态、连续性",
-  "- 创建或修改任何工作区文件（改前必先读当前内容）",
-  "- 执行长篇写作、扫榜、拆文、润色、去 AI 味等已启用 skill 覆盖的任务",
-  "- 批量子任务执行",
-  "",
-  "**允许直接回答（无需读取）**",
-  "- 纯方法论 / 概念 / 工具用法",
-  "- 已在本轮 system / user 上下文中完整注入所需资料",
-  "- 闲聊、问候",
-  "",
-  "**写回硬性要求**",
-  "- 创作/规划/设定的最终产出必须以工具写回工作区文件，不要只把正文贴在对话里。",
-  "- 改动遵循最小修改原则；不无故整文件覆盖。",
-  "- 路径使用相对工作区根目录，不传绝对路径。",
+  "**避免重复工具调用**",
+  "- 当前上下文已有同一路径的成功 read/search/browse 记录，且用户没有要求刷新或核对最新文件时，优先复用已注入内容和工具摘要。",
+  "- 同一轮连续工具调用前，先判断新增读取会补足哪一项缺失信息；只为确认已知事实的重复读取应合并或跳过。",
+  "- 工具摘要显示成功但内容不足时，直接读取缺失的最小范围，例如 range、heading_range 或关键词 search。",
 ].join("\n");
+
+function buildReferencePathList(skill: ResolvedSkill) {
+  if (skill.references.length === 0) return null;
+  return [
+    "- 可读参考：",
+    ...skill.references.map((reference) => `  - ${reference.path}`),
+  ].join("\n");
+}
 
 function buildSkillCatalogBlock(skill: ResolvedSkill) {
   const suggestedTools = normalizeSuggestedToolIds(skill.suggestedTools);
@@ -75,9 +69,7 @@ function buildSkillCatalogBlock(skill: ResolvedSkill) {
     suggestedTools.length > 0
       ? `- 常用工具：${suggestedTools.join(", ")}`
       : null,
-    skill.references.length > 0
-      ? `- 可读参考：${skill.references.length} 份（目录 references/）`
-      : null,
+    buildReferencePathList(skill),
   ]
     .filter(Boolean)
     .join("\n");
@@ -98,7 +90,7 @@ const TOOL_USAGE_HINT: Record<string, string> = {
   canon_query: "查长篇事实源；按人物、地点、伏笔、能力边界或章节线索检索 `.project/canon`、status、style、chapters。",
   edit: "改已有文件首选；先 read 再 edit；action=replace/insert_before/insert_after/prepend/append/replace_lines/replace_anchor_range/replace_heading_range；replaceAll=true 前确认命中。",
   write: "整份覆盖；只有已准备好完整新内容才用，缺失目录会自动创建；不要用 write 做局部修改。",
-  json: "JSON 文件局部读写首选；action=get/set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；不要用 write 改 JSON 字段。",
+  json: "JSON 文件读写首选；大文件先 overview/search，再 get 精确 pointer；创建用 create，局部更新用 set/merge/append/text_append/delete/batch/ensure_template/history_append/patch；不要用 write 改 JSON 字段。",
   path: "只动结构：create_file / create_folder / rename / move / delete；不写正文。",
   skill: '先 action="list" 匹配 skillId；任务命中 skill 时，执行前必须 action="read" relativePath="SKILL.md" 拉规则；执行子任务用 task。',
 };
@@ -173,36 +165,36 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
     renderPromptSections([
       {
         key: "s00",
-        title: "Agent OS 内核",
-        body: AGENT_OS_KERNEL,
-      },
-      {
-        key: "s01",
-        title: "运行环境",
-        body: envBody,
-      },
-      {
-        key: "s02",
-        title: "已启用工具",
-        body: buildToolPromptBlock(enabledToolIds),
-      },
-      {
-        key: "s03",
-        title: "已启用技能",
-        body: showSkillCatalog ? skillBlock : null,
-      },
-      {
-        key: "s04a",
-        title: "模式规则",
-        body: modeRulesBody,
-      },
-      {
-        key: "s04b",
         title: "主代理人设",
         body: normalizedDefaultAgent,
       },
       {
+        key: "s01",
+        title: "Agent OS 内核",
+        body: AGENT_OS_KERNEL,
+      },
+      {
+        key: "s02",
+        title: "运行环境",
+        body: envBody,
+      },
+      {
+        key: "s03",
+        title: "已启用工具",
+        body: buildToolPromptBlock(enabledToolIds),
+      },
+      {
+        key: "s04",
+        title: "已启用技能",
+        body: showSkillCatalog ? skillBlock : null,
+      },
+      {
         key: "s05",
+        title: "模式规则",
+        body: modeRulesBody,
+      },
+      {
+        key: "s06",
         title: "临时 Subagent",
         body: enabledToolIds.includes("task")
           ? "需要隔离上下文或并行处理时，直接调用 task 工具并提供 agentName / role / instructions 创建一次性 subagent。"

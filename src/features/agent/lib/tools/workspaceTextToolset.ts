@@ -8,7 +8,9 @@ import {
   appendJsonValueAtPointer,
   appendJsonTextAtPointer,
   appendJsonHistoryAtPointer,
+  buildJsonOverview,
   cloneJsonValue,
+  compactJsonForTool,
   deleteJsonValueAtPointer,
   ensureJsonTemplateAtPointer,
   getJsonValueAtPointer,
@@ -16,6 +18,7 @@ import {
   normalizeJsonAction,
   parseJsonDocument,
   parseJsonPointer,
+  searchJson,
   serializeJsonWithStyle,
   setJsonValueAtPointer,
 } from "./json";
@@ -54,6 +57,18 @@ function asNonNegativeInt(value: unknown, fallback: number) {
     return fallback;
   }
   return parsed;
+}
+
+function getJsonMaxChars(value: unknown) {
+  return Math.min(asPositiveInt(value, 4000), 20000);
+}
+
+function compactJsonOperationValues<T extends { value?: unknown }>(items: T[], maxChars: number): T[] {
+  return items.map((item) =>
+    "value" in item && item.value !== undefined
+      ? { ...item, value: compactJsonForTool(item.value, maxChars) }
+      : item
+  );
 }
 
 export function createWorkspaceTextTools({
@@ -247,6 +262,34 @@ export function createWorkspaceTextTools({
       execute: async (input, context) => {
         const action = normalizeJsonAction(input.action);
         const path = ensureString(input.path, "json.path");
+        const maxChars = getJsonMaxChars(input.maxChars);
+        if (action === "create") {
+          if (!input.overwrite) {
+            try {
+              await readWorkspaceTextFile(rootPath, path, getAbortContext(context));
+              throw new Error(
+                `json.create 目标文件已存在：${path}。如需覆盖请传 overwrite=true。`,
+              );
+            } catch (error) {
+              if (error instanceof Error && error.message.includes("overwrite=true")) {
+                throw error;
+              }
+            }
+          }
+          const nextJson = input.value === undefined ? {} : cloneJsonValue(input.value);
+          await writeWorkspaceTextFile(
+            rootPath,
+            path,
+            `${JSON.stringify(nextJson, null, 2)}\n`,
+            getAbortContext(context),
+          );
+          await onWorkspaceMutated?.();
+          return ok(`已创建 JSON 文件 ${path}。`, {
+            action,
+            path,
+            value: compactJsonForTool(nextJson, maxChars),
+          });
+        }
         const currentContents = await readWorkspaceTextFile(
           rootPath,
           path,
@@ -273,7 +316,7 @@ export function createWorkspaceTextTools({
 
           return ok(`已批量更新 ${path} 中 ${results.length} 个 JSON 操作。`, {
             action,
-            operations: results,
+            operations: compactJsonOperationValues(results, maxChars),
             operationsApplied: results.length,
             path,
           });
@@ -298,7 +341,7 @@ export function createWorkspaceTextTools({
 
           return ok(`已按 patch 更新 ${path} 中 ${operations.length} 个 JSON 操作。`, {
             action,
-            operations,
+            operations: compactJsonOperationValues(operations, maxChars),
             operationsApplied: operations.length,
             path,
           });
@@ -307,10 +350,47 @@ export function createWorkspaceTextTools({
         const pointer = String(input.pointer ?? "");
         const segments = parseJsonPointer(pointer);
         if (action === "get") {
-          return ok(
-            `已读取 ${path} 中 ${pointer || "/"} 的 JSON 数据。`,
-            getJsonValueAtPointer(currentJson, segments),
-          );
+          return ok(`已读取 ${path} 中 ${pointer || "/"} 的 JSON 数据。`, {
+            action,
+            path,
+            pointer: pointer || "/",
+            value: compactJsonForTool(
+              getJsonValueAtPointer(currentJson, segments),
+              maxChars,
+            ),
+          });
+        }
+        if (action === "overview") {
+          const target = getJsonValueAtPointer(currentJson, segments);
+          return ok(`已读取 ${path} 中 ${pointer || "/"} 的 JSON 结构概览。`, {
+            action,
+            path,
+            pointer: pointer || "/",
+            ...buildJsonOverview(target, {
+              maxDepth: asNonNegativeInt(input.maxDepth, 2),
+              maxEntries: asPositiveInt(input.maxEntries, 80),
+              pointer: pointer || "/",
+            }),
+          });
+        }
+        if (action === "search") {
+          const target = getJsonValueAtPointer(currentJson, segments);
+          const query = ensureString(input.query, "json.query");
+          return ok(`已在 ${path} 中搜索 JSON：${query}`, {
+            action,
+            path,
+            pointer: pointer || "/",
+            ...searchJson(target, {
+              caseSensitive: Boolean(input.caseSensitive),
+              limit: asPositiveInt(input.limit, 30),
+              pointer: pointer || "/",
+              query,
+              searchIn:
+                input.searchIn === "key" || input.searchIn === "value"
+                  ? input.searchIn
+                  : "all",
+            }),
+          });
         }
 
         if (input.value === undefined && action !== "delete") {
@@ -369,7 +449,10 @@ export function createWorkspaceTextTools({
             action,
             path,
             pointer: pointer || "/",
-            value: Array.isArray(target) ? target[target.length - 1] : target,
+            value: compactJsonForTool(
+              Array.isArray(target) ? target[target.length - 1] : target,
+              maxChars,
+            ),
           });
         }
 
@@ -378,7 +461,10 @@ export function createWorkspaceTextTools({
             action,
             path,
             pointer: pointer || "/",
-            value: getJsonValueAtPointer(nextJson, segments),
+            value: compactJsonForTool(
+              getJsonValueAtPointer(nextJson, segments),
+              maxChars,
+            ),
           });
         }
 
@@ -386,7 +472,10 @@ export function createWorkspaceTextTools({
           action,
           path,
           pointer: pointer || "/",
-          value: getJsonValueAtPointer(nextJson, segments),
+          value: compactJsonForTool(
+            getJsonValueAtPointer(nextJson, segments),
+            maxChars,
+          ),
         });
       },
     },

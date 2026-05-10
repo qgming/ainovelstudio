@@ -8,7 +8,6 @@ export type ManualTurnContextSelection = {
 
 export type ManualTurnContextPayload = {
   files: Array<{
-    content: string;
     name: string;
     path: string;
   }>;
@@ -40,12 +39,8 @@ export function createEmptyManualTurnContextSelection(): ManualTurnContextSelect
 }
 
 export function resolveManualTurnContext({
-  activeFilePath,
-  draftContent,
   enabledSkills,
-  readFile,
   selection,
-  workspaceRootPath,
 }: ResolveManualTurnContextInput): Promise<ManualTurnContextPayload> {
   return Promise.all([
     Promise.resolve(
@@ -58,39 +53,18 @@ export function resolveManualTurnContext({
         })),
     ),
     resolveManualFiles({
-      activeFilePath,
-      draftContent,
       filePaths: unique(selection.filePaths),
-      readFile,
-      workspaceRootPath,
     }),
   ]).then(([skills, files]) => ({ files, skills }));
 }
 
-async function resolveManualFiles({
-  activeFilePath,
-  draftContent,
+function resolveManualFiles({
   filePaths,
-  readFile,
-  workspaceRootPath,
 }: {
-  activeFilePath: string | null;
-  draftContent: string;
   filePaths: string[];
-  readFile: (rootPath: string, path: string) => Promise<string>;
-  workspaceRootPath: string | null;
 }) {
-  if (!workspaceRootPath || filePaths.length === 0) {
-    return [];
-  }
-
-  const files = await Promise.all(
-    filePaths.map(async (path) => ({
-      content: path === activeFilePath ? draftContent : await readFile(workspaceRootPath, path),
-      name: getBaseName(path),
-      path,
-    })),
-  );
-
-  return files;
+  return filePaths.map((path) => ({
+    name: getBaseName(path),
+    path,
+  }));
 }

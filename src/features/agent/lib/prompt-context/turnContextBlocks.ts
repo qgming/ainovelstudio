@@ -1,6 +1,6 @@
 import type { ManualTurnContextPayload } from "../manualTurnContext";
 import type { ProjectContextPayload } from "../projectContext";
-import { createMiddleExcerpt, MANUAL_CONTEXT_FILE_CHAR_LIMIT, MANUAL_CONTEXT_TOTAL_CHAR_LIMIT } from "./shared";
+import { createMiddleExcerpt, MANUAL_CONTEXT_FILE_CHAR_LIMIT } from "./shared";
 
 export function buildManualContextBlock(
   manualContext?: ManualTurnContextPayload | null,
@@ -24,43 +24,11 @@ export function buildManualContextBlock(
   }
 
   if (manualContext.files.length > 0) {
-    let remainingChars = MANUAL_CONTEXT_TOTAL_CHAR_LIMIT;
-    const renderedFiles: string[] = [];
-
-    for (const file of manualContext.files) {
-      if (remainingChars <= 0) {
-        break;
-      }
-
-      const allocatedChars = Math.min(
-        MANUAL_CONTEXT_FILE_CHAR_LIMIT,
-        remainingChars,
-      );
-      const excerpt = createMiddleExcerpt(file.content, allocatedChars);
-      remainingChars -= Math.min(file.content.trim().length, allocatedChars);
-
-      renderedFiles.push(
-        [
-          `#### ${file.name}`,
-          `- 路径：${file.path}`,
-          excerpt.truncated
-            ? `- 注入方式：已裁剪摘录，约省略 ${excerpt.omittedChars} 个字符；如需全文请再用 read 读取。`
-            : "- 注入方式：已直接注入当前文件内容。",
-          "```text",
-          excerpt.text,
-          "```",
-        ].join("\n"),
-      );
-    }
-
-    const omittedFileCount = manualContext.files.length - renderedFiles.length;
     blocks.push(
       [
         "### 手动指定文件",
-        ...renderedFiles,
-        omittedFileCount > 0
-          ? `- 另外还有 ${omittedFileCount} 个手动文件未直接注入，以控制上下文体积；需要时请按路径调用 read。`
-          : null,
+        "- 用户仅引用这些文件路径，系统不会自动注入文件正文；需要内容时按路径调用 read 读取最小必要范围。",
+        ...manualContext.files.map((file) => `- ${file.path}`),
       ].join("\n\n"),
     );
   }
@@ -85,6 +53,15 @@ export function buildProjectContextBlock(
   return [
     "以下资源属于工作区默认项目上下文。进入对话时系统会优先注入，用于帮助你快速了解项目。",
     ...projectContext.files.map((file) => {
+      if (!file.content?.trim()) {
+        return [
+          `### ${file.name}`,
+          `- 路径：${file.path}`,
+          file.description ? `- 说明：${file.description}` : null,
+          "- 注入方式：仅路径提示，未注入文件正文；需要内容时请按路径调用 read 读取最小必要范围。",
+        ].filter(Boolean).join("\n");
+      }
+
       const excerpt = createMiddleExcerpt(file.content, MANUAL_CONTEXT_FILE_CHAR_LIMIT);
       return [
         `### ${file.name}`,

@@ -157,7 +157,7 @@ export function buildUserTurnContent({
           `- 本轮任务类型：${taskProfile.label}`,
           `- 优先输出：${taskProfile.outputHint}`,
           `- 处理提醒：${taskProfile.caution}`,
-          "- 严格执行 s00 Agent OS 内核的任务循环：Inspect → Plan → Act → Verify → Report；除纯方法论/闲聊外不得跳过 Inspect。",
+          "- 严格执行 s01 Agent OS 内核的任务循环：Inspect → Plan → Act → Verify → Report；Inspect 包含复用当前上下文与历史工具记录，资料不足时再调用工具。",
           subagentAnalysis?.text
             ? `- 本轮已收到子任务摘要：${subagentAnalysis.agentName}`
             : "- 本轮默认由主代理直接处理。",
