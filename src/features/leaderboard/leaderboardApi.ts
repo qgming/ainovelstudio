@@ -99,6 +99,10 @@ function getCacheKey(request: LeaderboardRequest) {
   return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:${request.gender}:${request.type}:${request.categoryId}`;
 }
 
+function getTodayCachePrefix() {
+  return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:`;
+}
+
 function getMergedCacheKey(name: string) {
   return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:merged:${name}`;
 }
@@ -161,6 +165,50 @@ function writeCachedBookList(cacheKey: string, books: LeaderboardBook[]) {
   } catch {
     // Cache storage is best-effort; fetching should still succeed if quota is full.
   }
+}
+
+function sliceCachedBooks(books: LeaderboardBook[] | null, limit?: number) {
+  if (!books) return null;
+  return typeof limit === "number" ? books.slice(0, limit) : books;
+}
+
+export function readCachedLeaderboard(request: LeaderboardRequest): LeaderboardBook[] | null {
+  if (request.categoryId === OVERALL_CATEGORY_ID) {
+    return readCachedOverallLeaderboard(request);
+  }
+  const limit = request.limit ?? DEFAULT_LIMIT;
+  const fetchLimit = Math.max(limit, DEFAULT_LIMIT);
+  const books = readCachedBooks({ ...request, limit: fetchLimit });
+  return sliceCachedBooks(books, limit);
+}
+
+export function readCachedOverallLeaderboard(request: LeaderboardRequest): LeaderboardBook[] | null {
+  const cacheKey = getMergedCacheKey(`overall:${request.gender}:${request.type}`);
+  return sliceCachedBooks(readCachedBookList(cacheKey, request.forceRefresh), request.limit);
+}
+
+export function readCachedFanqieOverallLeaderboard(limit?: number): LeaderboardBook[] | null {
+  return sliceCachedBooks(readCachedBookList(getMergedCacheKey("fanqie-overall")), limit);
+}
+
+function matchesCachedBook(source: LeaderboardBook, target: Partial<LeaderboardBook>) {
+  if (source.bookId && target.bookId) return source.bookId === target.bookId;
+  if (source.detailUrl && target.detailUrl) return source.detailUrl === target.detailUrl;
+  return Boolean(source.bookName && source.bookName === target.bookName && source.author === target.author);
+}
+
+export function readCachedLeaderboardBookDetail(book: LeaderboardBook): LeaderboardBook | null {
+  const storage = getCacheStorage();
+  if (!storage) return null;
+  const prefix = getTodayCachePrefix();
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key?.startsWith(prefix)) continue;
+    const books = readCachedBookList(key);
+    const matched = books?.find((cachedBook) => matchesCachedBook(cachedBook, book));
+    if (matched) return matched;
+  }
+  return null;
 }
 
 function isTestMode() {

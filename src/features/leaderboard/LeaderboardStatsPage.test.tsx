@@ -8,10 +8,17 @@ const { mockFetchFanqieOverallLeaderboard, mockFetchOverallLeaderboard } = vi.ho
   mockFetchOverallLeaderboard: vi.fn(),
 }));
 
+const { mockReadCachedFanqieOverallLeaderboard, mockReadCachedOverallLeaderboard } = vi.hoisted(() => ({
+  mockReadCachedFanqieOverallLeaderboard: vi.fn(),
+  mockReadCachedOverallLeaderboard: vi.fn(),
+}));
+
 vi.mock("./leaderboardApi", () => ({
   fetchFanqieOverallLeaderboard: mockFetchFanqieOverallLeaderboard,
   fetchOverallLeaderboard: mockFetchOverallLeaderboard,
   formatCount: (value: number) => String(value),
+  readCachedFanqieOverallLeaderboard: mockReadCachedFanqieOverallLeaderboard,
+  readCachedOverallLeaderboard: mockReadCachedOverallLeaderboard,
 }));
 
 import { LeaderboardStatsPage } from "./LeaderboardStatsPage";
@@ -47,6 +54,20 @@ describe("LeaderboardStatsPage", () => {
   beforeEach(() => {
     mockFetchFanqieOverallLeaderboard.mockReset();
     mockFetchOverallLeaderboard.mockReset();
+    mockReadCachedFanqieOverallLeaderboard.mockReset();
+    mockReadCachedOverallLeaderboard.mockReset();
+    mockReadCachedFanqieOverallLeaderboard.mockReturnValue(null);
+    mockReadCachedOverallLeaderboard.mockReturnValue(null);
+  });
+
+  it("通过标题面包屑返回排行榜", async () => {
+    mockFetchOverallLeaderboard.mockResolvedValue([createBook({ readCount: 100 })]);
+
+    renderStatsPage("/leaderboard/statistics?board=male-reading");
+
+    expect(await screen.findByText("数据统计")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "排行榜" }));
+    expect(await screen.findByText("排行榜路由")).toBeInTheDocument();
   });
 
   it("按主榜总榜统计子分类作品占比和阅读占比", async () => {

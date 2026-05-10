@@ -5,6 +5,8 @@ import {
   fetchOverallLeaderboard,
   parseLeaderboardBooks,
   parseReadableCount,
+  readCachedFanqieOverallLeaderboard,
+  readCachedLeaderboardBookDetail,
 } from "./leaderboardApi";
 
 const { mockForward } = vi.hoisted(() => ({
@@ -296,5 +298,54 @@ describe("leaderboardApi", () => {
     expect(secondBooks).toEqual(firstBooks);
     expect(secondRequestCount).toBe(firstRequestCount);
     expect(mockForward.mock.calls.length).toBeGreaterThan(secondRequestCount);
+  });
+
+  it("可以同步读取今日番茄总榜本地缓存", async () => {
+    mockForward.mockImplementation(({ url }: { url: string }) => {
+      const params = new URL(url).searchParams;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        body: createRankApiJson([
+          createBook({
+            bookId: `cached-${params.get("gender")}-${params.get("rankMold")}-${params.get("category_id")}`,
+            bookName: "本地缓存作品",
+            read_count: "99",
+          }),
+        ]),
+      });
+    });
+
+    const remoteBooks = await fetchFanqieOverallLeaderboard();
+    const cachedBooks = readCachedFanqieOverallLeaderboard();
+
+    expect(cachedBooks).toEqual(remoteBooks);
+  });
+
+  it("可以从当天本地缓存读取图书详情", async () => {
+    mockForward.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: createRankApiJson(
+        Array.from({ length: 30 }, (_, index) => createBook({
+          abstract: index === 0 ? "本地详情简介" : "其他简介",
+          bookId: `detail-book-${index + 1}`,
+          bookName: `详情作品${index + 1}`,
+          currentPos: index + 1,
+        })),
+      ),
+    });
+
+    await fetchLeaderboard({ categoryId: 1014, gender: 1, type: 2 });
+
+    expect(readCachedLeaderboardBookDetail({
+      author: "作者",
+      bookId: "detail-book-1",
+      bookName: "详情作品1",
+      rank: 1,
+      readCount: 0,
+      status: "连载中",
+      wordCount: 0,
+    })).toMatchObject({ abstract: "本地详情简介", bookId: "detail-book-1" });
   });
 });

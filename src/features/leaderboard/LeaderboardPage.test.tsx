@@ -10,6 +10,13 @@ const { mockFetchFanqieOverallLeaderboard, mockFetchLeaderboard, mockFetchOveral
   mockOpenUrl: vi.fn(),
 }));
 
+const { mockReadCachedFanqieOverallLeaderboard, mockReadCachedLeaderboard, mockReadCachedLeaderboardBookDetail, mockReadCachedOverallLeaderboard } = vi.hoisted(() => ({
+  mockReadCachedFanqieOverallLeaderboard: vi.fn(),
+  mockReadCachedLeaderboard: vi.fn(),
+  mockReadCachedLeaderboardBookDetail: vi.fn(),
+  mockReadCachedOverallLeaderboard: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: mockOpenUrl,
 }));
@@ -19,6 +26,10 @@ vi.mock("./leaderboardApi", () => ({
   fetchLeaderboard: mockFetchLeaderboard,
   fetchOverallLeaderboard: mockFetchOverallLeaderboard,
   formatCount: (value: number) => (value >= 10_000 ? `${value / 10_000}万` : String(value)),
+  readCachedFanqieOverallLeaderboard: mockReadCachedFanqieOverallLeaderboard,
+  readCachedLeaderboard: mockReadCachedLeaderboard,
+  readCachedLeaderboardBookDetail: mockReadCachedLeaderboardBookDetail,
+  readCachedOverallLeaderboard: mockReadCachedOverallLeaderboard,
 }));
 
 import { LeaderboardPage } from "./LeaderboardPage";
@@ -36,6 +47,16 @@ const sampleBook: LeaderboardBook = {
   thumbUri: "",
   wordCount: 300_000,
 };
+
+function createBook(index: number): LeaderboardBook {
+  return {
+    ...sampleBook,
+    bookId: `book-${index}`,
+    bookName: `测试作品${index}`,
+    detailUrl: `https://fanqienovel.com/page/book-${index}`,
+    rank: index,
+  };
+}
 
 function StatsRouteMarker() {
   const location = useLocation();
@@ -58,7 +79,15 @@ describe("LeaderboardPage", () => {
     mockFetchFanqieOverallLeaderboard.mockReset();
     mockFetchLeaderboard.mockReset();
     mockFetchOverallLeaderboard.mockReset();
+    mockReadCachedFanqieOverallLeaderboard.mockReset();
+    mockReadCachedLeaderboard.mockReset();
+    mockReadCachedLeaderboardBookDetail.mockReset();
+    mockReadCachedOverallLeaderboard.mockReset();
     mockOpenUrl.mockReset();
+    mockReadCachedFanqieOverallLeaderboard.mockReturnValue(null);
+    mockReadCachedLeaderboard.mockReturnValue(null);
+    mockReadCachedLeaderboardBookDetail.mockReturnValue(null);
+    mockReadCachedOverallLeaderboard.mockReturnValue(null);
     Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
       configurable: true,
       value: vi.fn(() => false),
@@ -87,6 +116,49 @@ describe("LeaderboardPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开番茄详情页" }));
 
     expect(mockOpenUrl).toHaveBeenCalledWith("https://fanqienovel.com/page/book-1");
+  });
+
+  it("进入页面时优先使用今日番茄总榜本地缓存", async () => {
+    mockReadCachedFanqieOverallLeaderboard.mockReturnValueOnce([sampleBook]);
+
+    renderLeaderboardPage();
+
+    expect(await screen.findByText("测试作品")).toBeInTheDocument();
+    expect(mockFetchFanqieOverallLeaderboard).not.toHaveBeenCalled();
+  });
+
+  it("总榜图书较多时先渲染首批，滚动到底再追加", async () => {
+    mockFetchFanqieOverallLeaderboard.mockResolvedValueOnce(
+      Array.from({ length: 150 }, (_, index) => createBook(index + 1)),
+    );
+
+    renderLeaderboardPage();
+
+    expect(await screen.findByText("测试作品1")).toBeInTheDocument();
+    expect(screen.getByText("已显示 120 / 150 本，继续下滑加载更多")).toBeInTheDocument();
+    expect(screen.queryByText("测试作品121")).not.toBeInTheDocument();
+
+    const list = screen.getByText("已显示 120 / 150 本，继续下滑加载更多").closest(".overflow-y-auto");
+    expect(list).not.toBeNull();
+    Object.defineProperties(list!, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 1000 },
+      scrollTop: { configurable: true, value: 500 },
+    });
+    fireEvent.scroll(list!);
+
+    expect(await screen.findByText("测试作品121")).toBeInTheDocument();
+    expect(screen.queryByText("已显示 120 / 150 本，继续下滑加载更多")).not.toBeInTheDocument();
+  });
+
+  it("打开详情时优先使用本地缓存中的完整图书信息", async () => {
+    mockFetchFanqieOverallLeaderboard.mockResolvedValueOnce([{ ...sampleBook, abstract: "列表简介" }]);
+    mockReadCachedLeaderboardBookDetail.mockReturnValueOnce({ ...sampleBook, abstract: "本地完整简介" });
+
+    renderLeaderboardPage();
+    fireEvent.click(await screen.findByRole("button", { name: "查看 测试作品 详情" }));
+
+    expect(await screen.findByText("本地完整简介")).toBeInTheDocument();
   });
 
   it("请求失败时显示错误信息", async () => {

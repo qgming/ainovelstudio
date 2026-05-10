@@ -1,10 +1,15 @@
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageShell } from "@shared/components/PageShell";
 import { Skeleton } from "@shared/ui/skeleton";
 import { cn } from "@shared/utils";
-import { fetchFanqieOverallLeaderboard, fetchOverallLeaderboard } from "./leaderboardApi";
+import {
+  fetchFanqieOverallLeaderboard,
+  fetchOverallLeaderboard,
+  readCachedFanqieOverallLeaderboard,
+  readCachedOverallLeaderboard,
+} from "./leaderboardApi";
 import { FANQIE_OVERALL_BOARD_ID, MAIN_BOARDS, OVERALL_CATEGORY_ID } from "./leaderboardCatalog";
 import { LeaderboardStatsOverview } from "./LeaderboardStatsCharts";
 import { buildLeaderboardStats } from "./leaderboardStats";
@@ -62,6 +67,17 @@ async function fetchStatsBooks(selection: StatsBoardSelection, forceRefresh: boo
   });
 }
 
+function readCachedStatsBooks(selection: StatsBoardSelection) {
+  if (selection.isFanqieOverall || !selection.selectedBoard) {
+    return readCachedFanqieOverallLeaderboard();
+  }
+  return readCachedOverallLeaderboard({
+    categoryId: OVERALL_CATEGORY_ID,
+    gender: selection.selectedBoard.gender,
+    type: selection.selectedBoard.type,
+  });
+}
+
 function useLeaderboardStatsData(selection: StatsBoardSelection) {
   const requestSeq = useRef(0);
   const [books, setBooks] = useState<LeaderboardBook[]>([]);
@@ -70,6 +86,14 @@ function useLeaderboardStatsData(selection: StatsBoardSelection) {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const refresh = useCallback(async (forceRefresh = false) => {
+    const cachedBooks = forceRefresh ? null : readCachedStatsBooks(selection);
+    if (cachedBooks) {
+      setBooks(cachedBooks);
+      setErrorMessage(null);
+      setStatus("ready");
+      setUpdatedAt(new Date());
+      return;
+    }
     const currentSeq = requestSeq.current + 1;
     requestSeq.current = currentSeq;
     setStatus("loading");
@@ -180,8 +204,19 @@ function EmptyStats() {
   );
 }
 
+function StatsTitle() {
+  return (
+    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
+      <Link to="/leaderboard" className="text-muted-foreground transition-colors hover:text-foreground">
+        排行榜
+      </Link>
+      <span className="px-1.5 text-muted-foreground">/</span>
+      <span>数据统计</span>
+    </div>
+  );
+}
+
 export function LeaderboardStatsPage() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const boardId = searchParams.get("board") ?? FANQIE_OVERALL_BOARD_ID;
   const [bookFilter, setBookFilter] = useState<StatsBookFilter>("all");
@@ -190,14 +225,13 @@ export function LeaderboardStatsPage() {
 
   return (
     <PageShell
-      title={<div className="truncate text-[15px] font-semibold text-foreground">数据统计</div>}
+      title={<StatsTitle />}
       headerRight={
         <div className="hidden text-xs text-muted-foreground sm:block">
           {selection.boardName} · {formatUpdatedAt(updatedAt)}
         </div>
       }
       actions={[
-        { icon: ArrowLeft, label: "返回榜单", onClick: () => navigate("/leaderboard") },
         { icon: RefreshCw, label: status === "loading" ? "刷新中..." : "刷新统计", onClick: () => void refresh(true) },
       ]}
     >
