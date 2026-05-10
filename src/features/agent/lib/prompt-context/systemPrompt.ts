@@ -86,6 +86,7 @@ function buildSkillCatalogBlock(skill: ResolvedSkill) {
 const TOOL_USAGE_HINT: Record<string, string> = {
   ask: "需求模糊或用户必须在多个方案中二选一时使用；不要把可自行判断的任务转嫁给用户。",
   todo: "≥3 步任务开场先写短计划；参数用 items 数组，不要把数组转成字符串；同时只保留 1 个 in_progress；可填 phase=plot/bible/outline/chapter/write/review/polish。",
+  mode_control: '当前模式需要向应用提交控制信号时使用；YOLO 完成用 action="complete"；flow 阶段推进用 complete_stage / blocked / complete_workflow。',
   task: "≥3 项独立批量任务或需要隔离上下文时派发；可传 agentName/role/instructions 创建临时 subagent，prompt 写清输入范围与期望输出。",
   browse: "不知道路径首选；mode=list 看子项 / tree 看树 / stat 看路径概况。",
   search: "找关键词、章节、角色、字段；scope=content 搜正文 / names 搜文件名；matchMode=phrase/all_terms/any_term。",

@@ -258,10 +258,30 @@ describe("useChatRunStore", () => {
     let callCount = 0;
     streamControl.runPrompt.mockImplementation(async function* () {
       callCount += 1;
-      yield {
-        type: "text-delta",
-	        delta: callCount === 9 ? "YOLO目标完成，已经写回目标文件。" : `第 ${callCount} 轮继续推进。`,
-      };
+      if (callCount === 9) {
+        yield {
+          type: "tool-call",
+          toolName: "mode_control",
+          toolCallId: "mode-control-9",
+          status: "running",
+          inputSummary: '{"mode":"autopilot","action":"complete"}',
+        };
+        yield {
+          type: "tool-result",
+          toolName: "mode_control",
+          toolCallId: "mode-control-9",
+          status: "completed",
+          outputSummary: '{"kind":"mode-control","mode":"autopilot","action":"complete"}',
+          output: {
+            kind: "mode-control",
+            mode: "autopilot",
+            action: "complete",
+            createdAt: "2026-05-10T00:00:00.000Z",
+          },
+        };
+        return;
+      }
+      yield { type: "text-delta", delta: `第 ${callCount} 轮继续推进。` };
     });
 
     useAgentStore.setState({

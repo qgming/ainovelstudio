@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineTool } from "../modelGateway";
+import { MODE_CONTROL_DEFAULT_MODE } from "../modeControl";
 import type { ToolBuilder, ToolRunner } from "./types";
 
 const todoItemSchema = z.object({
@@ -109,6 +110,38 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
             toolName,
             tool,
             input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    mode_control: (toolName, tool) =>
+      defineTool({
+        description:
+          "向应用提交当前模式的流程控制信号。YOLO 完成时用 complete；flow 模式阶段推进用 complete_stage、blocked、complete_workflow。",
+        inputSchema: z.object({
+          mode: z
+            .string()
+            .min(1)
+            .default(MODE_CONTROL_DEFAULT_MODE)
+            .describe("当前受控模式，例如 autopilot、flow、book。YOLO 使用 autopilot。"),
+          action: z
+            .enum(["complete", "blocked", "continue", "complete_stage", "complete_workflow"])
+            .describe("YOLO 用 complete；flow 用 complete_stage 推进阶段，用 blocked 标记阻塞，用 complete_workflow 完成工作流。"),
+          workflowId: z.string().optional().describe("flow 模式使用，默认 chapter-harness。"),
+          stage: z
+            .enum(["inspect", "skill_load", "plan", "act", "verify", "state_maintain", "report"])
+            .optional()
+            .describe("flow 模式使用，必须等于当前程序阶段。"),
+          evidence: z.array(z.string()).optional().describe("flow 模式阶段完成或工作流完成的证据列表。"),
+          reason: z.string().optional().describe("控制信号原因，简洁说明验证证据或阻塞原因。"),
+          nextAction: z.string().optional().describe("blocked 或 continue 时可填写下一步动作。"),
+        }),
+        execute: async (input, options) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+            { toolCallId: options?.toolCallId },
           );
           return result.data ?? result.summary;
         },

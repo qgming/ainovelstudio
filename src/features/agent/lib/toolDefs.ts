@@ -22,6 +22,12 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "更新当前会话的显式计划状态；参数使用 items 数组；同一时间最多保留一个进行中的步骤；可选 phase 字段标记长链路阶段。",
   },
   {
+    id: "mode_control",
+    name: "模式控制",
+    description:
+      "向应用提交当前模式的结构化流程控制信号；YOLO 目标完成时用 action=complete，后续可扩展阻塞、继续等模式控制语义。",
+  },
+  {
     id: "task",
     name: "临时子任务",
     description:

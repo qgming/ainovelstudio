@@ -82,6 +82,7 @@ vi.mock("./providerApi", () => ({
 import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./tools";
 import { createInteractionToolBuilders } from "./ai-sdk-tools/interactionBuilders";
 import { createReadToolBuilders } from "./ai-sdk-tools/readBuilders";
+import { MODE_CONTROL_KIND } from "./modeControl";
 import { searxngSearchService } from "./tools/searxngSearchService";
 
 function createFanqieRankApiJson(bookList: unknown[]) {
@@ -1076,6 +1077,63 @@ describe("createGlobalToolset", () => {
       "https://search-a.example",
       "https://search-b.example",
     ]);
+  });
+
+  it("mode_control 会返回结构化流程控制信号", async () => {
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.mode_control.execute({
+      mode: "autopilot",
+      action: "complete",
+      reason: "文件已写回，验证通过。",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.summary).toContain("autopilot 模式控制：已标记完成。");
+    expect(result.data).toMatchObject({
+      kind: MODE_CONTROL_KIND,
+      mode: "autopilot",
+      action: "complete",
+      reason: "文件已写回，验证通过。",
+    });
+    expect(result.data).toHaveProperty("createdAt");
+  });
+
+  it("mode_control 在 flow 模式由程序校验阶段推进", async () => {
+    const toolset = createGlobalToolset();
+
+    const rejected = await toolset.mode_control.execute({
+      mode: "flow",
+      action: "complete_stage",
+      stage: "plan",
+      evidence: ["已有计划"],
+    });
+    const accepted = await toolset.mode_control.execute({
+      mode: "flow",
+      action: "complete_stage",
+      stage: "inspect",
+      evidence: ["已读取 .project/AGENTS.md"],
+    });
+
+    expect(rejected.data).toMatchObject({
+      mode: "flow",
+      action: "complete_stage",
+      workflow: {
+        accepted: false,
+        state: { currentStage: "inspect" },
+      },
+    });
+    expect(accepted.data).toMatchObject({
+      mode: "flow",
+      action: "complete_stage",
+      workflow: {
+        accepted: true,
+        state: {
+          completedStages: ["inspect"],
+          currentStage: "skill_load",
+        },
+      },
+    });
   });
 
   it("web_search 会返回解析后的公开网页结果", async () => {

@@ -20,6 +20,7 @@ describe("agent cards", () => {
 
     expect(card?.name).toBe("严格工作流");
     expect(card?.contextPolicyId).toBe("flow");
+    expect(card?.tools).toContain("mode_control");
     expect(card?.tools).toContain("json");
     expect(card?.writeScopes).toContain(".project/runs/");
   });
@@ -30,6 +31,7 @@ describe("agent cards", () => {
     expect(card?.name).toBe("YOLO 全自动目标");
     expect(card?.banTools).toContain("ask");
     expect(card?.contextPolicyId).toBe("autopilot");
+    expect(card?.tools).toContain("mode_control");
     expect(card?.tools).toContain("write");
   });
 
@@ -61,11 +63,12 @@ describe("agent cards", () => {
     const tools = applyAgentCardToolPolicy("autopilot", [
       "ask",
       "todo",
+      "mode_control",
       "read",
       "write",
       "json",
     ]);
 
-    expect(tools).toEqual(["todo", "read", "write", "json"]);
+    expect(tools).toEqual(["mode_control", "todo", "read", "write", "json"]);
   });
 });

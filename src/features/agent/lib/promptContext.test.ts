@@ -204,22 +204,24 @@ describe("prompt context", () => {
     expect(system).toContain("完成第一章审校并写回文件");
     expect(system).toContain("第 1 轮");
     expect(system).toContain("不用 ask");
-    expect(system).toContain("YOLO目标完成");
+    expect(system).toContain("mode_control");
+    expect(system).toContain('action="complete"');
   });
 
   it("flow 模式渲染严格工作流和章节 harness", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
-      enabledToolIds: ["todo", "read", "json", "canon_query"],
+      enabledToolIds: ["mode_control", "todo", "read", "json", "canon_query"],
       mode: "flow",
     });
 
     expect(system).toContain("# 模式：WORKFLOW");
     expect(system).toContain("Skill Load");
     expect(system).toContain("SKILL.md");
-    expect(system).toContain("再 State Maintain");
-    expect(system).toContain("chapter-plan -> draft -> continuity-review");
+    expect(system).toContain("currentStage：Inspect（inspect）");
+    expect(system).toContain("complete_stage");
+    expect(system).toContain("程序接受后再进入下一阶段");
     expect(system).toContain(".project/runs/chapter-NNN.json");
   });
 

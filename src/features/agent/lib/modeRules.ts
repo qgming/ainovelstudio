@@ -10,6 +10,11 @@
 
 import { resolveAgentCard } from "./agentCards";
 import type { LongformAgentMode } from "./longformTypes";
+import {
+  createInitialFlowWorkflowState,
+  formatFlowWorkflowState,
+  type FlowWorkflowState,
+} from "./workflowControl";
 
 export type AgentMode = "book" | "autopilot" | "flow" | LongformAgentMode;
 
@@ -18,6 +23,9 @@ export type AutopilotModeContext = {
   goal: string;
   iteration: number;
 };
+export type FlowModeContext = {
+  workflowState?: FlowWorkflowState;
+};
 
 export type ModeContextMap = {
   autopilot: AutopilotModeContext;
@@ -25,7 +33,7 @@ export type ModeContextMap = {
   "book-design": BookModeContext;
   "chapter-write": BookModeContext;
   "continuity-review": BookModeContext;
-  flow: BookModeContext;
+  flow: FlowModeContext;
   "state-maintain": BookModeContext;
   "style-polish": BookModeContext;
   "volume-plan": BookModeContext;
@@ -73,35 +81,43 @@ function buildAutopilotModeRules(context: AutopilotModeContext) {
     "- 目标未满足验收时，直接推进下一步；普通过程选择自行决策，不用 ask。",
     "- 遇到外部授权或高风险破坏性操作时，报告阻塞项和所需授权。",
     "- 涉及创作、规划、设定、审校的成果必须写回工作区文件；章节任务还要维护 `.project/runs/`、`.project/chapters/`、`.project/status/`。",
-    "- 只有成果、验证、状态回写全部完成时，最终回复写出「YOLO目标完成」。",
-    "- 未完成时写出当前阶段、已推进文件、下一轮动作，不要写「YOLO目标完成」。",
+    '- 只有成果、验证、状态回写全部完成时，调用 `mode_control`，参数为 mode="autopilot"、action="complete"，reason 写明验收证据。',
+    "- 未完成时继续推进下一步；不要调用 `mode_control` 的 complete 动作。",
   ].join("\n");
 }
 
-const FLOW_MODE_RULES = [
-  "# 模式：WORKFLOW（严格工作流）",
-  "",
-  "**身份**",
-  "- 你是长篇写作工作流执行器，按固定阶段推进，不跳步。",
-  "",
-  "**强制工作流**",
-  "- 进入任务后先 Inspect：读取 `.project/AGENTS.md`、`.project/README.md`、`.project/context-manifest.json`、相关 status JSON、canon/style/chapters/run 文件。",
-  "- 再 Skill Load：任务明显匹配已启用 skill 时，必须读取对应 `SKILL.md`；需要参考材料时再读该 skill 的 references。",
-  "- 再 Plan：用 todo 写出当前阶段计划，只保留一个 in_progress。",
-  "- 再 Act：按阶段执行，正文、卷纲、细纲由主代理串行写入。",
-  "- 再 Verify：用 read / word_count / canon_query / search 核对落地结果。",
-  "- 再 State Maintain：更新 `.project/runs/chapter-NNN.json`、`.project/chapters/`、`.project/status/`，必要时写 `.project/canon/` 和 `.project/style/`。",
-  "- 最后 Report：只汇报阶段、改动文件、验证结果、下一阶段。",
-  "",
-  "**章节 Harness**",
-  "- 默认阶段：chapter-plan -> draft -> continuity-review -> style-polish -> state-maintain -> final-check。",
-  "- 阶段失败时写明阻塞、证据、修正动作；修正后从失败阶段继续。",
-  "- final-check 需要同时满足字数、章内冲突、爽点兑现、章末钩子、连续性、风格一致、状态已回写。",
-  "",
-  "**边界**",
-  "- 可以使用 task 做市场、拆解、连续性、风格、状态维护等检查任务。",
-  "- 正文生成、卷纲、细纲保持主代理串行直写。",
-].join("\n");
+function buildFlowModeRules(context: FlowModeContext) {
+  const workflowState = context.workflowState ?? createInitialFlowWorkflowState();
+  return [
+    "# 模式：WORKFLOW（程序控制工作流）",
+    "",
+    "**身份**",
+    "- 你是长篇写作工作流执行器，当前阶段由程序状态机控制。",
+    "",
+    "**程序状态**",
+    formatFlowWorkflowState(workflowState),
+    "",
+    "**强制工作流**",
+    "- 只处理 currentStage 对应工作；完成本阶段后调用 `mode_control` 提交 complete_stage。",
+    "- complete_stage 必须包含 stage 与 evidence；程序接受后再进入下一阶段。",
+    "- 被程序 rejected 时，按 missing 补齐证据或动作，然后重新提交当前阶段。",
+    "- 遇到外部授权或高风险操作时调用 `mode_control` 提交 blocked，并写 reason。",
+    "- 所有阶段完成后调用 `mode_control` 提交 complete_workflow，并提供最终验收 evidence。",
+    "",
+    "**阶段门禁**",
+    "- Inspect：读取 `.project/AGENTS.md`、`.project/README.md`、`.project/context-manifest.json`、相关 status JSON、canon/style/chapters/run 文件。",
+    "- Skill Load：任务明显匹配已启用 skill 时，必须读取对应 `SKILL.md`；需要参考材料时再读 references。",
+    "- Plan：用 todo 写出当前阶段计划，只保留一个 in_progress。",
+    "- Act：按阶段执行，正文、卷纲、细纲由主代理串行写入。",
+    "- Verify：用 read / word_count / canon_query / search 核对落地结果。",
+    "- State Maintain：更新 `.project/runs/chapter-NNN.json`、`.project/chapters/`、`.project/status/`，必要时写 `.project/canon/` 和 `.project/style/`。",
+    "- Report：只汇报阶段、改动文件、验证结果、下一阶段。",
+    "",
+    "**边界**",
+    "- 可以使用 task 做市场、拆解、连续性、风格、状态维护等检查任务。",
+    "- 正文生成、卷纲、细纲保持主代理串行直写。",
+  ].join("\n");
+}
 
 function buildAgentCardModeRules(mode: LongformAgentMode) {
   const card = resolveAgentCard(mode);
@@ -141,7 +157,7 @@ export function buildModeRules<M extends AgentMode>(
     case "autopilot":
       return buildAutopilotModeRules(context as AutopilotModeContext);
     case "flow":
-      return FLOW_MODE_RULES;
+      return buildFlowModeRules(context as FlowModeContext);
     case "book-design":
     case "volume-plan":
     case "chapter-write":
