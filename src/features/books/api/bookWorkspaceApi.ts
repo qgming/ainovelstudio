@@ -148,6 +148,10 @@ export function syncBookFolderToWorkspace(rootPath: string) {
   return invoke<boolean>("sync_book_folder_to_workspace", { rootPath });
 }
 
+export function syncChangedBookFolderToWorkspace(rootPath: string) {
+  return invoke<boolean>("sync_changed_book_folder_to_workspace", { rootPath });
+}
+
 export function listBookWorkspaces() {
   return invoke<BookWorkspaceSummary[]>("list_book_workspaces").then((summaries) => {
     cacheBookWorkspaceSummaries(summaries);

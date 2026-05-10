@@ -22,6 +22,13 @@ pub fn hide_main_window(_app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+#[cfg(not(desktop))]
+#[allow(non_snake_case)]
+pub fn update_tray_ai_status(_app: AppHandle, _statusLabel: String) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg(desktop)]
 pub fn show_main_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {

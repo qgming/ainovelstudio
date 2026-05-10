@@ -2,37 +2,11 @@ mod app;
 mod domains;
 mod infrastructure;
 
-use crate::app::{hide_main_window, terminate_application, ToolCancellationRegistry};
 #[cfg(desktop)]
-use crate::app::show_main_window;
-#[cfg(desktop)]
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+use crate::app::{handle_tray_icon_event, handle_tray_menu_event, setup_tray};
+use crate::app::{
+    hide_main_window, terminate_application, update_tray_ai_status, ToolCancellationRegistry,
 };
-
-#[cfg(desktop)]
-const TRAY_SHOW_ID: &str = "show_main_window";
-#[cfg(desktop)]
-const TRAY_QUIT_ID: &str = "quit_application";
-
-#[cfg(desktop)]
-fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "显示主窗口", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
-
-    let mut tray_builder = TrayIconBuilder::new()
-        .tooltip("神笔写作")
-        .menu(&menu)
-        .show_menu_on_left_click(false);
-    if let Some(icon) = app.default_window_icon() {
-        tray_builder = tray_builder.icon(icon.clone());
-    }
-    tray_builder.build(app)?;
-    Ok(())
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -54,28 +28,14 @@ pub fn run() {
             setup_tray(app.handle())?;
             Ok(())
         })
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            TRAY_SHOW_ID => show_main_window(app),
-            TRAY_QUIT_ID => app.exit(0),
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if matches!(
-                event,
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                }
-            ) {
-                show_main_window(&tray.app_handle());
-            }
-        });
+        .on_menu_event(|app, event| handle_tray_menu_event(app, event.id().as_ref()))
+        .on_tray_icon_event(handle_tray_icon_event);
 
     builder
         .invoke_handler(tauri::generate_handler![
             domains::book_workspace::commands::cancel_tool_request,
             domains::book_workspace::commands::cancel_tool_requests,
+            update_tray_ai_status,
             terminate_application,
             hide_main_window,
             domains::chat::commands::initialize_chat_storage,
@@ -114,6 +74,7 @@ pub fn run() {
             domains::book_workspace::commands::pick_book_directory,
             domains::book_workspace::commands::open_book_folder,
             domains::book_workspace::commands::sync_book_folder_to_workspace,
+            domains::book_workspace::commands::sync_changed_book_folder_to_workspace,
             domains::book_workspace::commands::list_book_workspaces,
             domains::book_workspace::commands::get_book_workspace_summary,
             domains::book_workspace::commands::get_book_workspace_summary_by_id,

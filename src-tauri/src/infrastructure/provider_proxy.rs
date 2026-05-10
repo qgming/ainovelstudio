@@ -52,7 +52,11 @@ pub struct ProviderHttpResponse {
 }
 
 #[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "type")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
 pub enum ProviderStreamEvent {
     Start {
         request_id: String,
@@ -264,10 +268,13 @@ pub async fn stream_provider_request(
     let result = stream_provider_request_inner(&app, request, &request_id, &registry).await;
     registry.finish(Some(&request_id));
     if let Err(message) = result {
-        emit_stream_event(&app, ProviderStreamEvent::Error {
-            request_id,
-            message,
-        });
+        emit_stream_event(
+            &app,
+            ProviderStreamEvent::Error {
+                request_id,
+                message,
+            },
+        );
     }
     Ok(())
 }
@@ -322,26 +329,35 @@ async fn stream_provider_request_inner(
         })
         .collect::<HashMap<_, _>>();
 
-    emit_stream_event(app, ProviderStreamEvent::Start {
-        request_id: request_id.to_string(),
-        ok,
-        status,
-        headers,
-    });
+    emit_stream_event(
+        app,
+        ProviderStreamEvent::Start {
+            request_id: request_id.to_string(),
+            ok,
+            status,
+            headers,
+        },
+    );
 
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         registry.check(Some(request_id))?;
         let chunk = chunk.map_err(|error| error.to_string())?;
-        emit_stream_event(app, ProviderStreamEvent::Chunk {
-            request_id: request_id.to_string(),
-            chunk: chunk.to_vec(),
-        });
+        emit_stream_event(
+            app,
+            ProviderStreamEvent::Chunk {
+                request_id: request_id.to_string(),
+                chunk: chunk.to_vec(),
+            },
+        );
     }
 
-    emit_stream_event(app, ProviderStreamEvent::End {
-        request_id: request_id.to_string(),
-    });
+    emit_stream_event(
+        app,
+        ProviderStreamEvent::End {
+            request_id: request_id.to_string(),
+        },
+    );
     Ok(())
 }
 

@@ -8,7 +8,9 @@ use crate::domains::book_workspace::data::{
 };
 use crate::domains::book_workspace::maintenance::ensure_book_workspace_template_db;
 #[cfg(desktop)]
-use crate::domains::book_workspace::mirror::{export_book_to_mirror, import_mirror_to_book};
+use crate::domains::book_workspace::mirror::{
+    export_book_to_mirror, import_changed_mirror_to_book, import_mirror_to_book,
+};
 use crate::domains::book_workspace::ops::{
     create_workspace_directory_db, create_workspace_text_file_db, delete_workspace_entry_db,
     move_workspace_entry_db, read_text_file_db, read_text_file_line_db, rename_workspace_entry_db,
@@ -107,6 +109,27 @@ pub fn sync_book_folder_to_workspace(app: AppHandle, rootPath: String) -> Comman
     {
         with_transaction(&app, |transaction| {
             import_mirror_to_book(&app, transaction, &rootPath)
+        })
+    }
+
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        let _ = rootPath;
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn sync_changed_book_folder_to_workspace(
+    app: AppHandle,
+    rootPath: String,
+) -> CommandResult<bool> {
+    #[cfg(desktop)]
+    {
+        with_transaction(&app, |transaction| {
+            import_changed_mirror_to_book(&app, transaction, &rootPath)
         })
     }
 

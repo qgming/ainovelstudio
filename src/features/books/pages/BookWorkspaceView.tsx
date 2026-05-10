@@ -33,6 +33,7 @@ import { useBookPanelResize } from "../hooks/useBookPanelResize";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
 
 const AUTO_SAVE_DELAY_MS = 800;
+const MIRROR_SYNC_INTERVAL_MS = 1200;
 type MobileBookTab = "tree" | "editor" | "agent";
 
 /** 移动端顶部标题：书架 / 当前书名。 */
@@ -108,6 +109,9 @@ export function BookWorkspaceView({
   const rootBookName = useBookWorkspaceStore((state) => state.rootBookName);
   const setPromptValue = useBookWorkspaceStore((state) => state.setPromptValue);
   const submitPrompt = useBookWorkspaceStore((state) => state.submitPrompt);
+  const syncWorkspaceFromMirrorIfChanged = useBookWorkspaceStore(
+    (state) => state.syncWorkspaceFromMirrorIfChanged,
+  );
   const toggleDirectory = useBookWorkspaceStore((state) => state.toggleDirectory);
   const updateDraft = useBookWorkspaceStore((state) => state.updateDraft);
   const selectWorkspaceByBookId = useBookWorkspaceStore(
@@ -126,6 +130,7 @@ export function BookWorkspaceView({
 
   const [mobileActiveTab, setMobileActiveTab] = useState<MobileBookTab>("editor");
   const [externalErrorMessage, setExternalErrorMessage] = useState<string | null>(null);
+  const [mirrorSyncRootPath, setMirrorSyncRootPath] = useState<string | null>(null);
   const routeLoadingBookIdRef = useRef<string | null>(null);
 
   // —— 派生状态 ——
@@ -184,6 +189,20 @@ export function BookWorkspaceView({
   const resolvedRootNode: TreeNode | null = rootNode
     ? { ...rootNode, name: rootBookName || rootNode.name }
     : null;
+  const currentRootPath = rootNode?.path ?? null;
+
+  useEffect(() => {
+    if (!mirrorSyncRootPath || mirrorSyncRootPath !== currentRootPath) return;
+    let running = false;
+    const intervalId = window.setInterval(() => {
+      if (running) return;
+      running = true;
+      void syncWorkspaceFromMirrorIfChanged().finally(() => {
+        running = false;
+      });
+    }, MIRROR_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [currentRootPath, mirrorSyncRootPath, syncWorkspaceFromMirrorIfChanged]);
 
   /** 没有 onNavigateHome 时回退到 hash 路由首页。 */
   function navigateHome() {
@@ -200,6 +219,7 @@ export function BookWorkspaceView({
     try {
       setExternalErrorMessage(null);
       await openBookFolder(rootPath);
+      setMirrorSyncRootPath(rootPath);
     } catch (error) {
       setExternalErrorMessage(
         error instanceof Error ? error.message : "打开系统文件资源管理器失败。",

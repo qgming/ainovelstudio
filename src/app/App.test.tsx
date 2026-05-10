@@ -208,7 +208,7 @@ describe("App shell", () => {
     expect(mockWindow.maximize).toHaveBeenCalledTimes(1);
     expect(mockWindow.unmaximize).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith("hide_main_window");
+      expect(mockInvoke).toHaveBeenCalledWith("terminate_application");
     });
 
     await waitFor(() => {
@@ -216,7 +216,7 @@ describe("App shell", () => {
     });
   });
 
-  it("关闭请求会隐藏窗口并保持后台运行", async () => {
+  it("关闭请求会退出应用", async () => {
     let closeHandler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined;
     mockWindow.onCloseRequested.mockImplementation(async (handler: (event: { preventDefault: () => void }) => Promise<void>) => {
       closeHandler = handler;
@@ -233,8 +233,29 @@ describe("App shell", () => {
     await closeHandler?.({ preventDefault });
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
-    expect(mockWindow.hide).toHaveBeenCalledTimes(1);
-    expect(mockInvoke).not.toHaveBeenCalledWith("terminate_application");
+    expect(mockWindow.hide).not.toHaveBeenCalled();
+    expect(mockInvoke).toHaveBeenCalledWith("terminate_application");
+  });
+
+  it("桌面端会同步 Agent 状态到托盘菜单", async () => {
+    useAgentStore.setState({
+      activeRunRequestId: "run-1",
+      run: {
+        id: "session-1",
+        messages: [],
+        status: "running",
+        title: "继续写下一章",
+      },
+      status: "ready",
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("update_tray_ai_status", {
+        statusLabel: "AI 运行中",
+      });
+    });
   });
 
   it("Android 环境不会挂载桌面标题栏和关闭拦截", async () => {
@@ -576,7 +597,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
     expect(screen.getByText("版本")).toBeInTheDocument();
-    expect(screen.getByText("0.2.6")).toBeInTheDocument();
+    expect(screen.getByText("0.2.7")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");

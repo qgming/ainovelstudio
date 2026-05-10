@@ -45,7 +45,7 @@ export function TitleBar() {
   }
 
   async function handleCloseWindow() {
-    await invoke("hide_main_window");
+    await invoke("terminate_application");
   }
 
   return (
@@ -105,7 +105,7 @@ function WindowButton({ ariaLabel, children, danger = false, onClick }: WindowBu
             ? "最大化窗口 — 让应用占满当前屏幕"
             : ariaLabel === "还原窗口"
               ? "还原窗口 — 恢复到非最大化尺寸"
-              : "关闭窗口 — 隐藏到后台托盘继续运行"
+              : "关闭窗口 — 退出应用"
       }
       onClick={onClick}
       className={[

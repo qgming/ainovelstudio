@@ -14,6 +14,7 @@ import {
   readWorkspaceTree,
   renameWorkspaceEntry,
   setStoredWorkspaceSnapshot,
+  syncChangedBookFolderToWorkspace,
   syncBookFolderToWorkspace,
   writeWorkspaceTextFile,
 } from "@features/books/api/bookWorkspaceApi";
@@ -62,6 +63,7 @@ export type BookWorkspaceStore = {
   refreshWorkspace: () => Promise<void>;
   refreshWorkspaceList: () => Promise<void>;
   refreshWorkspaceAfterExternalChange: () => Promise<void>;
+  syncWorkspaceFromMirrorIfChanged: () => Promise<boolean>;
   requestDelete: (node: TreeNode) => void;
   resetState: () => void;
   rootNode: TreeNode | null;
@@ -443,6 +445,31 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
 
       if (isCurrent()) {
         set({ isBusy: false });
+      }
+    },
+    syncWorkspaceFromMirrorIfChanged: async () => {
+      const { activeFilePath, rootPath } = get();
+      if (!rootPath) {
+        return false;
+      }
+
+      const isCurrent = createWorkspaceLoadGuard();
+      try {
+        const changed = await syncChangedBookFolderToWorkspace(rootPath);
+        if (!changed || !isCurrent()) {
+          return false;
+        }
+        await loadWorkspace({
+          isCurrent,
+          rootPath,
+          selectedFilePath: activeFilePath,
+        });
+        return isCurrent();
+      } catch (error) {
+        if (isCurrent()) {
+          set({ errorMessage: getReadableError(error) });
+        }
+        return false;
       }
     },
     requestDelete: (node) => set({ confirmState: buildDeletePrompt(node) }),

@@ -113,6 +113,38 @@ describe("useBookWorkspaceStore", () => {
     expect(useBookWorkspaceStore.getState().activeFilePath).toBe(chapterPath);
   });
 
+  it("镜像变化后会同步导入并刷新当前文件内容", async () => {
+    let readTextFileValue = "这是章节初稿";
+
+    window.localStorage.setItem(
+      "ainovelstudio-book-workspace",
+      JSON.stringify({ rootPath, selectedFilePath: chapterPath }),
+    );
+
+    mockInvoke.mockImplementation(async (command: string) => {
+      switch (command) {
+        case "get_book_workspace_summary":
+          return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
+        case "read_workspace_tree":
+          return initialTree;
+        case "read_text_file":
+          return readTextFileValue;
+        case "sync_changed_book_folder_to_workspace":
+          readTextFileValue = "这是镜像编辑后的内容";
+          return true;
+        default:
+          return undefined;
+      }
+    });
+
+    await useBookWorkspaceStore.getState().initializeWorkspace();
+    const changed = await useBookWorkspaceStore.getState().syncWorkspaceFromMirrorIfChanged();
+
+    expect(changed).toBe(true);
+    expect(useBookWorkspaceStore.getState().draftContent).toBe("这是镜像编辑后的内容");
+    expect(useBookWorkspaceStore.getState().activeFilePath).toBe(chapterPath);
+  });
+
   it("打开书籍时会先补齐缺失的初始化模板", async () => {
     window.localStorage.setItem(
       "ainovelstudio-book-workspace",

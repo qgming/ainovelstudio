@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Sidebar } from "@app/components/Sidebar";
@@ -7,6 +8,8 @@ import { Toaster } from "@shared/ui/sonner";
 import { TooltipProvider } from "@shared/ui/tooltip";
 import { isMobileRuntime } from "@shared/platform";
 import { BookLibraryPage } from "@features/books/pages/BookLibraryPage";
+import { selectIsAgentRunActive, useChatRunStore } from "@features/agent/stores/useChatRunStore";
+import type { ChatRunStore } from "@features/agent/stores/useChatRunStore";
 import { useThemeStore } from "@shared/theme/useThemeStore";
 import { useUpdateStore } from "@features/update/stores/useUpdateStore";
 
@@ -36,6 +39,17 @@ function AppRouteLoadingState() {
   );
 }
 
+function getTrayAgentStatusLabel(state: ChatRunStore) {
+  if (state.status === "loading") return "初始化中";
+  if (state.status === "error") return "状态异常";
+  if (state.pendingAsk || state.run.status === "awaiting_user") return "等待用户";
+  if (state.inflightToolRequestIds.length > 0) return "工具读写中";
+  if (selectIsAgentRunActive(state)) return "AI 运行中";
+  if (state.run.status === "failed") return "上次失败";
+  if (state.run.status === "completed") return "已完成";
+  return "空闲";
+}
+
 function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
   const runStartupUpdateFlow = useUpdateStore((state) => state.runStartupUpdateFlow);
@@ -60,7 +74,7 @@ function AppShell() {
 
     void appWindow.onCloseRequested(async (event) => {
       event.preventDefault();
-      await appWindow.hide();
+      await invoke("terminate_application");
     }).then((dispose) => {
       if (disposed) {
         dispose();
@@ -73,6 +87,25 @@ function AppShell() {
       disposed = true;
       unlisten?.();
     };
+  }, [mobileRuntime]);
+
+  useEffect(() => {
+    if (mobileRuntime) {
+      return;
+    }
+
+    let lastStatusLabel = "";
+    function syncTrayStatus(state = useChatRunStore.getState()) {
+      const statusLabel = getTrayAgentStatusLabel(state);
+      if (statusLabel === lastStatusLabel) {
+        return;
+      }
+      lastStatusLabel = statusLabel;
+      void invoke("update_tray_ai_status", { statusLabel }).catch(() => undefined);
+    }
+
+    syncTrayStatus();
+    return useChatRunStore.subscribe(syncTrayStatus);
   }, [mobileRuntime]);
 
   return (
