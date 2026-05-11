@@ -108,6 +108,257 @@ describe("streamProviderRequestViaTauri", () => {
     await expect(readResponseText(response)).resolves.toBe("ok");
   });
 
+  it("将流式请求收到的非流式 chat.completion JSON 转成 SSE", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(JSON.stringify({
+          id: "chatcmpl-test",
+          object: "chat.completion",
+          created: 1778480260,
+          model: "deepseek-v4-pro",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                reasoning_content: "后台有响应，但不是 SSE。",
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }))),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    expect(text).toContain("\"object\":\"chat.completion.chunk\"");
+    expect(text).toContain("\"content\":\"后台有响应，但不是 SSE。\"");
+    expect(text).toContain("data: [DONE]");
+  });
+
+  it("转换非流式 chat.completion JSON 时保留工具调用", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(JSON.stringify({
+          id: "chatcmpl-tools",
+          object: "chat.completion",
+          created: 1778480148,
+          model: "deepseek-v4-pro",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: " ",
+                tool_calls: [
+                  {
+                    id: "call_read",
+                    type: "function",
+                    function: {
+                      name: "read",
+                      arguments: "{\"path\":\"设定/角色/林鹿溪.md\"}",
+                    },
+                    index: 0,
+                  },
+                ],
+                reasoning_content: "先读取角色设定。",
+              },
+              finish_reason: "tool_calls",
+            },
+          ],
+        }))),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(text).toContain("\"content\":\"先读取角色设定。\"");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"id\":\"call_read\"");
+    expect(text).toContain("\"name\":\"read\"");
+    expect(text).toContain("\"finish_reason\":\"tool_calls\"");
+  });
+
+  it("即使响应头标成 SSE，也会识别完整 chat.completion JSON 并转换", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(JSON.stringify({
+          id: "chatcmpl-mislabeled",
+          object: "chat.completion",
+          created: 1778480442,
+          model: "deepseek-v4-pro",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                tool_calls: [
+                  {
+                    id: "call_read_outline",
+                    type: "function",
+                    function: {
+                      name: "read",
+                      arguments: "{\"mode\":\"full\",\"path\":\"大纲/大纲.md\"}",
+                    },
+                    index: 0,
+                  },
+                ],
+                reasoning_content: "好的，用户要求继续执行。",
+              },
+              finish_reason: "tool_calls",
+            },
+          ],
+          usage: {
+            prompt_tokens: 50677,
+            completion_tokens: 0,
+            total_tokens: 50677,
+          },
+        }))),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    expect(text).toContain("\"content\":\"好的，用户要求继续执行。\"");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"completion_tokens\"");
+  });
+
+  it("非流式 chat.completion JSON 只有 reasoning_content 时也输出内容", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(JSON.stringify({
+          id: "chatcmpl-reasoning",
+          object: "chat.completion",
+          created: 1778480148,
+          model: "deepseek-v4-pro",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "",
+                reasoning_content: "只有思考内容也应该继续显示。",
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }))),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    await expect(readResponseText(response)).resolves.toContain("\"content\":\"只有思考内容也应该继续显示。\"");
+  });
+
+  it("非流式请求收到 JSON 时保持原始响应", async () => {
+    const rawBody = JSON.stringify({ object: "chat.completion", choices: [] });
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({ type: "chunk", requestId, chunk: Array.from(new TextEncoder().encode(rawBody)) });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [] }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    expect(response.headers.get("content-type")).toBe("application/json");
+    await expect(readResponseText(response)).resolves.toBe(rawBody);
+  });
+
   it("abort 时取消后端流式请求", async () => {
     mockInvoke.mockResolvedValue(undefined);
     const abortController = new AbortController();

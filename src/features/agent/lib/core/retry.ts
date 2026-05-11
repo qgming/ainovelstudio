@@ -59,25 +59,22 @@ export function appendRetryPrompt(messages: ModelMessage[], failure: AiRequestFa
 }
 
 export function buildFailureReport(failures: AiRequestFailure[], providerConfig: AgentProviderConfig) {
-  const lines = failures.map((failure) =>
-    [
-      `#${failure.attempt}`,
-      `时间：${failure.timestamp}`,
-      `turnId：${failure.turnId}`,
-      `错误类型：${failure.name}`,
-      `已生成片段数：${failure.partsGenerated}`,
-      `错误信息：${failure.message}`,
-    ].join("\n"),
-  );
+  const failure = failures.at(-1);
   return [
     `连续 ${MAX_CONSECUTIVE_AI_REQUEST_FAILURES} 次 AI 请求失败，已停止自动续跑。`,
     "",
     "失败上下文：",
     `模型：${providerConfig.model || "未配置"}`,
     `Base URL：${providerConfig.baseURL || "未配置"}`,
-    "",
-    "连续失败明细：",
-    lines.join("\n\n"),
+    ...(failure
+      ? [
+          `最近一次时间：${failure.timestamp}`,
+          `最近一次 turnId：${failure.turnId}`,
+          `错误类型：${failure.name}`,
+          `已生成片段数：${failure.partsGenerated}`,
+          `错误信息：${failure.message}`,
+        ]
+      : []),
     "",
     "建议检查网络稳定性、供应商状态、模型名称、Base URL、API Key 权限，以及供应商是否在流式响应中返回了非 SSE/异常响应体。",
   ].join("\n");

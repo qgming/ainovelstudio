@@ -230,7 +230,7 @@ describe("useChatRunStore", () => {
     expect(assistantTextUpdates).toBeLessThan(10);
   });
 
-  it("coachMessage 会发送只针对执行状态的鞭策提示词", async () => {
+  it("coachMessage 会发送轻量继续提示词", async () => {
     useAgentStore.setState({
       activeSessionId: "session-1",
       input: "",
@@ -248,10 +248,13 @@ describe("useChatRunStore", () => {
     await useAgentStore.getState().coachMessage();
 
     const prompt = streamControl.runPrompt.mock.calls[0]?.[0]?.prompt;
-    expect(prompt).toContain("节奏明显慢了");
-    expect(prompt).toContain("原来的剧情、人设、风格都保留");
-    expect(prompt).toContain("先说清楚卡点");
-    expect(prompt).toContain("把冲突和爽点往前推");
+    expect(prompt).toBe("请继续执行刚才未完成的任务，从当前断点往下做即可。不要额外改变任务目标或创作要求。");
+    expect(prompt).not.toContain("剧情");
+    expect(prompt).not.toContain("人设");
+    expect(prompt).not.toContain("风格");
+    expect(prompt).not.toContain("节奏");
+    expect(prompt).not.toContain("冲突");
+    expect(prompt).not.toContain("爽点");
   });
 
   it("YOLO 模式会持续自动检查并执行到目标完成", async () => {

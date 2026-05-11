@@ -3,7 +3,7 @@ import type { AgentMode } from "@features/agent/lib/modeRules";
 import { isModeControlCompletionPart } from "@features/agent/lib/modeControl";
 
 export const COACH_PROMPT =
-  "你刚才这个节奏明显慢了。原来的剧情、人设、风格都保留，别把问题扩大。现在先说清楚卡点，然后接着断点继续干。网文这东西最怕拖，读者不会等你慢慢找状态，给我把冲突和爽点往前推。";
+  "请继续执行刚才未完成的任务，从当前断点往下做即可。不要额外改变任务目标或创作要求。";
 
 export function buildAutopilotContinuePrompt(goal: string, iteration: number) {
   return [

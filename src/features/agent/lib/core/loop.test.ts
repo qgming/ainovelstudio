@@ -176,10 +176,27 @@ describe("agentLoop", () => {
     expect(parts.at(-1)).toEqual({ type: "text-delta", delta: "续跑完成" });
   });
 
-  it("AI 请求连续失败 5 次时会抛出详细失败报告", async () => {
+  it("AI 解码尾错已有文本或思考片段时会按完成收尾", async () => {
     const streamFn = vi.fn(() =>
-      streamFailure("error decoding response body", [{ type: "text-delta", id: "text-1", text: "半截" }]),
+      streamFailure("error decoding response body", [
+        { type: "reasoning-delta", id: "reasoning-0", text: "只返回了思考。" },
+      ]),
     );
+
+    const parts: AgentPart[] = [];
+    for await (const part of agentLoop(
+      { messages: [{ role: "user", content: "继续写" }], system: "test" },
+      { providerConfig: { apiKey: "k", baseURL: "u", model: "m" }, streamFn: streamFn as never },
+    )) {
+      parts.push(part);
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(1);
+    expect(parts).toEqual([{ type: "reasoning", summary: "正在思考", detail: "只返回了思考。" }]);
+  });
+
+  it("AI 请求连续失败 5 次时只展示最近一次失败报告", async () => {
+    const streamFn = vi.fn(() => streamFailure("error decoding response body"));
 
     await expect(async () => {
       for await (const _part of agentLoop(
@@ -191,7 +208,7 @@ describe("agentLoop", () => {
       )) {
         // drain stream
       }
-    }).rejects.toThrow(/连续 5 次 AI 请求失败[\s\S]*模型：test-model[\s\S]*已生成片段数：1/);
+    }).rejects.toThrow(/连续 5 次 AI 请求失败[\s\S]*模型：test-model[\s\S]*最近一次 turnId：[\s\S]*已生成片段数：0/);
 
     expect(streamFn).toHaveBeenCalledTimes(5);
   });

@@ -93,6 +93,28 @@ function createAssistantEventMessage(turnId: string) {
   };
 }
 
+function isResponseBodyDecodeError(error: unknown) {
+  return error instanceof Error && error.message.includes("error decoding response body");
+}
+
+function canCompleteAfterDecodeError(parts: AgentPart[]) {
+  return parts.length > 0 && parts.every((part) =>
+    part.type === "text-delta" || part.type === "reasoning" || part.type === "text"
+  );
+}
+
+function collectAssistantContent(parts: AgentPart[]) {
+  return parts
+    .map((part) => {
+      if (part.type === "text-delta") return part.delta;
+      if (part.type === "text") return part.text;
+      if (part.type === "reasoning") return part.detail;
+      return "";
+    })
+    .join("")
+    .trim();
+}
+
 async function collectStepUsage(
   result: ReturnType<typeof streamAgentText>,
   abortSignal?: AbortSignal,
@@ -171,6 +193,20 @@ async function* runStepWithRetry(
     return { ...stepResult, shouldRetry: false };
   } catch (error) {
     if (isAbortError(error, params.config.abortSignal)) throw error;
+    if (isResponseBodyDecodeError(error) && canCompleteAfterDecodeError(params.eventMessage.parts)) {
+      const content = collectAssistantContent(params.eventMessage.parts);
+      if (content) params.messages.push({ role: "assistant", content });
+      params.retryState.consecutiveFailures = 0;
+      params.retryState.failureHistory = [];
+      params.config.emit?.({ type: "message_end", message: params.eventMessage });
+      params.config.emit?.({
+        type: "turn_end",
+        finishReason: "stop",
+        turnId: params.turnId,
+        usage: null,
+      });
+      return { finishReason: "stop", shouldRetry: false };
+    }
     const failure = recordStepFailure(error, params);
     if (params.retryState.consecutiveFailures >= MAX_CONSECUTIVE_AI_REQUEST_FAILURES) {
       throw new Error(buildFailureReport(params.retryState.failureHistory, params.config.providerConfig), {
