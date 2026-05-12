@@ -94,6 +94,7 @@ function AppShell() {
   const [manualUpdateDialogOpen, setManualUpdateDialogOpen] = useState(false);
   const shownHomeUpdateVersionRef = useRef<string | null>(null);
   const hasAvailableUpdate = updateStatus === "available" && updateSummary;
+  const isBookLibraryRoute = location.pathname === "/";
   const updateDialogOpen = homeUpdateDialogOpen || manualUpdateDialogOpen;
 
   useEffect(() => {
@@ -186,7 +187,7 @@ function AppShell() {
           </main>
         </div>
       </div>
-      {hasAvailableUpdate ? (
+      {hasAvailableUpdate && isBookLibraryRoute ? (
         <FloatingUpdateButton
           mobileRuntime={mobileRuntime}
           version={updateSummary.version}

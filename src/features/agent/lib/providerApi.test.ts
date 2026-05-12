@@ -213,11 +213,71 @@ describe("streamProviderRequestViaTauri", () => {
     });
 
     const text = await readResponseText(response);
-    expect(text).toContain("\"content\":\"先读取角色设定。\"");
+    expect(text).not.toContain("\"content\":\"先读取角色设定。\"");
     expect(text).toContain("\"tool_calls\"");
     expect(text).toContain("\"id\":\"call_read\"");
     expect(text).toContain("\"name\":\"read\"");
     expect(text).toContain("\"finish_reason\":\"tool_calls\"");
+  });
+
+  it("缺失 finish_reason 的非流式工具调用会忽略 tool_calls 并保留 content", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(JSON.stringify({
+          id: "chatcmpl-object-tools",
+          object: "chat.completion",
+          created: 1778581721,
+          model: "gpt-5.4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "先直接落盘。",
+                tool_calls: [
+                  {
+                    id: "call_write",
+                    type: "function",
+                    function: {
+                      name: "write",
+                      arguments: {
+                        content: "# 第001章\n\n正文",
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }))),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(text).toContain("\"content\":\"先直接落盘。\"");
+    expect(text).not.toContain("\"tool_calls\"");
+    expect(text).not.toContain("\"id\":\"call_write\"");
+    expect(text).toContain("\"finish_reason\":\"stop\"");
   });
 
   it("即使响应头标成 SSE，也会识别完整 chat.completion JSON 并转换", async () => {
@@ -280,9 +340,135 @@ describe("streamProviderRequestViaTauri", () => {
 
     const text = await readResponseText(response);
     expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
-    expect(text).toContain("\"content\":\"好的，用户要求继续执行。\"");
+    expect(text).not.toContain("\"content\":\"好的，用户要求继续执行。\"");
     expect(text).toContain("\"tool_calls\"");
     expect(text).toContain("\"completion_tokens\"");
+  });
+
+  it("SSE data 包完整 chat.completion JSON 时也转换为可执行工具流", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      const rawCompletion = JSON.stringify({
+        id: "resp-tools-in-data",
+        object: "chat.completion",
+        created: 1778581721,
+        model: "gpt-5.4",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "先直接落盘第001章正文。",
+              tool_calls: [
+                {
+                  id: "call_write_chapter",
+                  type: "function",
+                  function: {
+                    name: "write",
+                    arguments: "{\"content\":\"# 第001章\\n\\n正文\",\"path\":\"正文/第001章.md\"}",
+                  },
+                  index: 0,
+                },
+              ],
+              reasoning_content: "准备写入章节。",
+            },
+          },
+        ],
+      });
+
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(`data: ${rawCompletion}\n\n`)),
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode("data: [DONE]\n\n")),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    expect(text).toContain("\"object\":\"chat.completion.chunk\"");
+    expect(text).toContain("\"content\":\"先直接落盘第001章正文。\"");
+    expect(text).not.toContain("\"tool_calls\"");
+    expect(text).not.toContain("\"id\":\"call_write_chapter\"");
+    expect(text).toContain("\"finish_reason\":\"stop\"");
+  });
+
+  it("缺失 finish_reason 且没有 content 时会用 choice.reasoning_content 作为续跑内容", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(JSON.stringify({
+          id: "chatcmpl-reasoning-invalid-tools",
+          object: "chat.completion",
+          created: 1778592129,
+          model: "gpt-5.4",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                tool_calls: [
+                  {
+                    id: "call_invalid_write",
+                    type: "function",
+                    function: {
+                      name: "write",
+                      arguments: "{\"action\":\"append\",\"content\":\"正文\"}",
+                    },
+                  },
+                ],
+              },
+              reasoning_content: "**Planning project details** I need to draft additional text and continue the chapter.",
+            },
+          ],
+        }))),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(text).toContain("I need to draft additional text");
+    expect(text).not.toContain("\"tool_calls\"");
+    expect(text).toContain("\"finish_reason\":\"stop\"");
   });
 
   it("非流式 chat.completion JSON 只有 reasoning_content 时也输出内容", async () => {
@@ -377,6 +563,36 @@ describe("streamProviderRequestViaTauri", () => {
     expect(mockInvoke).toHaveBeenCalledWith("cancel_provider_stream", expect.objectContaining({
       requestId: expect.stringMatching(/^provider-stream-/),
     }));
+  });
+
+  it("普通响应体取消不会误取消后端请求", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode("data: {\"choices\":[{\"delta\":{\"content\":\"A\"}}]}\n\n")),
+      });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: "{}",
+      url: "https://example.com/v1/chat/completions",
+    });
+    await response.body?.cancel();
+
+    expect(mockInvoke).not.toHaveBeenCalledWith("cancel_provider_stream", expect.anything());
   });
 
   it("abort 早于事件监听完成时不会再启动后端流", async () => {

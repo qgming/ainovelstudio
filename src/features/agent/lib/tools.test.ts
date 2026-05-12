@@ -119,12 +119,48 @@ describe("createWorkspaceToolset", () => {
     ]);
   });
 
-  it("write 写入文件后会触发工作区刷新回调", async () => {
+  it("create 创建空白文件后会触发工作区刷新回调", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件不存在"));
+
+    const result = await toolset.create.execute({
+      path: "章节/第一章.md",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第一章.md",
+      "",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, summary: "已创建空白文件 章节/第一章.md" });
+  });
+
+  it("create 遇到非缺失读取错误时不会写入空文件", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件文本编码无法识别，请转换为 UTF-8 或 GBK 后重试。"));
+
+    await expect(toolset.create.execute({
+      path: "章节/第一章.md",
+    })).rejects.toThrow("文件文本编码无法识别");
+
+    expect(mockWriteWorkspaceTextFile).not.toHaveBeenCalled();
+    expect(onWorkspaceMutated).not.toHaveBeenCalled();
+  });
+
+  it("write 追加写入已有文件后会触发工作区刷新回调", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue("旧内容\n");
 
     const result = await toolset.write.execute({
+      action: "append",
       content: "新内容",
       path: "章节/第一章.md",
     });
@@ -132,11 +168,11 @@ describe("createWorkspaceToolset", () => {
     expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
       rootPath,
       "章节/第一章.md",
-      "新内容",
+      "旧内容\n新内容",
       undefined,
     );
     expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ ok: true, summary: "已写入 章节/第一章.md" });
+    expect(result).toEqual({ ok: true, summary: "已追加写入 章节/第一章.md" });
   });
 
   it("browse 可以列出目录内容", async () => {

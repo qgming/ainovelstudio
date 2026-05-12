@@ -27,7 +27,7 @@ vi.mock("./providerApi", () => ({
   probeProviderConnectionViaTauri: mockProbeProviderConnectionViaTauri,
 }));
 
-import { generateAgentText, testAgentProviderConnection } from "./modelGateway";
+import { generateAgentText, streamAgentText, testAgentProviderConnection } from "./modelGateway";
 
 describe("modelGateway", () => {
   beforeEach(() => {
@@ -173,6 +173,39 @@ describe("modelGateway", () => {
         },
       }),
     );
+  });
+
+  it("流式生成不再挂载工具特化修复器", () => {
+    mockStreamText.mockReturnValue({
+      finishReason: Promise.resolve("stop"),
+      fullStream: (async function* () {})(),
+      response: Promise.resolve({ messages: [], modelId: "gpt-5.4" }),
+      totalUsage: Promise.resolve({
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        inputTokenDetails: {},
+        outputTokenDetails: {},
+      }),
+    });
+
+    streamAgentText({
+      messages: [{ role: "user", content: "写第001章" }],
+      providerConfig: {
+        apiKey: "sk-test",
+        baseURL: "https://example.com/v1",
+        model: "gpt-5.4",
+      },
+      system: "test-system",
+      tools: {
+        write: {
+          description: "write",
+          inputSchema: {},
+        } as never,
+      },
+    });
+
+    expect(mockStreamText.mock.calls[0]?.[0]?.experimental_repairToolCall).toBeUndefined();
   });
 
   it("鉴权失败时返回 auth_error", async () => {

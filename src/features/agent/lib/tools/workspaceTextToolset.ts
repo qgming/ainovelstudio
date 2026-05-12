@@ -44,6 +44,7 @@ import {
   asPositiveInt,
   ensureString,
   getAbortContext,
+  normalizeToolPath,
   ok,
   type WorkspaceToolContext,
 } from "./shared";
@@ -63,6 +64,15 @@ function getJsonMaxChars(value: unknown) {
   return Math.min(asPositiveInt(value, 4000), 20000);
 }
 
+function normalizeWriteAction(value: unknown) {
+  return value === "replace" ? "replace" : "append";
+}
+
+function isMissingWorkspaceTextFileError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /(?:目标路径|文件).*(?:不存在|未找到)|not found/i.test(message);
+}
+
 function compactJsonOperationValues<T extends { value?: unknown }>(items: T[], maxChars: number): T[] {
   return items.map((item) =>
     "value" in item && item.value !== undefined
@@ -76,6 +86,34 @@ export function createWorkspaceTextTools({
   rootPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
+    create: {
+      description: "创建空白文本文件",
+      execute: async (input, context) => {
+        const path = normalizeToolPath(ensureString(input.path, "create.path"));
+        if (!path || path === ".") {
+          throw new Error("create.path 必须是文件相对路径。");
+        }
+        const existingContent = await readWorkspaceTextFile(
+          rootPath,
+          path,
+          getAbortContext(context),
+        ).catch((error: unknown) => {
+          if (isMissingWorkspaceTextFileError(error)) return null;
+          throw error;
+        });
+        if (existingContent !== null) {
+          throw new Error(`create 目标文件已存在：${path}。如需写入内容请使用 write 或 edit。`);
+        }
+        await writeWorkspaceTextFile(
+          rootPath,
+          path,
+          "",
+          getAbortContext(context),
+        );
+        await onWorkspaceMutated?.();
+        return ok(`已创建空白文件 ${path}`);
+      },
+    },
     read: {
       description: "读取文本文件",
       execute: async (input, context) => {
@@ -243,18 +281,27 @@ export function createWorkspaceTextTools({
       },
     },
     write: {
-      description: "整文件写入文本",
+      description: "向已有文本文件写入内容",
       execute: async (input, context) => {
         const path = ensureString(input.path, "write.path");
+        const action = normalizeWriteAction(input.action);
         const content = String(input.content ?? "");
+        const currentContent = await readWorkspaceTextFile(
+          rootPath,
+          path,
+          getAbortContext(context),
+        );
+        const nextContent = action === "replace"
+          ? content
+          : `${currentContent}${content}`;
         await writeWorkspaceTextFile(
           rootPath,
           path,
-          content,
+          nextContent,
           getAbortContext(context),
         );
         await onWorkspaceMutated?.();
-        return ok(`已写入 ${path}`);
+        return ok(action === "replace" ? `已覆盖写入 ${path}` : `已追加写入 ${path}`);
       },
     },
     json: {

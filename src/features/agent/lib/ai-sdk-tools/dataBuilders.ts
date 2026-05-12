@@ -216,7 +216,7 @@ export const DATA_TOOL_SPECS = {
   },
   path: {
     description:
-      "只处理路径结构，不写正文内容。创建空文件/文件夹、重命名、移动、删除用它；写文本用 write/edit，写 JSON 内容用 json。删除属于高风险动作，除非用户明确要求。",
+      "只处理路径结构，不写正文内容。创建文件夹、重命名、移动、删除用它；写作场景创建空白文本文件优先用 create，写文本用 write/edit，写 JSON 内容用 json。删除属于高风险动作，除非用户明确要求。",
     inputSchema: pathInputSchema,
   },
   skill: {

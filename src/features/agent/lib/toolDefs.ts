@@ -88,10 +88,16 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "对文本做局部替换、插入、追加或前置；适合改 md/txt，不需要整份重写。",
   },
   {
-    id: "write",
-    name: "整文件写入",
+    id: "create",
+    name: "创建空文件",
     description:
-      "整文件覆盖写入；适合你已经准备好完整内容时使用，缺失目录会自动创建。",
+      "创建一个空白文本文件；只负责建文件，不写内容。新章节或新资料文件先 create，再用 write append 分段写入。",
+  },
+  {
+    id: "write",
+    name: "写入文本",
+    description:
+      "向已有文本文件追加或覆盖内容；默认 append 追加，适合长正文分段落盘。新文件必须先用 create 创建空文件。",
   },
 	  {
 	    id: "json",

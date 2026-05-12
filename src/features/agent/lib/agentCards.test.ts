@@ -25,13 +25,14 @@ describe("agent cards", () => {
     expect(card?.writeScopes).toContain(".project/runs/");
   });
 
-  it("解析 YOLO card 并禁用 ask", () => {
+  it("解析 YOLO card", () => {
     const card = getBuiltinAgentCard("autopilot");
 
     expect(card?.name).toBe("YOLO 全自动目标");
-    expect(card?.banTools).toContain("ask");
+    expect(card?.banTools).toEqual([]);
     expect(card?.contextPolicyId).toBe("autopilot");
     expect(card?.tools).toContain("mode_control");
+    expect(card?.tools).toContain("create");
     expect(card?.tools).toContain("write");
   });
 
@@ -47,7 +48,7 @@ describe("agent cards", () => {
     expect(card?.tools).toContain("canon_query");
   });
 
-  it("按 card 过滤启用工具", () => {
+  it("card 策略不再按模式过滤已启用工具", () => {
     const tools = applyAgentCardToolPolicy("style-polish", [
       "read",
       "edit",
@@ -56,10 +57,10 @@ describe("agent cards", () => {
       "canon_query",
     ]);
 
-    expect(tools).toEqual(["read", "edit", "word_count", "canon_query"]);
+    expect(tools).toEqual(["read", "edit", "write", "word_count", "canon_query"]);
   });
 
-  it("YOLO 工具策略移除 ask 以保持全自动", () => {
+  it("YOLO 工具策略保留全部已启用工具", () => {
     const tools = applyAgentCardToolPolicy("autopilot", [
       "ask",
       "todo",
@@ -69,6 +70,6 @@ describe("agent cards", () => {
       "json",
     ]);
 
-    expect(tools).toEqual(["mode_control", "todo", "read", "write", "json"]);
+    expect(tools).toEqual(["ask", "todo", "mode_control", "read", "write", "json"]);
   });
 });

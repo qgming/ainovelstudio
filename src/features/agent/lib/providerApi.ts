@@ -82,18 +82,6 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function requestExpectsChatCompletionStream(request: ForwardProviderRequest) {
-  if (!request.body) return false;
-
-  try {
-    const url = new URL(request.url);
-    const body = JSON.parse(request.body) as unknown;
-    return url.pathname.endsWith("/chat/completions") && isRecord(body) && body.stream === true;
-  } catch {
-    return false;
-  }
-}
-
 function extractTextContent(value: unknown): string {
   if (typeof value === "string") return value;
   if (!Array.isArray(value)) return "";
@@ -113,8 +101,78 @@ function extractChoiceText(choice: unknown) {
   const content = extractTextContent(choice.message.content);
   if (content.trim()) return content;
 
-  const reasoningContent = choice.message.reasoning_content ?? choice.message.reasoningContent;
+  const reasoningContent =
+    choice.message.reasoning_content
+    ?? choice.message.reasoningContent
+    ?? choice.reasoning_content
+    ?? choice.reasoningContent;
   return typeof reasoningContent === "string" ? reasoningContent : "";
+}
+
+function sanitizeToolPathSegment(value: string) {
+  return value
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 48)
+    .trim();
+}
+
+function inferWritePathFromContent(content: string, toolCallId?: string) {
+  const chapterMatch = content.match(/^\s*#\s*第\s*(\d{1,4})\s*章/m);
+  if (chapterMatch) {
+    return `正文/第${chapterMatch[1].padStart(3, "0")}章.md`;
+  }
+
+  const headingMatch = content.match(/^\s*#\s+(.+)$/m);
+  if (headingMatch) {
+    const heading = sanitizeToolPathSegment(headingMatch[1]);
+    if (heading) return `正文/${heading}.md`;
+  }
+
+  return `正文/${sanitizeToolPathSegment(toolCallId ?? "") || `生成内容-${Date.now().toString(36)}`}.md`;
+}
+
+function normalizeWriteArguments(argumentsValue: JsonRecord, toolCallId?: string) {
+  if (typeof argumentsValue.content === "string" && typeof argumentsValue.path !== "string") {
+    return {
+      ...argumentsValue,
+      path: inferWritePathFromContent(argumentsValue.content, toolCallId),
+    };
+  }
+  return argumentsValue;
+}
+
+function tryParseToolArguments(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeToolArguments(toolName: string | undefined, value: unknown, toolCallId?: string) {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "{}";
+    parsed = tryParseToolArguments(trimmed);
+    if (parsed === null) {
+      parsed = toolName === "write" ? { content: trimmed } : { value: trimmed };
+    }
+  }
+
+  if (parsed === undefined) parsed = {};
+  const parsedRecord = isRecord(parsed) ? parsed : { value: parsed };
+  const normalized = toolName === "write"
+    ? normalizeWriteArguments(parsedRecord, toolCallId)
+    : parsedRecord;
+
+  try {
+    return JSON.stringify(normalized);
+  } catch {
+    return "{}";
+  }
 }
 
 function normalizeToolCall(toolCall: unknown, fallbackIndex: number): JsonRecord | null {
@@ -129,12 +187,15 @@ function normalizeToolCall(toolCall: unknown, fallbackIndex: number): JsonRecord
 
   if (isRecord(toolCall.function)) {
     const normalizedFunction: JsonRecord = {};
+    const toolName = typeof toolCall.function.name === "string" ? toolCall.function.name : undefined;
     if (typeof toolCall.function.name === "string") {
       normalizedFunction.name = toolCall.function.name;
     }
-    if (typeof toolCall.function.arguments === "string") {
-      normalizedFunction.arguments = toolCall.function.arguments;
-    }
+    normalizedFunction.arguments = normalizeToolArguments(
+      toolName,
+      toolCall.function.arguments,
+      typeof toolCall.id === "string" ? toolCall.id : undefined,
+    );
     normalized.function = normalizedFunction;
   }
 
@@ -146,6 +207,11 @@ function extractToolCalls(choice: JsonRecord) {
   return choice.message.tool_calls
     .map((toolCall, index) => normalizeToolCall(toolCall, index))
     .filter((toolCall): toolCall is JsonRecord => toolCall !== null);
+}
+
+function isToolCallsFinishReason(choice: JsonRecord) {
+  const finishReason = choice.finish_reason ?? choice.finishReason ?? choice.native_finish_reason ?? choice.nativeFinishReason;
+  return finishReason === "tool_calls" || finishReason === "tool-calls";
 }
 
 function createChatCompletionChunk(params: {
@@ -201,9 +267,9 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
 
   parsed.choices.forEach((choice, fallbackIndex) => {
     if (!isRecord(choice)) return;
-    const index = typeof choice.index === "number" ? choice.index : fallbackIndex;
-    const text = extractChoiceText(choice);
-    const toolCalls = extractToolCalls(choice);
+	    const index = typeof choice.index === "number" ? choice.index : fallbackIndex;
+	    const text = extractChoiceText(choice);
+	    const toolCalls = isToolCallsFinishReason(choice) ? extractToolCalls(choice) : [];
 
     payloads.push(createChatCompletionChunk({
       created,
@@ -214,7 +280,7 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
       model,
     }));
 
-    if (text.length > 0) {
+    if (text.length > 0 && toolCalls.length === 0) {
       payloads.push(createChatCompletionChunk({
         created,
         delta: { content: text },
@@ -250,6 +316,47 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
   return payloads.length > 0 ? encodeSsePayload(payloads) : null;
 }
 
+function extractSseDataPayloads(body: string) {
+  const payloads: string[] = [];
+  let current: string[] = [];
+
+  for (const line of body.replace(/\r\n/g, "\n").split("\n")) {
+    if (!line.trim()) {
+      if (current.length > 0) {
+        payloads.push(current.join("\n"));
+        current = [];
+      }
+      continue;
+    }
+
+    if (line.startsWith("data:")) {
+      current.push(line.slice(5).trimStart());
+    }
+  }
+
+  if (current.length > 0) payloads.push(current.join("\n"));
+  return payloads.filter((payload) => payload.trim() && payload.trim() !== "[DONE]");
+}
+
+function convertChatCompletionSseToSse(body: string): Uint8Array | null {
+  const payloads = extractSseDataPayloads(body);
+  if (payloads.length !== 1) return null;
+  return convertChatCompletionJsonToSse(payloads[0]);
+}
+
+function sseLooksLikeChatCompletionJson(body: string) {
+  if (!body.replace(/\r\n/g, "\n").includes("\n\n")) return "pending" as const;
+  const payloads = extractSseDataPayloads(body);
+  if (payloads.length !== 1) return false;
+
+  try {
+    const parsed = JSON.parse(payloads[0]) as unknown;
+    return isRecord(parsed) && parsed.object === "chat.completion";
+  } catch {
+    return false;
+  }
+}
+
 function createBufferedResponse(params: {
   body: Uint8Array;
   headers: Record<string, string>;
@@ -270,7 +377,11 @@ function createBufferedResponse(params: {
 function sniffBufferedStreamBody(chunks: Uint8Array[]) {
   const text = new TextDecoder().decode(mergeChunks(chunks)).trimStart();
   if (!text) return "pending" as const;
-  if (/^(data|event|id|retry):/.test(text)) return "sse" as const;
+  if (/^(data|event|id|retry):/.test(text)) {
+    const sseBodyType = sseLooksLikeChatCompletionJson(text);
+    if (sseBodyType === "pending") return "pending" as const;
+    return sseBodyType ? "sse-chat-completion-json" as const : "sse" as const;
+  }
   if (text.startsWith("{") || text.startsWith("[")) return "json" as const;
   return "passthrough" as const;
 }
@@ -290,6 +401,7 @@ export async function streamProviderRequestViaTauri(
   let hasAborted = false;
   let bufferedJsonChunks: Uint8Array[] | null = null;
   let bufferedResponseMeta: { headers: Record<string, string>; status: number } | null = null;
+  let providerStreamClosed = false;
   let rejectStart: ((reason?: unknown) => void) | null = null;
   let unlisten: UnlistenFn | null = null;
   let abortHandler: (() => void) | null = null;
@@ -309,6 +421,9 @@ export async function streamProviderRequestViaTauri(
     },
     cancel() {
       cleanup();
+      if (providerStreamClosed || !abortSignal?.aborted) {
+        return undefined;
+      }
       return cancelProviderStream(requestId);
     },
   });
@@ -339,10 +454,7 @@ export async function streamProviderRequestViaTauri(
         if (getProviderStreamRequestId(payload) !== requestId) return;
 
         if (payload.type === "start") {
-          if (
-            payload.ok
-            && requestExpectsChatCompletionStream(request)
-          ) {
+          if (payload.ok) {
             bufferedJsonChunks = [];
             bufferedResponseMeta = { headers: payload.headers, status: payload.status };
             return;
@@ -361,6 +473,9 @@ export async function streamProviderRequestViaTauri(
           if (bufferedJsonChunks) {
             bufferedJsonChunks.push(chunk);
             const sniffedBodyType = sniffBufferedStreamBody(bufferedJsonChunks);
+            if (sniffedBodyType === "sse-chat-completion-json") {
+              return;
+            }
             if (sniffedBodyType === "sse" || sniffedBodyType === "passthrough") {
               resolvePassthroughStream(
                 bufferedResponseMeta?.headers ?? {},
@@ -375,11 +490,12 @@ export async function streamProviderRequestViaTauri(
         }
 
         if (payload.type === "end") {
+          providerStreamClosed = true;
           cleanup();
           if (bufferedJsonChunks && bufferedResponseMeta) {
             const merged = mergeChunks(bufferedJsonChunks);
             const rawBody = new TextDecoder().decode(merged);
-            const converted = convertChatCompletionJsonToSse(rawBody);
+            const converted = convertChatCompletionJsonToSse(rawBody) ?? convertChatCompletionSseToSse(rawBody);
             if (converted) {
               const headers: Record<string, string> = {
                 ...bufferedResponseMeta.headers,
@@ -408,6 +524,7 @@ export async function streamProviderRequestViaTauri(
           return;
         }
 
+        providerStreamClosed = true;
         handleError(payload.message);
       });
 

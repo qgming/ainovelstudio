@@ -232,6 +232,30 @@ describe("App shell", () => {
     expect(dialog).toHaveTextContent("发现 0.2.4");
     expect(dialog).toHaveTextContent("更新内容");
     expect(dialog).toHaveTextContent("修复更新日志显示");
+
+    fireEvent.click(screen.getByRole("button", { name: "稍后再说" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "查看 0.2.4 更新" })).toBeInTheDocument();
+  });
+
+  it("非书架页面检测到新版本时不会显示浮动更新入口", async () => {
+    window.location.hash = "#/setting";
+    updateStoreState.status = "available";
+    updateStoreState.updateSummary = {
+      currentVersion: "0.2.3",
+      notes: "### 更新内容\n\n- 修复更新日志显示",
+      packageKind: "exe",
+      publishedAt: null,
+      version: "0.2.4",
+    } as never;
+
+    render(<App />);
+
+    expect(await screen.findByLabelText("默认 AGENTS 编辑器", {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看 0.2.4 更新" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("关闭请求会退出应用", async () => {
@@ -539,6 +563,7 @@ describe("App shell", () => {
 
     expect(screen.getByText("读取文件")).toBeInTheDocument();
     expect(screen.getByText("局部编辑")).toBeInTheDocument();
+    expect(screen.getByText("创建空文件")).toBeInTheDocument();
     expect(screen.getByText("搜索内容")).toBeInTheDocument();
     expect(screen.getByText("浏览工作区")).toBeInTheDocument();
   });
