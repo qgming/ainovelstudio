@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Copy, Eye, EyeOff, Save } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 import { Button } from "@shared/ui/button";
+import { countNovelWords, formatNovelWordCount } from "@features/books/lib/novelWordCount";
 
 type BookEditorPanelProps = {
   activeFileName: string | null;
@@ -22,6 +24,8 @@ export function BookEditorPanel({
 }: BookEditorPanelProps) {
   const supportsMarkdownPreview = activeFileName?.toLowerCase().endsWith(".md") ?? false;
   const [isMarkdownPreview, setIsMarkdownPreview] = useState(false);
+  const novelWordCount = useMemo(() => countNovelWords(content), [content]);
+  const novelWordCountLabel = formatNovelWordCount(novelWordCount);
 
   useEffect(() => {
     setIsMarkdownPreview(false);
@@ -29,6 +33,7 @@ export function BookEditorPanel({
 
   const copyContent = async () => {
     await navigator.clipboard.writeText(content);
+    toast.success("已复制");
   };
 
   if (!activeFileName) {
@@ -49,10 +54,19 @@ export function BookEditorPanel({
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel">
       <header className="editor-panel-header">
-        <h2 className="editor-panel-title text-[13px]">
-          {activeFileName}
-        </h2>
-        <div className="editor-toolbar">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="editor-panel-title min-w-0 text-[13px]">
+            {activeFileName}
+          </h2>
+          <span
+            aria-label="当前内容字数"
+            className="editor-status-chip shrink-0 bg-background/45"
+            title={`当前内容字数：${novelWordCountLabel}`}
+          >
+            {novelWordCountLabel}
+          </span>
+        </div>
+        <div className="editor-toolbar shrink-0">
           {isDirty ? (
             <span className="editor-status-chip" data-tone="warning">未保存</span>
           ) : null}

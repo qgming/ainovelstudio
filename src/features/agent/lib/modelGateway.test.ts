@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockCreateOpenAICompatible, mockGenerateText, mockProbeProviderConnectionViaTauri, mockStreamText } = vi.hoisted(() => ({
+const { mockCreateOpenAICompatible, mockProbeProviderConnectionViaTauri, mockStreamText } = vi.hoisted(() => ({
   mockCreateOpenAICompatible: vi.fn(),
-  mockGenerateText: vi.fn(),
   mockProbeProviderConnectionViaTauri: vi.fn(),
   mockStreamText: vi.fn(),
 }));
@@ -12,7 +11,6 @@ vi.mock("ai", async () => {
   return {
     ...actual,
     defineTool: vi.fn(),
-    generateText: mockGenerateText,
     isLoopFinished: vi.fn(),
     streamText: mockStreamText,
     tool: vi.fn(),
@@ -29,9 +27,45 @@ vi.mock("./providerApi", () => ({
 
 import { generateAgentText, streamAgentText, testAgentProviderConnection } from "./modelGateway";
 
+function createStreamTextResult(text = "你好") {
+  return {
+    finishReason: Promise.resolve("stop"),
+    fullStream: (async function* () {
+      if (text) {
+        yield { type: "text-delta", text };
+      }
+    })(),
+    response: Promise.resolve({ messages: [], modelId: "gpt-4.1" }),
+    totalUsage: Promise.resolve({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      inputTokenDetails: {},
+      outputTokenDetails: {},
+    }),
+  };
+}
+
+function createStreamTextResultWithTrailingDecodeError(text = "摘要正文") {
+  return {
+    finishReason: Promise.resolve("stop"),
+    fullStream: (async function* () {
+      yield { type: "text-delta", text };
+      throw new Error("error decoding response body");
+    })(),
+    response: Promise.resolve({ messages: [], modelId: "gpt-4.1" }),
+    totalUsage: Promise.resolve({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      inputTokenDetails: {},
+      outputTokenDetails: {},
+    }),
+  };
+}
+
 describe("modelGateway", () => {
   beforeEach(() => {
-    mockGenerateText.mockReset();
     mockProbeProviderConnectionViaTauri.mockReset();
     mockStreamText.mockReset();
     mockCreateOpenAICompatible.mockReset();
@@ -118,11 +152,9 @@ describe("modelGateway", () => {
   });
 
   it("启用模拟 OpenCode 时注入额外请求头", async () => {
-    mockGenerateText.mockResolvedValue({
-      text: "你好",
-    });
+    mockStreamText.mockReturnValue(createStreamTextResult("你好"));
 
-    await generateAgentText({
+    await expect(generateAgentText({
       prompt: "你好",
       providerConfig: {
         apiKey: "sk-test",
@@ -131,7 +163,7 @@ describe("modelGateway", () => {
         simulateOpencodeBeta: true,
       },
       system: "test-system",
-    });
+    })).resolves.toBe("你好");
 
     expect(mockCreateOpenAICompatible).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -147,10 +179,39 @@ describe("modelGateway", () => {
     );
   });
 
+  it("非流式生成遇到非法 Base URL 时返回清晰配置错误", async () => {
+    await expect(
+      generateAgentText({
+        prompt: "压缩上下文",
+        providerConfig: {
+          apiKey: "sk-test",
+          baseURL: "not-a-url",
+          model: "gpt-4.1",
+        },
+        system: "test-system",
+      }),
+    ).rejects.toThrow("Base URL 格式无效，请填写完整地址。");
+
+    expect(mockCreateOpenAICompatible).not.toHaveBeenCalled();
+    expect(mockStreamText).not.toHaveBeenCalled();
+  });
+
+  it("非流式生成已有文本时容忍响应体尾部解码错误", async () => {
+    mockStreamText.mockReturnValue(createStreamTextResultWithTrailingDecodeError("压缩摘要"));
+
+    await expect(generateAgentText({
+      prompt: "压缩上下文",
+      providerConfig: {
+        apiKey: "sk-test",
+        baseURL: "https://example.com/v1",
+        model: "gpt-4.1",
+      },
+      system: "test-system",
+    })).resolves.toBe("压缩摘要");
+  });
+
   it("启用思考模式时通过 providerOptions 注入 reasoning_effort", async () => {
-    mockGenerateText.mockResolvedValue({
-      text: "你好",
-    });
+    mockStreamText.mockReturnValue(createStreamTextResult("你好"));
 
     await generateAgentText({
       prompt: "你好",
@@ -164,7 +225,7 @@ describe("modelGateway", () => {
       system: "test-system",
     });
 
-    expect(mockGenerateText).toHaveBeenCalledWith(
+    expect(mockStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
         providerOptions: {
           ainovelstudioProvider: {
@@ -206,6 +267,23 @@ describe("modelGateway", () => {
     });
 
     expect(mockStreamText.mock.calls[0]?.[0]?.experimental_repairToolCall).toBeUndefined();
+  });
+
+  it("流式生成遇到非法 Base URL 时返回清晰配置错误", () => {
+    expect(() =>
+      streamAgentText({
+        messages: [{ role: "user", content: "写第001章" }],
+        providerConfig: {
+          apiKey: "sk-test",
+          baseURL: "not-a-url",
+          model: "gpt-5.4",
+        },
+        system: "test-system",
+      }),
+    ).toThrow("Base URL 格式无效，请填写完整地址。");
+
+    expect(mockCreateOpenAICompatible).not.toHaveBeenCalled();
+    expect(mockStreamText).not.toHaveBeenCalled();
   });
 
   it("鉴权失败时返回 auth_error", async () => {

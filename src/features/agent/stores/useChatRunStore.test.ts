@@ -77,6 +77,7 @@ vi.mock("@features/agent/lib/session", () => ({
 import { appendChatEntry, createChatSession, initializeChatStorage } from "@features/agent/chat/api";
 import { cancelToolRequests } from "@features/books/api/bookWorkspaceApi";
 import { resolveManualTurnContext, type ManualTurnContextPayload } from "@features/agent/lib/manualTurnContext";
+import { readAgentSettings } from "@features/settings/api/agentSettingsApi";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
 import { useChatRunStore as useAgentStore } from "./useChatRunStore";
 
@@ -148,6 +149,44 @@ describe("useChatRunStore", () => {
     expect(abortController.signal.aborted).toBe(true);
     expect(useAgentStore.getState().inflightToolRequestIds).toEqual([]);
     expect(useAgentStore.getState().abortController).toBeNull();
+  });
+
+  it("手动压缩上下文前会先加载已保存的模型配置", async () => {
+    useAgentSettingsStore.getState().reset();
+    vi.mocked(readAgentSettings).mockResolvedValueOnce({
+      config: {
+        apiKey: "saved-key",
+        baseURL: "https://saved.example/v1",
+        model: "saved-model",
+      },
+      enabledTools: {},
+      modelConfigPresets: [],
+      providerPresets: [],
+    });
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      entriesBySession: { "session-1": [] },
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    await useAgentStore.getState().compactSession();
+
+    expect(readAgentSettings).toHaveBeenCalled();
+    expect(useAgentSettingsStore.getState().config).toMatchObject({
+      apiKey: "saved-key",
+      baseURL: "https://saved.example/v1",
+      model: "saved-model",
+    });
+    expect(useAgentStore.getState().errorMessage).toBeNull();
+    expect(useAgentStore.getState().isCompacting).toBe(false);
   });
 
   it("sendMessage 会在准备阶段前立即进入运行态", async () => {

@@ -2,12 +2,12 @@ import { cancelToolRequests } from "@features/books/api/bookWorkspaceApi";
 import { createChatSession, initializeChatStorage, setChatDraft } from "@features/agent/chat/api";
 import { getCompactionCount } from "@features/agent/chat/entries";
 import { isPlaceholderOnly } from "@features/agent/chat/sessionRuntime";
-import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
 import {
   applyPersistedSummary,
   buildInitialState,
   DEFAULT_CHAT_BOOK_ID,
   ensureSessionState,
+  ensureAgentSettingsReady,
   formatAgentError,
   selectIsAgentRunActive,
 } from "./helpers";
@@ -85,11 +85,12 @@ export function createChatRuntimeController(access: ChatRunStoreAccess) {
     const entries = access.get().entriesBySession[sessionId] ?? [];
     access.set({ isCompacting: true, errorMessage: null });
     try {
+      const settings = await ensureAgentSettingsReady();
       const result = await compactChatEntries({
         bookId: access.get().currentBookId,
         entries,
         messages: access.get().messagesBySession[sessionId] ?? [],
-        providerConfig: useAgentSettingsStore.getState().config,
+        providerConfig: settings.config,
         sessionId,
       });
       if (!result) {

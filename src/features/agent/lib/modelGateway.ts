@@ -1,9 +1,13 @@
-import { generateText, isLoopFinished, stepCountIs, streamText, tool as defineTool } from "ai";
+import { isLoopFinished, stepCountIs, streamText, tool as defineTool } from "ai";
 import type { ModelMessage, ToolSet } from "ai";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import type { AgentUsage } from "./types";
 import { createProvider } from "./providerRequest";
-import { buildProviderOptions, normalizeProviderConfig } from "./model-gateway/providerConfig";
+import {
+  assertProviderConfigReady,
+  buildProviderOptions,
+  normalizeProviderConfig,
+} from "./model-gateway/providerConfig";
 export { testAgentProviderConnection } from "./model-gateway/providerProbe";
 export type {
   ProviderConnectionTestResult,
@@ -17,18 +21,32 @@ export type AgentTextGenerationInput = {
   system: string;
 };
 
+function isResponseBodyDecodeError(error: unknown) {
+  return error instanceof Error && error.message.includes("error decoding response body");
+}
+
 /** 非流式文本生成（子代理等场景） */
 export async function generateAgentText({ prompt, providerConfig, system }: AgentTextGenerationInput) {
-  const normalizedConfig = normalizeProviderConfig(providerConfig);
-  const provider = createProvider(normalizedConfig);
-
-  const { text } = await generateText({
-    model: provider(normalizedConfig.model),
-    prompt,
-    providerOptions: buildProviderOptions(normalizedConfig),
+  const result = streamAgentText({
+    messages: [{ role: "user", content: prompt }],
+    providerConfig,
+    singleStep: true,
     system,
   });
 
+  let text = "";
+  try {
+    for await (const part of result.fullStream) {
+      if (part.type === "text-delta") {
+        text += part.text;
+      }
+    }
+  } catch (error) {
+    if (isResponseBodyDecodeError(error) && text.trim()) {
+      return text;
+    }
+    throw error;
+  }
   return text;
 }
 
@@ -127,6 +145,7 @@ export function streamAgentText({
   tools,
 }: StreamAgentTextInput): StreamAgentTextResult {
   const normalizedConfig = normalizeProviderConfig(providerConfig);
+  assertProviderConfigReady(normalizedConfig);
   const provider = createProvider(normalizedConfig);
 
   const result = streamText({

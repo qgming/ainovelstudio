@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { AgentMessage, AgentUsage } from "@features/agent/lib/types";
 
 type AgentContextOverviewProps = {
@@ -5,6 +6,7 @@ type AgentContextOverviewProps = {
   currentModel: string;
   isCompacting?: boolean;
   latestCompactionAt?: string | null;
+  latestCompactionSummary?: string | null;
   latestCompactionTokensBefore?: number | null;
   messages: AgentMessage[];
   onCompact?: () => void;
@@ -102,14 +104,22 @@ function buildBreakdownSegments(usage: AgentUsage | null): BreakdownSegment[] {
   ].filter((segment) => segment.value > 0);
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-1">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7b8798] dark:text-[#8b97a8]">
+    <div className="min-w-0 border-t border-border/80 py-2.5">
+      <p className="text-[11px] font-medium text-muted-foreground">
         {label}
       </p>
-      <p className="break-words text-[15px] leading-6 text-[#111827] dark:text-[#eef2f7]">{value}</p>
+      <p className="mt-1 break-words text-[13px] leading-5 text-foreground">{value}</p>
     </div>
+  );
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+      {children}
+    </p>
   );
 }
 
@@ -119,23 +129,19 @@ function ContextBreakdown({ usage }: { usage: AgentUsage | null }) {
 
   if (!usage || total <= 0) {
     return (
-      <div className="rounded-[14px] border border-[#e2e8f0] bg-white/92 p-4 dark:border-[#273142] dark:bg-[#111827]/92">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#66758a] dark:text-[#8b97a8]">
-          上下文拆分
-        </p>
-        <p className="mt-3 text-sm leading-6 text-[#718096] dark:text-[#7f8a9b]">
+      <section className="border-t border-border px-4 py-3">
+        <SectionTitle>上下文拆分</SectionTitle>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           发送第一条消息后，这里会显示最近一次模型调用的上下文占用。
         </p>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="rounded-[14px] border border-[#e2e8f0] bg-white/92 p-4 dark:border-[#273142] dark:bg-[#111827]/92">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#66758a] dark:text-[#8b97a8]">
-        上下文拆分
-      </p>
-      <div className="mt-3 h-3 overflow-hidden rounded-full bg-[#e2e8f0] dark:bg-[#1f2937]">
+    <section className="border-t border-border px-4 py-3">
+      <SectionTitle>上下文拆分</SectionTitle>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
         <div className="flex h-full w-full">
           {segments.map((segment) => (
             <div
@@ -148,15 +154,38 @@ function ContextBreakdown({ usage }: { usage: AgentUsage | null }) {
       </div>
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
         {segments.map((segment) => (
-          <div key={segment.label} className="inline-flex items-center gap-2 text-xs text-[#667085] dark:text-[#9aa4b2]">
-            <span className={`h-3 w-3 rounded-full ${segment.colorClassName}`} />
+          <div key={segment.label} className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <span className={`h-2.5 w-2.5 rounded-full ${segment.colorClassName}`} />
             <span>
               {segment.label} {((segment.value / total) * 100).toFixed(1)}%
             </span>
           </div>
         ))}
       </div>
-    </div>
+    </section>
+  );
+}
+
+function CompactionSummary({
+  latestCompactionSummary,
+}: {
+  latestCompactionSummary?: string | null;
+}) {
+  const summary = latestCompactionSummary?.trim();
+
+  return (
+    <section className="border-t border-border px-4 py-3">
+      <SectionTitle>压缩内容</SectionTitle>
+      {summary ? (
+        <div className="mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap border-l border-border pl-3 text-xs leading-6 text-foreground">
+          {summary}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          暂无压缩内容。压缩上下文后，这里会显示保留下来的会话摘要。
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -165,6 +194,7 @@ export function AgentContextOverview({
   currentModel,
   isCompacting = false,
   latestCompactionAt,
+  latestCompactionSummary,
   latestCompactionTokensBefore,
   messages,
   onCompact,
@@ -181,29 +211,30 @@ export function AgentContextOverview({
   const modelName = latestUsage?.modelId || currentModel.trim() || "未配置模型";
 
   return (
-    <div className="space-y-3 p-1">
-      <div className="rounded-[14px] border border-[#e2e8f0] bg-white/92 p-4 dark:border-[#273142] dark:bg-[#111827]/92">
-        <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-          <MetricCard label="会话" value={sessionTitle || "新对话"} />
-          <MetricCard label="消息数" value={formatCount(visibleMessages.length)} />
-          <MetricCard label="模型" value={modelName} />
-          <MetricCard label="模型调用" value={formatCount(usageList.length)} />
-          <MetricCard label="创建时间" value={formatEpoch(sessionCreatedAt)} />
-          <MetricCard label="最后活动" value={formatEpoch(sessionUpdatedAt)} />
-          <MetricCard label="用户消息" value={formatCount(userMessageCount)} />
-          <MetricCard label="助手消息" value={formatCount(assistantMessageCount)} />
-          <MetricCard label="本轮总 token" value={formatCount(latestUsage?.totalTokens ?? 0)} />
-          <MetricCard label="本轮输入 token" value={formatCount(latestUsage?.inputTokens ?? 0)} />
-          <MetricCard label="本轮输出 token" value={formatCount(latestUsage?.outputTokens ?? 0)} />
-          <MetricCard label="推理 token" value={formatCount(latestUsage?.reasoningTokens ?? 0)} />
-          <MetricCard
+    <div className="max-h-[min(72vh,42rem)] overflow-y-auto py-1">
+      <section className="px-4 pb-3">
+        <SectionTitle>会话参数</SectionTitle>
+        <div className="mt-2 grid grid-cols-2 gap-x-5">
+          <MetricItem label="会话" value={sessionTitle || "新对话"} />
+          <MetricItem label="消息数" value={formatCount(visibleMessages.length)} />
+          <MetricItem label="模型" value={modelName} />
+          <MetricItem label="模型调用" value={formatCount(usageList.length)} />
+          <MetricItem label="创建时间" value={formatEpoch(sessionCreatedAt)} />
+          <MetricItem label="最后活动" value={formatEpoch(sessionUpdatedAt)} />
+          <MetricItem label="用户消息" value={formatCount(userMessageCount)} />
+          <MetricItem label="助手消息" value={formatCount(assistantMessageCount)} />
+          <MetricItem label="本轮总 token" value={formatCount(latestUsage?.totalTokens ?? 0)} />
+          <MetricItem label="本轮输入 token" value={formatCount(latestUsage?.inputTokens ?? 0)} />
+          <MetricItem label="本轮输出 token" value={formatCount(latestUsage?.outputTokens ?? 0)} />
+          <MetricItem label="推理 token" value={formatCount(latestUsage?.reasoningTokens ?? 0)} />
+          <MetricItem
             label="缓存 token（读/写）"
             value={`${formatCount(latestUsage?.cacheReadTokens ?? 0)} / ${formatCount(latestUsage?.cacheWriteTokens ?? 0)}`}
           />
-          <MetricCard label="会话累计 token" value={formatCount(sessionUsage.totalTokens)} />
-          <MetricCard label="压缩次数" value={formatCount(compactionCount)} />
-          <MetricCard label="最近压缩" value={formatEpoch(latestCompactionAt)} />
-          <MetricCard
+          <MetricItem label="会话累计 token" value={formatCount(sessionUsage.totalTokens)} />
+          <MetricItem label="压缩次数" value={formatCount(compactionCount)} />
+          <MetricItem label="最近压缩" value={formatEpoch(latestCompactionAt)} />
+          <MetricItem
             label="压缩前 token"
             value={formatCount(latestCompactionTokensBefore ?? 0)}
           />
@@ -211,15 +242,16 @@ export function AgentContextOverview({
         {onCompact ? (
           <button
             type="button"
-            className="mt-4 h-9 rounded-md border border-[#cbd5e1] px-3 text-sm font-medium text-[#111827] transition-colors hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#334155] dark:text-[#eef2f7] dark:hover:bg-[#1f2937]"
+            className="mt-3 h-8 rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isCompacting}
             onClick={onCompact}
           >
             {isCompacting ? "正在压缩" : "压缩上下文"}
           </button>
         ) : null}
-      </div>
+      </section>
       <ContextBreakdown usage={latestUsage} />
+      <CompactionSummary latestCompactionSummary={latestCompactionSummary} />
     </div>
   );
 }

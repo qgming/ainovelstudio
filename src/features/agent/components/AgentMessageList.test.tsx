@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BookAgentPanel } from "@features/books/components/BookAgentPanel";
 import { AgentMessageList } from "./AgentMessageList";
@@ -7,8 +7,25 @@ import { useAgentSettingsStore } from "@features/settings/stores/useAgentSetting
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
 import { useSkillsStore } from "@features/skills/stores/useSkillsStore";
 
+const { toastSuccess, writeText } = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  writeText: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: toastSuccess,
+  },
+}));
+
 describe("BookAgentPanel", () => {
   beforeEach(() => {
+    toastSuccess.mockReset();
+    writeText.mockReset();
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
     useAgentStore.getState().reset();
     useBookWorkspaceStore.setState({
       activeFilePath: null,
@@ -63,6 +80,25 @@ describe("BookAgentPanel", () => {
     expect(screen.queryByText("read_file")).not.toBeInTheDocument();
   });
 
+  it("顶部错误提示支持复制并使用线条样式", async () => {
+    useAgentStore.setState({
+      errorMessage: "模型请求失败：请检查 Base URL",
+    });
+
+    render(<BookAgentPanel width={420} />);
+
+    const alert = screen.getByRole("alert");
+    expect(alert.className).toContain("border-l");
+    expect(alert.className).not.toContain("bg-destructive/10");
+
+    fireEvent.click(screen.getByRole("button", { name: "复制错误信息" }));
+
+    expect(writeText).toHaveBeenCalledWith("模型请求失败：请检查 Base URL");
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("错误信息已复制");
+    });
+  });
+
   it("YOLO 模式设定目标后在顶部显示目标信息", () => {
     useAgentStore.setState({
       activeModeId: "autopilot",
@@ -93,6 +129,24 @@ describe("BookAgentPanel", () => {
     });
     useAgentStore.setState({
       activeSessionId: "session-1",
+      compactionCount: 1,
+      entriesBySession: {
+        "session-1": [
+          {
+            id: "compaction-1",
+            seq: 1,
+            entryType: "compaction",
+            createdAt: "1714557500",
+            payload: {
+              summary: "压缩摘要：主角已经抵达北境，下一步需要收束伏笔。",
+              tokensBefore: 99103,
+              createdAt: "1714557500",
+            },
+          },
+        ],
+      },
+      latestCompactionAt: "1714557500",
+      latestCompactionTokensBefore: 99103,
       run: {
         id: "session-1",
         status: "completed",
@@ -148,10 +202,12 @@ describe("BookAgentPanel", () => {
 
     expect(screen.getByText("北境收束")).toBeInTheDocument();
     expect(screen.getByText("mimo-v2-pro-free")).toBeInTheDocument();
-    expect(screen.getAllByText("99,103")).toHaveLength(2);
+    expect(screen.getAllByText("99,103")).toHaveLength(3);
     expect(screen.getByText("98,752 / 0")).toBeInTheDocument();
     expect(screen.getByText("上下文拆分")).toBeInTheDocument();
     expect(screen.getByText(/缓存命中 99.6%/)).toBeInTheDocument();
+    expect(screen.getByText("压缩内容")).toBeInTheDocument();
+    expect(screen.getByText("压缩摘要：主角已经抵达北境，下一步需要收束伏笔。")).toBeInTheDocument();
   });
 
   it("支持打开技能选择器", () => {

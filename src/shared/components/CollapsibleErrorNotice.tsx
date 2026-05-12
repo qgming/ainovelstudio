@@ -1,5 +1,6 @@
-import { AlertCircle, ChevronDown, X } from "lucide-react";
+import { AlertCircle, ChevronDown, Copy, X } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@shared/ui/button";
 import { cn } from "@shared/utils";
 
@@ -16,10 +17,15 @@ export function CollapsibleErrorNotice({
 }: CollapsibleErrorNoticeProps) {
   const [expanded, setExpanded] = useState(false);
 
+  const copyMessage = async () => {
+    await navigator.clipboard.writeText(message);
+    toast.success("错误信息已复制");
+  };
+
   return (
     <div
       className={cn(
-        "flex shrink-0 items-start gap-3 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive",
+        "flex shrink-0 items-start gap-3 border-l border-destructive/45 px-3 py-2 text-sm text-destructive",
         className,
       )}
       role="alert"
@@ -41,6 +47,17 @@ export function CollapsibleErrorNotice({
         </span>
       </button>
       <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          aria-label="复制错误信息"
+          title="复制错误信息"
+          onClick={() => void copyMessage()}
+          variant="ghost"
+          size="icon-xs"
+          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
         <Button
           type="button"
           aria-label={expanded ? "收起错误详情" : "展开错误详情"}
@@ -74,4 +91,3 @@ export function CollapsibleErrorNotice({
     </div>
   );
 }
-

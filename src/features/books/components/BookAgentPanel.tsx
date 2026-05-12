@@ -14,6 +14,7 @@ import { AgentComposer, DEFAULT_AGENT_COMPOSER_MODES } from "@features/agent/com
 import { AgentContextOverview } from "@features/agent/components/AgentContextOverview";
 import { AgentInfoDisplay } from "@features/agent/components/AgentInfoDisplay";
 import { AgentMessageList } from "@features/agent/components/AgentMessageList";
+import { getLatestCompactionEntry } from "@features/agent/chat/entries";
 import { selectIsAgentRunActive } from "@features/agent/stores/chat-run/helpers";
 import { useChatRunStore } from "@features/agent/stores/useChatRunStore";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
@@ -90,6 +91,11 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const isCompacting = useChatRunStore((state) => state.isCompacting);
   const isHistoryOpen = useChatRunStore((state) => state.isHistoryOpen);
   const latestCompactionAt = useChatRunStore((state) => state.latestCompactionAt);
+  const latestCompactionSummary = useChatRunStore((state) => {
+    const sessionId = state.activeSessionId;
+    if (!sessionId) return null;
+    return getLatestCompactionEntry(state.entriesBySession[sessionId] ?? [])?.payload.summary ?? null;
+  });
   const latestCompactionTokensBefore = useChatRunStore((state) => state.latestCompactionTokensBefore);
   const openHistory = useChatRunStore((state) => state.openHistory);
   const planningState = useChatRunStore((state) => state.planningState);
@@ -157,12 +163,13 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
                 <Gauge className="h-4 w-4" />
               </ToolbarButton>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[24rem] p-2">
+            <DropdownMenuContent align="end" className="w-[25rem] max-w-[calc(100vw-1.5rem)] p-0">
               <AgentContextOverview
                 compactionCount={compactionCount}
                 currentModel={currentModel}
                 isCompacting={isCompacting}
                 latestCompactionAt={latestCompactionAt}
+                latestCompactionSummary={latestCompactionSummary}
                 latestCompactionTokensBefore={latestCompactionTokensBefore}
                 messages={run.messages}
                 onCompact={() => void compactSession("manual")}
