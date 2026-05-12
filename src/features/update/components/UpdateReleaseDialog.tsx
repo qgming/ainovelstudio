@@ -1,4 +1,3 @@
-import packageJson from "../../../../package.json";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { normalizeVersionLabel } from "@features/update/lib/version";
@@ -7,13 +6,10 @@ import { Button } from "@shared/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@shared/ui/dialog";
-
-const APP_VERSION = packageJson.version;
 
 const markdownComponents = {
   a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
@@ -61,23 +57,6 @@ const markdownComponents = {
   ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
 } as const;
 
-function formatPublishedAt(value: string | null) {
-  if (!value) {
-    return "未提供";
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function getPackageLabel(packageKind: UpdateSummary["packageKind"]) {
-  return packageKind === "apk" ? "APK" : "EXE";
-}
-
 type UpdateReleaseDialogProps = {
   onDownload: () => void;
   onOpenChange: (open: boolean) => void;
@@ -98,40 +77,19 @@ export function UpdateReleaseDialog({
           <DialogTitle>
             {summary ? `发现 ${normalizeVersionLabel(summary.version)}` : "发现新版本"}
           </DialogTitle>
-          <DialogDescription>
-            当前版本 {normalizeVersionLabel(APP_VERSION)}
-            {summary ? `，发布时间 ${formatPublishedAt(summary.publishedAt)}` : ""}
-          </DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-5">
-          {summary ? (
-            <div className="rounded-lg border border-border bg-panel-subtle px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {normalizeVersionLabel(summary.version)}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    安装包类型：{getPackageLabel(summary.packageKind ?? null)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">更新日志</p>
-            <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm leading-6 text-muted-foreground">
-              {summary?.notes?.trim() ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {summary.notes.trim()}
-                </ReactMarkdown>
-              ) : (
-                <p>本次版本暂未提供更新日志。</p>
-              )}
-            </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+          <div className="text-sm leading-6 text-muted-foreground">
+            {summary?.notes?.trim() ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {summary.notes.trim()}
+              </ReactMarkdown>
+            ) : (
+              <p>本次版本暂未提供更新日志。</p>
+            )}
           </div>
         </div>
-        <DialogFooter className="shrink-0">
+        <DialogFooter className="mx-0 mb-0 shrink-0 px-5 py-4">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             稍后再说
           </Button>

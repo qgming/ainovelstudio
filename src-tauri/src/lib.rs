@@ -16,9 +16,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init());
 
     #[cfg(desktop)]
-    let builder = builder
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build());
+    let builder = builder.plugin(tauri_plugin_process::init());
 
     #[cfg(desktop)]
     let builder = builder
@@ -60,6 +58,7 @@ pub fn run() {
             infrastructure::provider_proxy::forward_provider_request,
             infrastructure::provider_proxy::stream_provider_request,
             infrastructure::provider_proxy::cancel_provider_stream,
+            infrastructure::update_manifest::fetch_update_manifest,
             domains::chat::default_agent_config::initialize_default_agent_config,
             domains::chat::default_agent_config::read_default_agent_config,
             domains::chat::default_agent_config::write_default_agent_config,

@@ -73,7 +73,7 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("button", { name: "立即同步" })).not.toBeInTheDocument();
   });
 
-  it("检测到新版本时会显示位于主题切换上方的独立更新按钮", () => {
+  it("检测到新版本时不会挤占桌面侧边栏", () => {
     useUpdateStore.setState({
       autoUpdateEnabled: true,
       errorMessage: null,
@@ -91,12 +91,10 @@ describe("Sidebar", () => {
 
     renderSidebar();
 
-    const updateButton = screen.getByRole("button", { name: "查看 0.2.4 更新" });
     const themeButton = screen.getByRole("button", { name: "主题切换" });
 
-    expect(updateButton).toBeInTheDocument();
     expect(themeButton).toBeInTheDocument();
-    expect(updateButton.compareDocumentPosition(themeButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "查看 0.2.4 更新" })).not.toBeInTheDocument();
   });
 
   it("只有当前选中的桌面导航项显示左侧线条", () => {

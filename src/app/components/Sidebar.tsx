@@ -1,14 +1,11 @@
-import { Download, FileText, Settings, Sun, Moon, Sparkles, Trophy, type LucideIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { FileText, Settings, Sun, Moon, Sparkles, Trophy, type LucideIcon } from "lucide-react";
+import { type ReactNode } from "react";
 import { NavLink, useLocation, useMatch, useResolvedPath } from "react-router-dom";
 import { cn } from "@shared/utils";
 import { Button } from "@shared/ui/button";
-import { UpdateReleaseDialog } from "@features/update/components/UpdateReleaseDialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@shared/ui/tooltip";
 import { useIsMobile } from "@shared/hooks/useMobile";
 import { useThemeStore } from "@shared/theme/useThemeStore";
-import { useUpdateStore } from "@features/update/stores/useUpdateStore";
-import { normalizeVersionLabel } from "@features/update/lib/version";
 
 type NavItem = {
   to: string;
@@ -105,11 +102,6 @@ export function Sidebar() {
   const location = useLocation();
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
-  const downloadAvailableUpdate = useUpdateStore((state) => state.downloadAvailableUpdate);
-  const status = useUpdateStore((state) => state.status);
-  const updateSummary = useUpdateStore((state) => state.updateSummary);
-  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
-  const hasAvailableUpdate = status === "available" && updateSummary;
   const shouldHideMobileNav = location.pathname.startsWith("/books/");
 
   if (isMobile && shouldHideMobileNav) {
@@ -148,13 +140,6 @@ export function Sidebar() {
       </nav>
 
       <div className="flex w-full flex-col items-stretch gap-2">
-        {hasAvailableUpdate ? (
-          <SidebarActionButton
-            label={`查看 ${normalizeVersionLabel(updateSummary.version)} 更新`}
-            onClick={() => setUpdateDialogOpen(true)}
-            icon={<Download className={DESKTOP_SIDEBAR_ICON_CLASS} strokeWidth={2.1} />}
-          />
-        ) : null}
         <SidebarActionButton
           label="主题切换"
           onClick={toggleTheme}
@@ -172,14 +157,6 @@ export function Sidebar() {
           ))}
         </nav>
       </div>
-      <UpdateReleaseDialog
-        open={updateDialogOpen}
-        onOpenChange={setUpdateDialogOpen}
-        onDownload={() => {
-          void downloadAvailableUpdate();
-        }}
-        summary={updateSummary}
-      />
     </aside>
   );
 }

@@ -8,6 +8,7 @@ const WINDOWS_PLATFORM = "windows";
 const WINDOWS_ARCH = "x64";
 const ANDROID_PLATFORM = "android";
 const ANDROID_ARCH = "arm64";
+const MANIFEST_FILE_NAME = "app.json";
 
 async function readVersion(projectRoot) {
   const packageJsonPath = path.join(projectRoot, "package.json");
@@ -34,6 +35,40 @@ async function findNewestFile(filePaths) {
   return withStats[0]?.filePath ?? null;
 }
 
+async function readExistingManifest(projectRoot, version) {
+  const manifestPath = path.join(projectRoot, RELEASE_DIR, MANIFEST_FILE_NAME);
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    if (manifest.version === version) {
+      return manifest;
+    }
+  } catch {
+    // Missing or stale manifests are replaced below.
+  }
+
+  return {
+    version,
+    notes: "",
+    publishedAt: new Date().toISOString().slice(0, 10),
+    downloads: {},
+  };
+}
+
+async function writeManifest(projectRoot, version, target, download) {
+  const manifestPath = path.join(projectRoot, RELEASE_DIR, MANIFEST_FILE_NAME);
+  const manifest = await readExistingManifest(projectRoot, version);
+  manifest.downloads = {
+    ...(manifest.downloads ?? {}),
+    [target]: download,
+  };
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+  return manifestPath;
+}
+
+function buildGitHubReleaseDownloadUrl(version, fileName) {
+  return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${version}/${fileName}`;
+}
+
 async function collectWindowsBundle(projectRoot, version) {
   const sourceDir = path.join(
     projectRoot,
@@ -55,9 +90,6 @@ async function collectWindowsBundle(projectRoot, version) {
     throw new Error(`未找到版本 ${version} 的 Windows 安装包。`);
   }
 
-  const sourceSignaturePath = `${sourcePath}.sig`;
-  const signature = (await readFile(sourceSignaturePath, "utf8")).trim();
-
   const targetPath = path.join(
     projectRoot,
     RELEASE_DIR,
@@ -68,36 +100,19 @@ async function collectWindowsBundle(projectRoot, version) {
     RELEASE_DIR,
     `ainovelstudio_${WINDOWS_PLATFORM}_${WINDOWS_ARCH}.exe`,
   );
-  const targetSignaturePath = `${targetPath}.sig`;
-  const latestJsonPath = path.join(projectRoot, RELEASE_DIR, "latest.json");
-  const releaseTag = `v${version}`;
-  const updateUrl =
-    `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}` +
-    `/releases/download/${releaseTag}/${path.basename(targetPath)}`;
-  const latestJson = {
-    version,
-    notes: "",
-    pub_date: new Date().toISOString(),
-    platforms: {
-      "windows-x86_64": {
-        signature,
-        url: updateUrl,
-      },
-    },
-  };
 
   await rm(targetPath, { force: true });
   await rm(latestTargetPath, { force: true });
-  await rm(targetSignaturePath, { force: true });
   await copyFile(sourcePath, targetPath);
   await copyFile(sourcePath, latestTargetPath);
-  await copyFile(sourceSignaturePath, targetSignaturePath);
-  await writeFile(latestJsonPath, JSON.stringify(latestJson, null, 2));
+  const manifestPath = await writeManifest(projectRoot, version, "windows-x64", {
+    packageKind: "exe",
+    url: buildGitHubReleaseDownloadUrl(version, path.basename(targetPath)),
+  });
   return {
     latestTargetPath,
-    latestJsonPath,
+    manifestPath,
     targetPath,
-    targetSignaturePath,
   };
 }
 
@@ -140,7 +155,11 @@ async function collectAndroidBundle(projectRoot, version) {
   await rm(latestTargetPath, { force: true });
   await copyFile(sourcePath, targetPath);
   await copyFile(sourcePath, latestTargetPath);
-  return { latestTargetPath, targetPath };
+  const manifestPath = await writeManifest(projectRoot, version, "android-arm64", {
+    packageKind: "apk",
+    url: buildGitHubReleaseDownloadUrl(version, path.basename(targetPath)),
+  });
+  return { latestTargetPath, manifestPath, targetPath };
 }
 
 async function main() {
@@ -158,8 +177,7 @@ async function main() {
     const collected = await collectWindowsBundle(projectRoot, version);
     console.log(`Collected Windows bundle: ${collected.targetPath}`);
     console.log(`Collected Windows latest bundle: ${collected.latestTargetPath}`);
-    console.log(`Collected Windows signature: ${collected.targetSignaturePath}`);
-    console.log(`Generated updater manifest: ${collected.latestJsonPath}`);
+    console.log(`Generated update manifest: ${collected.manifestPath}`);
     return;
   }
 
@@ -167,6 +185,7 @@ async function main() {
     const collectedPath = await collectAndroidBundle(projectRoot, version);
     console.log(`Collected Android bundle: ${collectedPath.targetPath}`);
     console.log(`Collected Android latest bundle: ${collectedPath.latestTargetPath}`);
+    console.log(`Generated update manifest: ${collectedPath.manifestPath}`);
     return;
   }
 

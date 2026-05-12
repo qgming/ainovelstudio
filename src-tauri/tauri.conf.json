@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "targets": "all",
     "resources": {
       "resources/skills": "skills",
@@ -39,16 +39,5 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://github.com/qgming/ainovelstudio/releases/latest/download/latest.json"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFBQUE5NkE2MjU3MDg5NjIKUldSaWlYQWxwcGFxR3QvS2d6enoyMkxUMUY3WUNMVjVHNExGUmNVSlZVdHVEdVJCT3hPT3M2U3gK",
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   }
 }

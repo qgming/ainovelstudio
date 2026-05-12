@@ -1,11 +1,13 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Download } from "lucide-react";
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Sidebar } from "@app/components/Sidebar";
 import { TitleBar } from "@app/components/TitleBar";
 import { Toaster } from "@shared/ui/sonner";
 import { TooltipProvider } from "@shared/ui/tooltip";
+import { Button } from "@shared/ui/button";
 import { isMobileRuntime } from "@shared/platform";
 import { BookLibraryPage } from "@features/books/pages/BookLibraryPage";
 import { selectIsAgentRunActive, useChatRunStore } from "@features/agent/stores/useChatRunStore";
@@ -13,6 +15,7 @@ import type { ChatRunStore } from "@features/agent/stores/useChatRunStore";
 import { useThemeStore } from "@shared/theme/useThemeStore";
 import { useUpdateStore } from "@features/update/stores/useUpdateStore";
 import { UpdateReleaseDialog } from "@features/update/components/UpdateReleaseDialog";
+import { normalizeVersionLabel } from "@features/update/lib/version";
 
 const BookWorkspaceRoute = lazy(() =>
   import("@features/books/pages/BookWorkspaceRoute").then((module) => ({ default: module.BookWorkspaceRoute })),
@@ -51,6 +54,34 @@ function getTrayAgentStatusLabel(state: ChatRunStore) {
   return "空闲";
 }
 
+function FloatingUpdateButton({
+  mobileRuntime,
+  onClick,
+  version,
+}: {
+  mobileRuntime: boolean;
+  onClick: () => void;
+  version: string;
+}) {
+  const edgeInset = "max(12px, env(safe-area-inset-right))";
+  const bottomInset = mobileRuntime
+    ? "calc(4.5rem + max(12px, env(safe-area-inset-bottom)))"
+    : "max(12px, env(safe-area-inset-bottom))";
+
+  return (
+    <Button
+      type="button"
+      aria-label={`查看 ${normalizeVersionLabel(version)} 更新`}
+      onClick={onClick}
+      style={{ bottom: bottomInset, right: edgeInset }}
+      className="fixed z-40 h-11 gap-2 rounded-full border border-primary/20 bg-primary px-4 text-primary-foreground shadow-[0_14px_40px_rgba(15,23,42,0.22)] transition-transform duration-150 hover:translate-y-[-1px] hover:bg-primary/90"
+    >
+      <Download className="h-4 w-4" strokeWidth={2.2} />
+      <span className="text-sm font-medium">更新 {normalizeVersionLabel(version)}</span>
+    </Button>
+  );
+}
+
 function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
   const downloadAvailableUpdate = useUpdateStore((state) => state.downloadAvailableUpdate);
@@ -60,7 +91,10 @@ function AppShell() {
   const location = useLocation();
   const mobileRuntime = isMobileRuntime();
   const [homeUpdateDialogOpen, setHomeUpdateDialogOpen] = useState(false);
+  const [manualUpdateDialogOpen, setManualUpdateDialogOpen] = useState(false);
   const shownHomeUpdateVersionRef = useRef<string | null>(null);
+  const hasAvailableUpdate = updateStatus === "available" && updateSummary;
+  const updateDialogOpen = homeUpdateDialogOpen || manualUpdateDialogOpen;
 
   useEffect(() => {
     initializeTheme();
@@ -152,9 +186,23 @@ function AppShell() {
           </main>
         </div>
       </div>
+      {hasAvailableUpdate ? (
+        <FloatingUpdateButton
+          mobileRuntime={mobileRuntime}
+          version={updateSummary.version}
+          onClick={() => setManualUpdateDialogOpen(true)}
+        />
+      ) : null}
       <UpdateReleaseDialog
-        open={homeUpdateDialogOpen}
-        onOpenChange={setHomeUpdateDialogOpen}
+        open={updateDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setManualUpdateDialogOpen(true);
+            return;
+          }
+          setHomeUpdateDialogOpen(false);
+          setManualUpdateDialogOpen(false);
+        }}
         onDownload={() => {
           void downloadAvailableUpdate();
         }}
