@@ -87,8 +87,8 @@ describe("prompt context", () => {
       enabledToolIds: [],
     });
 
-    expect(system).toContain("## s04 已启用技能");
-    expect(system).toContain("system 里只保留技能目录");
+    expect(system).toContain("## s03 动态资源目录");
+    expect(system).toContain("SKILL.md 头部 frontmatter 动态汇总");
     expect(system).toContain("执行前必须");
     expect(system).toContain("SKILL.md");
     expect(system).toContain("### 技能：代码审查");
@@ -189,7 +189,7 @@ describe("prompt context", () => {
 
     expect(system).toContain("# 模式：BOOK");
     expect(system).toContain(".project/AGENTS.md");
-    expect(system).toContain("## s06 临时 Subagent");
+    expect(system).toContain("## s05 临时 Subagent");
   });
 
   it("autopilot 模式渲染 YOLO 契约与目标上下文", () => {

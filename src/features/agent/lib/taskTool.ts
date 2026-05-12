@@ -6,6 +6,7 @@ import { runSubAgentTask, type TemporarySubAgentProfile } from "./runSubAgentTas
 import type { AgentTool } from "./runtime";
 import type { AgentPart } from "./types";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
+import type { AgentToolPromptSpec } from "./ai-sdk-tools/toolPromptSpecs";
 
 const MAX_TASK_BATCH_SIZE = 8;
 const DEFAULT_TASK_BATCH_CONCURRENCY = 2;
@@ -45,24 +46,34 @@ type TaskExecutionResult = {
 };
 
 const taskItemInputSchema = z.object({
-  id: z.string().optional().describe("可选。批量任务里的稳定 ID，便于结果回填。"),
-  prompt: z.string().min(1).describe("需要外包给子代理的局部任务指令。"),
-  agentName: z.string().optional().describe("可选。临时 subagent 名称。"),
-  role: z.string().optional().describe("可选。临时 subagent 的专业角色。"),
-  instructions: z.string().optional().describe("可选。临时 subagent 的执行约束或专长说明。"),
+  id: z.string().optional().describe("可选。批量任务里的稳定短 ID，便于结果回填，例如 scan-urban。"),
+  prompt: z.string().min(1).describe("需要外包给子代理的局部任务指令。必须写清输入范围、可用文件/关键词、期望输出；不要让子代理写正文或改文件。"),
+  agentName: z.string().optional().describe("可选。临时 subagent 名称，短名称即可。"),
+  role: z.string().optional().describe("可选。临时 subagent 的专业角色，例如“榜单分析员”“连续性检查员”。"),
+  instructions: z.string().optional().describe("可选。临时 subagent 的执行约束或专长说明，例如只输出结论、不要改文件。"),
 });
 
 const taskToolInputSchema = z.object({
-  prompt: z.string().min(1).optional().describe("单个子任务指令。"),
+  prompt: z.string().min(1).optional().describe("单个子任务指令。prompt 和 tasks 二选一；单任务用 prompt，批量用 tasks。"),
   agentName: z.string().optional().describe("单任务临时 subagent 名称。"),
   role: z.string().optional().describe("单任务临时 subagent 角色。"),
-  instructions: z.string().optional().describe("单任务临时 subagent 执行说明。"),
-  tasks: z.array(taskItemInputSchema).min(1).max(MAX_TASK_BATCH_SIZE).optional(),
-  concurrency: z.number().int().min(1).max(MAX_TASK_BATCH_CONCURRENCY).optional(),
-  sharedContext: z.string().min(1).optional(),
+  instructions: z.string().optional().describe("单任务临时 subagent 执行说明和边界。"),
+  tasks: z.array(taskItemInputSchema).min(1).max(MAX_TASK_BATCH_SIZE).optional().describe("批量子任务数组。适合彼此独立的资料搜索、诊断、检查；不要放强依赖前后结果的任务。"),
+  concurrency: z.number().int().min(1).max(MAX_TASK_BATCH_CONCURRENCY).optional().describe("批量并发数，默认 2，最大 4；任务重或会读大量文件时用 1-2。"),
+  sharedContext: z.string().min(1).optional().describe("批量任务共享背景资料，避免每个 prompt 重复。放章节摘要、目标、边界、输入文件清单等。"),
 }).refine((input) => Boolean(input.prompt || input.tasks?.length), {
   message: "必须提供 prompt 或 tasks。",
 });
+
+export const TASK_TOOL_SPEC = {
+  description: [
+    "按需创建【临时 subagent】在干净上下文中执行局部任务，并实时回传进度。",
+    "适用：按章批量更新设定/状态、多主题资料搜索、批量拆爆款、风格诊断、合规检查等彼此独立的工作。",
+    "禁用：写正文、续写章节、生成卷纲细纲、需要主代理立即写回的强连续任务；这些必须在主对话直写以保证连续性与文风一致。",
+    "用法：单任务传 prompt；批量任务传 tasks[] 和可选 sharedContext。子代理结果只回到父代理，不会自动写文件。",
+  ].join("\n"),
+  inputSchema: taskToolInputSchema,
+} satisfies AgentToolPromptSpec;
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
@@ -170,12 +181,8 @@ export function createTaskTool(params: {
   workspaceTools: Record<string, AgentTool>;
 }) {
   return defineTool({
-    description: [
-      "按需创建【临时 subagent】在干净上下文中执行局部任务，并实时回传进度。",
-      "适用：按章批量更新设定/状态、多主题资料搜索、批量拆爆款、风格诊断、合规检查等彼此独立的工作。",
-      "禁用：写正文、续写章节、生成卷纲细纲，这些必须在主对话直写以保证连续性与文风一致。",
-    ].join("\n"),
-    inputSchema: taskToolInputSchema,
+    description: TASK_TOOL_SPEC.description,
+    inputSchema: TASK_TOOL_SPEC.inputSchema,
     execute: async (input: TaskToolInput) => {
       const normalized = normalizeTaskToolInput(input);
       const runOne = (request: NormalizedTaskRequest) => runTaskRequest({

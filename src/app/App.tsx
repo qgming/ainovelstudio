@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Sidebar } from "@app/components/Sidebar";
 import { TitleBar } from "@app/components/TitleBar";
 import { Toaster } from "@shared/ui/sonner";
@@ -12,6 +12,7 @@ import { selectIsAgentRunActive, useChatRunStore } from "@features/agent/stores/
 import type { ChatRunStore } from "@features/agent/stores/useChatRunStore";
 import { useThemeStore } from "@shared/theme/useThemeStore";
 import { useUpdateStore } from "@features/update/stores/useUpdateStore";
+import { UpdateReleaseDialog } from "@features/update/components/UpdateReleaseDialog";
 
 const BookWorkspaceRoute = lazy(() =>
   import("@features/books/pages/BookWorkspaceRoute").then((module) => ({ default: module.BookWorkspaceRoute })),
@@ -52,8 +53,14 @@ function getTrayAgentStatusLabel(state: ChatRunStore) {
 
 function AppShell() {
   const initializeTheme = useThemeStore((state) => state.initializeTheme);
+  const downloadAvailableUpdate = useUpdateStore((state) => state.downloadAvailableUpdate);
   const runStartupUpdateFlow = useUpdateStore((state) => state.runStartupUpdateFlow);
+  const updateStatus = useUpdateStore((state) => state.status);
+  const updateSummary = useUpdateStore((state) => state.updateSummary);
+  const location = useLocation();
   const mobileRuntime = isMobileRuntime();
+  const [homeUpdateDialogOpen, setHomeUpdateDialogOpen] = useState(false);
+  const shownHomeUpdateVersionRef = useRef<string | null>(null);
 
   useEffect(() => {
     initializeTheme();
@@ -62,6 +69,17 @@ function AppShell() {
   useEffect(() => {
     void runStartupUpdateFlow();
   }, [runStartupUpdateFlow]);
+
+  useEffect(() => {
+    if (location.pathname !== "/" || updateStatus !== "available" || !updateSummary) {
+      return;
+    }
+    if (shownHomeUpdateVersionRef.current === updateSummary.version) {
+      return;
+    }
+    shownHomeUpdateVersionRef.current = updateSummary.version;
+    setHomeUpdateDialogOpen(true);
+  }, [location.pathname, updateStatus, updateSummary]);
 
   useEffect(() => {
     if (mobileRuntime) {
@@ -134,6 +152,14 @@ function AppShell() {
           </main>
         </div>
       </div>
+      <UpdateReleaseDialog
+        open={homeUpdateDialogOpen}
+        onOpenChange={setHomeUpdateDialogOpen}
+        onDownload={() => {
+          void downloadAvailableUpdate();
+        }}
+        summary={updateSummary}
+      />
     </div>
   );
 }

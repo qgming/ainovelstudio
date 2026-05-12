@@ -461,8 +461,8 @@ export function AgentComposer({
 
       <div className="overflow-hidden border-t border-border">
         {isAskMode && askRequest ? (
-          <div>
-            <div className="space-y-1 px-3 py-3">
+          <div className="flex h-[340px] flex-col">
+            <div className="shrink-0 space-y-1 border-b border-border px-3 py-3">
               <div className="text-sm font-medium text-foreground">{askRequest.title}</div>
               {askRequest.description ? (
                 <div className="text-xs leading-5 text-muted-foreground">
@@ -470,7 +470,7 @@ export function AgentComposer({
                 </div>
               ) : null}
             </div>
-            <div className="divide-y divide-border border-y border-border">
+            <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto overscroll-contain">
               {askRequest.options.map((option) => {
                 const selected = askSelectedIds.includes(option.id);
                 const isCustomOption = option.id === askRequest.customOptionId;
@@ -531,13 +531,13 @@ export function AgentComposer({
                 );
               })}
             </div>
-            <div className="flex items-center justify-between gap-3 px-3 py-3">
-              <div className="text-xs text-muted-foreground">
+            <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-t border-border bg-app px-3">
+              <div className="min-w-0 truncate text-xs text-muted-foreground">
                 {askRequest.selectionMode === "single"
                   ? "请选择一项后确认"
                   : `可多选${Number.isFinite(askMaxSelections) ? `，最多 ${askMaxSelections} 项` : ""}`}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Button type="button" variant="ghost" size="sm" onClick={onStop}>
                   终止
                 </Button>

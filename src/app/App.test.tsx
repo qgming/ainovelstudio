@@ -216,6 +216,24 @@ describe("App shell", () => {
     });
   });
 
+  it("首页检测到新版本时会自动展示更新弹窗", async () => {
+    updateStoreState.status = "available";
+    updateStoreState.updateSummary = {
+      currentVersion: "0.2.3",
+      notes: "### 更新内容\n\n- 修复更新日志显示",
+      packageKind: "exe",
+      publishedAt: null,
+      version: "0.2.4",
+    } as never;
+
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("发现 0.2.4");
+    expect(dialog).toHaveTextContent("更新内容");
+    expect(dialog).toHaveTextContent("修复更新日志显示");
+  });
+
   it("关闭请求会退出应用", async () => {
     let closeHandler: ((event: { preventDefault: () => void }) => Promise<void>) | undefined;
     mockWindow.onCloseRequested.mockImplementation(async (handler: (event: { preventDefault: () => void }) => Promise<void>) => {

@@ -8,7 +8,8 @@ import {
   DropdownMenuTrigger,
 } from "@shared/ui/dropdown-menu";
 import { cn } from "@shared/utils";
-import { PanelHeader, PanelNotice, PanelTitle, PanelToolbar } from "@shared/ui/panel";
+import { CollapsibleErrorNotice } from "@shared/components/CollapsibleErrorNotice";
+import { PanelHeader, PanelTitle, PanelToolbar } from "@shared/ui/panel";
 import { AgentComposer, DEFAULT_AGENT_COMPOSER_MODES } from "@features/agent/components/AgentComposer";
 import { AgentContextOverview } from "@features/agent/components/AgentContextOverview";
 import { AgentInfoDisplay } from "@features/agent/components/AgentInfoDisplay";
@@ -207,9 +208,10 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         </PanelToolbar>
       </PanelHeader>
       {errorMessage ? (
-        <PanelNotice tone="error" className="text-xs">
-          {errorMessage}
-        </PanelNotice>
+        <CollapsibleErrorNotice
+          className="mx-2 mb-2 text-xs"
+          message={errorMessage}
+        />
       ) : null}
       {activeModeId === "autopilot" && autopilotGoal ? (
         <AgentInfoDisplay

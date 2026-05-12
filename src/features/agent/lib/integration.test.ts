@@ -624,7 +624,7 @@ describe("agent session (streaming)", () => {
 
     const request = mockStreamFn.mock.calls[0][0];
     expect(request.system).toContain("## s00 主代理人设");
-    expect(request.system).toContain("## s03 已启用工具");
+    expect(request.system).toContain("## s03 动态资源目录");
     expect(request.system).toContain("# 自定义主代理");
     expect(request.system).not.toContain(DEFAULT_MAIN_AGENT_MARKDOWN);
     expect(request.messages[0].content).toContain("# 当前轮上下文");

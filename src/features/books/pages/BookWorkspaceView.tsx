@@ -13,8 +13,9 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Bot, FolderTree, SquarePen } from "lucide-react";
+import { Bot, FolderTree, SquarePen } from "lucide-react";
 import { cn } from "@shared/utils";
+import { CollapsibleErrorNotice } from "@shared/components/CollapsibleErrorNotice";
 import { BookAgentPanel } from "@features/books/components/BookAgentPanel";
 import { BookCollapsedPanelToggle } from "@features/books/components/BookCollapsedPanelToggle";
 import { BookEditorPanel } from "@features/books/components/BookEditorPanel";
@@ -377,22 +378,14 @@ export function BookWorkspaceView({
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-panel-subtle">
       {visibleErrorMessage ? (
-        <div className="mx-6 mt-4 flex shrink-0 items-start justify-between gap-4 rounded-md border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>{visibleErrorMessage}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
+        <CollapsibleErrorNotice
+          className="mx-6 mt-4"
+          message={visibleErrorMessage}
+          onDismiss={() => {
               dismissError();
               setExternalErrorMessage(null);
-            }}
-            className="shrink-0 px-2 py-1 text-xs font-medium transition hover:opacity-80"
-          >
-            关闭
-          </button>
-        </div>
+          }}
+        />
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-hidden">
