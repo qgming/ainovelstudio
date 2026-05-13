@@ -18,7 +18,7 @@ description: |
 ## Inputs To Read
 
 - 用户主提示词（目标平台、目标读者、自身擅长、禁区）。
-- `.project/MEMORY/market/` 下已有调研：避免重复扫同一方向。
+- `资料/市场/` 下已有调研：避免重复扫同一方向；没有该目录时按需创建。
 
 ## Procedure
 
@@ -29,7 +29,7 @@ description: |
    - 可推荐题材方向（含 平台 + 卖点 + 对标书候选）
    - 不推荐方向 + 原因
    - 差异化建议
-4. 写入 `.project/MEMORY/market/scan-{时间戳或编号}.md`。
+4. 写入 `资料/市场/scan-{时间戳或编号}.md`。
 
 ## Analysis Dimensions
 
@@ -50,7 +50,7 @@ description: |
 
 ## Outputs / Write-Back
 
-- `.project/MEMORY/market/scan-*.md`
+- `资料/市场/scan-*.md`
 
 不要写：正文、大纲、设定、选题简报（简报由后续拆解 / 简报子任务产出）。
 

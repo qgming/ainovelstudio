@@ -19,7 +19,7 @@ description: |
 
 - 对标书的公开正文 / 简介 / 平台数据：用 `web_search` 拿链接，再用 `web_fetch` 读章节。
 - 本轮 `scan-*.md`（若来自市场扫描子任务）：拿到对标书候选与方向。
-- 已有 `analyses/` 拆解：避免重复拆同一本。
+- 已有 `资料/拆文/` 拆解：避免重复拆同一本；没有该目录时按需创建。
 
 ## Procedure
 
@@ -28,7 +28,7 @@ description: |
 1. 拿黄金三章原文，分析钩子 / 期待感 / 信息释放 / 章末追读力。
 2. 拿全书前 1/4 章节梗概，画情绪曲线与节奏模型。
 3. 整理对标书档案、可借鉴模块、不要照抄部分。
-4. 写入 `.project/MEMORY/analyses/{对标书}.md`。
+4. 写入 `资料/拆文/{对标书}.md`。
 
 ### 深度拆解（用户要求逐章）
 
@@ -37,8 +37,8 @@ description: |
 
 ### 选题简报（在简报子任务中）
 
-1. 读本轮 scan + analyses，整合成可立项简报。
-2. 写入 `.project/MEMORY/market/brief-*.md`：推荐题材 / 平台 / 读者 / 卖点 / 对标书 / 借鉴技法 / 差异化 / 风险与禁区。
+1. 读本轮 scan + `资料/拆文/`，整合成可立项简报。
+2. 写入 `资料/市场/brief-*.md`：推荐题材 / 平台 / 读者 / 卖点 / 对标书 / 借鉴技法 / 差异化 / 风险与禁区。
 
 ## Breakdown Checklist
 
@@ -57,8 +57,8 @@ description: |
 
 ## Outputs / Write-Back
 
-- `.project/MEMORY/analyses/{对标书}.md`
-- `.project/MEMORY/market/brief-*.md`（在简报节点）
+- `资料/拆文/{对标书}.md`
+- `资料/市场/brief-*.md`（在简报节点）
 
 不要写：正文、大纲、设定。
 

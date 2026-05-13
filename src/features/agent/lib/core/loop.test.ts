@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import { APICallError, type ModelMessage } from "ai";
 import { describe, expect, it, vi } from "vitest";
 import { agentLoop } from "./loop";
 import type { AgentPart } from "../types";
@@ -24,6 +24,17 @@ function streamFailure(message: string, parts: unknown[] = []) {
         yield part;
       }
       throw new Error(message);
+    })(),
+    responseMessagesPromise: Promise.resolve([]),
+    usagePromise: Promise.resolve(null),
+  };
+}
+
+function streamApiFailure(error: Error) {
+  return {
+    finishReasonPromise: Promise.resolve("stop"),
+    fullStream: (async function* () {
+      throw error;
     })(),
     responseMessagesPromise: Promise.resolve([]),
     usagePromise: Promise.resolve(null),
@@ -249,6 +260,34 @@ describe("agentLoop", () => {
     expect(messageSnapshots[1]?.at(-1)?.content).toContain("连续第 1 次短暂失败");
     expect(messageSnapshots[4]?.at(-1)?.content).toContain("连续第 4 次短暂失败");
     expect(parts.at(-1)).toEqual({ type: "text-delta", delta: "续跑完成" });
+  });
+
+  it("供应商明确返回模型不可用时不会自动续跑", async () => {
+    const error = new APICallError({
+      message: "upstream error",
+      requestBodyValues: { model: "deepseek-v4-pro" },
+      responseBody: JSON.stringify({
+        error: {
+          code: "model_not_found",
+          message: "No available channel for model deepseek-v4-pro under group default",
+          type: "new_api_error",
+        },
+      }),
+      statusCode: 503,
+      url: "https://api.example.com/v1/chat/completions",
+    });
+    const streamFn = vi.fn(() => streamApiFailure(error));
+
+    await expect(async () => {
+      for await (const _part of agentLoop(
+        { messages: [{ role: "user", content: "继续写" }], system: "test" },
+        { providerConfig: { apiKey: "k", baseURL: "https://api.example.com/v1", model: "deepseek-v4-pro" }, streamFn: streamFn as never },
+      )) {
+        // drain stream
+      }
+    }).rejects.toThrow("upstream error");
+
+    expect(streamFn).toHaveBeenCalledTimes(1);
   });
 
   it("AI 解码尾错已有文本或思考片段时会按完成收尾", async () => {

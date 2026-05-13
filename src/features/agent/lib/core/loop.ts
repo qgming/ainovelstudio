@@ -10,6 +10,7 @@ import {
   createFailureRecord,
   createRetryState,
   isAbortError,
+  isNonRetryableAiRequestError,
   MAX_CONSECUTIVE_AI_REQUEST_FAILURES,
   type RetryState,
 } from "./retry";
@@ -221,6 +222,7 @@ async function* runStepWithRetry(
     return { ...stepResult, shouldRetry: false };
   } catch (error) {
     if (isAbortError(error, params.config.abortSignal)) throw error;
+    if (isNonRetryableAiRequestError(error)) throw error;
     if (isResponseBodyDecodeError(error) && canCompleteAfterDecodeError(params.eventMessage.parts)) {
       const content = collectAssistantContent(params.eventMessage.parts);
       if (content) params.messages.push({ role: "assistant", content });

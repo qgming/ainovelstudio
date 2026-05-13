@@ -225,9 +225,9 @@ const wordCountInputSchema = z.object({
 
 const canonQueryInputSchema = z.object({
   kind: z
-    .enum(["canon", "status", "style", "chapter", "memory"])
+    .enum(["canon", "status", "setting", "outline", "chapter"])
     .default("canon")
-    .describe("查询范围类型。canon=设定事实；status=项目状态；style=文风；chapter=章节摘要/正文线索；memory=记忆。默认 canon。"),
+    .describe("查询范围类型。canon=项目事实源；status=状态；setting=设定；outline=大纲；chapter=正文线索。默认 canon。"),
   limit: z
     .number()
     .int()
@@ -266,7 +266,7 @@ export const READ_TOOL_SPECS = {
   },
   canon_query: {
     description:
-      "查询长篇 canon 事实源。用于核对人物、地点、伏笔、能力边界、文风基线和章节摘要，减少凭印象续写。",
+      "查询项目事实源。用于核对人物、地点、伏笔、能力边界、状态、大纲或正文线索，减少凭印象续写。",
     inputSchema: canonQueryInputSchema,
   },
 } satisfies Record<string, AgentToolPromptSpec>;

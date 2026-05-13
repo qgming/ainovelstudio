@@ -79,7 +79,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "canon_query",
     name: "Canon 查询",
     description:
-      "按人物、地点、伏笔、能力边界或章节线索查询 .project/canon、status、style、chapters 等长篇事实源。",
+      "按人物、地点、伏笔、能力边界或章节线索查询 .project/status、设定、大纲、正文等项目事实源。",
   },
   {
     id: "edit",

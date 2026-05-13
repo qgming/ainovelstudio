@@ -11,7 +11,8 @@ describe("agent cards", () => {
 
     expect(card?.name).toBe("章节生产");
     expect(card?.tools).toContain("canon_query");
-    expect(card?.writeScopes).toContain(".project/runs/");
+    expect(card?.writeScopes).toContain(".project/status/");
+    expect(card?.writeScopes).not.toContain(".project/runs/");
     expect(card?.allowedSubagents).toContain("连续性检查");
   });
 
@@ -22,7 +23,8 @@ describe("agent cards", () => {
     expect(card?.contextPolicyId).toBe("flow");
     expect(card?.tools).toContain("mode_control");
     expect(card?.tools).toContain("json");
-    expect(card?.writeScopes).toContain(".project/runs/");
+    expect(card?.writeScopes).toContain(".project/status/");
+    expect(card?.writeScopes).not.toContain(".project/runs/");
   });
 
   it("解析 YOLO card", () => {

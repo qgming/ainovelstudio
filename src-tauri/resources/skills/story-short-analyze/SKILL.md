@@ -19,14 +19,14 @@ description: |
 
 - 对标短篇正文（用 `web_search` + `web_fetch` 拿）。
 - 本轮 `scan-*.md`（若来自市场扫描子任务）。
-- 已有 `analyses/` 拆解：避免重复。
+- 已有 `资料/拆文/` 拆解：避免重复；没有该目录时按需创建。
 
 ## Procedure
 
 1. 拿全文，按 4-6 段拆「开头钩子 → 冲突建立 → 中段拉扯 → 反转 → 收束」。
 2. 提取：开头 200 字技巧、对话密度、反转底层路径、结尾情绪落点。
 3. 整理对标书档案、可借鉴模块、不要照抄部分。
-4. 写入 `.project/MEMORY/analyses/{对标短篇}.md`。
+4. 写入 `资料/拆文/{对标短篇}.md`。
 
 ## Breakdown Checklist
 
@@ -45,7 +45,7 @@ description: |
 
 ## Outputs / Write-Back
 
-- `.project/MEMORY/analyses/{对标短篇}.md`
+- `资料/拆文/{对标短篇}.md`
 
 不要写：正文、设定、长篇拆解。
 

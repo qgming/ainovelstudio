@@ -122,7 +122,7 @@ export function createChatRuntimeController(access: ChatRunStoreAccess) {
     rejectPendingAsk(state.pendingAsk);
     sessionSlot.abort(reason);
     sessionSlot.clear();
-    abortController?.abort();
+    abortController?.abort(reason);
     applyStoppedState();
     await cancelToolRequests(requestIds);
   }

@@ -323,13 +323,13 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("canon_query 只返回长篇事实源范围内的线索", async () => {
+  it("canon_query 只返回轻量项目事实源范围内的线索", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockSearchWorkspaceContent.mockResolvedValue([
       {
         matchType: "content",
-        path: ".project/canon/characters.md",
+        path: "设定/人物.md",
         lineNumber: 3,
         lineText: "沈砚：黑钟持有者。",
       },
@@ -349,8 +349,9 @@ describe("createWorkspaceToolset", () => {
     expect(result).toEqual({
       ok: true,
       summary: [
-        "找到 1 条与“沈砚”相关的 canon 线索：",
-        "- .project/canon/characters.md:3 沈砚：黑钟持有者。",
+        "找到 2 条与“沈砚”相关的项目线索：",
+        "- 设定/人物.md:3 沈砚：黑钟持有者。",
+        "- 正文/第001章_章名.md:8 沈砚看见黑钟。",
       ].join("\n"),
       data: {
         kind: "canon",
@@ -358,7 +359,13 @@ describe("createWorkspaceToolset", () => {
           {
             lineNumber: 3,
             lineText: "沈砚：黑钟持有者。",
-            path: ".project/canon/characters.md",
+            path: "设定/人物.md",
+            type: "content",
+          },
+          {
+            lineNumber: 8,
+            lineText: "沈砚看见黑钟。",
+            path: "正文/第001章_章名.md",
             type: "content",
           },
         ],

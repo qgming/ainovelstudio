@@ -20,7 +20,7 @@ import {
 } from "./helpers";
 import { appendMessageEntry, removeEntry, replaceMessageEntry } from "./entriesRuntime";
 import { rejectPendingAsk } from "./askController";
-import type { ChatRunStoreAccess } from "./runtimeTypes";
+import { isRunInterruptReason, type ChatRunStoreAccess } from "./runtimeTypes";
 
 export type TerminalRunState = {
   latestEntries: ChatEntry[];
@@ -40,11 +40,15 @@ type TerminalHandlerParams = ChatRunStoreAccess & {
 };
 
 export async function handleTerminalError(error: unknown, params: TerminalHandlerParams) {
-  if (params.abortController.signal.aborted) {
+  if (isExplicitRunInterrupt(params.abortController.signal)) {
     await handleAbort(params);
     return;
   }
   await handleFailure(error, params);
+}
+
+function isExplicitRunInterrupt(signal: AbortSignal) {
+  return signal.aborted && isRunInterruptReason(signal.reason);
 }
 
 function currentBookId(params: TerminalHandlerParams) {

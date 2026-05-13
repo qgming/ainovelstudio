@@ -7,12 +7,12 @@ import {
 export const FLOW_WORKFLOW_ID = "chapter-harness";
 
 export const FLOW_WORKFLOW_STAGES = [
-  { id: "inspect", label: "Inspect", gate: "读取项目上下文、状态、canon、style、chapters 或相关事实源。" },
+  { id: "inspect", label: "Inspect", gate: "读取项目上下文、status、相关设定/大纲/正文或其他事实源。" },
   { id: "skill_load", label: "Skill Load", gate: "任务命中 skill 时已读取对应 SKILL.md。" },
   { id: "plan", label: "Plan", gate: "需要多步推进时已写入 todo 计划。" },
   { id: "act", label: "Act", gate: "已完成本阶段写入、编辑、查询或分析动作。" },
   { id: "verify", label: "Verify", gate: "已用 read、word_count、json 或查询工具核对结果。" },
-  { id: "state_maintain", label: "State Maintain", gate: "已维护 run、chapters、status、canon 或 style 状态。" },
+  { id: "state_maintain", label: "State Maintain", gate: "已维护 status 或按任务需要补充的项目文件。" },
   { id: "report", label: "Report", gate: "已形成最终交付说明、风险和下一步。" },
 ] as const;
 

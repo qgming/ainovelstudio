@@ -32,7 +32,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "YOLO 全自动目标",
     reasoningEffort: "xhigh",
     tools: [MODE_CONTROL_TOOL_ID, "todo", "browse", "read", "search", "web_search", "web_fetch", "fanqie_leaderboard", "skill", "task", "edit", "create", "write", "json", "path", "word_count", "canon_query"],
-    writeScopes: ["正文/", "大纲/", "设定/", ".project/runs/", ".project/chapters/", ".project/status/", ".project/canon/", ".project/style/", ".project/evals/", ".project/MEMORY/"],
+    writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
   },
   {
     allowedSubagents: [
@@ -45,7 +45,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     body: [
       "严格执行长篇工作流，不跳过读取、技能加载、计划、执行、验证和状态维护。",
       "任务匹配已启用 skill 时，先读取对应 SKILL.md，再进入执行阶段。",
-      "每个章节任务都维护 run、章节摘要、status 和必要 canon。",
+      "每个章节任务默认维护 status；需要专题记录时再创建补充文件。",
     ].join("\n"),
     contextPolicyId: "flow",
     id: "flow",
@@ -54,7 +54,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "严格工作流",
     reasoningEffort: "xhigh",
     tools: [MODE_CONTROL_TOOL_ID, "ask", "todo", "browse", "read", "search", "fanqie_leaderboard", "skill", "task", "edit", "create", "write", "json", "path", "word_count", "canon_query"],
-    writeScopes: ["正文/", "大纲/", ".project/runs/", ".project/chapters/", ".project/status/", ".project/canon/", ".project/style/", ".project/evals/"],
+    writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
   },
   {
     allowedSubagents: [
@@ -74,7 +74,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "长篇立项",
     reasoningEffort: "xhigh",
     tools: ["ask", "todo", "browse", "read", "search", "web_search", "web_fetch", "fanqie_leaderboard", "skill", "task", "edit", "create", "write", "json", "path"],
-    writeScopes: [".project/README.md", ".project/MEMORY/", "设定/", "大纲/"],
+    writeScopes: [".project/README.md", "设定/", "大纲/", ".project/status/"],
   },
   {
     allowedSubagents: [SUBAGENT_CARDS.continuity, SUBAGENT_CARDS.quality],
@@ -90,7 +90,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "卷纲规划",
     reasoningEffort: "xhigh",
     tools: ["ask", "todo", "browse", "read", "search", "skill", "task", "edit", "create", "write", "json", "path", "canon_query"],
-    writeScopes: ["大纲/", ".project/status/", ".project/canon/"],
+    writeScopes: ["大纲/", "设定/", ".project/status/"],
   },
   {
     allowedSubagents: [SUBAGENT_CARDS.continuity, SUBAGENT_CARDS.quality],
@@ -98,7 +98,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     body: [
       "正文由主代理串行直写，保证文风、人物声音和连续性。",
       "每章遵循 chapter-plan -> draft -> continuity-review -> style-polish -> state-maintain -> final-check。",
-      "写完必须更新章节 run 记录，并推动状态维护。",
+      "写完必须更新最新剧情、人物变化和连续性状态。",
     ].join("\n"),
     contextPolicyId: "chapter-write",
     id: "chapter-write",
@@ -107,13 +107,13 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "章节生产",
     reasoningEffort: "xhigh",
     tools: ["ask", "todo", "browse", "read", "search", "skill", "task", "edit", "create", "write", "json", "path", "word_count", "canon_query"],
-    writeScopes: ["正文/", "大纲/", ".project/runs/", ".project/chapters/", ".project/status/"],
+    writeScopes: ["正文/", "大纲/", ".project/status/"],
   },
   {
     allowedSubagents: [SUBAGENT_CARDS.continuity, SUBAGENT_CARDS.state],
     banTools: [],
     body: [
-      "检查人物状态、时间线、伏笔账本、能力边界和 canon 冲突。",
+      "检查人物状态、时间线、伏笔账本、能力边界和设定冲突。",
       "发现阻断性冲突时，先写明冲突证据和修正建议，再允许进入 final-check。",
     ].join("\n"),
     contextPolicyId: "continuity-review",
@@ -123,7 +123,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "连续性审校",
     reasoningEffort: "xhigh",
     tools: ["todo", "browse", "read", "search", "skill", "task", "edit", "create", "write", "json", "canon_query"],
-    writeScopes: [".project/evals/", ".project/status/", ".project/canon/"],
+    writeScopes: [".project/status/", "设定/", "大纲/"],
   },
   {
     allowedSubagents: [SUBAGENT_CARDS.style, SUBAGENT_CARDS.quality],
@@ -139,14 +139,14 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "文风润色",
     reasoningEffort: "high",
     tools: ["todo", "browse", "read", "search", "skill", "edit", "create", "write", "word_count", "canon_query"],
-    writeScopes: ["正文/", ".project/style/", ".project/evals/"],
+    writeScopes: ["正文/", ".project/README.md", ".project/status/"],
   },
   {
     allowedSubagents: [SUBAGENT_CARDS.state],
     banTools: [],
     body: [
-      "从已完成章节抽取 CanonDelta，并用 JSON patch 更新状态真值层。",
-      "即时事实写 status JSON，稳定事实写 canon，章节摘要写 chapters。",
+      "从已完成章节抽取剧情、人物和连续性变化，并用 JSON patch 更新状态真值层。",
+      "默认只写 status JSON；需要长期专题记录时再创建补充文件。",
     ].join("\n"),
     contextPolicyId: "state-maintain",
     id: "state-maintain",
@@ -155,7 +155,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     name: "状态维护",
     reasoningEffort: "high",
     tools: ["todo", "browse", "read", "search", "json", "edit", "create", "write", "path", "canon_query"],
-    writeScopes: [".project/status/", ".project/canon/", ".project/chapters/", ".project/runs/"],
+    writeScopes: [".project/status/"],
   },
 ];
 

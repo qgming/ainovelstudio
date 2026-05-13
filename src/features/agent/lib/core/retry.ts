@@ -1,9 +1,23 @@
-import type { ModelMessage } from "ai";
+import { APICallError, type ModelMessage } from "ai";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 
 export const MAX_CONSECUTIVE_AI_REQUEST_FAILURES = 5;
 
 const RETRY_CONTINUE_PROMPT = "继续执行";
+const NON_RETRYABLE_HTTP_STATUS = new Set([400, 401, 403, 404, 422]);
+const NON_RETRYABLE_PROVIDER_ERROR_CODES = new Set([
+  "authentication_error",
+  "billing_not_active",
+  "content_policy_violation",
+  "context_length_exceeded",
+  "insufficient_quota",
+  "invalid_api_key",
+  "invalid_model",
+  "invalid_request_error",
+  "model_not_found",
+  "permission_denied",
+  "rate_limit_exceeded",
+]);
 
 export type AiRequestFailure = {
   attempt: number;
@@ -26,6 +40,13 @@ export function createRetryState(): RetryState {
 export function isAbortError(error: unknown, abortSignal?: AbortSignal) {
   if (abortSignal?.aborted) return true;
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+export function isNonRetryableAiRequestError(error: unknown) {
+  if (!APICallError.isInstance(error)) return false;
+  const providerCode = extractProviderErrorCode(error.responseBody);
+  if (providerCode && NON_RETRYABLE_PROVIDER_ERROR_CODES.has(providerCode)) return true;
+  return typeof error.statusCode === "number" && NON_RETRYABLE_HTTP_STATUS.has(error.statusCode);
 }
 
 export function createFailureRecord(params: {
@@ -84,4 +105,22 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   if (typeof error === "string" && error.trim()) return error.trim();
   return "未知 AI 请求错误";
+}
+
+function extractProviderErrorCode(responseBody?: string) {
+  const body = responseBody?.trim();
+  if (!body) return "";
+
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!parsed || typeof parsed !== "object") return "";
+    const topLevelCode = (parsed as Record<string, unknown>).code;
+    if (typeof topLevelCode === "string") return topLevelCode;
+    const nestedError = (parsed as Record<string, unknown>).error;
+    if (!nestedError || typeof nestedError !== "object") return "";
+    const nestedCode = (nestedError as Record<string, unknown>).code;
+    return typeof nestedCode === "string" ? nestedCode : "";
+  } catch {
+    return "";
+  }
 }

@@ -558,6 +558,40 @@ describe("useChatRunStore", () => {
     ]);
   });
 
+  it("非显式用户停止导致的 abort 会按失败处理而不是上下文取消", async () => {
+    streamControl.runPrompt.mockImplementation(async function* (options: { abortController: AbortController }) {
+      options.abortController.abort(new Error("provider stream closed unexpectedly"));
+      throw new Error("provider stream closed unexpectedly");
+    });
+
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "继续写",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    await useAgentStore.getState().sendMessage();
+
+    const state = useAgentStore.getState();
+    expect(state.run.status).toBe("failed");
+    expect(state.activeRunRequestId).toBeNull();
+    expect(state.run.messages.at(-1)?.role).toBe("system");
+    expect(state.run.messages.at(-1)?.parts).toEqual([
+      {
+        type: "text",
+        text: expect.stringContaining("provider stream closed unexpectedly"),
+      },
+    ]);
+  });
+
   it("initialize 会把恢复出的 running 会话降级为空闲并清理未完成 part", async () => {
     vi.mocked(initializeChatStorage).mockResolvedValue({
       activeSessionDraft: "",

@@ -169,32 +169,33 @@ describe("project context", () => {
 	    });
 	  });
 
-  it("按 context manifest 注入任务策略文件，不注入当前激活文件正文", async () => {
+  it("按轻量 context manifest 注入任务策略文件，不注入当前激活文件正文", async () => {
     const manifest = {
       policies: [
         {
           alwaysInclude: [
-            ".project/style/voice.md",
-            ".project/canon/README.md",
+            ".project/status/latest-plot.json",
+            ".project/status/character-state.json",
+            ".project/status/continuity-index.json",
           ],
           charBudget: 26000,
           fullReadTriggers: ["续写"],
           includeIfActive: ["大纲/大纲.md"],
           priority: 30,
-          summaryFirst: [".project/chapters/README.md"],
+          summaryFirst: [],
           taskType: "chapter-write",
         },
       ],
-      version: 1,
+      version: 2,
     };
     const readFile = vi.fn().mockImplementation(async (_rootPath: string, path: string) => {
       const files: Record<string, string> = {
         [DEFAULT_PROJECT_AGENT_PATH]: "# 项目规则",
         [DEFAULT_PROJECT_README_PATH]: "# 项目说明",
         [DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH]: JSON.stringify(manifest),
-        ".project/style/voice.md": "# 文风",
-        ".project/canon/README.md": "# Canon",
-        ".project/chapters/README.md": "# 章节摘要",
+        ".project/status/latest-plot.json": "{\"latestUpdate\":\"进入试炼\"}",
+        ".project/status/character-state.json": "{\"characters\":{}}",
+        ".project/status/continuity-index.json": "{\"openThreads\":[]}",
         "大纲/大纲.md": "# 卷纲",
         "正文/第001章_章名.md": "正文",
       };
@@ -214,9 +215,9 @@ describe("project context", () => {
 	      ".project/AGENTS.md",
 	      ".project/README.md",
 	      ".project/context-manifest.json",
-	      ".project/style/voice.md",
-	      ".project/canon/README.md",
-	      ".project/chapters/README.md",
+	      ".project/status/latest-plot.json",
+	      ".project/status/character-state.json",
+	      ".project/status/continuity-index.json",
 	      "大纲/大纲.md",
 	    ]);
 	    expect(

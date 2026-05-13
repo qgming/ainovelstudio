@@ -3,7 +3,13 @@ import type { WritingAgentSession } from "@features/agent/lib/session";
 import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
 import type { ChatRunStoreState, ChatRunStoreSetter } from "./helpers";
 
-export type RunInterruptReason = "manual_stop" | "app_close" | "restart" | "reset" | "coach";
+export const RUN_INTERRUPT_REASONS = ["manual_stop", "app_close", "restart", "reset", "coach"] as const;
+
+export type RunInterruptReason = (typeof RUN_INTERRUPT_REASONS)[number];
+
+export function isRunInterruptReason(value: unknown): value is RunInterruptReason {
+  return typeof value === "string" && (RUN_INTERRUPT_REASONS as readonly string[]).includes(value);
+}
 
 export type SendMessageOptions = {
   autopilotGoal?: string;

@@ -213,7 +213,7 @@ describe("prompt context", () => {
     expect(system).toContain('action="complete"');
   });
 
-  it("flow 模式渲染严格工作流和章节 harness", () => {
+  it("flow 模式渲染轻量状态维护工作流", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
@@ -227,7 +227,8 @@ describe("prompt context", () => {
     expect(system).toContain("currentStage：Inspect（inspect）");
     expect(system).toContain("complete_stage");
     expect(system).toContain("程序接受后再进入下一阶段");
-    expect(system).toContain(".project/runs/chapter-NNN.json");
+    expect(system).toContain(".project/status/*.json");
+    expect(system).not.toContain(".project/runs/chapter-NNN.json");
   });
 
   it("长篇章节模式渲染 AgentCard 契约", () => {
@@ -241,7 +242,8 @@ describe("prompt context", () => {
     expect(system).toContain("# 模式：chapter-write");
     expect(system).toContain("章节生产");
     expect(system).toContain("canon_query");
-    expect(system).toContain(".project/runs/chapter-NNN.json");
+    expect(system).toContain(".project/status/*.json");
+    expect(system).not.toContain(".project/runs/chapter-NNN.json");
     expect(system).toContain("chapter-plan -> draft");
   });
 });

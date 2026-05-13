@@ -13,11 +13,10 @@ import {
 } from "./shared";
 
 const CANON_QUERY_PATHS = [
-  ".project/canon",
   ".project/status",
-  ".project/style",
-  ".project/chapters",
-  ".project/MEMORY",
+  "设定",
+  "大纲",
+  "正文",
 ];
 
 function normalizeKind(value: unknown) {
@@ -28,9 +27,9 @@ function normalizeKind(value: unknown) {
 function isCanonPath(path: string, requestedKind: string) {
   const normalized = path.replace(/\\/g, "/");
   if (requestedKind === "status") return normalized.startsWith(".project/status/");
-  if (requestedKind === "style") return normalized.startsWith(".project/style/");
-  if (requestedKind === "chapter") return normalized.startsWith(".project/chapters/");
-  if (requestedKind === "memory") return normalized.startsWith(".project/MEMORY/");
+  if (requestedKind === "setting") return normalized.startsWith("设定/");
+  if (requestedKind === "outline") return normalized.startsWith("大纲/");
+  if (requestedKind === "chapter") return normalized.startsWith("正文/");
   return CANON_QUERY_PATHS.some((prefix) => normalized.startsWith(`${prefix}/`));
 }
 
@@ -51,7 +50,7 @@ function formatCanonMatch(match: WorkspaceSearchMatch) {
 
 function buildSummary(query: string, matches: ReturnType<typeof formatCanonMatch>[]) {
   if (matches.length === 0) {
-    return `未在 canon / status / style / chapters 中找到“${query}”。`;
+    return `未在 status / 设定 / 大纲 / 正文 中找到“${query}”。`;
   }
   const lines = matches.map((match) => {
     if (match.type === "content") {
@@ -59,14 +58,16 @@ function buildSummary(query: string, matches: ReturnType<typeof formatCanonMatch
     }
     return `- ${match.path}`;
   });
-  return [`找到 ${matches.length} 条与“${query}”相关的 canon 线索：`, ...lines].join("\n");
+  return [`找到 ${matches.length} 条与“${query}”相关的项目线索：`, ...lines].join("\n");
 }
 
 async function readSeedFiles(rootPath: string, query: string, context: ReturnType<typeof getAbortContext>) {
   const seedPaths = [
-    ".project/canon/README.md",
-    ".project/style/voice.md",
-    ".project/chapters/README.md",
+    ".project/README.md",
+    ".project/status/project-state.json",
+    ".project/status/latest-plot.json",
+    ".project/status/character-state.json",
+    ".project/status/continuity-index.json",
   ];
   const files = await Promise.all(
     seedPaths.map(async (path) => {
@@ -92,7 +93,7 @@ export function createWorkspaceCanonTools({
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
     canon_query: {
-      description: "按人物、地点、伏笔、能力边界或章节线索查询长篇 canon 事实源",
+      description: "按人物、地点、伏笔、能力边界或章节线索查询项目事实源",
       execute: async (input, context) => {
         const abortContext = getAbortContext(context);
         const query = ensureString(input.query, "canon_query.query");
