@@ -110,6 +110,31 @@ pub fn initialize_default_agent_config(
     ensure_default_agent_document(&app)
 }
 
+
+#[tauri::command]
+pub fn reset_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
+    let connection = open_database(&app)?;
+    let markdown = normalize_markdown(DEFAULT_AGENT_TEMPLATE);
+    connection
+        .execute(
+            r#"
+            INSERT INTO config_documents (key, markdown, initialized_from_builtin, updated_at)
+            VALUES (?1, ?2, 1, ?3)
+            ON CONFLICT(key) DO UPDATE
+            SET markdown = excluded.markdown,
+                initialized_from_builtin = 1,
+                updated_at = excluded.updated_at
+            "#,
+            params![DEFAULT_AGENT_CONFIG_KEY, markdown, current_timestamp()],
+        )
+        .map_err(error_to_string)?;
+
+    Ok(build_document(
+        normalize_markdown(DEFAULT_AGENT_TEMPLATE),
+        true,
+    ))
+}
+
 #[tauri::command]
 pub fn read_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
     ensure_default_agent_document(&app)

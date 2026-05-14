@@ -83,18 +83,18 @@ describe("agent settings store", () => {
         baseURL: "",
         model: "",
       },
-      enabledTools: { read_file: false },
+      enabledTools: { workspace_read: false },
     });
 
-    useAgentSettingsStore.getState().toggleTool("read");
+    useAgentSettingsStore.getState().toggleTool("workspace_read");
     await Promise.resolve();
 
-    expect(useAgentSettingsStore.getState().enabledTools.read).toBe(false);
+    expect(useAgentSettingsStore.getState().enabledTools.workspace_read).toBe(false);
     expect(mockInvoke).toHaveBeenCalledWith("write_agent_settings", {
       settings: expect.objectContaining({
         enabledTools: expect.objectContaining({
-          read: false,
-          write: true,
+          workspace_read: false,
+          workspace_write: true,
         }),
       }),
     });
@@ -120,7 +120,7 @@ describe("agent settings store", () => {
             reasoningEffort: "high",
             simulateOpencodeBeta: true,
           },
-          enabledTools: { read: false },
+          enabledTools: { workspace_read: false },
         });
       }
 
@@ -138,8 +138,8 @@ describe("agent settings store", () => {
     expect(state.config.enableReasoningEffort).toBe(true);
     expect(state.config.reasoningEffort).toBe("high");
     expect(state.config.simulateOpencodeBeta).toBe(true);
-    expect(state.enabledTools.read).toBe(false);
-    expect(state.enabledTools.write).toBe(true);
+    expect(state.enabledTools.workspace_read).toBe(false);
+    expect(state.enabledTools.workspace_write).toBe(true);
     expect(mockInvoke).not.toHaveBeenCalledWith(
       "write_agent_settings",
       expect.anything(),
@@ -347,6 +347,21 @@ describe("agent settings store", () => {
     );
   });
 
+  it("resetDefaultAgentMarkdown 会恢复内置 AGENTS 并写回配置", async () => {
+    mockCommand("reset_default_agent_config", {
+      initializedFromBuiltin: true,
+      markdown: "# 内置主代理\n\n- 已恢复。",
+      path: "sqlite://config/AGENTS.md",
+    });
+
+    await useAgentSettingsStore.getState().resetDefaultAgentMarkdown();
+
+    expect(mockInvoke).toHaveBeenCalledWith("reset_default_agent_config");
+    expect(useAgentSettingsStore.getState().defaultAgentMarkdown).toBe(
+      "# 内置主代理\n\n- 已恢复。",
+    );
+    expect(useAgentSettingsStore.getState().status).toBe("ready");
+  });
   it("resetConfig 只重置模型配置，不影响当前 AGENTS 内容", () => {
     mockCommand("write_agent_settings", {
       config: {
@@ -383,7 +398,7 @@ describe("agent settings store", () => {
   it("reset 恢复默认值", () => {
     mockCommand("clear_agent_settings", undefined);
 
-    useAgentSettingsStore.getState().toggleTool("write");
+    useAgentSettingsStore.getState().toggleTool("workspace_write");
     useAgentSettingsStore.getState().updateConfig({ model: "custom-model" });
     useAgentSettingsStore.setState({
       defaultAgentMarkdown: "# 文件主代理",
@@ -393,7 +408,7 @@ describe("agent settings store", () => {
     useAgentSettingsStore.getState().reset();
 
     const state = useAgentSettingsStore.getState();
-    expect(state.enabledTools.write).toBe(true);
+    expect(state.enabledTools.workspace_write).toBe(true);
     expect(state.config.model).toBe("");
     expect(state.config.enableReasoningEffort).toBe(false);
     expect(state.config.reasoningEffort).toBe("xhigh");

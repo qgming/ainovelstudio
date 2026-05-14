@@ -126,6 +126,7 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
   const deleteProviderPreset = useAgentSettingsStore((state) => state.deleteProviderPreset);
   const status = useAgentSettingsStore((state) => state.status);
   const refreshDefaultAgentMarkdown = useAgentSettingsStore((state) => state.refreshDefaultAgentMarkdown);
+  const resetDefaultAgentMarkdown = useAgentSettingsStore((state) => state.resetDefaultAgentMarkdown);
   const toggleTool = useAgentSettingsStore((state) => state.toggleTool);
   const updateDefaultAgentMarkdown = useAgentSettingsStore((state) => state.updateDefaultAgentMarkdown);
   const [agentsDraft, setAgentsDraft] = useState(defaultAgentMarkdown);
@@ -170,6 +171,15 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
     }
   }
 
+  async function handleResetAgents() {
+    try {
+      await resetDefaultAgentMarkdown();
+      setAgentsDirty(false);
+    } catch {
+      // 错误状态由 store 统一维护；失败时保留当前草稿。
+    }
+  }
+
   function handleModelDraftChange(patch: Partial<typeof modelDraft>) {
     setModelDraft((current) => {
       const next = { ...current, ...patch };
@@ -201,6 +211,7 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
         errorMessage={errorMessage}
         isDirty={agentsDirty}
         onChange={handleAgentDraftChange}
+        onReset={handleResetAgents}
         onSave={handleSaveAgents}
         status={status}
       />

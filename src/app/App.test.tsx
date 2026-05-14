@@ -561,13 +561,57 @@ describe("App shell", () => {
       ).toBeInTheDocument();
     });
 
-    expect(screen.getByText("读取文件")).toBeInTheDocument();
+    expect(screen.getByText("读取工作区文件")).toBeInTheDocument();
     expect(screen.getByText("局部编辑")).toBeInTheDocument();
-    expect(screen.getByText("创建空文件")).toBeInTheDocument();
-    expect(screen.getByText("搜索内容")).toBeInTheDocument();
+    expect(screen.getByText("写入文本")).toBeInTheDocument();
+    expect(screen.getByText("搜索工作区")).toBeInTheDocument();
     expect(screen.getByText("浏览工作区")).toBeInTheDocument();
   });
 
+  it("设置页支持一键重置默认 AGENTS 为内置内容并保存", async () => {
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "initialize_chat_storage") {
+        return chatBootstrap;
+      }
+      if (command === "list_book_workspaces") {
+        return [];
+      }
+      if (command === "initialize_default_agent_config" || command === "read_default_agent_config") {
+        return {
+          initializedFromBuiltin: false,
+          markdown: "# 自定义主代理",
+          path: "sqlite://config/AGENTS.md",
+        };
+      }
+      if (command === "read_agent_settings") {
+        return null;
+      }
+      if (command === "reset_default_agent_config") {
+        return {
+          initializedFromBuiltin: true,
+          markdown: "# 内置主代理\n\n- 恢复默认。",
+          path: "sqlite://config/AGENTS.md",
+        };
+      }
+      return undefined;
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("link", { name: "设置" }));
+    const editor = await screen.findByLabelText("默认 AGENTS 编辑器", {}, { timeout: 5000 });
+
+    await waitFor(() => {
+      expect(editor).toHaveValue("# 自定义主代理");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重置为内置 AGENTS 并保存" }));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("reset_default_agent_config");
+      expect(editor).toHaveValue("# 内置主代理\n\n- 恢复默认。");
+    });
+  });
   it("设置页会主动初始化模型配置并回填已保存的 key、url 和 model", async () => {
     mockInvoke.mockImplementation(async (command: string) => {
       if (command === "initialize_chat_storage") {
@@ -640,7 +684,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
     expect(screen.getByText("版本")).toBeInTheDocument();
-    expect(screen.getByText("0.2.7")).toBeInTheDocument();
+    expect(screen.getByText("0.2.8")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");

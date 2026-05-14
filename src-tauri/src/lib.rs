@@ -61,6 +61,7 @@ pub fn run() {
             infrastructure::update_manifest::fetch_update_manifest,
             domains::chat::default_agent_config::initialize_default_agent_config,
             domains::chat::default_agent_config::read_default_agent_config,
+            domains::chat::default_agent_config::reset_default_agent_config,
             domains::chat::default_agent_config::write_default_agent_config,
             domains::data_sync::read_data_sync_settings,
             domains::data_sync::write_data_sync_settings,

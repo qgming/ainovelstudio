@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   initializeDefaultAgentConfig,
   readDefaultAgentConfig,
+  resetDefaultAgentConfig,
   writeDefaultAgentConfig,
 } from "@features/settings/api/defaultAgentConfigApi";
 import {
@@ -60,6 +61,7 @@ type AgentSettingsActions = {
   deleteProviderPreset: (id: string) => void;
   initialize: () => Promise<void>;
   refreshDefaultAgentMarkdown: () => Promise<void>;
+  resetDefaultAgentMarkdown: () => Promise<void>;
   reset: () => void;
   resetConfig: () => void;
   saveConfig: (config: AgentProviderConfig) => Promise<void>;
@@ -254,6 +256,27 @@ export const useAgentSettingsStore = create<AgentSettingsStore>((set, get) => ({
       set((state) => ({
         ...state,
         errorMessage: formatSettingsError(error, "主代理 AGENTS.md 刷新失败。"),
+        status: "error",
+      }));
+      throw error;
+    }
+  },
+  resetDefaultAgentMarkdown: async () => {
+    set((state) => ({ ...state, errorMessage: null, status: "loading" }));
+
+    try {
+      const doc = await resetDefaultAgentConfig();
+      set((state) => ({
+        ...state,
+        configFilePath: typeof doc?.path === "string" ? doc.path : null,
+        defaultAgentMarkdown: normalizeMainAgentMarkdown(doc?.markdown),
+        errorMessage: null,
+        status: "ready",
+      }));
+    } catch (error) {
+      set((state) => ({
+        ...state,
+        errorMessage: formatSettingsError(error, "重置主代理 AGENTS.md 失败。"),
         status: "error",
       }));
       throw error;

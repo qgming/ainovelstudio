@@ -1,4 +1,4 @@
-import { Save } from "lucide-react";
+import { RotateCcw, Save } from "lucide-react";
 import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 
 type DefaultAgentSectionProps = {
@@ -6,6 +6,7 @@ type DefaultAgentSectionProps = {
   errorMessage?: string | null;
   isDirty: boolean;
   onChange: (value: string) => void;
+  onReset: () => void | Promise<void>;
   onSave: () => void | Promise<void>;
   status?: "idle" | "loading" | "ready" | "error";
 };
@@ -15,6 +16,7 @@ export function DefaultAgentSection({
   errorMessage,
   isDirty,
   onChange,
+  onReset,
   onSave,
   status = "idle",
 }: DefaultAgentSectionProps) {
@@ -23,14 +25,24 @@ export function DefaultAgentSection({
       <SettingsSectionHeader
         title="AGENTS.md"
         actions={
-          <SettingsHeaderResponsiveButton
-            type="button"
-            text="保存"
-            label="保存 AGENTS"
-            icon={<Save className="h-4 w-4" />}
-            onClick={onSave}
-            disabled={!isDirty || status === "loading"}
-          />
+          <>
+            <SettingsHeaderResponsiveButton
+              type="button"
+              text="重置"
+              label="重置为内置 AGENTS 并保存"
+              icon={<RotateCcw className="h-4 w-4" />}
+              onClick={onReset}
+              disabled={status === "loading"}
+            />
+            <SettingsHeaderResponsiveButton
+              type="button"
+              text="保存"
+              label="保存 AGENTS"
+              icon={<Save className="h-4 w-4" />}
+              onClick={onSave}
+              disabled={!isDirty || status === "loading"}
+            />
+          </>
         }
       />
       {errorMessage ? (

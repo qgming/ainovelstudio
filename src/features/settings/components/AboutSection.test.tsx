@@ -47,7 +47,7 @@ describe("AboutSection", () => {
     render(<AboutSection />);
 
     expect(screen.getByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
-    expect(screen.getByText("0.2.7")).toBeInTheDocument();
+    expect(screen.getByText("0.2.8")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("link", { name: "打开官网" })).toHaveAttribute("href", "https://www.qgming.com");
