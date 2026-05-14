@@ -20,7 +20,7 @@ export async function buildLinearConversationMessages(
   params: {
     entries?: ChatEntry[];
     history?: AgentMessage[];
-    currentUserContent: string;
+    currentUserContent: string | string[];
     summaryOptions?: HistorySummaryOptions;
   },
 ): Promise<ModelMessage[]> {

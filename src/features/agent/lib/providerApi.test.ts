@@ -154,7 +154,7 @@ describe("streamProviderRequestViaTauri", () => {
     expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
     expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
     expect(text).toContain("\"object\":\"chat.completion.chunk\"");
-    expect(text).toContain("\"content\":\"后台有响应，但不是 SSE。\"");
+    expect(text).toContain("\"reasoning_content\":\"后台有响应，但不是 SSE。\"");
     expect(text).toContain("data: [DONE]");
   });
 
@@ -514,7 +514,7 @@ describe("streamProviderRequestViaTauri", () => {
       url: "https://example.com/v1/chat/completions",
     });
 
-    await expect(readResponseText(response)).resolves.toContain("\"content\":\"只有思考内容也应该继续显示。\"");
+    await expect(readResponseText(response)).resolves.toContain("\"reasoning_content\":\"只有思考内容也应该继续显示。\"");
   });
 
   it("非流式请求收到 JSON 时保持原始响应", async () => {

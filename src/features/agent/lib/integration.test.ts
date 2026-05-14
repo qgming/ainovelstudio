@@ -203,7 +203,7 @@ describe("agent session (streaming)", () => {
       abortSignal: abortController.signal,
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["read"],
+      enabledToolIds: ["workspace_read"],
       prompt: "读取文件",
       providerConfig: {
         apiKey: "test-key",
@@ -211,7 +211,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        read: {
+        workspace_read: {
           description: "读取文件",
           execute: async () =>
             new Promise((resolve) => {
@@ -226,7 +226,7 @@ describe("agent session (streaming)", () => {
       // drain stream
     }
 
-    const tool = mockStreamFn.mock.calls[0][0].tools?.read as
+    const tool = mockStreamFn.mock.calls[0][0].tools?.workspace_read as
       | {
           execute?: (
             input: { path: string },
@@ -260,7 +260,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["read"],
+      enabledToolIds: ["workspace_read"],
       prompt: "读取文件",
       providerConfig: {
         apiKey: "test-key",
@@ -268,7 +268,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        read: {
+        workspace_read: {
           description: "读取文件",
           execute: executeMock,
         },
@@ -283,7 +283,7 @@ describe("agent session (streaming)", () => {
       // drain stream
     }
 
-    const tool = mockStreamFn.mock.calls[0][0].tools?.read as
+    const tool = mockStreamFn.mock.calls[0][0].tools?.workspace_read as
       | {
           execute?: (
             input: { path: string },
@@ -298,7 +298,7 @@ describe("agent session (streaming)", () => {
       { path: "章节/第一章.md" },
       expect.objectContaining({
         abortSignal: expect.any(AbortSignal),
-        requestId: expect.stringMatching(/^tool-read-/),
+        requestId: expect.stringMatching(/^tool-workspace_read-/),
       }),
     );
     expect(events).toHaveLength(2);
@@ -401,7 +401,7 @@ describe("agent session (streaming)", () => {
             }
           >;
         }) => {
-          const taskTool = request.tools?.task;
+          const taskTool = request.tools?.delegate_task;
           return {
             fullStream: (async function* () {
               yield {
@@ -506,20 +506,24 @@ describe("agent session (streaming)", () => {
     }
 
     const request = mockStreamFn.mock.calls[0][0];
-    expect(request.messages).toHaveLength(3);
+    expect(request.messages).toHaveLength(4);
     expect(request.messages[0]).toEqual({
       role: "user",
       content: "先总结上一章",
     });
     expect(request.messages[1]).toEqual({
       role: "assistant",
-      content: "上一章的核心冲突是主角是否进城。",
+      content: [{ type: "text", text: "上一章的核心冲突是主角是否进城。" }],
     });
     expect(request.messages[2].role).toBe("user");
-    expect(request.messages[2].content).toContain("继续分析第二章");
+    expect(request.messages[2].content).toContain("# 当前轮上下文");
     expect(request.messages[2].content).toContain(
       "- 当前工作区：C:/books/北境余烬",
     );
+    expect(request.messages[3]).toEqual({
+      role: "user",
+      content: "继续分析第二章",
+    });
   });
 
   it("连续对话时会把上一轮工具结果带入下一轮输入", async () => {
@@ -548,14 +552,14 @@ describe("agent session (streaming)", () => {
           parts: [
             {
               type: "tool-call",
-              toolName: "read",
+              toolName: "workspace_read",
               toolCallId: "call-history-1",
               status: "completed",
               inputSummary: '{"path":"设定/人物.md"}',
             },
             {
               type: "tool-result",
-              toolName: "read",
+              toolName: "workspace_read",
               toolCallId: "call-history-1",
               status: "completed",
               outputSummary: "主角：林燃；目标：逃离北城",
@@ -584,12 +588,28 @@ describe("agent session (streaming)", () => {
     expect(request.messages[1]).toEqual({
       role: "assistant",
       content: [
-        "工具执行：read，对象：设定/人物.md，结果：成功。",
-        '输入摘要：{"path":"设定/人物.md"}',
-        "输出摘要：主角：林燃；目标：逃离北城",
-        "",
-        "我已经提炼出主角目标。",
-      ].join("\n"),
+        {
+          type: "tool-call",
+          toolCallId: "call-history-1",
+          toolName: "workspace_read",
+          input: { path: "设定/人物.md" },
+        },
+      ],
+    });
+    expect(request.messages[2]).toEqual({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call-history-1",
+          toolName: "workspace_read",
+          output: { type: "text", value: "主角：林燃；目标：逃离北城" },
+        },
+      ],
+    });
+    expect(request.messages[3]).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: "我已经提炼出主角目标。" }],
     });
   });
 
@@ -639,8 +659,11 @@ describe("agent session (streaming)", () => {
       "- 当前文件类型：章节/正文稿件",
     );
     expect(request.messages[0].content).toContain("- 本轮任务类型：分析/诊断");
-    expect(request.messages[0].content).toContain("## s16 用户请求");
-    expect(request.messages[0].content).toContain("帮我整理这一章的冲突节奏");
+    expect(request.messages[0].content).not.toContain("## s16 用户请求");
+    expect(request.messages[1]).toEqual({
+      role: "user",
+      content: "帮我整理这一章的冲突节奏",
+    });
   });
 
   it("把手动选择的技能和文件内容注入当前轮上下文", async () => {
@@ -694,7 +717,11 @@ describe("agent session (streaming)", () => {
     expect(request.messages[0].content).toContain("- 设定/人物.md");
     expect(request.messages[0].content).toContain("系统不会自动注入文件正文");
     expect(request.messages[0].content).not.toContain("主角：林燃");
-    expect(request.messages[0].content).toContain("## s16 用户请求");
+    expect(request.messages[0].content).not.toContain("## s16 用户请求");
+    expect(request.messages[1]).toEqual({
+      role: "user",
+      content: "继续写这一章",
+    });
   });
 
   it("多步任务但没有计划时，会在当前轮上下文里注入先规划提醒", async () => {
@@ -726,13 +753,15 @@ describe("agent session (streaming)", () => {
       // drain stream
     }
 
-    const content =
-      mockStreamFn.mock.calls[0][0].messages[
-        mockStreamFn.mock.calls[0][0].messages.length - 1
-      ]?.content;
+    const request = mockStreamFn.mock.calls[0][0];
+    const content = request.messages[request.messages.length - 2]?.content;
     expect(content).toContain("## s12 计划执行提醒");
-    expect(content).toContain("请先用 todo 写出当前短计划");
+    expect(content).toContain("请先用 update_plan 写出当前短计划");
     expect(content).not.toContain("## s13 当前计划状态");
+    expect(request.messages[request.messages.length - 1]).toEqual({
+      role: "user",
+      content: "先定位问题，再修复并跑测试",
+    });
   });
 
   it("计划连续多轮未更新时，会在当前轮上下文里注入刷新提醒", async () => {
@@ -773,14 +802,16 @@ describe("agent session (streaming)", () => {
       // drain stream
     }
 
-    const content =
-      mockStreamFn.mock.calls[0][0].messages[
-        mockStreamFn.mock.calls[0][0].messages.length - 1
-      ]?.content;
+    const request = mockStreamFn.mock.calls[0][0];
+    const content = request.messages[request.messages.length - 2]?.content;
     expect(content).toContain("## s12 计划执行提醒");
-    expect(content).toContain("请先用 todo 刷新当前短计划");
+    expect(content).toContain("请先用 update_plan 刷新当前短计划");
     expect(content).toContain("## s13 当前计划状态");
     expect(content).toContain("[>] 修复问题");
+    expect(request.messages[request.messages.length - 1]).toEqual({
+      role: "user",
+      content: "继续分析这个问题",
+    });
   });
 
   it("普通请求不会注入额外的 planning reminder", async () => {
@@ -812,11 +843,13 @@ describe("agent session (streaming)", () => {
       // drain stream
     }
 
-    const content =
-      mockStreamFn.mock.calls[0][0].messages[
-        mockStreamFn.mock.calls[0][0].messages.length - 1
-      ]?.content;
+    const request = mockStreamFn.mock.calls[0][0];
+    const content = request.messages[request.messages.length - 2]?.content;
     expect(content).not.toContain("## s12 计划执行提醒");
+    expect(request.messages[request.messages.length - 1]).toEqual({
+      role: "user",
+      content: "解释这个函数",
+    });
   });
 
   it("目录树工具把真实目录树返回给模型", async () => {
@@ -825,13 +858,13 @@ describe("agent session (streaming)", () => {
     async function* mockFullStream() {
       yield {
         type: "tool-call" as const,
-        toolName: "browse",
+        toolName: "workspace_browse",
         toolCallId: "call-tree-1",
         input: {},
       };
       yield {
         type: "tool-result" as const,
-        toolName: "browse",
+        toolName: "workspace_browse",
         toolCallId: "call-tree-1",
         output: {
           kind: "directory",
@@ -851,7 +884,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["browse"],
+      enabledToolIds: ["workspace_browse"],
       prompt: "读取目录树",
       providerConfig: {
         apiKey: "test-key",
@@ -859,7 +892,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        browse: {
+        workspace_browse: {
           description: "读取当前工作区目录树",
           execute: async () => ({
             ok: true,
@@ -887,21 +920,19 @@ describe("agent session (streaming)", () => {
     }
 
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
-    expect(mockStreamFn.mock.calls[0][0].system).toContain(
-      "优先传相对工作区根目录的路径",
-    );
-    expect(mockStreamFn.mock.calls[0][0].tools?.browse).toBeDefined();
+    expect(mockStreamFn.mock.calls[0][0].system).toContain("浏览工作区结构");
+    expect(mockStreamFn.mock.calls[0][0].tools?.workspace_browse).toBeDefined();
     expect(parts).toEqual([
       {
         type: "tool-call",
-        toolName: "browse",
+        toolName: "workspace_browse",
         toolCallId: "call-tree-1",
         status: "running",
         inputSummary: "{}",
       },
       {
         type: "tool-result",
-        toolName: "browse",
+        toolName: "workspace_browse",
         toolCallId: "call-tree-1",
         status: "completed",
         output: {
@@ -934,7 +965,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["path"],
+      enabledToolIds: ["workspace_path"],
       prompt: "把章节移动到归档目录",
       providerConfig: {
         apiKey: "test-key",
@@ -942,7 +973,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        path: {
+        workspace_path: {
           description: "迁移文件或文件夹",
           execute: executeMock,
         },
@@ -955,8 +986,8 @@ describe("agent session (streaming)", () => {
     }
 
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
-    expect(mockStreamFn.mock.calls[0][0].system).toContain("path");
-    const tool = mockStreamFn.mock.calls[0][0].tools?.path as
+    expect(mockStreamFn.mock.calls[0][0].system).toContain("workspace_path");
+    const tool = mockStreamFn.mock.calls[0][0].tools?.workspace_path as
       | {
           execute?: (
             input: { action: "move"; path: string; targetParentPath: string },
@@ -984,7 +1015,7 @@ describe("agent session (streaming)", () => {
         targetParentPath: "归档/第一卷",
       },
       expect.objectContaining({
-        requestId: expect.stringMatching(/^tool-path-/),
+        requestId: expect.stringMatching(/^tool-workspace_path-/),
       }),
     );
   });
@@ -995,13 +1026,13 @@ describe("agent session (streaming)", () => {
     async function* mockFullStream() {
       yield {
         type: "tool-call" as const,
-        toolName: "skill",
+        toolName: "skill_read",
         toolCallId: "call-skills-1",
         input: {},
       };
       yield {
         type: "tool-result" as const,
-        toolName: "skill",
+        toolName: "skill_read",
         toolCallId: "call-skills-1",
         output: [
           {
@@ -1022,7 +1053,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["skill"],
+      enabledToolIds: ["skill_read"],
       prompt: "列出本地技能",
       providerConfig: {
         apiKey: "test-key",
@@ -1030,7 +1061,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        skill: {
+        skill_read: {
           description: "列出技能",
           execute: async () => ({
             ok: true,
@@ -1047,18 +1078,18 @@ describe("agent session (streaming)", () => {
     }
 
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
-    expect(mockStreamFn.mock.calls[0][0].tools?.skill).toBeDefined();
+    expect(mockStreamFn.mock.calls[0][0].tools?.skill_read).toBeDefined();
     expect(parts).toEqual([
       {
         type: "tool-call",
-        toolName: "skill",
+        toolName: "skill_read",
         toolCallId: "call-skills-1",
         status: "running",
         inputSummary: "{}",
       },
       {
         type: "tool-result",
-        toolName: "skill",
+        toolName: "skill_read",
         toolCallId: "call-skills-1",
         status: "completed",
         output: [
@@ -1270,25 +1301,25 @@ describe("agent session (streaming)", () => {
     async function* mockFullStream() {
       yield {
         type: "tool-call" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-1",
         input: { path: "章节/第一章.md" },
       };
       yield {
         type: "tool-call" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-2",
         input: { path: "章节/第二章.md" },
       };
       yield {
         type: "tool-result" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-2",
         output: "已读取第二章",
       };
       yield {
         type: "tool-result" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-1",
         output: "已读取第一章",
       };
@@ -1301,7 +1332,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["read"],
+      enabledToolIds: ["workspace_read"],
       prompt: "连续读取章节",
       providerConfig: {
         apiKey: "test-key",
@@ -1309,7 +1340,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        read: {
+        workspace_read: {
           description: "读取文件",
           execute: async () => ({
             ok: true,
@@ -1327,21 +1358,21 @@ describe("agent session (streaming)", () => {
     expect(parts).toEqual([
       {
         type: "tool-call",
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-1",
         status: "running",
         inputSummary: '{"path":"章节/第一章.md"}',
       },
       {
         type: "tool-call",
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-2",
         status: "running",
         inputSummary: '{"path":"章节/第二章.md"}',
       },
       {
         type: "tool-result",
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-2",
         status: "completed",
         output: "已读取第二章",
@@ -1349,7 +1380,7 @@ describe("agent session (streaming)", () => {
       },
       {
         type: "tool-result",
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-1",
         status: "completed",
         output: "已读取第一章",
@@ -1364,13 +1395,13 @@ describe("agent session (streaming)", () => {
     async function* mockFullStream() {
       yield {
         type: "tool-call" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-1",
         input: { path: "章节/第一章.md" },
       };
       yield {
         type: "tool-result" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "",
         output: "异常结果",
       };
@@ -1383,7 +1414,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["read"],
+      enabledToolIds: ["workspace_read"],
       prompt: "测试异常结果",
       providerConfig: {
         apiKey: "test-key",
@@ -1391,7 +1422,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        read: {
+        workspace_read: {
           description: "读取文件",
           execute: async () => ({
             ok: true,
@@ -1409,14 +1440,14 @@ describe("agent session (streaming)", () => {
     expect(parts).toEqual([
       {
         type: "tool-call",
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "call-read-1",
         status: "running",
         inputSummary: '{"path":"章节/第一章.md"}',
       },
       {
         type: "tool-result",
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "",
         status: "completed",
         output: "异常结果",
@@ -1438,7 +1469,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
-      enabledToolIds: ["read"],
+      enabledToolIds: ["workspace_read"],
       prompt: "继续写这一章",
       providerConfig: {
         apiKey: "test-key",
@@ -1446,7 +1477,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        read: {
+        workspace_read: {
           description: "读取文件",
           execute: async () => ({
             ok: true,
@@ -1480,13 +1511,13 @@ describe("agent session (streaming)", () => {
       yield { type: "reasoning-delta" as const, text: "正在分析人物动机。" };
       yield {
         type: "tool-call" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "sub-call-1",
         input: { path: "章节/第一章.md" },
       };
       yield {
         type: "tool-result" as const,
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "sub-call-1",
         output: "已读取当前章节",
       };
@@ -1510,7 +1541,7 @@ describe("agent session (streaming)", () => {
             }
           >;
         }) => {
-          const taskTool = request.tools?.task;
+          const taskTool = request.tools?.delegate_task;
           return {
             fullStream: (async function* () {
               yield {
@@ -1550,7 +1581,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        read: {
+        workspace_read: {
           description: "读取文件",
           execute: async () => ({
             ok: true,
@@ -1582,7 +1613,7 @@ describe("agent session (streaming)", () => {
       { type: "reasoning", summary: "正在思考", detail: "正在分析人物动机。" },
       {
         type: "tool-call",
-        toolName: "read",
+        toolName: "workspace_read",
         toolCallId: "sub-call-1",
         status: "completed",
         inputSummary: '{"path":"章节/第一章.md"}',
@@ -1669,7 +1700,7 @@ describe("agent session (streaming)", () => {
             toolCallId: "task-call-live-1",
             input: { prompt: "帮我分析主角动机" },
           };
-          const output = await request.tools?.task?.execute?.(
+          const output = await request.tools?.delegate_task?.execute?.(
             { prompt: "帮我分析主角动机" },
             {} as never,
           );
@@ -1763,7 +1794,7 @@ describe("agent session (streaming)", () => {
         >;
       }) => ({
         fullStream: (async function* () {
-          const output = await request.tools?.task?.execute?.(
+          const output = await request.tools?.delegate_task?.execute?.(
             {
               concurrency: 2,
               tasks: [
@@ -1851,7 +1882,7 @@ describe("agent session (streaming)", () => {
         >;
       }) => ({
         fullStream: (async function* () {
-          await request.tools?.task?.execute?.(
+          await request.tools?.delegate_task?.execute?.(
             {
               sharedContext: "第一章摘要：主角入城遇到药铺老板。",
               tasks: [
@@ -1922,7 +1953,7 @@ describe("agent session (streaming)", () => {
             }
           >;
         }) => {
-          const taskTool = request.tools?.task;
+          const taskTool = request.tools?.delegate_task;
           return {
             fullStream: (async function* () {
               yield {
@@ -1957,15 +1988,15 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        write: {
+        workspace_write: {
           description: "写入文件",
           execute: async () => ({ ok: true, summary: "已写入报告" }),
         },
-        json: {
+        workspace_json: {
           description: "更新 JSON",
           execute: async () => ({ ok: true, summary: "已更新 JSON", data: {} }),
         },
-        path: {
+        workspace_path: {
           description: "处理路径",
           execute: async () => ({ ok: true, summary: "已删除旧文件" }),
         },
@@ -1980,10 +2011,10 @@ describe("agent session (streaming)", () => {
 
     expect(mockSubagentStreamFn).toHaveBeenCalledTimes(1);
     const subagentTools = mockSubagentStreamFn.mock.calls[0][0].tools;
-    expect(subagentTools?.write).toBeDefined();
-    expect(subagentTools?.json).toBeDefined();
-    expect(subagentTools?.path).toBeDefined();
-    expect(subagentTools?.task).toBeUndefined();
+    expect(subagentTools?.workspace_write).toBeDefined();
+    expect(subagentTools?.workspace_json).toBeDefined();
+    expect(subagentTools?.workspace_path).toBeDefined();
+    expect(subagentTools?.delegate_task).toBeUndefined();
   });
 });
 

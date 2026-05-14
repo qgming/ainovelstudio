@@ -108,7 +108,7 @@ async function buildLoopContext(prompt: string, context: WritingRuntimeContext) 
   const messages = await buildLinearConversationMessages({
     entries: context.conversationEntries as never,
     history: context.conversationHistory,
-    currentUserContent,
+    currentUserContent: [currentUserContent, prompt],
     summaryOptions: { summarizeHistory: buildHistorySummaryFn(context.providerConfig) },
   });
 

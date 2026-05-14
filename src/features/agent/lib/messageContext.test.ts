@@ -30,7 +30,7 @@ describe("buildConversationMessages", () => {
 
     expect(messages).toHaveLength(21);
     expect(messages[0]).toEqual({ role: "user", content: "用户消息 5" });
-    expect(messages[19]).toEqual({ role: "assistant", content: "助手消息 24" });
+    expect(messages[19]).toEqual({ role: "assistant", content: [{ type: "text", text: "助手消息 24" }] });
     expect(messages[20]).toEqual({ role: "user", content: "当前问题" });
   });
 
@@ -66,14 +66,32 @@ describe("buildConversationMessages", () => {
     expect(messages[0]).toEqual({
       role: "assistant",
       content: [
-        "思考摘要：判断需要先读取设定；用户要求续写，必须确认人物目标。",
-        "",
-        "工具执行：read_file，对象：设定.md，结果：成功。",
-        "输入摘要：{\"path\":\"设定.md\"}",
-        "输出摘要：主角：林燃；目标：逃离北城",
-        "",
-        "我已整理完关键设定。",
-      ].join("\n"),
+        { type: "reasoning", text: "用户要求续写，必须确认人物目标。" },
+        {
+          type: "tool-call",
+          toolCallId: "call-1",
+          toolName: "read_file",
+          input: { path: "设定.md" },
+        },
+      ],
+    });
+    expect(messages[1]).toEqual({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call-1",
+          toolName: "read_file",
+          output: {
+            type: "json",
+            value: { protagonist: "林燃", goal: "逃离北城" },
+          },
+        },
+      ],
+    });
+    expect(messages[2]).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: "我已整理完关键设定。" }],
     });
   });
 
@@ -101,7 +119,10 @@ describe("buildConversationMessages", () => {
 
     expect(messages[0]).toEqual({
       role: "assistant",
-      content: "工具执行：read_file，对象：未记录目标，结果：失败，异常：toolCallId 缺失。\n输出摘要：读取失败",
+      content: [{
+        type: "text",
+        text: "工具执行：read_file，对象：未记录目标，结果：失败，异常：toolCallId 缺失。\n输出摘要：读取失败",
+      }],
     });
   });
 
@@ -142,6 +163,7 @@ describe("buildConversationMessages", () => {
       messages.some(
         (message) =>
           message.role === "assistant"
+          && typeof message.content === "string"
           && message.content.includes("较早工具活动已折叠：read_file"),
       ),
     ).toBe(true);

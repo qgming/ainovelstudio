@@ -63,15 +63,16 @@ describe("prompt context", () => {
     expect(sectionKeys).toHaveLength(unique.size);
   });
 
-  it("user prompt 用户请求渲染在 s16，且各 section key 唯一", () => {
+  it("user prompt 不再渲染为独立 section，但动态上下文各 section key 仍唯一", () => {
     const prompt = buildUserTurnContent({
       activeFilePath: "章节/第一章.md",
       prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
-    expect(prompt).toContain("## s16 用户请求");
+    expect(prompt).not.toContain("## s16 用户请求");
     expect(prompt).not.toMatch(/## s15 用户请求/u);
+    expect(prompt).toContain("## s10 当前轮动态上下文");
 
     const sectionKeys = [...prompt.matchAll(/^## (s\d+[a-z]?)\s/gmu)].map(
       (match) => match[1],

@@ -1,3 +1,4 @@
+import type { ModelMessage } from "ai";
 import type { AgentMessage, AgentPart } from "../types";
 import { extractPathsFromToolPart } from "./pathExtract";
 import { compactText, truncateText } from "./text";
@@ -12,6 +13,11 @@ import {
 } from "./types";
 
 type ToolLikePart = Extract<AgentPart, { type: "tool-call" | "tool-result" }>;
+
+type ModelAssistantContent = Extract<ModelMessage, { role: "assistant" }>["content"];
+type ModelAssistantPart = Exclude<ModelAssistantContent, string>[number];
+type ModelToolContent = Extract<ModelMessage, { role: "tool" }>["content"];
+type ModelToolResultPart = Extract<ModelToolContent[number], { type: "tool-result" }>;
 
 function stripTrailingSentencePunctuation(value: string) {
   return value.replace(/[。！？.!?；;，,：:]+$/u, "").trim();
@@ -81,6 +87,52 @@ function serializeReasoning(
   return content ? `思考摘要：${truncateText(content, maxChars)}` : null;
 }
 
+function getReasoningText(part: Extract<AgentPart, { type: "reasoning" }>) {
+  return (part.detail || part.summary).trim();
+}
+
+function tryParseJson(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return { value: trimmed };
+  }
+}
+
+function hasToolOutput(part: Extract<AgentPart, { type: "tool-call" }>) {
+  return part.output !== undefined
+    || compactText(part.outputSummary ?? "").length > 0
+    || compactText(part.validationError ?? "").length > 0;
+}
+
+function buildToolResultOutput(part: ToolLikePart): ModelToolResultPart["output"] {
+  const error = compactText(part.validationError ?? "");
+  const summary = "outputSummary" in part ? compactText(part.outputSummary ?? "") : "";
+  if (error || part.status === "failed") {
+    return { type: "error-text", value: [error, summary].filter(Boolean).join("\n") || "工具执行失败。" };
+  }
+
+  if ("output" in part && part.output !== undefined) {
+    return typeof part.output === "string"
+      ? { type: "text", value: part.output }
+      : { type: "json", value: part.output as never };
+  }
+
+  return { type: "text", value: summary };
+}
+
+function buildFallbackTextPart(
+  part: AgentPart,
+  parts: AgentPart[],
+  index: number,
+): ModelAssistantPart | null {
+  const serialized = serializeAgentPart(part, "detailed", parts, index);
+  return serialized ? { type: "text", text: serialized } : null;
+}
+
 function hasExplicitToolResult(
   parts: AgentPart[],
   startIndex: number,
@@ -93,7 +145,7 @@ function hasExplicitToolResult(
   });
 }
 
-function normalizeAssistantParts(parts: AgentPart[]) {
+export function normalizeAssistantParts(parts: AgentPart[]) {
   return parts.flatMap((part, index) => {
     if (part.type !== "tool-call") {
       return [part];
@@ -118,6 +170,97 @@ function normalizeAssistantParts(parts: AgentPart[]) {
 
     return normalizedParts;
   });
+}
+
+export function serializeAgentMessageToModelMessages(message: AgentMessage): ModelMessage[] {
+  if (message.role === "user") {
+    const content = message.parts
+      .map((part) => (part.type === "text" ? truncateText(part.text, MAX_USER_MESSAGE_CHARS) : null))
+      .filter((part): part is string => Boolean(part))
+      .join("\n\n")
+      .trim();
+
+    return content ? [{ role: "user", content }] : [];
+  }
+
+  if (message.role !== "assistant") {
+    return [];
+  }
+
+  const normalizedParts = normalizeAssistantParts(message.parts);
+  const messages: ModelMessage[] = [];
+  let assistantContent: ModelAssistantPart[] = [];
+  let toolContent: ModelToolResultPart[] = [];
+  let assistantHasToolCall = false;
+
+  const flushAssistant = () => {
+    if (assistantContent.length === 0) return;
+    messages.push({ role: "assistant", content: assistantContent });
+    if (toolContent.length > 0) {
+      messages.push({ role: "tool", content: toolContent });
+    }
+    assistantContent = [];
+    toolContent = [];
+    assistantHasToolCall = false;
+  };
+
+  normalizedParts.forEach((part, index) => {
+    if (part.type === "reasoning") {
+      if (assistantHasToolCall) flushAssistant();
+      const text = getReasoningText(part);
+      if (text) assistantContent.push({ type: "reasoning", text } as ModelAssistantPart);
+      return;
+    }
+
+    if (part.type === "text") {
+      if (assistantHasToolCall) flushAssistant();
+      const text = part.text.trim();
+      if (text) assistantContent.push({ type: "text", text } as ModelAssistantPart);
+      return;
+    }
+
+    if (part.type === "tool-call") {
+      const matchingResult = findMatchingToolResult(normalizedParts, index);
+      const resultSource = matchingResult ?? (hasToolOutput(part) ? part : undefined);
+
+      if (!part.toolCallId.trim() || !resultSource) {
+        const fallback = buildFallbackTextPart(part, normalizedParts, index);
+        if (fallback) assistantContent.push(fallback);
+        return;
+      }
+
+      assistantContent.push({
+        type: "tool-call",
+        toolCallId: part.toolCallId,
+        toolName: part.toolName,
+        input: tryParseJson(part.inputSummary) ?? {},
+      } as ModelAssistantPart);
+      assistantHasToolCall = true;
+      toolContent.push({
+        type: "tool-result",
+        toolCallId: part.toolCallId,
+        toolName: part.toolName,
+        output: buildToolResultOutput(resultSource),
+      } as ModelToolResultPart);
+      return;
+    }
+
+    if (part.type === "subagent") {
+      if (assistantHasToolCall) flushAssistant();
+      const text = [part.summary, part.detail ?? ""].filter(Boolean).join("\n").trim();
+      if (text) assistantContent.push({ type: "text", text } as ModelAssistantPart);
+      return;
+    }
+
+    const fallback = buildFallbackTextPart(part, normalizedParts, index);
+    if (fallback) {
+      if (assistantHasToolCall) flushAssistant();
+      assistantContent.push(fallback);
+    }
+  });
+
+  flushAssistant();
+  return messages;
 }
 
 function findMatchingToolResult(parts: AgentPart[], startIndex: number) {

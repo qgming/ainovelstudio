@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../types";
 import { buildHybridHistorySummary, estimateMessagesChars } from "./memory";
-import { serializeAgentMessage } from "./serialization";
+import { serializeAgentMessage, serializeAgentMessageToModelMessages } from "./serialization";
 import {
   MAX_DETAILED_HISTORY_MESSAGES,
   MAX_HISTORY_CHAR_BUDGET,
@@ -10,14 +10,21 @@ import {
   type TextConversationMessage,
 } from "./types";
 
+function normalizeCurrentUserContent(currentUserContent: string | string[]) {
+  return (Array.isArray(currentUserContent) ? currentUserContent : [currentUserContent])
+    .map((content) => content.trim())
+    .filter(Boolean);
+}
+
 function trimRecentMessagesToBudget(
   messages: SerializedHistoryMessage[],
-  currentUserContent: string,
+  currentUserContent: string | string[],
   prefixSummary: string,
 ) {
   const kept: SerializedHistoryMessage[] = [];
+  const currentUserContentText = normalizeCurrentUserContent(currentUserContent).join("\n\n");
   let remainingBudget =
-    MAX_HISTORY_CHAR_BUDGET - currentUserContent.length - prefixSummary.length;
+    MAX_HISTORY_CHAR_BUDGET - currentUserContentText.length - prefixSummary.length;
 
   for (const message of [...messages].reverse()) {
     if (message.content.length > remainingBudget && kept.length > 0) {
@@ -41,11 +48,50 @@ function toModelMessage(message: SerializedHistoryMessage): TextConversationMess
   };
 }
 
+function buildDetailedHistoryMessages(
+  historyMessages: AgentMessage[],
+  compactBoundary: number,
+) {
+  return historyMessages
+    .slice(compactBoundary)
+    .flatMap((message) => serializeAgentMessageToModelMessages(message));
+}
+
+function buildTrimmedDetailedHistoryMessages(
+  recentHistory: AgentMessage[],
+  compactBoundary: number,
+  currentUserMessages: string[],
+  historySummary: string,
+) {
+  const detailedEntries = recentHistory
+    .slice(compactBoundary)
+    .map((message) => ({
+      message,
+      serialized: serializeAgentMessage(message, "detailed"),
+    }))
+    .filter((entry): entry is { message: AgentMessage; serialized: SerializedHistoryMessage } =>
+      Boolean(entry.serialized),
+    );
+  const keptSerialized = new Set(
+    trimRecentMessagesToBudget(
+      detailedEntries.map((entry) => entry.serialized),
+      currentUserMessages,
+      historySummary,
+    ),
+  );
+
+  return detailedEntries
+    .filter((entry) => keptSerialized.has(entry.serialized))
+    .flatMap((entry) => serializeAgentMessageToModelMessages(entry.message));
+}
+
 export async function buildConversationMessages(
   historyMessages: AgentMessage[],
-  currentUserContent: string,
+  currentUserContent: string | string[],
   options?: HistorySummaryOptions,
 ): Promise<TextConversationMessage[]> {
+  const currentUserMessages = normalizeCurrentUserContent(currentUserContent);
+  const currentUserContentText = currentUserMessages.join("\n\n");
   const recentHistory = historyMessages.slice(-MAX_HISTORY_TURNS);
   const compactBoundary = Math.max(
     0,
@@ -55,12 +101,13 @@ export async function buildConversationMessages(
     .map((message, index) =>
       serializeAgentMessage(message, index < compactBoundary ? "compact" : "detailed"))
     .filter((message): message is SerializedHistoryMessage => Boolean(message));
+  const detailedHistory = buildDetailedHistoryMessages(recentHistory, compactBoundary);
   const needsSummaryCompact =
-    estimateMessagesChars(serializedHistory, currentUserContent) > MAX_HISTORY_CHAR_BUDGET;
+    estimateMessagesChars(serializedHistory, currentUserContentText) > MAX_HISTORY_CHAR_BUDGET;
   const historySummary = needsSummaryCompact
     ? await buildHybridHistorySummary(
         serializedHistory.slice(0, compactBoundary),
-        currentUserContent,
+        currentUserContentText,
         options?.summarizeHistory,
       )
     : "";
@@ -72,19 +119,23 @@ export async function buildConversationMessages(
               content: historySummary,
             }]
           : []),
-        ...trimRecentMessagesToBudget(
-          serializedHistory.slice(compactBoundary),
-          currentUserContent,
+        ...buildTrimmedDetailedHistoryMessages(
+          recentHistory,
+          compactBoundary,
+          currentUserMessages,
           historySummary,
-        ).map((message) => toModelMessage(message)),
+        ),
       ]
-    : serializedHistory.map((message) => toModelMessage(message));
+    : [
+        ...serializedHistory.slice(0, compactBoundary).map((message) => toModelMessage(message)),
+        ...detailedHistory,
+      ];
 
   return [
     ...history,
-    {
-      role: "user",
-      content: currentUserContent,
-    },
+    ...currentUserMessages.map((content) => ({
+      role: "user" as const,
+      content,
+    })),
   ];
 }

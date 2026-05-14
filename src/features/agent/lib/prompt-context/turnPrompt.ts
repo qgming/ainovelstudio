@@ -194,11 +194,6 @@ export function buildUserTurnContent({
         title: "手动指定上下文",
         body: buildManualContextBlock(manualContext),
       },
-      {
-        key: "s16",
-        title: "用户请求",
-        body: prompt.trim(),
-      },
     ]),
   ]);
 }

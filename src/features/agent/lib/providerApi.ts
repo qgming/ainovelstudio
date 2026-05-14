@@ -101,6 +101,12 @@ function extractChoiceText(choice: unknown) {
   const content = extractTextContent(choice.message.content);
   if (content.trim()) return content;
 
+  return "";
+}
+
+function extractChoiceReasoning(choice: unknown) {
+  if (!isRecord(choice) || !isRecord(choice.message)) return "";
+
   const reasoningContent =
     choice.message.reasoning_content
     ?? choice.message.reasoningContent
@@ -269,6 +275,7 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
     if (!isRecord(choice)) return;
 	    const index = typeof choice.index === "number" ? choice.index : fallbackIndex;
 	    const text = extractChoiceText(choice);
+	    const reasoning = extractChoiceReasoning(choice);
 	    const toolCalls = isToolCallsFinishReason(choice) ? extractToolCalls(choice) : [];
 
     payloads.push(createChatCompletionChunk({
@@ -280,10 +287,21 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
       model,
     }));
 
-    if (text.length > 0 && toolCalls.length === 0) {
-      payloads.push(createChatCompletionChunk({
-        created,
-        delta: { content: text },
+	    if (reasoning.length > 0) {
+	      payloads.push(createChatCompletionChunk({
+	        created,
+	        delta: { reasoning_content: reasoning },
+	        finishReason: null,
+	        id,
+	        index,
+	        model,
+	      }));
+	    }
+
+	    if (text.length > 0 && toolCalls.length === 0) {
+	      payloads.push(createChatCompletionChunk({
+	        created,
+	        delta: { content: text },
         finishReason: null,
         id,
         index,

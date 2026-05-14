@@ -22,9 +22,7 @@ export type SerializedHistoryMessage = {
   tools: string[];
 };
 
-export type TextConversationMessage = Extract<ModelMessage, { role: "assistant" | "user" }> & {
-  content: string;
-};
+export type TextConversationMessage = ModelMessage;
 
 export type TaskMemory = {
   constraints: string[];
