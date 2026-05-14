@@ -30,17 +30,17 @@ function parseTodoItems(items: unknown) {
 export function normalizeTodoItems(items: unknown): PlanItem[] {
   const parsedItems = parseTodoItems(items);
   if (!Array.isArray(parsedItems)) {
-    throw new Error("todo.items 必须是数组。");
+    throw new Error("update_plan.items 必须是数组。");
   }
 
   const validated = parsedItems.map((item, index) => {
     if (!item || typeof item !== "object") {
-      throw new Error(`todo.items[${index}] 必须是对象。`);
+      throw new Error(`update_plan.items[${index}] 必须是对象。`);
     }
 
     const content = String(item.content ?? "").trim();
     if (!content) {
-      throw new Error(`todo.items[${index}].content 不能为空。`);
+      throw new Error(`update_plan.items[${index}].content 不能为空。`);
     }
 
     const phase = String(item.phase ?? "").trim();

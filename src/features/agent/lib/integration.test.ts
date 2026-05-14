@@ -406,7 +406,7 @@ describe("agent session (streaming)", () => {
             fullStream: (async function* () {
               yield {
                 type: "tool-call" as const,
-                toolName: "task",
+                toolName: "delegate_task",
                 toolCallId: "task-call-stop-1",
                 input: { prompt: "帮我分析主角动机" },
               };
@@ -424,7 +424,7 @@ describe("agent session (streaming)", () => {
       abortSignal: abortController.signal,
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
-      enabledToolIds: ["task"],
+      enabledToolIds: ["delegate_task"],
       prompt: "帮我分析主角动机",
       providerConfig: {
         apiKey: "test-key",
@@ -1175,19 +1175,19 @@ describe("agent session (streaming)", () => {
     ]);
   });
 
-  it("web_fetch 工具把网页正文结果返回给模型", async () => {
+  it("web_read 工具把网页正文结果返回给模型", async () => {
     const parts: AgentPart[] = [];
 
     async function* mockFullStream() {
       yield {
         type: "tool-call" as const,
-        toolName: "web_fetch",
+        toolName: "web_read",
         toolCallId: "call-web-fetch-1",
         input: { url: "https://example.com/article-1" },
       };
       yield {
         type: "tool-result" as const,
-        toolName: "web_fetch",
+        toolName: "web_read",
         toolCallId: "call-web-fetch-1",
         output: {
           success: true,
@@ -1209,7 +1209,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: null,
       enabledSkills: [],
-      enabledToolIds: ["web_fetch"],
+      enabledToolIds: ["web_read"],
       prompt: "读一下这个网页",
       providerConfig: {
         apiKey: "test-key",
@@ -1217,7 +1217,7 @@ describe("agent session (streaming)", () => {
         model: "test-model",
       },
       workspaceTools: {
-        web_fetch: {
+        web_read: {
           description: "网页读取",
           execute: async () => ({
             ok: true,
@@ -1234,18 +1234,18 @@ describe("agent session (streaming)", () => {
     }
 
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
-    expect(mockStreamFn.mock.calls[0][0].tools?.web_fetch).toBeDefined();
+    expect(mockStreamFn.mock.calls[0][0].tools?.web_read).toBeDefined();
     expect(parts).toEqual([
       {
         type: "tool-call",
-        toolName: "web_fetch",
+        toolName: "web_read",
         toolCallId: "call-web-fetch-1",
         status: "running",
         inputSummary: '{"url":"https://example.com/article-1"}',
       },
       {
         type: "tool-result",
-        toolName: "web_fetch",
+        toolName: "web_read",
         toolCallId: "call-web-fetch-1",
         status: "completed",
         output: {
@@ -1515,7 +1515,7 @@ describe("agent session (streaming)", () => {
             fullStream: (async function* () {
               yield {
                 type: "tool-call" as const,
-                toolName: "task",
+                toolName: "delegate_task",
                 toolCallId: "task-call-1",
                 input: { prompt: "帮我分析主角动机" },
               };
@@ -1525,7 +1525,7 @@ describe("agent session (streaming)", () => {
               );
               yield {
                 type: "tool-result" as const,
-                toolName: "task",
+                toolName: "delegate_task",
                 toolCallId: "task-call-1",
                 output: output ?? "",
               };
@@ -1542,7 +1542,7 @@ describe("agent session (streaming)", () => {
       activeFilePath: "章节/第一章.md",
       workspaceRootPath: "C:/books/北境余烬",
       enabledSkills: [],
-      enabledToolIds: ["read", "task"],
+      enabledToolIds: ["workspace_read", "delegate_task"],
       prompt: "帮我分析主角动机",
       providerConfig: {
         apiKey: "test-key",
@@ -1601,7 +1601,7 @@ describe("agent session (streaming)", () => {
     });
     expect(parts).toContainEqual({
       type: "tool-call",
-      toolName: "task",
+      toolName: "delegate_task",
       toolCallId: "task-call-1",
       status: "running",
       inputSummary: '{"prompt":"帮我分析主角动机"}',
@@ -1609,7 +1609,7 @@ describe("agent session (streaming)", () => {
     const taskResult = parts.find(
       (part): part is Extract<AgentPart, { type: "tool-result" }> =>
         part.type === "tool-result" &&
-        part.toolName === "task" &&
+        part.toolName === "delegate_task" &&
         part.toolCallId === "task-call-1",
     );
     expect(taskResult).toBeDefined();
@@ -1665,7 +1665,7 @@ describe("agent session (streaming)", () => {
         fullStream: (async function* () {
           yield {
             type: "tool-call" as const,
-            toolName: "task",
+            toolName: "delegate_task",
             toolCallId: "task-call-live-1",
             input: { prompt: "帮我分析主角动机" },
           };
@@ -1675,7 +1675,7 @@ describe("agent session (streaming)", () => {
           );
           yield {
             type: "tool-result" as const,
-            toolName: "task",
+            toolName: "delegate_task",
             toolCallId: "task-call-live-1",
             output: output ?? "",
           };
@@ -1686,7 +1686,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
-      enabledToolIds: ["task"],
+      enabledToolIds: ["delegate_task"],
       prompt: "帮我分析主角动机",
       providerConfig: {
         apiKey: "test-key",
@@ -1775,7 +1775,7 @@ describe("agent session (streaming)", () => {
           );
           yield {
             type: "tool-result" as const,
-            toolName: "task",
+            toolName: "delegate_task",
             toolCallId: "task-call-batch-1",
             output: output ?? "",
           };
@@ -1786,7 +1786,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
-      enabledToolIds: ["task"],
+      enabledToolIds: ["delegate_task"],
       prompt: "批量分析主线和支线",
       providerConfig: {
         apiKey: "test-key",
@@ -1804,7 +1804,7 @@ describe("agent session (streaming)", () => {
 
     const taskResult = parts.find(
       (part): part is Extract<AgentPart, { type: "tool-result" }> =>
-        part.type === "tool-result" && part.toolName === "task",
+        part.type === "tool-result" && part.toolName === "delegate_task",
     );
     expect(taskResult?.output).toMatchObject({
       mode: "batch",
@@ -1863,7 +1863,7 @@ describe("agent session (streaming)", () => {
           );
           yield {
             type: "tool-result" as const,
-            toolName: "task",
+            toolName: "delegate_task",
             toolCallId: "task-call-shared-1",
             output: "",
           };
@@ -1874,7 +1874,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
-      enabledToolIds: ["task"],
+      enabledToolIds: ["delegate_task"],
       prompt: "按章批量更新设定",
       providerConfig: {
         apiKey: "test-key",
@@ -1927,7 +1927,7 @@ describe("agent session (streaming)", () => {
             fullStream: (async function* () {
               yield {
                 type: "tool-call" as const,
-                toolName: "task",
+                toolName: "delegate_task",
                 toolCallId: "task-call-write-1",
                 input: { prompt: "请生成报告并删除旧文件" },
               };
@@ -1937,7 +1937,7 @@ describe("agent session (streaming)", () => {
               );
               yield {
                 type: "tool-result" as const,
-                toolName: "task",
+                toolName: "delegate_task",
                 toolCallId: "task-call-write-1",
                 output: output ?? "",
               };
@@ -1949,7 +1949,7 @@ describe("agent session (streaming)", () => {
     const stream = runSessionPrompt({
       activeFilePath: "章节/第一章.md",
       enabledSkills: [],
-      enabledToolIds: ["task", "write", "json", "path"],
+      enabledToolIds: ["delegate_task", "workspace_write", "workspace_json", "workspace_path"],
       prompt: "请生成报告并删除旧文件",
       providerConfig: {
         apiKey: "test-key",

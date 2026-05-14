@@ -104,7 +104,7 @@ function formatRankPosDiff(diff: number) {
 
 export function createFanqieLeaderboardTools(): Record<string, AgentTool> {
   return {
-    fanqie_leaderboard: {
+    leaderboard: {
       description: "读取番茄小说排行榜，可按主榜、分类和排名范围返回作品信息。",
       execute: async (input) => {
         const forceRefresh = input.forceRefresh === true;
@@ -130,7 +130,7 @@ export function createFanqieLeaderboardTools(): Record<string, AgentTool> {
           type: board.type,
         };
         if (typeof input.categoryName === "string" && input.categoryName.trim()) {
-          ensureString(input.categoryName, "fanqie_leaderboard.categoryName");
+          ensureString(input.categoryName, "leaderboard.categoryName");
         }
         const books = category.id === OVERALL_CATEGORY_ID
           ? await fetchOverallLeaderboard(request)

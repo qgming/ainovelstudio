@@ -161,7 +161,7 @@ async function runTaskRequest(params: {
       providerConfig: params.providerConfig,
       streamFn: params.streamFn,
       workspaceTools: params.workspaceTools,
-      enabledToolIds: params.enabledToolIds.filter((toolId) => toolId !== "task"),
+      enabledToolIds: params.enabledToolIds.filter((toolId) => toolId !== "delegate_task"),
       onProgress: params.onProgress,
     });
     return { id: params.request.id, status: "completed", agentName: output.agent.name, summary: output.text, subagentId: output.subagentId };

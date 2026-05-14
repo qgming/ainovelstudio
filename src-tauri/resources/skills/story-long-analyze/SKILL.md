@@ -17,7 +17,7 @@ description: |
 
 ## Inputs To Read
 
-- 对标书的公开正文 / 简介 / 平台数据：用 `web_search` 拿链接，再用 `web_fetch` 读章节。
+- 对标书的公开正文 / 简介 / 平台数据：用 `web_search` 拿链接，再用 `web_read` 读章节。
 - 本轮 `scan-*.md`（若来自市场扫描子任务）：拿到对标书候选与方向。
 - 已有 `资料/拆文/` 拆解：避免重复拆同一本；没有该目录时按需创建。
 
@@ -70,7 +70,7 @@ description: |
 
 ## Reference Map
 
-使用 `skill({ action: "read", skillId: "story-long-analyze", relativePath })` 读取。
+使用 `skill_read({ action: "read", skillId: "story-long-analyze", relativePath })` 读取。
 
 | 场景 | relativePath | 读取时机 | 重点 |
 |---|---|---|---|

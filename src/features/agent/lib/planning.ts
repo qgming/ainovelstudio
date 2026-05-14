@@ -65,7 +65,7 @@ function parseTodoPayload(raw: string | undefined): PlanItem[] | null {
 }
 
 function getTodoItemsFromPart(part: AgentPart): PlanItem[] | null {
-  if (part.type !== "tool-call" || part.toolName !== "todo" || part.status !== "completed") {
+  if (part.type !== "tool-call" || part.toolName !== "update_plan" || part.status !== "completed") {
     return null;
   }
 

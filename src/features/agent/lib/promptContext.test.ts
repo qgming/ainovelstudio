@@ -183,7 +183,7 @@ describe("prompt context", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [createSkill()],
-      enabledToolIds: ["task"],
+      enabledToolIds: ["delegate_task"],
       mode: "book",
     });
 
@@ -196,7 +196,7 @@ describe("prompt context", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
-      enabledToolIds: ["todo"],
+      enabledToolIds: ["update_plan"],
       mode: "autopilot",
       modeContext: {
         goal: "完成第一章审校并写回文件",
@@ -209,7 +209,7 @@ describe("prompt context", () => {
     expect(system).toContain("完成第一章审校并写回文件");
     expect(system).toContain("第 1 轮");
     expect(system).toContain("不用 ask");
-    expect(system).toContain("mode_control");
+    expect(system).toContain("run_control");
     expect(system).toContain('action="complete"');
   });
 
@@ -217,7 +217,7 @@ describe("prompt context", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
-      enabledToolIds: ["mode_control", "todo", "read", "json", "canon_query"],
+      enabledToolIds: ["run_control", "update_plan", "workspace_read", "workspace_json", "project_memory_search"],
       mode: "flow",
     });
 
@@ -235,13 +235,13 @@ describe("prompt context", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
-      enabledToolIds: ["read", "write", "canon_query"],
+      enabledToolIds: ["workspace_read", "workspace_write", "project_memory_search"],
       mode: "chapter-write",
     });
 
     expect(system).toContain("# 模式：chapter-write");
     expect(system).toContain("章节生产");
-    expect(system).toContain("canon_query");
+    expect(system).toContain("project_memory_search");
     expect(system).toContain(".project/status/*.json");
     expect(system).not.toContain(".project/runs/chapter-NNN.json");
     expect(system).toContain("chapter-plan -> draft");

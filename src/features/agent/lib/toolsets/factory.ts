@@ -29,7 +29,7 @@ export function createDefaultLocalResourceToolset(options?: {
   });
 
   if (options?.includeAsk === false) {
-    const { ask: _ask, ...rest } = localTools;
+    const { ask_user: _ask, ...rest } = localTools;
     return rest;
   }
 

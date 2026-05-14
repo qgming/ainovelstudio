@@ -38,10 +38,10 @@ function buildPlanningInterventionBlock(
   }
 
   if (planningIntervention.reason === "stale_plan") {
-    return "提醒：当前计划已经连续几轮没有更新，可能与当前执行不再一致。继续前请先用 todo 刷新当前短计划。";
+    return "提醒：当前计划已经连续几轮没有更新，可能与当前执行不再一致。继续前请先用 update_plan 刷新当前短计划。";
   }
 
-  return "提醒：本轮请求看起来包含多个步骤。继续执行前，请先用 todo 写出当前短计划，并在完成关键步骤后及时更新。";
+  return "提醒：本轮请求看起来包含多个步骤。继续执行前，请先用 update_plan 写出当前短计划，并在完成关键步骤后及时更新。";
 }
 
 function inferTaskProfile(prompt: string): TaskProfile {
@@ -58,7 +58,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "改写/润色",
       outputHint: "优先给修改后文本，必要时再附简短修改说明。",
-      caution: "改前必先 read 目标文件当前原文，不要凭印象改；默认保留原意、信息量与文风，不要无故重置结构或删掉有效细节。",
+      caution: "改前必先 workspace_read 目标文件当前原文，不要凭印象改；默认保留原意、信息量与文风，不要无故重置结构或删掉有效细节。",
     };
   }
 
@@ -70,7 +70,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "设定/规划",
       outputHint: "优先给结构化方案，如大纲、设定条目、角色卡或步骤清单。",
-      caution: "开始前必先 browse 工作区并 read 已有大纲、人物、设定；保持内部逻辑闭环，避免设定互相冲突或只有概念没有落地细节。",
+      caution: "开始前必先 workspace_browse 工作区并 workspace_read 已有大纲、人物、设定；保持内部逻辑闭环，避免设定互相冲突或只有概念没有落地细节。",
     };
   }
 
@@ -78,7 +78,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "审稿/评估",
       outputHint: "优先给问题与结论，再给修改建议或风险排序。",
-      caution: "开始前必先 read 被审对象的正文与相关设定；聚焦真实问题，不要用空泛表扬稀释判断。",
+      caution: "开始前必先 workspace_read 被审对象的正文与相关设定；聚焦真实问题，不要用空泛表扬稀释判断。",
     };
   }
 
@@ -86,7 +86,7 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "分析/诊断",
       outputHint: "优先给结论、结构化观察和依据，避免先讲泛泛方法。",
-      caution: "开始前必先 read 被分析对象的正文或资料；基于已读内容推断，未读取的情节与设定不要当成事实引用。",
+      caution: "开始前必先 workspace_read 被分析对象的正文或资料；基于已读内容推断，未读取的情节与设定不要当成事实引用。",
     };
   }
 
@@ -94,14 +94,14 @@ function inferTaskProfile(prompt: string): TaskProfile {
     return {
       label: "翻译/转写",
       outputHint: "优先给译文或转换结果，必要时补充少量术语说明。",
-      caution: "翻译前必先 read 源文件全文；注意语气、叙述视角和专有名词的一致性。",
+      caution: "翻译前必先 workspace_read 源文件全文；注意语气、叙述视角和专有名词的一致性。",
     };
   }
 
   return {
     label: "通用协作",
     outputHint: "优先给最接近用户目标的可执行结果或下一步动作。",
-    caution: "如涉及工作区内容，先用 browse/search/read 读相关文件再继续，不要假设未见内容。",
+    caution: "如涉及工作区内容，先用 workspace_browse / workspace_search / workspace_read 读相关文件再继续，不要假设未见内容。",
   };
 }
 

@@ -65,7 +65,10 @@ function getJsonMaxChars(value: unknown) {
 }
 
 function normalizeWriteAction(value: unknown) {
-  return value === "replace" ? "replace" : "append";
+  if (value === "create" || value === "replace") {
+    return value;
+  }
+  return "append";
 }
 
 function isMissingWorkspaceTextFileError(error: unknown) {
@@ -86,38 +89,55 @@ export function createWorkspaceTextTools({
   rootPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
-    create: {
-      description: "创建空白文本文件",
+    workspace_write: {
+      description: "向工作区文本文件写入内容或创建空白文件",
       execute: async (input, context) => {
-        const path = normalizeToolPath(ensureString(input.path, "create.path"));
+        const path = normalizeToolPath(ensureString(input.path, "workspace_write.path"));
         if (!path || path === ".") {
-          throw new Error("create.path 必须是文件相对路径。");
+          throw new Error("workspace_write.path 必须是文件相对路径。");
         }
-        const existingContent = await readWorkspaceTextFile(
+        const action = normalizeWriteAction(input.action);
+        const abortContext = getAbortContext(context);
+        if (action === "create") {
+          const existingContent = await readWorkspaceTextFile(
+            rootPath,
+            path,
+            abortContext,
+          ).catch((error: unknown) => {
+            if (isMissingWorkspaceTextFileError(error)) return null;
+            throw error;
+          });
+          if (existingContent !== null) {
+            throw new Error(`workspace_write 目标文件已存在：${path}。`);
+          }
+          await writeWorkspaceTextFile(rootPath, path, "", abortContext);
+          await onWorkspaceMutated?.();
+          return ok(`已创建空白文件 ${path}`);
+        }
+
+        const currentContent = await readWorkspaceTextFile(
           rootPath,
           path,
-          getAbortContext(context),
-        ).catch((error: unknown) => {
-          if (isMissingWorkspaceTextFileError(error)) return null;
-          throw error;
-        });
-        if (existingContent !== null) {
-          throw new Error(`create 目标文件已存在：${path}。如需写入内容请使用 write 或 edit。`);
-        }
+          abortContext,
+        );
+        const content = String(input.content ?? "");
+        const nextContent = action === "replace"
+          ? content
+          : `${currentContent}${content}`;
         await writeWorkspaceTextFile(
           rootPath,
           path,
-          "",
-          getAbortContext(context),
+          nextContent,
+          abortContext,
         );
         await onWorkspaceMutated?.();
-        return ok(`已创建空白文件 ${path}`);
+        return ok(action === "replace" ? `已覆盖写入 ${path}` : `已追加写入 ${path}`);
       },
     },
-    read: {
+    workspace_read: {
       description: "读取文本文件",
       execute: async (input, context) => {
-        const path = ensureString(input.path, "read.path");
+        const path = ensureString(input.path, "workspace_read.path");
         const mode = normalizeReadMode(input.mode);
         const content = await readWorkspaceTextFile(
           rootPath,
@@ -144,7 +164,7 @@ export function createWorkspaceTextTools({
           return ok(
             readRangeAroundAnchor({
               afterLines: asNonNegativeInt(input.afterLines, 20),
-              anchor: ensureString(input.anchor, "read.anchor"),
+              anchor: ensureString(input.anchor, "workspace_read.anchor"),
               beforeLines: asNonNegativeInt(input.beforeLines, 20),
               caseSensitive: Boolean(input.caseSensitive),
               contents: content,
@@ -158,7 +178,7 @@ export function createWorkspaceTextTools({
           return ok(
             readRangeByHeading({
               contents: content,
-              heading: ensureString(input.heading, "read.heading"),
+              heading: ensureString(input.heading, "workspace_read.heading"),
               occurrence: asPositiveInt(input.occurrence, 1),
               path,
             }),
@@ -168,7 +188,7 @@ export function createWorkspaceTextTools({
         const startLine = asPositiveInt(input.startLine, 1);
         const endLine = asPositiveInt(input.endLine, startLine);
         if (endLine < startLine) {
-          throw new Error("read.range 的 endLine 不能小于 startLine。");
+          throw new Error("workspace_read.range 的 endLine 不能小于 startLine。");
         }
         const startIndex = startLine - 1;
         const endIndex = Math.min(endLine, lines.length);
@@ -177,11 +197,11 @@ export function createWorkspaceTextTools({
         );
       },
     },
-    edit: {
+    workspace_edit: {
       description: "对文本文件做局部编辑",
       execute: async (input, context) => {
         const action = normalizeEditAction(input.action);
-        const path = ensureString(input.path, "edit.path");
+        const path = ensureString(input.path, "workspace_edit.path");
         const content = String(input.content ?? "");
         const target = input.target == null ? undefined : String(input.target);
         const expectedCount = asPositiveInt(input.expectedCount, 1);
@@ -215,7 +235,7 @@ export function createWorkspaceTextTools({
           const lines = splitTextLines(currentContent);
           const { startIndex, endIndex } = resolveAnchorWindow({
             afterLines: asNonNegativeInt(input.afterLines, 20),
-            anchor: ensureString(input.anchor, "edit.anchor"),
+            anchor: ensureString(input.anchor, "workspace_edit.anchor"),
             beforeLines: asNonNegativeInt(input.beforeLines, 20),
             caseSensitive: Boolean(input.caseSensitive),
             lines,
@@ -241,7 +261,7 @@ export function createWorkspaceTextTools({
         if (action === "replace_heading_range") {
           const lines = splitTextLines(currentContent);
           const { startIndex, endIndex } = resolveHeadingWindow({
-            heading: ensureString(input.heading, "edit.heading"),
+            heading: ensureString(input.heading, "workspace_edit.heading"),
             lines,
             occurrence: asPositiveInt(input.occurrence, 1),
           });
@@ -280,47 +300,26 @@ export function createWorkspaceTextTools({
         return ok(`已更新 ${path}（${action}，命中 ${result.matchCount} 处）。`);
       },
     },
-    write: {
-      description: "向已有文本文件写入内容",
-      execute: async (input, context) => {
-        const path = ensureString(input.path, "write.path");
-        const action = normalizeWriteAction(input.action);
-        const content = String(input.content ?? "");
-        const currentContent = await readWorkspaceTextFile(
-          rootPath,
-          path,
-          getAbortContext(context),
-        );
-        const nextContent = action === "replace"
-          ? content
-          : `${currentContent}${content}`;
-        await writeWorkspaceTextFile(
-          rootPath,
-          path,
-          nextContent,
-          getAbortContext(context),
-        );
-        await onWorkspaceMutated?.();
-        return ok(action === "replace" ? `已覆盖写入 ${path}` : `已追加写入 ${path}`);
-      },
-    },
-    json: {
+    workspace_json: {
       description: "读取或局部更新 JSON 文件",
       execute: async (input, context) => {
         const action = normalizeJsonAction(input.action);
-        const path = ensureString(input.path, "json.path");
+        const path = ensureString(input.path, "workspace_json.path");
         const maxChars = getJsonMaxChars(input.maxChars);
         if (action === "create") {
           if (!input.overwrite) {
-            try {
-              await readWorkspaceTextFile(rootPath, path, getAbortContext(context));
+            const existingContent = await readWorkspaceTextFile(
+              rootPath,
+              path,
+              getAbortContext(context),
+            ).catch((error: unknown) => {
+              if (isMissingWorkspaceTextFileError(error)) return null;
+              throw error;
+            });
+            if (existingContent !== null) {
               throw new Error(
-                `json.create 目标文件已存在：${path}。如需覆盖请传 overwrite=true。`,
+                `workspace_json.create 目标文件已存在：${path}。如需覆盖请传 overwrite=true。`,
               );
-            } catch (error) {
-              if (error instanceof Error && error.message.includes("overwrite=true")) {
-                throw error;
-              }
             }
           }
           const nextJson = input.value === undefined ? {} : cloneJsonValue(input.value);
@@ -345,7 +344,7 @@ export function createWorkspaceTextTools({
         const currentJson = parseJsonDocument(currentContents, path);
         if (action === "batch") {
           if (!Array.isArray(input.operations) || input.operations.length === 0) {
-            throw new Error("json.batch 需要提供非空 operations。");
+            throw new Error("workspace_json.batch 需要提供非空 operations。");
           }
 
           const operations = input.operations.map(normalizeJsonBatchOperation);
@@ -371,7 +370,7 @@ export function createWorkspaceTextTools({
 
         if (action === "patch") {
           if (!Array.isArray(input.patch) || input.patch.length === 0) {
-            throw new Error("json.patch 需要提供非空 patch。");
+            throw new Error("workspace_json.patch 需要提供非空 patch。");
           }
 
           const { operations, root: nextJson } = applyJsonPatch(
@@ -422,7 +421,7 @@ export function createWorkspaceTextTools({
         }
         if (action === "search") {
           const target = getJsonValueAtPointer(currentJson, segments);
-          const query = ensureString(input.query, "json.query");
+          const query = ensureString(input.query, "workspace_json.query");
           return ok(`已在 ${path} 中搜索 JSON：${query}`, {
             action,
             path,
@@ -441,7 +440,7 @@ export function createWorkspaceTextTools({
         }
 
         if (input.value === undefined && action !== "delete") {
-          throw new Error(`json.${action} 需要提供 value。`);
+          throw new Error(`workspace_json.${action} 需要提供 value。`);
         }
 
         let nextJson = cloneJsonValue(currentJson);

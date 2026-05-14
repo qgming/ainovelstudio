@@ -23,7 +23,7 @@ description: |
 ## Procedure
 
 1. 用 `web_search` 拿短篇平台热门链接（知乎盐言、七猫短篇榜、黑岩故事推荐等）。
-2. 用 `web_fetch` 读热门短篇与编辑推荐。
+2. 用 `web_read` 读热门短篇与编辑推荐。
 3. 整理：
    - 平台风向摘要
    - 可推荐题材方向（含 平台 + 卖点 + 对标短篇候选）
@@ -60,7 +60,7 @@ description: |
 
 ## Reference Map
 
-使用 `skill({ action: "read", skillId: "story-short-scan", relativePath })` 读取。
+使用 `skill_read({ action: "read", skillId: "story-short-scan", relativePath })` 读取。
 
 | 场景 | relativePath | 读取时机 | 重点 |
 |---|---|---|---|

@@ -24,7 +24,7 @@ function buildAskPart(
 ): AgentPart {
   return {
     type: "ask-user",
-    toolName: "ask",
+    toolName: "ask_user",
     toolCallId,
     status,
     title: request.title,
@@ -52,10 +52,10 @@ export function createScopedAskUser(params: {
     toolCallId: string | undefined,
     request: AskUserRequest,
   ): Promise<AskToolAnswer> {
-    if (!toolCallId?.trim()) throw new Error("ask 工具缺少 toolCallId，无法建立交互。");
-    if (!onAskUser) throw new Error("当前运行环境不支持 ask 交互。");
+    if (!toolCallId?.trim()) throw new Error("ask_user 工具缺少 toolCallId，无法建立交互。");
+    if (!onAskUser) throw new Error("当前运行环境不支持 ask_user 交互。");
     if (pendingToolCallId && pendingToolCallId !== toolCallId) {
-      throw new Error("当前已有等待用户回答的 ask，暂不支持并发交互。");
+      throw new Error("当前已有等待用户回答的 ask_user，暂不支持并发交互。");
     }
 
     pendingToolCallId = toolCallId;

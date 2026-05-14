@@ -35,7 +35,7 @@ export function normalizeJsonBatchOperation(
   index: number,
 ): JsonBatchOperation {
   if (!operation || typeof operation !== "object") {
-    throw new Error(`json.batch 第 ${index + 1} 项操作必须是对象。`);
+    throw new Error(`workspace_json.batch 第 ${index + 1} 项操作必须是对象。`);
   }
 
   const record = operation as Record<string, unknown>;
@@ -50,7 +50,7 @@ export function normalizeJsonBatchOperation(
     action !== "text_append"
   ) {
     throw new Error(
-      `json.batch 第 ${index + 1} 项 action 仅支持 set / merge / append / text_append / ensure_template / history_append / delete。`,
+      `workspace_json.batch 第 ${index + 1} 项 action 仅支持 set / merge / append / text_append / ensure_template / history_append / delete。`,
     );
   }
 
@@ -89,7 +89,7 @@ export function applyJsonOperation(
   const normalizedPointer = pointer || "/";
 
   if (operation.action !== "delete" && operation.value === undefined) {
-    throw new Error(`json.${operation.action} 需要提供 value。`);
+    throw new Error(`workspace_json.${operation.action} 需要提供 value。`);
   }
 
   if (operation.action === "set") {
@@ -165,7 +165,7 @@ export function applyJsonOperations(
       return applied.result;
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
-      throw new Error(`json.batch 第 ${index + 1} 项操作失败：${message}`);
+      throw new Error(`workspace_json.batch 第 ${index + 1} 项操作失败：${message}`);
     }
   });
 

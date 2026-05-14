@@ -195,7 +195,7 @@ function resolveSelectedBlockWindow(
   if (mode === "anchor_range") {
     const anchor = options?.anchor?.trim();
     if (!anchor) {
-      throw new Error("web_fetch.anchor_range 需要提供 anchor。");
+      throw new Error("web_read.anchor_range 需要提供 anchor。");
     }
 
     return resolveAnchorWindow({
@@ -211,7 +211,7 @@ function resolveSelectedBlockWindow(
   if (mode === "heading_range") {
     const heading = options?.heading?.trim();
     if (!heading) {
-      throw new Error("web_fetch.heading_range 需要提供 heading。");
+      throw new Error("web_read.heading_range 需要提供 heading。");
     }
     return resolveHeadingWindow(blocks, heading, Math.max(options?.occurrence ?? 1, 1));
   }

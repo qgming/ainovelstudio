@@ -174,7 +174,7 @@ describe("agentLoop", () => {
     expect(messageSnapshots[1]?.at(-1)?.content).toContain(reasoning);
   });
 
-  it("默认单步上限是 100", async () => {
+  it("默认单步上限是 1000", async () => {
     const streamFn = vi.fn(() => streamResult([], "tool-calls", []));
 
     await expect(async () => {
@@ -184,9 +184,9 @@ describe("agentLoop", () => {
       )) {
         // drain stream
       }
-    }).rejects.toThrow("Agent 达到最大单步次数 100");
+    }).rejects.toThrow("Agent 达到最大单步次数 1000");
 
-    expect(streamFn).toHaveBeenCalledTimes(100);
+    expect(streamFn).toHaveBeenCalledTimes(1000);
   });
 
   it("null 单步上限允许调用方使用无限上限", async () => {

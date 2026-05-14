@@ -81,7 +81,7 @@ export type AgentPart =
     }
   | {
       type: "ask-user";
-      toolName: "ask";
+      toolName: "ask_user";
       toolCallId: string;
       status: "awaiting_user" | "completed" | "failed";
       title: string;

@@ -15,8 +15,8 @@ function buildAssistantMessage(outputSummary: string): AgentMessage {
     parts: [
       {
         type: "tool-call",
-        toolCallId: "todo-1",
-        toolName: "todo",
+        toolCallId: "update-plan-1",
+        toolName: "update_plan",
         status: "completed",
         inputSummary: "{\"items\":[]}",
         outputSummary,
@@ -65,7 +65,7 @@ describe("planning", () => {
     ).toBeNull();
   });
 
-  it("从最近一次 todo 工具结果推导当前计划和未更新轮数", () => {
+  it("从最近一次 update_plan 工具结果推导当前计划和未更新轮数", () => {
     const messages: AgentMessage[] = [
       {
         id: "user-1",

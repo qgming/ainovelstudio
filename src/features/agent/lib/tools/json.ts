@@ -247,7 +247,7 @@ export function parseJsonPointer(pointer: string) {
     return [];
   }
   if (!normalized.startsWith("/")) {
-    throw new Error("json.pointer 必须为空字符串或以 / 开头。");
+    throw new Error("workspace_json.pointer 必须为空字符串或以 / 开头。");
   }
 
   return normalized
@@ -398,7 +398,7 @@ export function ensureJsonTemplateAtPointer(
   template: unknown,
 ) {
   if (!isPlainObject(template)) {
-    throw new Error("json.ensure_template 需要 object 类型的 value。");
+    throw new Error("workspace_json.ensure_template 需要 object 类型的 value。");
   }
 
   if (segments.length === 0) {
@@ -421,7 +421,7 @@ export function mergeJsonValueAtPointer(
   value: unknown,
 ) {
   if (!isPlainObject(value)) {
-    throw new Error("json.merge 需要 object 类型的 value。");
+    throw new Error("workspace_json.merge 需要 object 类型的 value。");
   }
 
   let nextRoot = root;
@@ -431,7 +431,7 @@ export function mergeJsonValueAtPointer(
     target = getJsonValueAtPointer(nextRoot, segments);
   }
   if (!isPlainObject(target)) {
-    throw new Error("json.merge 目标节点必须是对象。");
+    throw new Error("workspace_json.merge 目标节点必须是对象。");
   }
 
   Object.assign(target, cloneJsonValue(value));
@@ -450,7 +450,7 @@ export function appendJsonValueAtPointer(
     target = getJsonValueAtPointer(nextRoot, segments);
   }
   if (!Array.isArray(target)) {
-    throw new Error("json.append 目标节点必须是数组。");
+    throw new Error("workspace_json.append 目标节点必须是数组。");
   }
 
   target.push(cloneJsonValue(value));
@@ -466,7 +466,7 @@ export function appendJsonTextAtPointer(
   },
 ) {
   if (typeof value !== "string") {
-    throw new Error("json.text_append 需要 string 类型的 value。");
+    throw new Error("workspace_json.text_append 需要 string 类型的 value。");
   }
 
   const separator = typeof options?.separator === "string" ? options.separator : "";
@@ -475,7 +475,7 @@ export function appendJsonTextAtPointer(
     return setJsonValueAtPointer(root, segments, value);
   }
   if (typeof currentValue !== "string") {
-    throw new Error("json.text_append 目标节点必须是字符串。");
+    throw new Error("workspace_json.text_append 目标节点必须是字符串。");
   }
 
   const nextValue = currentValue ? `${currentValue}${separator}${value}` : value;
@@ -502,7 +502,7 @@ export function appendJsonHistoryAtPointer(
   const nextRoot = appendJsonValueAtPointer(root, segments, nextValue);
   const target = getJsonValueAtPointer(nextRoot, segments);
   if (!Array.isArray(target)) {
-    throw new Error("json.history_append 目标节点必须是数组。");
+    throw new Error("workspace_json.history_append 目标节点必须是数组。");
   }
 
   const limit = typeof options?.limit === "number" ? Math.trunc(options.limit) : undefined;
@@ -514,7 +514,7 @@ export function appendJsonHistoryAtPointer(
 
 export function deleteJsonValueAtPointer(root: unknown, segments: string[]) {
   if (segments.length === 0) {
-    throw new Error("json.delete 不能删除根节点。");
+    throw new Error("workspace_json.delete 不能删除根节点。");
   }
 
   const parent = getJsonValueAtPointer(root, segments.slice(0, -1));
@@ -553,7 +553,7 @@ function readPatchedValue(root: unknown, segments: string[]) {
   if (lastSegment === "-") {
     const parent = getJsonValueAtPointer(root, parentSegments);
     if (!Array.isArray(parent) || parent.length === 0) {
-      throw new Error("json.patch 追加数组项后未找到结果值。");
+      throw new Error("workspace_json.patch 追加数组项后未找到结果值。");
     }
     return cloneJsonValue(parent[parent.length - 1]);
   }
@@ -566,7 +566,7 @@ export function applyJsonPatch(root: unknown, operations: JsonPatchOperation[]) 
     const op = operation.op;
     const path = normalizePatchPointer(
       operation.path,
-      `json.patch 第 ${index + 1} 项`,
+      `workspace_json.patch 第 ${index + 1} 项`,
     );
     const segments = parseJsonPointer(path);
 
@@ -579,7 +579,7 @@ export function applyJsonPatch(root: unknown, operations: JsonPatchOperation[]) 
       const currentValue = cloneJsonValue(getJsonValueAtPointer(nextRoot, segments));
       const expectedValue = cloneJsonValue(operation.value);
       if (JSON.stringify(currentValue) !== JSON.stringify(expectedValue)) {
-        throw new Error(`json.patch 第 ${index + 1} 项 test 失败：${path}`);
+        throw new Error(`workspace_json.patch 第 ${index + 1} 项 test 失败：${path}`);
       }
       return { op, path, value: currentValue };
     }
@@ -587,7 +587,7 @@ export function applyJsonPatch(root: unknown, operations: JsonPatchOperation[]) 
       if (op === "copy" || op === "move") {
       const from = normalizePatchPointer(
         operation.from ?? "",
-        `json.patch 第 ${index + 1} 项`,
+        `workspace_json.patch 第 ${index + 1} 项`,
       );
       const movedValue = cloneJsonValue(
         getJsonValueAtPointer(nextRoot, parseJsonPointer(from)),
@@ -600,7 +600,7 @@ export function applyJsonPatch(root: unknown, operations: JsonPatchOperation[]) 
     }
 
     if (operation.value === undefined) {
-      throw new Error(`json.patch 第 ${index + 1} 项 ${op} 需要提供 value。`);
+      throw new Error(`workspace_json.patch 第 ${index + 1} 项 ${op} 需要提供 value。`);
     }
 
     nextRoot =

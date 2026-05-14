@@ -83,41 +83,35 @@ const editInputSchema = z.object({
 
 const writeInputSchema = z.object({
   action: z
-    .enum(["append", "replace"])
+    .enum(["create", "append", "replace"])
     .default("append")
-    .describe("写入方式。append=追加到已有文件末尾，适合长正文分段落盘；replace=覆盖已有文件全文。新文件必须先用 create 创建空文件。"),
-  content: z.string().describe("要写入的文本内容。长章节不要一次塞入全章，分多次 append 写入较短段落块。"),
-  path: z.string().describe("必填。目标文件的相对工作区路径，不要传绝对路径，不要省略文件名；文件必须已存在。章节正文优先用 正文/第001章.md、正文/第012章.md 这类路径；大纲用 大纲/xxx.md，设定用 设定/xxx.md。"),
-});
-
-const createInputSchema = z.object({
-  path: z.string().describe("必填。要创建的空白文本文件相对工作区路径，不要传绝对路径，不要只传目录；例如 正文/第001章.md、大纲/第一卷.md、设定/人物.md。create 只创建空文件，不写正文内容。"),
+    .describe("写入方式。create=创建空白文本文件；append=追加到已有文件末尾；replace=覆盖已有文件全文。"),
+  content: z
+    .string()
+    .optional()
+    .describe("要写入的文本内容。action=create 时不填；append/replace 时填写。长章节建议分多次 append。"),
+  path: z.string().describe("必填。目标文件的相对工作区路径，不要传绝对路径，不要省略文件名；章节正文优先用 正文/第001章.md、正文/第012章.md 这类路径；大纲用 大纲/xxx.md，设定用 设定/xxx.md。"),
 });
 
 export const WRITE_TOOL_SPECS = {
-  create: {
+  workspace_write: {
     description:
-      "创建一个空白文本文件，只负责建文件，不写入正文内容。新章节/新大纲/新设定文件先用 create(path) 建空文件，再用 write(action=append) 分段写入内容；不要把 content 传给 create。",
-    inputSchema: createInputSchema,
-  },
-  edit: {
-    description:
-      "对已有文本文件做局部编辑并写回。改少量文字、追加段落、替换某个标题块或按行号替换时首选；必须提供 path、action、content，并按 action 提供 target / 行号 / anchor / heading。不要用它创建全新完整文件。",
-    inputSchema: editInputSchema,
-  },
-  write: {
-    description:
-      "向已有文本文件写入内容，不负责创建文件。默认 action=append，会追加到文件末尾，适合长正文分段落盘；action=replace 才覆盖已有文件全文。新文件必须先调用 create(path) 创建空白文件，再用 write 追加或覆盖。JSON 文件优先用 json。",
+      "创建或写入文本文件。action=create 创建空白文件；action=append 追加内容；action=replace 覆盖全文。JSON 文件优先用 workspace_json。",
     inputSchema: writeInputSchema,
+  },
+  workspace_edit: {
+    description:
+      "对已有文本文件做局部编辑并写回。改少量文字、插入片段、替换某个标题块或按行号替换时首选；必须提供 path、action、content，并按 action 提供 target / 行号 / anchor / heading。不要用它创建全新完整文件。",
+    inputSchema: editInputSchema,
   },
 } satisfies Record<string, AgentToolPromptSpec>;
 
 export function createWriteToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    create: (toolName, tool) =>
+    workspace_write: (toolName, tool) =>
       defineTool({
-        description: WRITE_TOOL_SPECS.create.description,
-        inputSchema: WRITE_TOOL_SPECS.create.inputSchema,
+        description: WRITE_TOOL_SPECS.workspace_write.description,
+        inputSchema: WRITE_TOOL_SPECS.workspace_write.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -127,23 +121,10 @@ export function createWriteToolBuilders(runTool: ToolRunner): Record<string, Too
           return result.summary;
         },
       }),
-    edit: (toolName, tool) =>
+    workspace_edit: (toolName, tool) =>
       defineTool({
-        description: WRITE_TOOL_SPECS.edit.description,
-        inputSchema: WRITE_TOOL_SPECS.edit.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.summary;
-        },
-      }),
-    write: (toolName, tool) =>
-      defineTool({
-        description: WRITE_TOOL_SPECS.write.description,
-        inputSchema: WRITE_TOOL_SPECS.write.inputSchema,
+        description: WRITE_TOOL_SPECS.workspace_edit.description,
+        inputSchema: WRITE_TOOL_SPECS.workspace_edit.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,

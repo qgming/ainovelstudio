@@ -158,13 +158,13 @@ function normalizeToolArguments(toolName: string | undefined, value: unknown, to
     if (!trimmed) return "{}";
     parsed = tryParseToolArguments(trimmed);
     if (parsed === null) {
-      parsed = toolName === "write" ? { content: trimmed } : { value: trimmed };
+      parsed = toolName === "workspace_write" ? { content: trimmed } : { value: trimmed };
     }
   }
 
   if (parsed === undefined) parsed = {};
   const parsedRecord = isRecord(parsed) ? parsed : { value: parsed };
-  const normalized = toolName === "write"
+  const normalized = toolName === "workspace_write"
     ? normalizeWriteArguments(parsedRecord, toolCallId)
     : parsedRecord;
 

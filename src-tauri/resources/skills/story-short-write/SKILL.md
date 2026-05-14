@@ -40,12 +40,12 @@ description: |
 
 1. 完成 1 万到 3 万字独立完结。
 2. 强开头 / 强冲突 / 强情绪拉扯 / 强反转 / 清晰 payoff / 可发布性。
-3. 用 `word_count` 核对字数。
+3. 用 `text_stats` 核对字数。
 
 ### 返修
 
 1. 读 revision_brief，只动当前项目。
-2. 用 `edit` 做最小修改。
+2. 用 `workspace_edit` 做最小修改。
 
 ## Execution Detail
 
@@ -77,7 +77,7 @@ description: |
 - **开头抓人**：前 200 字出现人物困境、关系裂缝或强事件。
 - **反转可追溯**：反转前至少有 2 个可回看线索。
 - **情绪兑现**：结尾回应开头承诺，不空喊主题。
-- **篇幅达标**：1 万到 3 万字，用 `word_count` 复核。
+- **篇幅达标**：1 万到 3 万字，用 `text_stats` 复核。
 - **避重**：与 factory-index 中最近几篇的题材 / 关系 / 反转 / 结局有明显差异。
 
 ## Outputs / Write-Back
@@ -89,7 +89,7 @@ description: |
 
 ## Reference Map
 
-使用 `skill({ action: "read", skillId, relativePath })` 读取。短篇本地资料的 `skillId` 为 `story-short-write`；复用长篇通用资料时显式切到 `story-long-write`；去 AI 味显式切到 `story-deslop`。
+使用 `skill_read({ action: "read", skillId, relativePath })` 读取。短篇本地资料的 `skillId` 为 `story-short-write`；复用长篇通用资料时显式切到 `story-long-write`；去 AI 味显式切到 `story-deslop`。
 
 | 场景 | skillId | relativePath | 读取时机 | 重点 |
 |---|---|---|---|---|

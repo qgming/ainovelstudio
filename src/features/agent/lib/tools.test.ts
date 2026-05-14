@@ -119,13 +119,14 @@ describe("createWorkspaceToolset", () => {
     ]);
   });
 
-  it("create 创建空白文件后会触发工作区刷新回调", async () => {
+  it("workspace_write create 创建空白文件后会触发工作区刷新回调", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
     mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件不存在"));
 
-    const result = await toolset.create.execute({
+    const result = await toolset.workspace_write.execute({
+      action: "create",
       path: "章节/第一章.md",
     });
 
@@ -139,13 +140,14 @@ describe("createWorkspaceToolset", () => {
     expect(result).toEqual({ ok: true, summary: "已创建空白文件 章节/第一章.md" });
   });
 
-  it("create 遇到非缺失读取错误时不会写入空文件", async () => {
+  it("workspace_write create 遇到非缺失读取错误时不会写入空文件", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
     mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件文本编码无法识别，请转换为 UTF-8 或 GBK 后重试。"));
 
-    await expect(toolset.create.execute({
+    await expect(toolset.workspace_write.execute({
+      action: "create",
       path: "章节/第一章.md",
     })).rejects.toThrow("文件文本编码无法识别");
 
@@ -153,13 +155,13 @@ describe("createWorkspaceToolset", () => {
     expect(onWorkspaceMutated).not.toHaveBeenCalled();
   });
 
-  it("write 追加写入已有文件后会触发工作区刷新回调", async () => {
+  it("workspace_write append 追加写入已有文件后会触发工作区刷新回调", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue("旧内容\n");
 
-    const result = await toolset.write.execute({
+    const result = await toolset.workspace_write.execute({
       action: "append",
       content: "新内容",
       path: "章节/第一章.md",
@@ -175,7 +177,7 @@ describe("createWorkspaceToolset", () => {
     expect(result).toEqual({ ok: true, summary: "已追加写入 章节/第一章.md" });
   });
 
-  it("browse 可以列出目录内容", async () => {
+  it("workspace_browse 可以列出目录内容", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTree.mockResolvedValue({
@@ -192,7 +194,7 @@ describe("createWorkspaceToolset", () => {
       path: "C:/books/北境余烬",
     });
 
-    const result = await toolset.browse.execute({ mode: "list" });
+    const result = await toolset.workspace_browse.execute({ mode: "list" });
 
     expect(result).toEqual({
       ok: true,
@@ -225,7 +227,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("browse 支持按类型、扩展名和数量筛选子项", async () => {
+  it("workspace_browse 支持按类型、扩展名和数量筛选子项", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTree.mockResolvedValue({
@@ -249,7 +251,7 @@ describe("createWorkspaceToolset", () => {
       path: "C:/books/北境余烬",
     });
 
-    const result = await toolset.browse.execute({
+    const result = await toolset.workspace_browse.execute({
       extensions: ["md"],
       kind: "file",
       limit: 1,
@@ -280,7 +282,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("search 会返回过滤后的结构化命中结果", async () => {
+  it("workspace_search 会返回过滤后的结构化命中结果", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockSearchWorkspaceContent.mockResolvedValue([
@@ -296,7 +298,7 @@ describe("createWorkspaceToolset", () => {
       },
     ]);
 
-    const result = await toolset.search.execute({
+    const result = await toolset.workspace_search.execute({
       limit: 5,
       path: "章节",
       query: "钟声",
@@ -323,7 +325,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("canon_query 只返回轻量项目事实源范围内的线索", async () => {
+  it("project_memory_search 只返回轻量项目事实源范围内的线索", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockSearchWorkspaceContent.mockResolvedValue([
@@ -341,7 +343,7 @@ describe("createWorkspaceToolset", () => {
       },
     ]);
 
-    const result = await toolset.canon_query.execute({
+    const result = await toolset.project_memory_search.execute({
       kind: "canon",
       query: "沈砚",
     });
@@ -374,14 +376,14 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("read 支持读取指定行段", async () => {
+  it("workspace_read 支持读取指定行段", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一行\n第二行\n第三行\n第四行",
     );
 
-    const result = await toolset.read.execute({
+    const result = await toolset.workspace_read.execute({
       endLine: 3,
       mode: "range",
       path: "章节/第一卷/第1章.md",
@@ -398,7 +400,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("search 支持大小写、整词、上下文和每文件限额", async () => {
+  it("workspace_search 支持大小写、整词、上下文和每文件限额", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockSearchWorkspaceContent.mockResolvedValue([
@@ -425,7 +427,7 @@ describe("createWorkspaceToolset", () => {
       "第一行\nhero HERO hero\n第三行\nhero again\n尾声",
     );
 
-    const result = await toolset.search.execute({
+    const result = await toolset.workspace_search.execute({
       afterLines: 1,
       beforeLines: 1,
       caseSensitive: true,
@@ -469,7 +471,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("search 支持 all_terms 模式的多词匹配", async () => {
+  it("workspace_search 支持 all_terms 模式的多词匹配", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockSearchWorkspaceContent
@@ -502,7 +504,7 @@ describe("createWorkspaceToolset", () => {
         },
       ]);
 
-    const result = await toolset.search.execute({
+    const result = await toolset.workspace_search.execute({
       matchMode: "all_terms",
       query: "hero bell",
       scope: "content",
@@ -542,14 +544,14 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("read 支持按锚点读取附近行段", async () => {
+  it("workspace_read 支持按锚点读取附近行段", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一行\n铺垫句\n主角抬头看向夜空\n情绪落点\n尾声",
     );
 
-    const result = await toolset.read.execute({
+    const result = await toolset.workspace_read.execute({
       afterLines: 1,
       anchor: "主角抬头",
       beforeLines: 1,
@@ -568,7 +570,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("read 支持按 Markdown 标题读取整段内容", async () => {
+  it("workspace_read 支持按 Markdown 标题读取整段内容", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
@@ -584,7 +586,7 @@ describe("createWorkspaceToolset", () => {
       ].join("\n"),
     );
 
-    const result = await toolset.read.execute({
+    const result = await toolset.workspace_read.execute({
       heading: "第二幕",
       mode: "heading_range",
       path: "05-完整大纲.md",
@@ -602,14 +604,14 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("word_count 会返回稳定的字数统计结果", async () => {
+  it("text_stats 会返回稳定的字数统计结果", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一段有3人。\nHello world!\n\n第二段",
     );
 
-    const result = await toolset.word_count.execute({
+    const result = await toolset.text_stats.execute({
       path: "章节/第一卷/第1章.md",
     });
 
@@ -643,13 +645,13 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("edit 支持精确替换文本并刷新工作区", async () => {
+  it("workspace_edit 支持精确替换文本并刷新工作区", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue("旧段落\n目标句子\n尾声");
 
-    const result = await toolset.edit.execute({
+    const result = await toolset.workspace_edit.execute({
       action: "replace",
       content: "新句子",
       path: "章节/第一卷/第1章.md",
@@ -669,7 +671,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("edit 支持按行段整体替换文本", async () => {
+  it("workspace_edit 支持按行段整体替换文本", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -677,7 +679,7 @@ describe("createWorkspaceToolset", () => {
       "第一行\n第二行\n第三行\n第四行\n",
     );
 
-    const result = await toolset.edit.execute({
+    const result = await toolset.workspace_edit.execute({
       action: "replace_lines",
       content: "替换后的第二行\n替换后的第三行",
       endLine: 3,
@@ -698,7 +700,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("edit 支持按锚点范围整体替换文本", async () => {
+  it("workspace_edit 支持按锚点范围整体替换文本", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -706,7 +708,7 @@ describe("createWorkspaceToolset", () => {
       "第一行\n铺垫句\n主角抬头看向夜空\n情绪落点\n尾声",
     );
 
-    const result = await toolset.edit.execute({
+    const result = await toolset.workspace_edit.execute({
       action: "replace_anchor_range",
       afterLines: 1,
       anchor: "主角抬头",
@@ -728,7 +730,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("edit 支持按 Markdown 标题块整体替换文本", async () => {
+  it("workspace_edit 支持按 Markdown 标题块整体替换文本", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -745,7 +747,7 @@ describe("createWorkspaceToolset", () => {
       ].join("\n"),
     );
 
-    const result = await toolset.edit.execute({
+    const result = await toolset.workspace_edit.execute({
       action: "replace_heading_range",
       content: "## 第二幕\n重写后的第二幕正文",
       heading: "第二幕",
@@ -772,7 +774,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json 支持按指针局部更新数据", async () => {
+  it("workspace_json 支持按指针局部更新数据", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -780,7 +782,7 @@ describe("createWorkspaceToolset", () => {
       '{\n  "stage": "构思期",\n  "currentChapter": "第001章"\n}\n',
     );
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "set",
       path: "正文/创作状态追踪器.json",
       pointer: "/currentChapter",
@@ -807,13 +809,13 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json 支持创建 JSON 文件并格式化初始值", async () => {
+  it("workspace_json 支持创建 JSON 文件并格式化初始值", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
-    mockReadWorkspaceTextFile.mockRejectedValue(new Error("missing"));
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件不存在"));
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "create",
       path: ".project/status/new-state.json",
       value: { progress: { currentChapter: 1 } },
@@ -843,8 +845,23 @@ describe("createWorkspaceToolset", () => {
     });
     expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
   });
+  it("workspace_json create 默认拒绝覆盖已有文件", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue('{"existing":true}');
 
-  it("json 支持读取结构概览而不返回完整 JSON", async () => {
+    await expect(toolset.workspace_json.execute({
+      action: "create",
+      path: ".project/status/existing-state.json",
+      value: { progress: { currentChapter: 1 } },
+    })).rejects.toThrow("workspace_json.create 目标文件已存在");
+
+    expect(mockWriteWorkspaceTextFile).not.toHaveBeenCalled();
+    expect(onWorkspaceMutated).not.toHaveBeenCalled();
+  });
+
+  it("workspace_json 支持读取结构概览而不返回完整 JSON", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
@@ -852,7 +869,7 @@ describe("createWorkspaceToolset", () => {
       progress: { currentChapter: 3 },
     }, null, 2));
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "overview",
       maxDepth: 1,
       path: ".project/status/project-state.json",
@@ -872,7 +889,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json overview 对采样省略的结构会标记 truncated", async () => {
+  it("workspace_json overview 对采样省略的结构会标记 truncated", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     const manyKeys = Object.fromEntries(
@@ -880,7 +897,7 @@ describe("createWorkspaceToolset", () => {
     );
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify(manyKeys, null, 2));
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "overview",
       maxDepth: 1,
       path: ".project/status/project-state.json",
@@ -895,7 +912,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json 支持按 key/value 搜索并返回 JSON Pointer", async () => {
+  it("workspace_json 支持按 key/value 搜索并返回 JSON Pointer", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
@@ -903,7 +920,7 @@ describe("createWorkspaceToolset", () => {
       progress: { currentChapter: 3 },
     }, null, 2));
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "search",
       path: ".project/status/project-state.json",
       query: "林燃",
@@ -927,7 +944,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json search 命中数量上限时会标记 truncated", async () => {
+  it("workspace_json search 命中数量上限时会标记 truncated", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
@@ -936,7 +953,7 @@ describe("createWorkspaceToolset", () => {
       c: "林燃",
     }, null, 2));
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "search",
       limit: 2,
       path: ".project/status/project-state.json",
@@ -953,14 +970,14 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json get 默认会截断超长返回值", async () => {
+  it("workspace_json get 默认会截断超长返回值", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
       content: "长文本".repeat(200),
     }, null, 2));
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "get",
       maxChars: 80,
       path: "正文/第一章.json",
@@ -981,7 +998,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json 支持批量执行多个局部操作并只写回一次", async () => {
+  it("workspace_json 支持批量执行多个局部操作并只写回一次", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -999,7 +1016,7 @@ describe("createWorkspaceToolset", () => {
       ].join("\n"),
     );
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "batch",
       operations: [
         { action: "set", pointer: "/stage", value: "写作期" },
@@ -1053,7 +1070,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json batch 支持模板补齐和历史追加", async () => {
+  it("workspace_json batch 支持模板补齐和历史追加", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -1061,7 +1078,7 @@ describe("createWorkspaceToolset", () => {
       '{\n  "progress": {},\n  "recentUpdates": []\n}\n',
     );
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "batch",
       operations: [
         { action: "ensure_template", pointer: "/progress", value: { currentChapter: 1 } },
@@ -1103,7 +1120,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json 支持按模板补齐缺失字段", async () => {
+  it("workspace_json 支持按模板补齐缺失字段", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -1111,7 +1128,7 @@ describe("createWorkspaceToolset", () => {
       '{\n  "progress": {\n    "currentWordCount": 1200\n  }\n}\n',
     );
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "ensure_template",
       path: ".project/status/project-state.json",
       pointer: "/progress",
@@ -1154,7 +1171,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json 支持追加历史记录并自动补时间戳", async () => {
+  it("workspace_json 支持追加历史记录并自动补时间戳", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -1162,7 +1179,7 @@ describe("createWorkspaceToolset", () => {
       '{\n  "recentUpdates": []\n}\n',
     );
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "history_append",
       path: ".project/status/project-state.json",
       pointer: "/recentUpdates",
@@ -1206,8 +1223,47 @@ describe("createWorkspaceToolset", () => {
       },
     });
   });
+  it("workspace_json delete 会删除指定 JSON 节点", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      '{\n  "progress": {\n    "currentChapter": 3,\n    "targetWordCount": 5000\n  }\n}\n',
+    );
 
-  it("json 支持向字符串属性追加文本而不重写整个对象", async () => {
+    const result = await toolset.workspace_json.execute({
+      action: "delete",
+      path: ".project/status/project-state.json",
+      pointer: "/progress/targetWordCount",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      ".project/status/project-state.json",
+      [
+        "{",
+        '  "progress": {',
+        '    "currentChapter": 3',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: "已删除 .project/status/project-state.json 中 /progress/targetWordCount 的 JSON 节点。",
+      data: {
+        action: "delete",
+        deleted: true,
+        path: ".project/status/project-state.json",
+        pointer: "/progress/targetWordCount",
+      },
+    });
+  });
+
+  it("workspace_json 支持向字符串属性追加文本而不重写整个对象", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -1223,7 +1279,7 @@ describe("createWorkspaceToolset", () => {
       ].join("\n"),
     );
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "text_append",
       path: "正文/第一章.json",
       pointer: "/chapter/content",
@@ -1257,7 +1313,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("json 支持通过 patch 执行标准 JSON 补丁操作", async () => {
+  it("workspace_json 支持通过 patch 执行标准 JSON 补丁操作", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -1273,7 +1329,7 @@ describe("createWorkspaceToolset", () => {
       ].join("\n"),
     );
 
-    const result = await toolset.json.execute({
+    const result = await toolset.workspace_json.execute({
       action: "patch",
       path: ".project/status/project-state.json",
       patch: [
@@ -1316,7 +1372,7 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("path 支持迁移文件或文件夹到指定目录", async () => {
+  it("workspace_path 支持迁移文件或文件夹到指定目录", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
@@ -1324,7 +1380,7 @@ describe("createWorkspaceToolset", () => {
       "C:/books/北境余烬/归档/第一卷/第001章.md",
     );
 
-    const result = await toolset.path.execute({
+    const result = await toolset.workspace_path.execute({
       action: "move",
       path: "草稿/第001章.md",
       targetParentPath: "归档/第一卷",
@@ -1346,10 +1402,10 @@ describe("createGlobalToolset", () => {
     ]);
   });
 
-  it("mode_control 会返回结构化流程控制信号", async () => {
+  it("run_control 会返回结构化流程控制信号", async () => {
     const toolset = createGlobalToolset();
 
-    const result = await toolset.mode_control.execute({
+    const result = await toolset.run_control.execute({
       mode: "autopilot",
       action: "complete",
       reason: "文件已写回，验证通过。",
@@ -1366,16 +1422,16 @@ describe("createGlobalToolset", () => {
     expect(result.data).toHaveProperty("createdAt");
   });
 
-  it("mode_control 在 flow 模式由程序校验阶段推进", async () => {
+  it("run_control 在 flow 模式由程序校验阶段推进", async () => {
     const toolset = createGlobalToolset();
 
-    const rejected = await toolset.mode_control.execute({
+    const rejected = await toolset.run_control.execute({
       mode: "flow",
       action: "complete_stage",
       stage: "plan",
       evidence: ["已有计划"],
     });
-    const accepted = await toolset.mode_control.execute({
+    const accepted = await toolset.run_control.execute({
       mode: "flow",
       action: "complete_stage",
       stage: "inspect",
@@ -1453,7 +1509,7 @@ describe("createGlobalToolset", () => {
     });
   });
 
-  it("web_fetch 会返回网页标题和主要正文", async () => {
+  it("web_read 会返回网页标题和主要正文", async () => {
     mockForwardProviderRequestViaTauri.mockResolvedValue({
       ok: true,
       status: 200,
@@ -1469,7 +1525,7 @@ describe("createGlobalToolset", () => {
     });
     const toolset = createGlobalToolset();
 
-    const result = await toolset.web_fetch.execute({
+    const result = await toolset.web_read.execute({
       url: "https://example.com/article-1",
     });
 
@@ -1498,7 +1554,7 @@ describe("createGlobalToolset", () => {
     );
   });
 
-  it("web_fetch 支持按标题块提取网页内容", async () => {
+  it("web_read 支持按标题块提取网页内容", async () => {
     mockForwardProviderRequestViaTauri.mockResolvedValue({
       ok: true,
       status: 200,
@@ -1519,7 +1575,7 @@ describe("createGlobalToolset", () => {
     });
     const toolset = createGlobalToolset();
 
-    const result = await toolset.web_fetch.execute({
+    const result = await toolset.web_read.execute({
       heading: "安装",
       mode: "heading_range",
       url: "https://example.com/docs/install",
@@ -1542,7 +1598,7 @@ describe("createGlobalToolset", () => {
     expect((result.data as { content: string }).content).not.toContain("配置部分");
   });
 
-  it("web_fetch 可提取结构化链接和表格", async () => {
+  it("web_read 可提取结构化链接和表格", async () => {
     mockForwardProviderRequestViaTauri.mockResolvedValue({
       ok: true,
       status: 200,
@@ -1568,7 +1624,7 @@ describe("createGlobalToolset", () => {
     });
     const toolset = createGlobalToolset();
 
-    const result = await toolset.web_fetch.execute({
+    const result = await toolset.web_read.execute({
       includeLinks: true,
       includeTables: true,
       url: "https://example.com/articles/report",
@@ -1700,7 +1756,7 @@ describe("createGlobalToolset", () => {
     });
   });
 
-  it("fanqie_leaderboard 可按分类和排名范围读取榜单作品", async () => {
+  it("leaderboard 可按分类和排名范围读取榜单作品", async () => {
     mockForwardProviderRequestViaTauri.mockResolvedValue({
       ok: true,
       status: 200,
@@ -1731,7 +1787,7 @@ describe("createGlobalToolset", () => {
     });
     const toolset = createGlobalToolset();
 
-    const result = await toolset.fanqie_leaderboard.execute({
+    const result = await toolset.leaderboard.execute({
       board: "male-reading",
       categoryName: "都市高武",
       rankFrom: 2,
@@ -1770,7 +1826,7 @@ describe("createGlobalToolset", () => {
     });
   });
 
-  it("fanqie_leaderboard 默认读取 30 本分类榜单作品", async () => {
+  it("leaderboard 默认读取 30 本分类榜单作品", async () => {
     mockForwardProviderRequestViaTauri.mockResolvedValue({
       ok: true,
       status: 200,
@@ -1789,7 +1845,7 @@ describe("createGlobalToolset", () => {
     });
     const toolset = createGlobalToolset();
 
-    const result = await toolset.fanqie_leaderboard.execute({
+    const result = await toolset.leaderboard.execute({
       board: "male-reading",
       categoryName: "都市高武",
     });
@@ -1801,7 +1857,7 @@ describe("createGlobalToolset", () => {
     expect((result.data as { books: unknown[] }).books).toHaveLength(30);
   });
 
-  it("fanqie_leaderboard 支持读取总榜前 120 名", async () => {
+  it("leaderboard 支持读取总榜前 120 名", async () => {
     mockForwardProviderRequestViaTauri.mockImplementation(({ url }: { url: string }) => {
       const categoryId = Number(new URL(url).searchParams.get("category_id"));
       return Promise.resolve({
@@ -1823,7 +1879,7 @@ describe("createGlobalToolset", () => {
     });
     const toolset = createGlobalToolset();
 
-    const result = await toolset.fanqie_leaderboard.execute({
+    const result = await toolset.leaderboard.execute({
       board: "male-reading",
       categoryName: "总榜",
       limit: 120,
@@ -1836,7 +1892,7 @@ describe("createGlobalToolset", () => {
     expect((result.data as { books: unknown[] }).books).toHaveLength(120);
   });
 
-  it("fanqie_leaderboard 默认读取今日番茄总榜前 180 名", async () => {
+  it("leaderboard 默认读取今日番茄总榜前 180 名", async () => {
     mockForwardProviderRequestViaTauri.mockImplementation(({ url }: { url: string }) => {
       const params = new URL(url).searchParams;
       const categoryId = Number(params.get("category_id"));
@@ -1861,7 +1917,7 @@ describe("createGlobalToolset", () => {
     });
     const toolset = createGlobalToolset();
 
-    const result = await toolset.fanqie_leaderboard.execute({});
+    const result = await toolset.leaderboard.execute({});
 
     expect(result).toMatchObject({
       ok: true,
@@ -1870,13 +1926,13 @@ describe("createGlobalToolset", () => {
     expect((result.data as { books: unknown[] }).books).toHaveLength(180);
   });
 
-  it("fanqie_leaderboard AI schema 支持具体排名查询参数", () => {
+  it("leaderboard AI schema 支持具体排名查询参数", () => {
     const builders = createReadToolBuilders(async (_toolName, _tool, input) => ({
       ok: true,
       summary: "ok",
       data: input,
     }));
-    const tool = builders.fanqie_leaderboard("fanqie_leaderboard", {
+    const tool = builders.leaderboard("leaderboard", {
       description: "fanqie",
       execute: vi.fn(),
     });
@@ -1910,7 +1966,7 @@ describe("createLocalResourceToolset", () => {
     mockWriteSkillFileContent.mockReset();
   });
 
-  it("skill 工具可以列出本地 skills", async () => {
+  it("skill_read 工具可以列出本地 skills", async () => {
     const refreshSkills = vi.fn().mockResolvedValue(undefined);
     mockScanInstalledSkills.mockResolvedValue([
       {
@@ -1919,13 +1975,13 @@ describe("createLocalResourceToolset", () => {
         description: "写作章节正文",
         sourceKind: "builtin-package",
         references: [{ path: "references/voice.md" }],
-        suggestedTools: ["read", "write"],
+        suggestedTools: ["workspace_read", "workspace_write"],
         tags: ["chapter"],
       },
     ]);
     const toolset = createLocalResourceToolset({ refreshSkills });
 
-    const result = await toolset.skill.execute({ action: "list" });
+    const result = await toolset.skill_read.execute({ action: "list" });
 
     expect(result).toEqual({
       ok: true,
@@ -1937,18 +1993,18 @@ describe("createLocalResourceToolset", () => {
           id: "chapter-write",
           name: "章节写作",
           sourceKind: "builtin-package",
-          suggestedTools: ["read", "write"],
+          suggestedTools: ["workspace_read", "workspace_write"],
           tags: ["chapter"],
         },
       ],
     });
   });
 
-  it("skill 工具可以读取指定文件", async () => {
+  it("skill_read 工具可以读取指定文件", async () => {
     mockReadSkillFileContent.mockResolvedValue("# SKILL");
     const toolset = createLocalResourceToolset();
 
-    const result = await toolset.skill.execute({
+    const result = await toolset.skill_read.execute({
       action: "read",
       relativePath: "SKILL.md",
       skillId: "chapter-write",
@@ -1957,11 +2013,11 @@ describe("createLocalResourceToolset", () => {
     expect(result).toEqual({ ok: true, summary: "# SKILL" });
   });
 
-  it("todo 工具限制同一时间最多一个 in_progress", async () => {
+  it("update_plan 工具限制同一时间最多一个 in_progress", async () => {
     const toolset = createLocalResourceToolset();
 
     await expect(
-      toolset.todo.execute({
+      toolset.update_plan.execute({
         items: [
           { content: "Step A", status: "in_progress" },
           { content: "Step B", status: "in_progress" },
@@ -1970,10 +2026,10 @@ describe("createLocalResourceToolset", () => {
     ).rejects.toThrow("Only one item can be in_progress");
   });
 
-  it("todo 工具兼容 todos 字段和字符串化数组", async () => {
+  it("update_plan 工具兼容 todos 字段和字符串化数组", async () => {
     const toolset = createLocalResourceToolset();
 
-    const result = await toolset.todo.execute({
+    const result = await toolset.update_plan.execute({
       todos: JSON.stringify([
         { content: "Inspect workspace", status: "completed" },
         { activeForm: "正在修复 todo", content: "Patch todo tool", status: "in_progress" },
@@ -1991,13 +2047,13 @@ describe("createLocalResourceToolset", () => {
     });
   });
 
-  it("todo AI schema 会把 todos 字符串预处理为 items 数组", () => {
+  it("update_plan AI schema 会把 todos 字符串预处理为 items 数组", () => {
     const builders = createInteractionToolBuilders(async (_toolName, _tool, input) => ({
       ok: true,
       summary: "ok",
       data: input,
     }));
-    const tool = builders.todo("todo", { description: "todo", execute: vi.fn() });
+    const tool = builders.update_plan("update_plan", { description: "update_plan", execute: vi.fn() });
 
     const parsed = (tool as { inputSchema: { parse: (input: unknown) => unknown } }).inputSchema.parse({
       todos: JSON.stringify([
@@ -2012,7 +2068,7 @@ describe("createLocalResourceToolset", () => {
     });
   });
 
-  it("ask 工具会自动追加用户输入选项并返回结构化答案", async () => {
+  it("ask_user 工具会自动追加用户输入选项并返回结构化答案", async () => {
     const toolset = createLocalResourceToolset();
     const askUser = vi.fn().mockResolvedValue({
       selectionMode: "multiple",
@@ -2024,7 +2080,7 @@ describe("createLocalResourceToolset", () => {
       customInput: "再加强压迫感",
     });
 
-    const result = await toolset.ask.execute(
+    const result = await toolset.ask_user.execute(
       {
         title: "你更想往哪个方向推进？",
         selectionMode: "multiple",
@@ -2069,12 +2125,12 @@ describe("createLocalResourceToolset", () => {
     const toolset = createLocalResourceToolset();
 
     await expect(
-      toolset.ask.execute({
+      toolset.ask_user.execute({
         title: "你更想往哪个方向推进？",
         selectionMode: "single",
         options: [{ id: "plot", label: "推进主线" }],
       }),
-    ).rejects.toThrow("当前环境不支持 ask 交互");
+    ).rejects.toThrow("当前环境不支持 ask_user 交互");
   });
 
 });

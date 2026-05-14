@@ -10,7 +10,7 @@ import { joinSections } from "./shared";
 
 const TOOL_SPECS: Record<string, AgentToolPromptSpec> = {
   ...INTERACTION_TOOL_SPECS,
-  task: TASK_TOOL_SPEC,
+  delegate_task: TASK_TOOL_SPEC,
   ...READ_TOOL_SPECS,
   ...WRITE_TOOL_SPECS,
   ...DATA_TOOL_SPECS,
@@ -85,8 +85,8 @@ export function buildDynamicResourceDirectory(params: {
     ? null
     : params.enabledSkills.length > 0
       ? [
-          "以下技能目录从已启用技能的 SKILL.md 头部 frontmatter 动态汇总。目录只用于发现技能；任务明显匹配某个 skill 时，执行前必须用 skill 工具读取完整规则：",
-          '  skill({ action: "read", skillId: "<id>", relativePath: "SKILL.md" })',
+          "以下技能目录从已启用技能的 SKILL.md 头部 frontmatter 动态汇总。目录只用于发现技能；任务明显匹配某个 skill 时，执行前必须用 skill_read 工具读取完整规则：",
+          '  skill_read({ action: "read", skillId: "<id>", relativePath: "SKILL.md" })',
           "需要例子、模板或专项方法时，再按需读取 references/ 下的文件。",
           "",
           ...params.enabledSkills.map((skill) => buildSkillBlock(skill)),

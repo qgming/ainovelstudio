@@ -67,7 +67,7 @@
 
 ### Agent 在工作区里行动
 
-Agent 可以读取当前书籍结构、指定文件、启用的技能和项目规则。它能搜索、读取、编辑、写入、查 canon、统计字数，也能通过 `todo` 维护任务计划。
+Agent 可以读取当前书籍结构、指定文件、启用的技能和项目规则。它能用 `workspace_search`、`workspace_read`、`workspace_edit`、`workspace_write` 处理工作区内容，用 `project_memory_search` 查项目事实源，用 `text_stats` 统计字数，也能通过 `update_plan` 维护任务计划。
 
 ### 长篇创作有事实源
 

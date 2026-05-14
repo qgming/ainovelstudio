@@ -82,8 +82,8 @@ function buildTools(
     { askUser },
   );
 
-  if (context.enabledToolIds.includes("task")) {
-    aiTools.task = createTaskTool({
+  if (context.enabledToolIds.includes("delegate_task")) {
+    aiTools.delegate_task = createTaskTool({
       abortSignal,
       enabledSkills: context.enabledSkills,
       enabledToolIds: context.enabledToolIds,

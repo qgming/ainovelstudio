@@ -303,14 +303,14 @@ describe("useChatRunStore", () => {
       if (callCount === 9) {
         yield {
           type: "tool-call",
-          toolName: "mode_control",
+          toolName: "run_control",
           toolCallId: "mode-control-9",
           status: "running",
           inputSummary: '{"mode":"autopilot","action":"complete"}',
         };
         yield {
           type: "tool-result",
-          toolName: "mode_control",
+          toolName: "run_control",
           toolCallId: "mode-control-9",
           status: "completed",
           outputSummary: '{"kind":"mode-control","mode":"autopilot","action":"complete"}',

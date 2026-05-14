@@ -47,7 +47,7 @@ describe("workflowControl", () => {
     expect(result.state.currentStage).toBe("skill_load");
   });
 
-  it("从历史 mode_control 工具结果恢复 flow 状态", () => {
+  it("从历史 run_control 工具结果恢复 flow 状态", () => {
     const state = processFlowWorkflowControl(createInitialFlowWorkflowState(), {
       mode: "flow",
       action: "complete_stage",

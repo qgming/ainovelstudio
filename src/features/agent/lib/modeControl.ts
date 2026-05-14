@@ -1,6 +1,6 @@
 import type { AgentPart } from "./types";
 
-export const MODE_CONTROL_TOOL_ID = "mode_control";
+export const MODE_CONTROL_TOOL_ID = "run_control";
 export const MODE_CONTROL_KIND = "mode-control";
 export const MODE_CONTROL_DEFAULT_MODE = "autopilot";
 export const MODE_CONTROL_COMPLETE_ACTION = "complete";

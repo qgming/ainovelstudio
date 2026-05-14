@@ -59,7 +59,7 @@ function isAbortError(error: unknown) {
 function buildTemporaryAgent(profile?: TemporarySubAgentProfile): RuntimeSubAgentProfile {
   const name = profile?.name?.trim() || "临时 Subagent";
   const role = profile?.role?.trim() || "临时任务执行";
-  const description = profile?.description?.trim() || "按当前 task 工具调用临时创建的一次性子代理。";
+  const description = profile?.description?.trim() || "按当前 delegate_task 工具调用临时创建的一次性子代理。";
   const body = profile?.body?.trim() || [
     `# ${name}`,
     "",

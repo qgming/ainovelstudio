@@ -239,32 +239,32 @@ const canonQueryInputSchema = z.object({
 });
 
 export const READ_TOOL_SPECS = {
-  fanqie_leaderboard: {
+  leaderboard: {
     description:
       "读取番茄小说排行榜，支持男频/女频、阅读榜/新书榜、分类或总榜，并可按具体排名或排名范围返回书名、作者、简介、在读数、字数、状态、排行变化和详情链接。",
     inputSchema: fanqieLeaderboardInputSchema,
   },
   web_search: {
     description:
-      "搜索公开网络信息并返回标题、摘要和链接。需要最新/外部事实时使用；拿到具体链接后用 web_fetch 精读。查官方规则优先传 domains 限定站点。",
+      "搜索公开网络信息并返回标题、摘要和链接。需要最新/外部事实时使用；拿到具体链接后用 web_read 精读。查官方规则优先传 domains 限定站点。",
     inputSchema: webSearchInputSchema,
   },
-  web_fetch: {
+  web_read: {
     description:
-      "读取指定网页正文。通常先 web_search 找链接，再 web_fetch；已知 URL 可直接用。页面很长时用 heading_range 或 anchor_range 精读。",
+      "读取指定网页正文。通常先 web_search 找链接，再 web_read；已知 URL 可直接用。页面很长时用 heading_range 或 anchor_range 精读。",
     inputSchema: webFetchInputSchema,
   },
-  read: {
+  workspace_read: {
     description:
       "读取工作区文本文件。已知准确路径时使用；未知路径先 browse/search。大文件不要直接 full，优先 head/tail/range/anchor_range/heading_range。",
     inputSchema: readInputSchema,
   },
-  word_count: {
+  text_stats: {
     description:
       "统计文本文件字符数、中文字符数、段落数等。支持单文件（path）、多文件（paths 数组）或目录递归（dir + 可选 extensions）批量统计。批量返回每文件统计 + 总和 + 中位字符数。",
     inputSchema: wordCountInputSchema,
   },
-  canon_query: {
+  project_memory_search: {
     description:
       "查询项目事实源。用于核对人物、地点、伏笔、能力边界、状态、大纲或正文线索，减少凭印象续写。",
     inputSchema: canonQueryInputSchema,
@@ -273,10 +273,10 @@ export const READ_TOOL_SPECS = {
 
 export function createReadToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    fanqie_leaderboard: (toolName, tool) =>
+    leaderboard: (toolName, tool) =>
       defineTool({
-        description: READ_TOOL_SPECS.fanqie_leaderboard.description,
-        inputSchema: READ_TOOL_SPECS.fanqie_leaderboard.inputSchema,
+        description: READ_TOOL_SPECS.leaderboard.description,
+        inputSchema: READ_TOOL_SPECS.leaderboard.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -299,10 +299,10 @@ export function createReadToolBuilders(runTool: ToolRunner): Record<string, Tool
           return result.data ?? result.summary;
         },
       }),
-    web_fetch: (toolName, tool) =>
+    web_read: (toolName, tool) =>
       defineTool({
-        description: READ_TOOL_SPECS.web_fetch.description,
-        inputSchema: READ_TOOL_SPECS.web_fetch.inputSchema,
+        description: READ_TOOL_SPECS.web_read.description,
+        inputSchema: READ_TOOL_SPECS.web_read.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -312,10 +312,10 @@ export function createReadToolBuilders(runTool: ToolRunner): Record<string, Tool
           return result.data ?? result.summary;
         },
       }),
-    read: (toolName, tool) =>
+    workspace_read: (toolName, tool) =>
       defineTool({
-        description: READ_TOOL_SPECS.read.description,
-        inputSchema: READ_TOOL_SPECS.read.inputSchema,
+        description: READ_TOOL_SPECS.workspace_read.description,
+        inputSchema: READ_TOOL_SPECS.workspace_read.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -325,10 +325,10 @@ export function createReadToolBuilders(runTool: ToolRunner): Record<string, Tool
           return result.data ?? result.summary;
         },
       }),
-    word_count: (toolName, tool) =>
+    text_stats: (toolName, tool) =>
       defineTool({
-        description: READ_TOOL_SPECS.word_count.description,
-        inputSchema: READ_TOOL_SPECS.word_count.inputSchema,
+        description: READ_TOOL_SPECS.text_stats.description,
+        inputSchema: READ_TOOL_SPECS.text_stats.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -338,10 +338,10 @@ export function createReadToolBuilders(runTool: ToolRunner): Record<string, Tool
           return result.data ?? result.summary;
         },
       }),
-    canon_query: (toolName, tool) =>
+    project_memory_search: (toolName, tool) =>
       defineTool({
-        description: READ_TOOL_SPECS.canon_query.description,
-        inputSchema: READ_TOOL_SPECS.canon_query.inputSchema,
+        description: READ_TOOL_SPECS.project_memory_search.description,
+        inputSchema: READ_TOOL_SPECS.project_memory_search.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,

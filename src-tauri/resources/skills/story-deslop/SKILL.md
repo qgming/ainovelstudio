@@ -18,7 +18,7 @@ description: |
 
 ## Inputs To Read
 
-- 待润色的文件全文（用 `read`）。
+- 待润色的文件全文（用 `workspace_read`）。
 - `.project/AGENTS.md` 与 README 的风格基线（用户文风、字数约束、禁写约束）。
 
 ## Procedure
@@ -28,7 +28,7 @@ description: |
 1. **第一遍：识别空泛大词与宣传腔**
    - 标出"基本""略有""稍微""相对而言""总体来说"等无信息词。
    - 标出"展现""彰显""诠释""映衬""弥漫"等书面腔。
-   - 用 `edit` 做最小替换：能换词不换句。
+   - 用 `workspace_edit` 做最小替换：能换词不换句。
 
 2. **第二遍：拆三连句与机械排比**
    - 整齐对仗的三连句拆成参差的 1-3 句。
@@ -82,14 +82,14 @@ description: |
 
 ## Outputs / Write-Back
 
-- 当前文件（用 `edit` 做最小修改）。
-- 完成后用 `word_count` 核对字数变化在合理范围。
+- 当前文件（用 `workspace_edit` 做最小修改）。
+- 完成后用 `text_stats` 核对字数变化在合理范围。
 
 不要写：新章节、设定文件、状态 JSON。
 
 ## Reference Map
 
-使用 `skill({ action: "read", skillId: "story-deslop", relativePath })` 读取。
+使用 `skill_read({ action: "read", skillId: "story-deslop", relativePath })` 读取。
 
 | 场景 | relativePath | 读取时机 | 重点 |
 |---|---|---|---|

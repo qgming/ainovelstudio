@@ -23,12 +23,7 @@ export type EditAction =
   | "replace_heading_range"
   | "replace_lines"
   | "replace";
-export type PathAction =
-  | "create_file"
-  | "create_folder"
-  | "delete"
-  | "move"
-  | "rename";
+export type PathAction = "create_folder" | "move" | "rename";
 
 export function splitTextLines(contents: string) {
   const normalized = contents.replace(/\r\n/g, "\n");
@@ -180,12 +175,7 @@ export function normalizeEditAction(value: unknown): EditAction {
 }
 
 export function normalizePathAction(value: unknown): PathAction {
-  if (
-    value === "create_file" ||
-    value === "create_folder" ||
-    value === "delete" ||
-    value === "move"
-  ) {
+  if (value === "create_folder" || value === "move") {
     return value;
   }
   return "rename";
@@ -219,7 +209,7 @@ export function matchesExtensionFilter(
 
 function countExactMatches(source: string, target: string) {
   if (!target) {
-    throw new Error("edit.target 不能为空。");
+    throw new Error("workspace_edit.target 不能为空。");
   }
 
   let count = 0;
@@ -250,14 +240,14 @@ export function applyTextEdit(
     return { matchCount: 1, nextContent: `${content}${source}` };
   }
 
-  const exactTarget = ensureString(target, "edit.target");
+  const exactTarget = ensureString(target, "workspace_edit.target");
   const matchCount = countExactMatches(source, exactTarget);
   if (matchCount === 0) {
-    throw new Error("未找到 edit.target 指定的文本。");
+    throw new Error("未找到 workspace_edit.target 指定的文本。");
   }
   if (!replaceAll && matchCount !== expectedCount) {
     throw new Error(
-      `edit.target 命中 ${matchCount} 处，与 expectedCount=${expectedCount} 不一致。`,
+      `workspace_edit.target 命中 ${matchCount} 处，与 expectedCount=${expectedCount} 不一致。`,
     );
   }
 
@@ -290,12 +280,12 @@ export function replaceTextByLineRange(
   endLine: number,
 ) {
   if (endLine < startLine) {
-    throw new Error("edit.replace_lines 的 endLine 不能小于 startLine。");
+    throw new Error("workspace_edit.replace_lines 的 endLine 不能小于 startLine。");
   }
 
   const lines = splitTextLines(source);
   if (startLine > lines.length) {
-    throw new Error(`edit.replace_lines 的 startLine 超出文件范围：${startLine}。`);
+    throw new Error(`workspace_edit.replace_lines 的 startLine 超出文件范围：${startLine}。`);
   }
 
   const normalized = source.replace(/\r\n/g, "\n");

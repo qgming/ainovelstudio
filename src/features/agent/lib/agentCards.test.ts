@@ -10,7 +10,7 @@ describe("agent cards", () => {
     const card = getBuiltinAgentCard("chapter-write");
 
     expect(card?.name).toBe("章节生产");
-    expect(card?.tools).toContain("canon_query");
+    expect(card?.tools).toContain("project_memory_search");
     expect(card?.writeScopes).toContain(".project/status/");
     expect(card?.writeScopes).not.toContain(".project/runs/");
     expect(card?.allowedSubagents).toContain("连续性检查");
@@ -21,8 +21,8 @@ describe("agent cards", () => {
 
     expect(card?.name).toBe("严格工作流");
     expect(card?.contextPolicyId).toBe("flow");
-    expect(card?.tools).toContain("mode_control");
-    expect(card?.tools).toContain("json");
+    expect(card?.tools).toContain("run_control");
+    expect(card?.tools).toContain("workspace_json");
     expect(card?.writeScopes).toContain(".project/status/");
     expect(card?.writeScopes).not.toContain(".project/runs/");
   });
@@ -33,9 +33,9 @@ describe("agent cards", () => {
     expect(card?.name).toBe("YOLO 全自动目标");
     expect(card?.banTools).toEqual([]);
     expect(card?.contextPolicyId).toBe("autopilot");
-    expect(card?.tools).toContain("mode_control");
-    expect(card?.tools).toContain("create");
-    expect(card?.tools).toContain("write");
+    expect(card?.tools).toContain("run_control");
+    expect(card?.tools).toContain("workspace_write");
+    expect(card?.tools).toContain("workspace_write");
   });
 
   it("支持用户覆盖内置 card 字段", () => {
@@ -47,31 +47,31 @@ describe("agent cards", () => {
     expect(card?.name).toBe("自定义章节生产");
     expect(card?.mode).toBe("chapter-write");
     expect(card?.writeScopes).toEqual(["正文/"]);
-    expect(card?.tools).toContain("canon_query");
+    expect(card?.tools).toContain("project_memory_search");
   });
 
   it("card 策略不再按模式过滤已启用工具", () => {
     const tools = applyAgentCardToolPolicy("style-polish", [
-      "read",
-      "edit",
-      "write",
-      "word_count",
-      "canon_query",
+      "workspace_read",
+      "workspace_edit",
+      "workspace_write",
+      "text_stats",
+      "project_memory_search",
     ]);
 
-    expect(tools).toEqual(["read", "edit", "write", "word_count", "canon_query"]);
+    expect(tools).toEqual(["workspace_read", "workspace_edit", "workspace_write", "text_stats", "project_memory_search"]);
   });
 
   it("YOLO 工具策略保留全部已启用工具", () => {
     const tools = applyAgentCardToolPolicy("autopilot", [
-      "ask",
-      "todo",
-      "mode_control",
-      "read",
-      "write",
-      "json",
+      "ask_user",
+      "update_plan",
+      "run_control",
+      "workspace_read",
+      "workspace_write",
+      "workspace_json",
     ]);
 
-    expect(tools).toEqual(["ask", "todo", "mode_control", "read", "write", "json"]);
+    expect(tools).toEqual(["ask_user", "update_plan", "run_control", "workspace_read", "workspace_write", "workspace_json"]);
   });
 });

@@ -90,7 +90,7 @@ describe("AgentPartRenderer", () => {
       <AgentPartRenderer
         part={{
           type: "ask-user",
-          toolName: "ask",
+          toolName: "ask_user",
           toolCallId: "ask-1",
           status: "awaiting_user",
           title: "你更想往哪个方向推进？",
@@ -113,7 +113,7 @@ describe("AgentPartRenderer", () => {
       <AgentPartRenderer
         part={{
           type: "ask-user",
-          toolName: "ask",
+          toolName: "ask_user",
           toolCallId: "ask-1",
           status: "completed",
           title: "你更想往哪个方向推进？",

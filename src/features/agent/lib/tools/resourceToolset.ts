@@ -39,22 +39,22 @@ function normalizeAskSelectionMode(value: unknown): AskSelectionMode {
 
 function normalizeAskOptions(value: unknown): AskOption[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new Error("ask.options 必须是非空数组。");
+    throw new Error("ask_user.options 必须是非空数组。");
   }
 
   const seenIds = new Set<string>();
   return value.map((option, index) => {
     if (!isPlainObject(option)) {
-      throw new Error(`ask.options[${index}] 必须是对象。`);
+      throw new Error(`ask_user.options[${index}] 必须是对象。`);
     }
 
-    const id = ensureString(option.id, `ask.options[${index}].id`);
-    const label = ensureString(option.label, `ask.options[${index}].label`);
+    const id = ensureString(option.id, `ask_user.options[${index}].id`);
+    const label = ensureString(option.label, `ask_user.options[${index}].label`);
     if (id === ASK_CUSTOM_OPTION_ID) {
-      throw new Error(`ask.options[${index}].id 不能使用保留值 ${ASK_CUSTOM_OPTION_ID}。`);
+      throw new Error(`ask_user.options[${index}].id 不能使用保留值 ${ASK_CUSTOM_OPTION_ID}。`);
     }
     if (seenIds.has(id)) {
-      throw new Error(`ask.options[${index}].id 不能重复。`);
+      throw new Error(`ask_user.options[${index}].id 不能重复。`);
     }
     seenIds.add(id);
 
@@ -86,10 +86,10 @@ function normalizeAskRequest(input: Record<string, unknown>): AskUserRequest {
 
   if (selectionMode === "single") {
     if (minSelections != null && minSelections !== 1) {
-      throw new Error("ask.minSelections 在单选模式下只能为 1。");
+      throw new Error("ask_user.minSelections 在单选模式下只能为 1。");
     }
     if (maxSelections != null && maxSelections !== 1) {
-      throw new Error("ask.maxSelections 在单选模式下只能为 1。");
+      throw new Error("ask_user.maxSelections 在单选模式下只能为 1。");
     }
   }
 
@@ -99,11 +99,11 @@ function normalizeAskRequest(input: Record<string, unknown>): AskUserRequest {
     && maxSelections != null
     && minSelections > maxSelections
   ) {
-    throw new Error("ask.minSelections 不能大于 ask.maxSelections。");
+    throw new Error("ask_user.minSelections 不能大于 ask_user.maxSelections。");
   }
 
   return {
-    title: ensureString(input.title, "ask.title"),
+    title: ensureString(input.title, "ask_user.title"),
     description: String(input.description ?? "").trim() || undefined,
     selectionMode,
     options,
@@ -144,10 +144,10 @@ function ensureAskInteractiveContext(
   toolCallId: string;
 } {
   if (!context?.interactive?.askUser) {
-    throw new Error("当前环境不支持 ask 交互。");
+    throw new Error("当前环境不支持 ask_user 交互。");
   }
   if (!context.toolCallId?.trim()) {
-    throw new Error("ask 工具缺少 toolCallId。");
+    throw new Error("ask_user 工具缺少 toolCallId。");
   }
   return context as AgentToolExecutionContext & {
     interactive: {
@@ -161,7 +161,7 @@ export function createLocalResourceToolset({
   refreshSkills,
 }: LocalResourceToolsetContext = {}): Record<string, AgentTool> {
   const tools: Record<string, AgentTool> = {
-    ask: {
+    ask_user: {
       description: "向用户发起单选或多选问题，并在收到答案后继续当前轮。",
       execute: async (input, context) => {
         const resolvedContext = ensureAskInteractiveContext(context);
@@ -172,7 +172,7 @@ export function createLocalResourceToolset({
         return ok(`已收到用户回答：${summarizeAskAnswer(answer)}`, answer);
       },
     },
-    todo: {
+    update_plan: {
       description: "更新当前会话中的待办计划",
       execute: async (input) => {
         const items = normalizeTodoItems(input.items ?? input.todos);
@@ -183,8 +183,8 @@ export function createLocalResourceToolset({
         });
       },
     },
-    skill: {
-      description: "读取或管理本地技能资源",
+    skill_read: {
+      description: "读取本地技能资源",
       execute: async (input, context) => {
         const action = normalizeSkillAction(input.action);
         if (action === "list") {
@@ -197,10 +197,10 @@ export function createLocalResourceToolset({
         }
 
         if (action === "read") {
-          const skillId = ensureString(input.skillId, "skill.skillId");
+          const skillId = ensureString(input.skillId, "skill_read.skillId");
           const relativePath = ensureString(
             input.relativePath,
-            "skill.relativePath",
+            "skill_read.relativePath",
           );
           return ok(
             await readSkillFileContent(
@@ -211,11 +211,29 @@ export function createLocalResourceToolset({
           );
         }
 
+        const skillId = ensureString(input.skillId, "skill_read.skillId");
+        const relativePath = ensureString(
+          input.relativePath,
+          "skill_read.relativePath",
+        );
+        return ok(
+          await readSkillFileContent(
+            skillId,
+            relativePath,
+            getAbortContext(context),
+          ),
+        );
+      },
+    },
+    skill_manage: {
+      description: "创建、更新或删除本地技能资源",
+      execute: async (input) => {
+        const action = normalizeSkillAction(input.action);
         if (action === "create") {
-          const nextName = ensureString(input.name, "skill.name");
+          const nextName = ensureString(input.name, "skill_manage.name");
           const skills = await createSkill(
             nextName,
-            ensureString(input.description, "skill.description"),
+            ensureString(input.description, "skill_manage.description"),
           );
           await refreshSkills?.();
           const createdSkill =
@@ -228,8 +246,8 @@ export function createLocalResourceToolset({
         }
 
         if (action === "create_reference") {
-          const skillId = ensureString(input.skillId, "skill.skillId");
-          const name = ensureString(input.name, "skill.name");
+          const skillId = ensureString(input.skillId, "skill_read.skillId");
+          const name = ensureString(input.name, "skill_manage.name");
           await createSkillReferenceFile(skillId, name);
           await refreshSkills?.();
           return ok(`已为技能 ${skillId} 创建参考文件 ${name}.md`, {
@@ -239,10 +257,10 @@ export function createLocalResourceToolset({
         }
 
         if (action === "write") {
-          const skillId = ensureString(input.skillId, "skill.skillId");
+          const skillId = ensureString(input.skillId, "skill_read.skillId");
           const relativePath = ensureString(
             input.relativePath,
-            "skill.relativePath",
+            "skill_read.relativePath",
           );
           await writeSkillFileContent(
             skillId,
@@ -256,7 +274,7 @@ export function createLocalResourceToolset({
           });
         }
 
-        const skillId = ensureString(input.skillId, "skill.skillId");
+        const skillId = ensureString(input.skillId, "skill_read.skillId");
         await deleteInstalledSkill(skillId);
         await refreshSkills?.();
         return ok(`已删除技能 ${skillId}`, { skillId });

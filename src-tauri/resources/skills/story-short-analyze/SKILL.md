@@ -17,7 +17,7 @@ description: |
 
 ## Inputs To Read
 
-- 对标短篇正文（用 `web_search` + `web_fetch` 拿）。
+- 对标短篇正文（用 `web_search` + `web_read` 拿）。
 - 本轮 `scan-*.md`（若来自市场扫描子任务）。
 - 已有 `资料/拆文/` 拆解：避免重复；没有该目录时按需创建。
 
@@ -57,7 +57,7 @@ description: |
 
 ## Reference Map
 
-使用 `skill({ action: "read", skillId, relativePath })` 读取。短篇拆文专属资料的 `skillId` 为 `story-short-analyze`；通用长篇资料复用时显式切换到 `story-long-write` 或 `story-short-write`。
+使用 `skill_read({ action: "read", skillId, relativePath })` 读取。短篇拆文专属资料的 `skillId` 为 `story-short-analyze`；通用长篇资料复用时显式切换到 `story-long-write` 或 `story-short-write`。
 
 | 场景 | skillId | relativePath | 读取时机 | 重点 |
 |---|---|---|---|---|

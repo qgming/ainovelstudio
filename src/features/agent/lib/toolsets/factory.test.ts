@@ -54,10 +54,10 @@ describe("createDefaultLocalResourceToolset", () => {
     expect(mockSkillsRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("includeAsk=false 时会从本地工具集中移除 ask", () => {
+  it("includeAsk=false 时会从本地工具集中移除 ask_user", () => {
     vi.doMock("../tools", () => ({
       createGlobalToolset: () => ({ global_tool: mockGlobalTool }),
-      createLocalResourceToolset: () => ({ ask: { description: "ask", execute: vi.fn() }, local_tool: true }),
+      createLocalResourceToolset: () => ({ ask_user: { description: "ask_user", execute: vi.fn() }, local_tool: true }),
       createWorkspaceToolset: (opts: { rootPath: string; onWorkspaceMutated: () => Promise<void> }) => {
         mockWorkspaceMutated.mockImplementation(opts.onWorkspaceMutated);
         return { workspace_tool: true, _rootPath: opts.rootPath };

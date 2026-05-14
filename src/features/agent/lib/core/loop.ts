@@ -16,7 +16,7 @@ import {
 } from "./retry";
 import { mapStreamPart, updateStepState, type StepStreamState } from "./streamParts";
 
-const DEFAULT_MAX_AGENT_STEPS = 100;
+const DEFAULT_MAX_AGENT_STEPS = 1000;
 
 export type AgentLoopContext = {
   messages: ModelMessage[];

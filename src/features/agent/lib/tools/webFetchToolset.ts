@@ -20,10 +20,10 @@ function formatFetchSummary(response: WebFetchResponse) {
 
 export function createWebFetchTools(): Record<string, AgentTool> {
   return {
-    web_fetch: {
+    web_read: {
       description: "读取网页正文并提取主要文本",
       execute: async (input) => {
-        const url = ensureString(input.url, "web_fetch.url");
+        const url = ensureString(input.url, "web_read.url");
         const mode =
           input.mode === "anchor_range" || input.mode === "heading_range"
             ? input.mode

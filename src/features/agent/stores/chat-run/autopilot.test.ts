@@ -30,11 +30,11 @@ describe("YOLO autopilot", () => {
     expect(prompt).toContain("读取相关资料");
     expect(prompt).toContain("Inspect -> Skill Load -> Plan -> Act -> Verify -> State Maintain -> Report");
     expect(prompt).toContain("SKILL.md");
-    expect(prompt).toContain("mode_control");
+    expect(prompt).toContain("run_control");
     expect(prompt).toContain('action="complete"');
   });
 
-  it("只有 mode_control complete 工具结果会判定目标完成", () => {
+  it("只有 run_control complete 工具结果会判定目标完成", () => {
     const completedPart: AgentPart = {
       type: "tool-call",
       toolName: MODE_CONTROL_TOOL_ID,

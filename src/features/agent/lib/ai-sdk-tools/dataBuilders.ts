@@ -150,38 +150,51 @@ const jsonInputSchema = z.object({
 
 const pathInputSchema = z.object({
   action: z
-    .enum(["create_file", "create_folder", "delete", "move", "rename"])
-    .describe("路径动作。create_file/create_folder 需要 parentPath+name；rename 需要 path+name；move 需要 path+targetParentPath；delete 需要 path。"),
+    .enum(["create_folder", "move", "rename"])
+    .describe("路径动作。create_folder 需要 parentPath+name；rename 需要 path+name；move 需要 path+targetParentPath。"),
   name: z
     .string()
     .optional()
-    .describe("create_file/create_folder/rename 使用的新名称，只写文件名或文件夹名，不要带父路径。"),
+    .describe("create_folder/rename 使用的新名称，只写文件夹名或文件名，不要带父路径。"),
   parentPath: z
     .string()
     .optional()
-    .describe("create_file/create_folder 使用的父目录相对路径；根目录可传空字符串或不填。"),
+    .describe("create_folder 使用的父目录相对路径；根目录可传空字符串或不填。"),
   path: z
     .string()
     .optional()
-    .describe("rename/move/delete 使用的现有目标相对路径。删除前确认用户明确要求。"),
+    .describe("rename/move 使用的现有目标相对路径。删除请使用 workspace_delete。"),
   targetParentPath: z
     .string()
     .optional()
     .describe("仅 move 使用。移动到的目标父目录相对路径。"),
 });
 
-const skillInputSchema = z.object({
+const skillReadInputSchema = z.object({
+  action: z
+    .enum(["list", "read"])
+    .default("list")
+    .describe("技能动作。list 列出技能；read 读 SKILL.md 或 references/templates 文件。"),
+  relativePath: z
+    .string()
+    .optional()
+    .describe("action=read 时技能内相对路径，如 SKILL.md、references/voice.md、templates/prompt.md。"),
+  skillId: z
+    .string()
+    .optional()
+    .describe("read 动作通常都需要 skillId；先 list 获取准确 id。"),
+});
+
+const skillManageInputSchema = z.object({
   action: z
     .enum([
       "create",
       "create_reference",
       "delete",
-      "list",
-      "read",
       "write",
     ])
-    .default("list")
-    .describe("技能动作。list 列出技能；read 读 SKILL.md 或 references/templates 文件；write 写回技能文件；create 新建技能；create_reference 新建参考文件；delete 删除技能。"),
+    .default("create")
+    .describe("技能动作。create 新建技能；create_reference 新建参考文件；write 写回技能文件；delete 删除技能。"),
   content: z
     .string()
     .optional()
@@ -205,33 +218,38 @@ const skillInputSchema = z.object({
   skillId: z
     .string()
     .optional()
-    .describe("list 之外的动作通常都需要 skillId；先 list 获取准确 id。"),
+    .describe("管理动作通常都需要 skillId；先 list 获取准确 id。"),
 });
 
 export const DATA_TOOL_SPECS = {
-  json: {
+  workspace_json: {
     description:
       "读写 JSON 文件的首选工具。读取先 overview/search/get；修改字段用 set/merge/append/text_append/delete；多字段更新用 batch；标准 JSON Patch 用 patch；新建 JSON 用 create。不要用 write 修改 JSON 字段。",
     inputSchema: jsonInputSchema,
   },
-  path: {
+  workspace_path: {
     description:
-      "只处理路径结构，不写正文内容。创建文件夹、重命名、移动、删除用它；写作场景创建空白文本文件优先用 create，写文本用 write/edit，写 JSON 内容用 json。删除属于高风险动作，除非用户明确要求。",
+      "只处理路径结构，不写正文内容。创建文件夹、重命名、移动用它；删除另拆为独立高风险工具。写作场景创建空白文本文件优先用 workspace_write，写文本用 workspace_edit / workspace_write，写 JSON 内容用 workspace_json。",
     inputSchema: pathInputSchema,
   },
-  skill: {
+  skill_read: {
     description:
-      "读取或管理本地 skill。任务命中技能时先 list/read SKILL.md 获取完整规则；用户要求创建或修改技能时用 create/create_reference/write 落盘。write 写的是技能文件完整内容，不是补丁片段。",
-    inputSchema: skillInputSchema,
+      "读取本地 skill。任务命中技能时先 list/read SKILL.md 获取完整规则；需要参考材料时再读 references。",
+    inputSchema: skillReadInputSchema,
+  },
+  skill_manage: {
+    description:
+      "管理本地 skill。用户要求创建或修改技能时用 create/create_reference/write/delete 落盘。write 写的是技能文件完整内容，不是补丁片段。",
+    inputSchema: skillManageInputSchema,
   },
 } satisfies Record<string, AgentToolPromptSpec>;
 
 export function createDataToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    json: (toolName, tool) =>
+    workspace_json: (toolName, tool) =>
       defineTool({
-        description: DATA_TOOL_SPECS.json.description,
-        inputSchema: DATA_TOOL_SPECS.json.inputSchema,
+        description: DATA_TOOL_SPECS.workspace_json.description,
+        inputSchema: DATA_TOOL_SPECS.workspace_json.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -241,10 +259,10 @@ export function createDataToolBuilders(runTool: ToolRunner): Record<string, Tool
           return result.data ?? result.summary;
         },
       }),
-    path: (toolName, tool) =>
+    workspace_path: (toolName, tool) =>
       defineTool({
-        description: DATA_TOOL_SPECS.path.description,
-        inputSchema: DATA_TOOL_SPECS.path.inputSchema,
+        description: DATA_TOOL_SPECS.workspace_path.description,
+        inputSchema: DATA_TOOL_SPECS.workspace_path.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -254,10 +272,38 @@ export function createDataToolBuilders(runTool: ToolRunner): Record<string, Tool
           return result.summary;
         },
       }),
-    skill: (toolName, tool) =>
+    workspace_delete: (toolName, tool) =>
       defineTool({
-        description: DATA_TOOL_SPECS.skill.description,
-        inputSchema: DATA_TOOL_SPECS.skill.inputSchema,
+        description: "删除工作区文件或文件夹。",
+        inputSchema: z.object({
+          path: z.string().describe("要删除的工作区相对路径，不要传绝对路径。"),
+        }),
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.summary;
+        },
+      }),
+    skill_read: (toolName, tool) =>
+      defineTool({
+        description: DATA_TOOL_SPECS.skill_read.description,
+        inputSchema: DATA_TOOL_SPECS.skill_read.inputSchema,
+        execute: async (input) => {
+          const result = await runTool(
+            toolName,
+            tool,
+            input as unknown as Record<string, unknown>,
+          );
+          return result.data ?? result.summary;
+        },
+      }),
+    skill_manage: (toolName, tool) =>
+      defineTool({
+        description: DATA_TOOL_SPECS.skill_manage.description,
+        inputSchema: DATA_TOOL_SPECS.skill_manage.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,

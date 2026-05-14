@@ -29,7 +29,7 @@ function normalizeAction(value: unknown): ModeControlAction {
   if (typeof value === "string" && MODE_CONTROL_ACTIONS.has(value as ModeControlAction)) {
     return value as ModeControlAction;
   }
-  throw new Error("mode_control.action 必须是 complete、blocked、continue、complete_stage 或 complete_workflow。");
+  throw new Error("run_control.action 必须是 complete、blocked、continue、complete_stage 或 complete_workflow。");
 }
 
 function buildSummary(action: ModeControlAction, mode: string, reason?: string) {

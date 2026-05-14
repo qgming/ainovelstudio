@@ -10,38 +10,38 @@ export type ToolDef = {
 
 export const BUILTIN_TOOLS: ToolDef[] = [
   {
-    id: "ask",
+    id: "ask_user",
     name: "询问用户",
     description:
       "在运行过程中向用户发起单选或多选问题；工具会自动附带“用户输入”选项，并在用户确认后继续当前轮。",
   },
   {
-    id: "todo",
-    name: "待办计划",
+    id: "update_plan",
+    name: "更新计划",
     description:
       "更新当前会话的显式计划状态；参数使用 items 数组；同一时间最多保留一个进行中的步骤；可选 phase 字段标记长链路阶段。",
   },
   {
-    id: "mode_control",
-    name: "模式控制",
+    id: "run_control",
+    name: "运行控制",
     description:
-      "向应用提交当前模式的结构化流程控制信号；YOLO 目标完成时用 action=complete，后续可扩展阻塞、继续等模式控制语义。",
+      "向应用提交当前模式的流程控制信号；YOLO 目标完成时用 action=complete，flow 模式下可推进阶段或标记阻塞。",
   },
   {
-    id: "task",
+    id: "delegate_task",
     name: "临时子任务",
     description:
       "按需创建一次性 subagent，在独立上下文中执行局部任务；可直接传入角色、职责和补充指令，无需预装代理。",
   },
   {
-    id: "browse",
+    id: "workspace_browse",
     name: "浏览工作区",
     description:
       "浏览目录树、列出文件夹内容或查看路径概况；适合先了解结构，再决定读哪个文件。",
   },
   {
-    id: "search",
-    name: "搜索内容",
+    id: "workspace_search",
+    name: "搜索工作区",
     description:
       "搜索文件夹名、文件名和正文内容；适合定位关键词、章节、设定或数据字段。",
   },
@@ -52,70 +52,76 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "搜索公开网络信息并返回标题、摘要和链接；适合补充外部资料、平台规则和最新公开网页内容。",
   },
   {
-    id: "web_fetch",
+    id: "web_read",
     name: "网页读取",
     description:
       "读取指定网页正文并提取标题和主要文本；适合在搜索后继续展开阅读具体内容。",
   },
   {
-    id: "fanqie_leaderboard",
-    name: "番茄排行榜",
+    id: "leaderboard",
+    name: "小说排行榜",
     description:
-      "读取番茄小说排行榜；支持男频/女频、阅读榜/新书榜、分类/总榜、具体排名或排名范围，返回书名、简介、在读数、排行变化等结构化信息。",
+      "读取小说排行榜；支持男频/女频、阅读榜/新书榜、分类/总榜、具体排名或排名范围，返回书名、简介、在读数、排行变化等结构化信息。",
   },
   {
-    id: "read",
-    name: "读取文件",
+    id: "workspace_read",
+    name: "读取工作区文件",
     description:
       "读取文本文件全文或局部行段；已知准确路径时使用，未知路径先 browse 或 search。",
   },
   {
-    id: "word_count",
-    name: "字数统计",
+    id: "text_stats",
+    name: "文本统计",
     description:
       "统计文本文件字符/中文/英文/段落等指标。支持单文件 path、多文件 paths、目录递归 dir 三种模式；批量返回每文件统计 + 总和 + 中位字符数。",
   },
   {
-    id: "canon_query",
-    name: "Canon 查询",
+    id: "project_memory_search",
+    name: "项目记忆查询",
     description:
       "按人物、地点、伏笔、能力边界或章节线索查询 .project/status、设定、大纲、正文等项目事实源。",
   },
   {
-    id: "edit",
+    id: "workspace_edit",
     name: "局部编辑",
     description:
       "对文本做局部替换、插入、追加或前置；适合改 md/txt，不需要整份重写。",
   },
   {
-    id: "create",
-    name: "创建空文件",
-    description:
-      "创建一个空白文本文件；只负责建文件，不写内容。新章节或新资料文件先 create，再用 write append 分段写入。",
-  },
-  {
-    id: "write",
+    id: "workspace_write",
     name: "写入文本",
     description:
-      "向已有文本文件追加或覆盖内容；默认 append 追加，适合长正文分段落盘。新文件必须先用 create 创建空文件。",
+      "向已有文本文件追加或覆盖内容；可先创建空文件，再用 append 或 replace 写入正文。",
   },
-	  {
-	    id: "json",
-	    name: "JSON 数据",
-	    description:
-	      "按 JSON Pointer 概览、搜索、读取、创建或局部更新 JSON；适合维护状态文件、改字段、补模板、追加历史和批量 patch。",
-	  },
   {
-    id: "path",
+    id: "workspace_json",
+    name: "JSON 数据",
+    description:
+      "按 JSON Pointer 概览、搜索、读取、创建或局部更新 JSON；适合维护状态文件、改字段、补模板、追加历史和批量 patch。",
+  },
+  {
+    id: "workspace_path",
     name: "路径操作",
     description:
-      "创建文件或文件夹、重命名、迁移或删除路径；只处理结构，不负责正文内容。",
+      "创建文件或文件夹、重命名、迁移路径；只处理结构，不负责正文内容。",
   },
   {
-    id: "skill",
-    name: "技能资源",
+    id: "workspace_delete",
+    name: "删除路径",
     description:
-      "列出、读取、创建、更新或删除本地 skill 文件；优先先列出再读写具体文件。",
+      "删除工作区中的文件或文件夹；高风险操作，通常只在用户明确要求时使用。",
+  },
+  {
+    id: "skill_read",
+    name: "读取技能",
+    description:
+      "列出、读取本地 skill 文件和参考文件；优先先列出再读写具体文件。",
+  },
+  {
+    id: "skill_manage",
+    name: "管理技能",
+    description:
+      "创建、更新、删除本地 skill 文件；用于维护技能资源，不用于常规写作内容。",
   },
 ];
 

@@ -92,11 +92,11 @@ export function createWorkspaceCanonTools({
   rootPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
-    canon_query: {
+    project_memory_search: {
       description: "按人物、地点、伏笔、能力边界或章节线索查询项目事实源",
       execute: async (input, context) => {
         const abortContext = getAbortContext(context);
-        const query = ensureString(input.query, "canon_query.query");
+        const query = ensureString(input.query, "project_memory_search.query");
         const kind = normalizeKind(input.kind);
         const limit = Math.min(asPositiveInt(input.limit, 12), 30);
         const rawMatches = await searchWorkspaceContent(rootPath, query, limit * 4, abortContext);

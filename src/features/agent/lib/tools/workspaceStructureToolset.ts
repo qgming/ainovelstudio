@@ -1,6 +1,5 @@
 import {
   createWorkspaceDirectory,
-  createWorkspaceTextFile,
   deleteWorkspaceEntry,
   readWorkspaceTextFile,
   moveWorkspaceEntry,
@@ -117,7 +116,7 @@ export function createWorkspaceStructureTools({
   rootPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
-    browse: {
+    workspace_browse: {
       description: "浏览工作区结构",
       execute: async (input, context) => {
         const mode = normalizeBrowseMode(input.mode);
@@ -148,7 +147,7 @@ export function createWorkspaceStructureTools({
         }
 
         if (node.kind !== "directory") {
-          throw new Error("browse.list 只能用于目录。");
+          throw new Error("workspace_browse.list 只能用于目录。");
         }
 
         const kindFilter = normalizeBrowseKind(input.kind);
@@ -182,11 +181,11 @@ export function createWorkspaceStructureTools({
         });
       },
     },
-    search: {
+    workspace_search: {
       description: "搜索工作区内容",
       execute: async (input, context) => {
         const abortContext = getAbortContext(context);
-        const query = ensureString(input.query, "search.query");
+        const query = ensureString(input.query, "workspace_search.query");
         const limit = asPositiveInt(input.limit, 50);
         const beforeLines = asNonNegativeInt(input.beforeLines, 0);
         const afterLines = asNonNegativeInt(input.afterLines, 0);
@@ -284,26 +283,15 @@ export function createWorkspaceStructureTools({
         return ok(formatSearchSummary(query, enriched), enriched);
       },
     },
-    path: {
-      description: "处理工作区路径结构",
+    workspace_path: {
+      description: "创建文件夹、重命名或移动工作区路径",
       execute: async (input, context) => {
         const action = normalizePathAction(input.action);
-        if (action === "create_file") {
-          const createdPath = await createWorkspaceTextFile(
-            rootPath,
-            String(input.parentPath ?? ""),
-            ensureString(input.name, "path.name"),
-            getAbortContext(context),
-          );
-          await onWorkspaceMutated?.();
-          return ok(`已创建文件 ${toDisplayPath(rootPath, createdPath)}`);
-        }
-
         if (action === "create_folder") {
           const createdPath = await createWorkspaceDirectory(
             rootPath,
             String(input.parentPath ?? ""),
-            ensureString(input.name, "path.name"),
+            ensureString(input.name, "workspace_path.name"),
             getAbortContext(context),
           );
           await onWorkspaceMutated?.();
@@ -313,29 +301,31 @@ export function createWorkspaceStructureTools({
         if (action === "move") {
           const movedPath = await moveWorkspaceEntry(
             rootPath,
-            ensureString(input.path, "path.path"),
-            ensureString(input.targetParentPath, "path.targetParentPath"),
+            ensureString(input.path, "workspace_path.path"),
+            ensureString(input.targetParentPath, "workspace_path.targetParentPath"),
             getAbortContext(context),
           );
           await onWorkspaceMutated?.();
           return ok(`已迁移到 ${toDisplayPath(rootPath, movedPath)}`);
         }
 
-        if (action === "delete") {
-          const path = ensureString(input.path, "path.path");
-          await deleteWorkspaceEntry(rootPath, path, getAbortContext(context));
-          await onWorkspaceMutated?.();
-          return ok(`已删除 ${toDisplayPath(rootPath, path)}`);
-        }
-
         const renamedPath = await renameWorkspaceEntry(
           rootPath,
-          ensureString(input.path, "path.path"),
-          ensureString(input.name, "path.name"),
+          ensureString(input.path, "workspace_path.path"),
+          ensureString(input.name, "workspace_path.name"),
           getAbortContext(context),
         );
         await onWorkspaceMutated?.();
         return ok(`已重命名为 ${toDisplayPath(rootPath, renamedPath)}`);
+      },
+    },
+    workspace_delete: {
+      description: "删除工作区文件或文件夹",
+      execute: async (input, context) => {
+        const path = ensureString(input.path, "workspace_delete.path");
+        await deleteWorkspaceEntry(rootPath, path, getAbortContext(context));
+        await onWorkspaceMutated?.();
+        return ok(`已删除 ${toDisplayPath(rootPath, path)}`);
       },
     },
   };

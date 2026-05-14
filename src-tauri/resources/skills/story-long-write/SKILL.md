@@ -31,7 +31,7 @@ description: |
 
 ### 立项阶段（无项目或刚开新书）
 
-1. 用 `ask` 向作者确认题材方向、目标平台、目标字数（除非主提示词已明确）。
+1. 用 `ask_user` 向作者确认题材方向、目标平台、目标字数（除非主提示词已明确）。
 2. 写 `设定/作品定位.md`、`设定/剧情梗概.md`、`设定/写作风格.md`、`设定/角色/主角.md`。
 3. 写 `大纲/大纲.md`（卷级结构）+ `大纲/细纲_第001章.md` 至 `细纲_第00X章.md`（前 3-5 章）。
 
@@ -40,12 +40,12 @@ description: |
 1. 读 `.project/status/system-state.json` 拿到当前章节号与活跃文件。
 2. 读上一章正文与当前章细纲（若无则先补）。
 3. 写 `正文/第NNN章_章名.md`：开篇 200 字内有具体场景或冲突；单章一个核心冲突 + 1-2 个推进点 + 一个主爽点；章末必留钩子。
-4. 字数符合 README / AGENTS 约定（默认汉字 2500-3500），写完用 `word_count` 复核。
+4. 字数符合 README / AGENTS 约定（默认汉字 2500-3500），写完用 `text_stats` 复核。
 
 ### 返修阶段（收到 revision_brief）
 
 1. 读 revision_brief 与最近一次审稿结论。
-2. 用 `edit` 做最小修改，只动当前章及其直接相关文件。
+2. 用 `workspace_edit` 做最小修改，只动当前章及其直接相关文件。
 3. 不要顺手改下一章或重写整章。
 
 ## Execution Detail
@@ -63,7 +63,7 @@ description: |
 2. 单章只押一个核心冲突，附 1-2 个推进点；每个推进点都要改变人物处境、信息差或资源状态。
 3. 对话要推动关系和冲突，避免角色把设定完整讲给读者听。
 4. 章末钩子必须是可继续追读的未完成动作、反转、危险、选择或情绪裂口。
-5. 写完后用 `word_count` 复核字数；低于项目约定时补冲突推进，高于约定时删解释和重复心理。
+5. 写完后用 `text_stats` 复核字数；低于项目约定时补冲突推进，高于约定时删解释和重复心理。
 
 ## Quality Gates
 
@@ -91,7 +91,7 @@ description: |
 
 ## Reference Map
 
-使用 `skill({ action: "read", skillId, relativePath })` 读取。当前 skill 内文件的 `skillId` 为 `story-long-write`；跨 skill 文件必须显式切换 `skillId`。
+使用 `skill_read({ action: "read", skillId, relativePath })` 读取。当前 skill 内文件的 `skillId` 为 `story-long-write`；跨 skill 文件必须显式切换 `skillId`。
 
 | 场景 | skillId | relativePath | 读取时机 | 重点 |
 |---|---|---|---|---|

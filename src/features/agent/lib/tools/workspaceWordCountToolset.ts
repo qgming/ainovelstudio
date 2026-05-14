@@ -163,7 +163,7 @@ export function createWorkspaceWordCountTools({
   rootPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
-    word_count: {
+    text_stats: {
       description:
         "统计文本文件的字数和结构指标。支持 path（单文件）、paths（多文件）、dir（目录递归批量统计）三种模式。",
       execute: async (input, context) => {
@@ -171,7 +171,7 @@ export function createWorkspaceWordCountTools({
 
         // 单文件统计模式。
         if (input.path && !input.paths && !input.dir) {
-          const path = ensureString(input.path, "word_count.path");
+          const path = ensureString(input.path, "text_stats.path");
           const content = await readWorkspaceTextFile(rootPath, path, abortContext);
           const stats = computeTextCountStats(path, content);
           return ok(formatWordCountSummary(stats), stats);
@@ -181,7 +181,7 @@ export function createWorkspaceWordCountTools({
         let targetPaths: string[] = [];
         if (Array.isArray(input.paths) && input.paths.length > 0) {
           targetPaths = input.paths.map((value, index) =>
-            ensureString(value, `word_count.paths[${index}]`),
+            ensureString(value, `text_stats.paths[${index}]`),
           );
         } else if (input.dir != null) {
           const dirRel = normalizeRelativePath(rootPath, String(input.dir ?? ""));
@@ -191,14 +191,14 @@ export function createWorkspaceWordCountTools({
             throw new Error(`未找到路径：${dirRel || "."}`);
           }
           if (node.kind !== "directory") {
-            throw new Error("word_count.dir 必须指向目录。");
+            throw new Error("text_stats.dir 必须指向目录。");
           }
           const exts = normalizeExtensions(input.extensions);
           const filterExts = exts.size > 0 ? exts : DEFAULT_TEXT_EXTENSIONS;
           collectTextFilePaths(rootPath, node, filterExts, targetPaths);
         } else {
           throw new Error(
-            "word_count 需要传入 path、paths 或 dir 之一。",
+            "text_stats 需要传入 path、paths 或 dir 之一。",
           );
         }
 

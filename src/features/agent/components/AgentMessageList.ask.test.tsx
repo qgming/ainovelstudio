@@ -16,7 +16,7 @@ describe("AgentMessageList ask 状态", () => {
               { type: "placeholder", text: "正在思考" },
               {
                 type: "ask-user",
-                toolName: "ask",
+                toolName: "ask_user",
                 toolCallId: "ask-1",
                 status: "awaiting_user",
                 title: "你更想往哪个方向推进？",

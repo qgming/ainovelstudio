@@ -212,27 +212,27 @@ const searchInputSchema = z.object({
 });
 
 export const INTERACTION_TOOL_SPECS = {
-  ask: {
+  ask_user: {
     description:
       "向用户提问。只有需求模糊且不同选择会显著影响结果时使用；可自行判断、可先读文件确认、或用户已给明确目标时不要问。工具会自动补“用户输入”。",
     inputSchema: askInputSchema,
   },
-  todo: {
+  update_plan: {
     description:
       "更新当前会话短计划。≥3 步或长链路任务使用；每次传完整 items，并保持最多一个 in_progress。简单单步任务不要为了形式调用。",
     inputSchema: todoObjectInputSchema,
   },
-  mode_control: {
+  run_control: {
     description:
       "向应用提交当前模式的流程控制信号。YOLO 完成时用 complete；flow 模式阶段推进用 complete_stage、blocked、complete_workflow。",
     inputSchema: modeControlInputSchema,
   },
-  browse: {
+  workspace_browse: {
     description:
       "浏览工作区结构。未知路径或需要了解目录时使用；已知关键词用 search，已知准确文件用 read。",
     inputSchema: browseInputSchema,
   },
-  search: {
+  workspace_search: {
     description:
       "搜索工作区目录名、文件名和正文内容。找路径、角色名、章节、字段、锚点时使用；找到准确路径后用 read 精读。",
     inputSchema: searchInputSchema,
@@ -241,10 +241,10 @@ export const INTERACTION_TOOL_SPECS = {
 
 export function createInteractionToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    ask: (toolName, tool) =>
+    ask_user: (toolName, tool) =>
       defineTool({
-        description: INTERACTION_TOOL_SPECS.ask.description,
-        inputSchema: INTERACTION_TOOL_SPECS.ask.inputSchema,
+        description: INTERACTION_TOOL_SPECS.ask_user.description,
+        inputSchema: INTERACTION_TOOL_SPECS.ask_user.inputSchema,
         execute: async (input, options) => {
           const result = await runTool(
             toolName,
@@ -255,9 +255,9 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
           return result.data ?? result.summary;
         },
       }),
-    todo: (toolName, tool) =>
+    update_plan: (toolName, tool) =>
       defineTool({
-        description: INTERACTION_TOOL_SPECS.todo.description,
+        description: INTERACTION_TOOL_SPECS.update_plan.description,
         inputSchema: todoInputSchema,
         execute: async (input) => {
           const result = await runTool(
@@ -268,10 +268,10 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
           return result.data ?? result.summary;
         },
       }),
-    mode_control: (toolName, tool) =>
+    run_control: (toolName, tool) =>
       defineTool({
-        description: INTERACTION_TOOL_SPECS.mode_control.description,
-        inputSchema: INTERACTION_TOOL_SPECS.mode_control.inputSchema,
+        description: INTERACTION_TOOL_SPECS.run_control.description,
+        inputSchema: INTERACTION_TOOL_SPECS.run_control.inputSchema,
         execute: async (input, options) => {
           const result = await runTool(
             toolName,
@@ -282,10 +282,10 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
           return result.data ?? result.summary;
         },
       }),
-    browse: (toolName, tool) =>
+    workspace_browse: (toolName, tool) =>
       defineTool({
-        description: INTERACTION_TOOL_SPECS.browse.description,
-        inputSchema: INTERACTION_TOOL_SPECS.browse.inputSchema,
+        description: INTERACTION_TOOL_SPECS.workspace_browse.description,
+        inputSchema: INTERACTION_TOOL_SPECS.workspace_browse.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,
@@ -295,10 +295,10 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
           return result.data ?? result.summary;
         },
       }),
-    search: (toolName, tool) =>
+    workspace_search: (toolName, tool) =>
       defineTool({
-        description: INTERACTION_TOOL_SPECS.search.description,
-        inputSchema: INTERACTION_TOOL_SPECS.search.inputSchema,
+        description: INTERACTION_TOOL_SPECS.workspace_search.description,
+        inputSchema: INTERACTION_TOOL_SPECS.workspace_search.inputSchema,
         execute: async (input) => {
           const result = await runTool(
             toolName,

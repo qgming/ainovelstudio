@@ -11,7 +11,7 @@ export const FLOW_WORKFLOW_STAGES = [
   { id: "skill_load", label: "Skill Load", gate: "任务命中 skill 时已读取对应 SKILL.md。" },
   { id: "plan", label: "Plan", gate: "需要多步推进时已写入 todo 计划。" },
   { id: "act", label: "Act", gate: "已完成本阶段写入、编辑、查询或分析动作。" },
-  { id: "verify", label: "Verify", gate: "已用 read、word_count、json 或查询工具核对结果。" },
+  { id: "verify", label: "Verify", gate: "已用 workspace_read、text_stats、workspace_json 或查询工具核对结果。" },
   { id: "state_maintain", label: "State Maintain", gate: "已维护 status 或按任务需要补充的项目文件。" },
   { id: "report", label: "Report", gate: "已形成最终交付说明、风险和下一步。" },
 ] as const;
@@ -186,7 +186,7 @@ function getStage(stage: FlowWorkflowStageId) {
 
 function normalizeAction(value: unknown): FlowWorkflowAction {
   if (value === "complete_stage" || value === "blocked" || value === "complete_workflow") return value;
-  throw new Error("flow mode_control.action 必须是 complete_stage、blocked 或 complete_workflow。");
+  throw new Error("flow run_control.action 必须是 complete_stage、blocked 或 complete_workflow。");
 }
 
 function validateWorkflowId(value: unknown) {

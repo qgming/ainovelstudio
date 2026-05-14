@@ -23,7 +23,7 @@ description: |
 ## Procedure
 
 1. 用 `web_search` 拿榜单链接（起点月票榜 / 番茄推荐榜 / 晋江总分榜等）。
-2. 用 `web_fetch` 读榜单页与若干代表书的简介 / 标签 / 评论。
+2. 用 `web_read` 读榜单页与若干代表书的简介 / 标签 / 评论。
 3. 整理：
    - 平台风向摘要
    - 可推荐题材方向（含 平台 + 卖点 + 对标书候选）
@@ -62,7 +62,7 @@ description: |
 
 ## Reference Map
 
-使用 `skill({ action: "read", skillId: "story-long-scan", relativePath })` 读取。
+使用 `skill_read({ action: "read", skillId: "story-long-scan", relativePath })` 读取。
 
 | 场景 | relativePath | 读取时机 | 重点 |
 |---|---|---|---|
