@@ -80,6 +80,7 @@ pub struct SkillManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     skill_file_path: Option<String>,
     source_kind: String,
+    #[serde(default)]
     suggested_tools: Vec<String>,
     tags: Vec<String>,
     validation: SkillValidation,
@@ -1180,4 +1181,39 @@ pub fn import_skill_zip(
     }
 
     install_skill_archive(&app, &fileName, archiveBytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skill_manifest_defaults_missing_suggested_tools_to_empty_list() {
+        let manifest = serde_json::from_str::<SkillManifest>(
+            r##"{
+                "author": "tester",
+                "body": "Legacy skill body",
+                "defaultEnabled": true,
+                "description": "Legacy skill description",
+                "discoveredAt": 1,
+                "id": "legacy-skill",
+                "installPath": "sqlite://skills/legacy-skill",
+                "isBuiltin": true,
+                "name": "Legacy Skill",
+                "rawMarkdown": "# Legacy skill",
+                "references": [],
+                "sourceKind": "builtin-package",
+                "tags": [],
+                "validation": {
+                    "errors": [],
+                    "isValid": true,
+                    "warnings": []
+                },
+                "version": "1.0.0"
+            }"##,
+        )
+        .expect("legacy manifest without suggestedTools should deserialize");
+
+        assert!(manifest.suggested_tools.is_empty());
+    }
 }
