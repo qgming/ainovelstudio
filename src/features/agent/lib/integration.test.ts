@@ -150,7 +150,7 @@ describe("agent session (streaming)", () => {
     }
 
     const call = mockStreamFn.mock.calls[0]?.[0];
-    expect(call?.messages?.[0]?.content).toContain("## s14 项目默认上下文");
+    expect(call?.messages?.[0]?.content).toContain("## 项目默认上下文");
     expect(call?.messages?.[0]?.content).toContain(".project/AGENTS.md");
     expect(call?.messages?.[0]?.content).toContain(".project/README.md");
     expect(call?.messages?.[0]?.content).toContain(".project/status/latest-plot.json");
@@ -643,12 +643,12 @@ describe("agent session (streaming)", () => {
     }
 
     const request = mockStreamFn.mock.calls[0][0];
-    expect(request.system).toContain("## s00 主代理人设");
-    expect(request.system).toContain("## s03 动态资源目录");
+    expect(request.system).toContain("## 主代理人设");
+    expect(request.system).toContain("## 动态资源目录");
     expect(request.system).toContain("# 自定义主代理");
     expect(request.system).not.toContain(DEFAULT_MAIN_AGENT_MARKDOWN);
     expect(request.messages[0].content).toContain("# 当前轮上下文");
-    expect(request.messages[0].content).toContain("## s10 当前轮动态上下文");
+    expect(request.messages[0].content).toContain("## 当前轮动态上下文");
     expect(request.messages[0].content).toContain(
       "- 当前工作区：C:/books/北境余烬",
     );
@@ -659,7 +659,7 @@ describe("agent session (streaming)", () => {
       "- 当前文件类型：章节/正文稿件",
     );
     expect(request.messages[0].content).toContain("- 本轮任务类型：分析/诊断");
-    expect(request.messages[0].content).not.toContain("## s16 用户请求");
+    expect(request.messages[0].content).not.toContain("## 用户请求");
     expect(request.messages[1]).toEqual({
       role: "user",
       content: "帮我整理这一章的冲突节奏",
@@ -710,14 +710,14 @@ describe("agent session (streaming)", () => {
     }
 
     const request = mockStreamFn.mock.calls[0][0];
-    expect(request.messages[0].content).toContain("## s15 手动指定上下文");
+    expect(request.messages[0].content).toContain("## 手动指定上下文");
     expect(request.messages[0].content).toContain("### 手动指定技能");
     expect(request.messages[0].content).toContain("剧情规划：拆解冲突和节奏。");
     expect(request.messages[0].content).toContain("### 手动指定文件");
     expect(request.messages[0].content).toContain("- 设定/人物.md");
     expect(request.messages[0].content).toContain("系统不会自动注入文件正文");
     expect(request.messages[0].content).not.toContain("主角：林燃");
-    expect(request.messages[0].content).not.toContain("## s16 用户请求");
+    expect(request.messages[0].content).not.toContain("## 用户请求");
     expect(request.messages[1]).toEqual({
       role: "user",
       content: "继续写这一章",
@@ -755,9 +755,9 @@ describe("agent session (streaming)", () => {
 
     const request = mockStreamFn.mock.calls[0][0];
     const content = request.messages[request.messages.length - 2]?.content;
-    expect(content).toContain("## s12 计划执行提醒");
+    expect(content).toContain("## 计划执行提醒");
     expect(content).toContain("请先用 update_plan 写出当前短计划");
-    expect(content).not.toContain("## s13 当前计划状态");
+    expect(content).not.toContain("## 当前计划状态");
     expect(request.messages[request.messages.length - 1]).toEqual({
       role: "user",
       content: "先定位问题，再修复并跑测试",
@@ -804,9 +804,9 @@ describe("agent session (streaming)", () => {
 
     const request = mockStreamFn.mock.calls[0][0];
     const content = request.messages[request.messages.length - 2]?.content;
-    expect(content).toContain("## s12 计划执行提醒");
+    expect(content).toContain("## 计划执行提醒");
     expect(content).toContain("请先用 update_plan 刷新当前短计划");
-    expect(content).toContain("## s13 当前计划状态");
+    expect(content).toContain("## 当前计划状态");
     expect(content).toContain("[>] 修复问题");
     expect(request.messages[request.messages.length - 1]).toEqual({
       role: "user",
@@ -845,7 +845,7 @@ describe("agent session (streaming)", () => {
 
     const request = mockStreamFn.mock.calls[0][0];
     const content = request.messages[request.messages.length - 2]?.content;
-    expect(content).not.toContain("## s12 计划执行提醒");
+    expect(content).not.toContain("## 计划执行提醒");
     expect(request.messages[request.messages.length - 1]).toEqual({
       role: "user",
       content: "解释这个函数",
@@ -1663,7 +1663,7 @@ describe("agent session (streaming)", () => {
     expect(mockSubagentStreamFn.mock.calls[0][0].maxSteps).toBeUndefined();
     expect(mockStreamFn).toHaveBeenCalledTimes(1);
     expect(mockStreamFn.mock.calls[0][0].messages[0].content).not.toContain(
-      "## s11 子任务摘要（剧情代理）",
+      "## 子任务摘要（剧情代理）",
     );
   });
 

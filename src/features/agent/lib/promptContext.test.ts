@@ -38,10 +38,10 @@ describe("prompt context", () => {
       enabledToolIds: [],
     });
 
-    expect(system).toContain("## s00 主代理人设");
-    expect(system).toContain("## s01 Agent OS 内核");
-    expect(system.indexOf("## s00 主代理人设")).toBeLessThan(
-      system.indexOf("## s01 Agent OS 内核"),
+    expect(system).toContain("## 主代理人设");
+    expect(system).toContain("## Agent OS 内核");
+    expect(system.indexOf("## 主代理人设")).toBeLessThan(
+      system.indexOf("## Agent OS 内核"),
     );
     expect(system).toContain("Inspect");
     expect(system).toContain("Plan");
@@ -49,7 +49,7 @@ describe("prompt context", () => {
     expect(system).toContain("Report");
   });
 
-  it("system prompt 各 section key 唯一", () => {
+  it("system prompt 不暴露内部 section key", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [createSkill()],
@@ -63,16 +63,16 @@ describe("prompt context", () => {
     expect(sectionKeys).toHaveLength(unique.size);
   });
 
-  it("user prompt 不再渲染为独立 section，但动态上下文各 section key 仍唯一", () => {
+  it("user prompt 使用纯 Markdown 标题且不暴露内部 section key", () => {
     const prompt = buildUserTurnContent({
       activeFilePath: "章节/第一章.md",
       prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
-    expect(prompt).not.toContain("## s16 用户请求");
-    expect(prompt).not.toMatch(/## s15 用户请求/u);
-    expect(prompt).toContain("## s10 当前轮动态上下文");
+    expect(prompt).not.toContain("## 用户请求");
+    expect(prompt).not.toMatch(/^## s\d+[a-z]?\s/gmu);
+    expect(prompt).toContain("## 当前轮动态上下文");
 
     const sectionKeys = [...prompt.matchAll(/^## (s\d+[a-z]?)\s/gmu)].map(
       (match) => match[1],
@@ -88,9 +88,9 @@ describe("prompt context", () => {
       enabledToolIds: [],
     });
 
-    expect(system).toContain("## s03 动态资源目录");
-    expect(system).toContain("SKILL.md 头部 frontmatter 动态汇总");
-    expect(system).toContain("执行前必须");
+    expect(system).toContain("## 动态资源目录");
+    expect(system).toContain("以下是当前启用的技能目录");
+    expect(system).toContain("任务明显匹配时，先读取完整 SKILL.md");
     expect(system).toContain("SKILL.md");
     expect(system).toContain("### 技能：代码审查");
     expect(system).toContain("用于审查代码改动的检查清单");
@@ -108,7 +108,7 @@ describe("prompt context", () => {
       enabledToolIds: [],
     });
 
-    expect(system).not.toContain("## s06 临时 Subagent");
+    expect(system).not.toContain("## 临时 Subagent");
   });
 
   it("手动指定文件只注入路径，不注入正文", () => {
@@ -169,7 +169,7 @@ describe("prompt context", () => {
       workspaceRootPath: "C:/books/北境余烬",
     });
 
-    expect(prompt).toContain("## s14 项目默认上下文");
+    expect(prompt).toContain("## 项目默认上下文");
     expect(prompt).toContain(".project/AGENTS.md");
     expect(prompt).toContain(".project/README.md");
     expect(prompt).toContain(".project/status/latest-plot.json");
@@ -190,7 +190,7 @@ describe("prompt context", () => {
 
     expect(system).toContain("# 模式：BOOK");
     expect(system).toContain(".project/AGENTS.md");
-    expect(system).toContain("## s05 临时 Subagent");
+    expect(system).toContain("## 临时 Subagent");
   });
 
   it("autopilot 模式渲染 YOLO 契约与目标上下文", () => {

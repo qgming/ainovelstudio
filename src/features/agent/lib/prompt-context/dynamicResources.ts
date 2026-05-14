@@ -74,8 +74,8 @@ export function buildDynamicResourceDirectory(params: {
   const toolBody =
     enabledToolBlocks.length > 0
       ? [
-          "以下工具从当前启用工具的真实 description 与参数 schema 动态汇总。",
-          "涉及工作区路径时，优先传相对工作区根目录的路径，不要传绝对路径（例如用 `05-完整大纲.md`，不要用 `C:/.../05-完整大纲.md`）。",
+          "以下是当前可用工具，说明来自真实 description 与参数 schema。",
+          "涉及工作区时优先传相对路径，不要传绝对路径。",
           "",
           ...enabledToolBlocks,
         ].join("\n")
@@ -85,9 +85,9 @@ export function buildDynamicResourceDirectory(params: {
     ? null
     : params.enabledSkills.length > 0
       ? [
-          "以下技能目录从已启用技能的 SKILL.md 头部 frontmatter 动态汇总。目录只用于发现技能；任务明显匹配某个 skill 时，执行前必须用 skill_read 工具读取完整规则：",
+          "以下是当前启用的技能目录。目录只用于发现技能；任务明显匹配时，先读取完整 SKILL.md：",
           '  skill_read({ action: "read", skillId: "<id>", relativePath: "SKILL.md" })',
-          "需要例子、模板或专项方法时，再按需读取 references/ 下的文件。",
+          "需要模板、例子或专项方法时，再按需读取 references/。",
           "",
           ...params.enabledSkills.map((skill) => buildSkillBlock(skill)),
         ].join("\n")

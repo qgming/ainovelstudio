@@ -1,6 +1,5 @@
 export type PromptSection = {
   body: string | null | undefined;
-  key: string;
   title: string;
 };
 
@@ -27,7 +26,7 @@ export function renderPromptSections(sections: PromptSection[]) {
   return sections
     .filter((section) => Boolean(section.body?.trim()))
     .map((section) =>
-      [`## ${section.key} ${section.title}`, section.body?.trim()]
+      [`## ${section.title}`, section.body?.trim()]
         .filter(Boolean)
         .join("\n"),
     )
