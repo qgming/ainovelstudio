@@ -82,10 +82,6 @@ pub struct AgentProviderConfig {
     #[serde(default)]
     model: String,
     #[serde(default)]
-    enable_reasoning_effort: bool,
-    #[serde(default)]
-    reasoning_effort: String,
-    #[serde(default)]
     simulate_opencode_beta: bool,
 }
 

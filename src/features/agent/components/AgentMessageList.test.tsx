@@ -52,8 +52,6 @@ describe("BookAgentPanel", () => {
         apiKey: "",
         baseURL: "",
         model: "",
-        enableReasoningEffort: false,
-        reasoningEffort: "xhigh",
         simulateOpencodeBeta: false,
       },
       errorMessage: null,
@@ -122,8 +120,6 @@ describe("BookAgentPanel", () => {
         apiKey: "",
         baseURL: "https://example.com/v1",
         model: "fallback-model",
-        enableReasoningEffort: false,
-        reasoningEffort: "xhigh",
         simulateOpencodeBeta: false,
       },
     });

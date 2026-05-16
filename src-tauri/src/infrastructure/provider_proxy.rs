@@ -20,7 +20,6 @@ type CommandResult<T> = Result<T, String>;
 
 const CONNECTION_TEST_SYSTEM: &str = "你是连接测试助手。请直接回复一句不超过20字的自然语言，确认你已收到这条测试消息。不要调用工具，不要返回 JSON。";
 const CONNECTION_TEST_PROMPT: &str = "请直接回复一句简短的话，确认你已收到这条测试消息。";
-const DEFAULT_REASONING_EFFORT: &str = "xhigh";
 const OPENCODE_CLIENT: &str = "cli";
 const OPENCODE_PROJECT: &str = "global";
 
@@ -35,10 +34,6 @@ pub struct AgentProviderConfig {
     base_url: String,
     #[serde(default)]
     model: String,
-    #[serde(default)]
-    enable_reasoning_effort: bool,
-    #[serde(default)]
-    reasoning_effort: String,
     #[serde(default)]
     simulate_opencode_beta: bool,
 }
@@ -89,16 +84,6 @@ fn get_opencode_session_id() -> &'static str {
 
 fn normalize_base_url(base_url: &str) -> String {
     base_url.trim().trim_end_matches('/').to_string()
-}
-
-fn normalized_reasoning_effort(config: &AgentProviderConfig) -> &'static str {
-    match config.reasoning_effort.trim() {
-        "low" => "low",
-        "medium" => "medium",
-        "high" => "high",
-        "xhigh" => "xhigh",
-        _ => DEFAULT_REASONING_EFFORT,
-    }
 }
 
 fn build_request_headers(
@@ -179,7 +164,7 @@ pub async fn fetch_provider_models(
 pub async fn probe_provider_connection(
     config: AgentProviderConfig,
 ) -> CommandResult<ProviderHttpResponse> {
-    let mut body = json!({
+    let body = json!({
         "model": config.model.trim(),
         "messages": [
             {
@@ -192,10 +177,6 @@ pub async fn probe_provider_connection(
             }
         ]
     });
-
-    if config.enable_reasoning_effort {
-        body["reasoning_effort"] = Value::String(normalized_reasoning_effort(&config).to_string());
-    }
 
     send_request(
         config,

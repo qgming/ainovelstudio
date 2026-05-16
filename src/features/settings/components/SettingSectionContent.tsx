@@ -3,7 +3,6 @@ import { DEFAULT_MAIN_AGENT_MARKDOWN } from "@features/agent/lib/promptContext";
 import { ALL_TOOL_DEFS } from "@features/agent/lib/toolDefs";
 import {
   getDefaultAgentProviderConfig,
-  normalizeReasoningEffort,
   useAgentSettingsStore,
 } from "@features/settings/stores/useAgentSettingsStore";
 import { DefaultAgentSection } from "./DefaultAgentSection";
@@ -23,9 +22,6 @@ function isSameProviderConfig(
     left.apiKey === right.apiKey &&
     left.baseURL === right.baseURL &&
     left.model === right.model &&
-    Boolean(left.enableReasoningEffort) === Boolean(right.enableReasoningEffort) &&
-    normalizeReasoningEffort(left.reasoningEffort) ===
-      normalizeReasoningEffort(right.reasoningEffort) &&
     Boolean(left.simulateOpencodeBeta) === Boolean(right.simulateOpencodeBeta)
   );
 }

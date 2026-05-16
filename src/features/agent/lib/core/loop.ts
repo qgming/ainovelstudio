@@ -53,6 +53,9 @@ type AgentStepResult = {
   finishReason?: string;
 };
 
+type ModelAssistantContent = Extract<ModelMessage, { role: "assistant" }>["content"];
+type ModelAssistantPart = Exclude<ModelAssistantContent, string>[number];
+
 type RunStepWithRetryParams = {
   config: AgentLoopConfig;
   context: AgentLoopContext;
@@ -114,6 +117,21 @@ function collectAssistantContent(parts: AgentPart[]) {
     })
     .join("")
     .trim();
+}
+
+function collectAssistantModelContent(parts: AgentPart[]): ModelAssistantPart[] {
+  return parts.flatMap<ModelAssistantPart>((part) => {
+    if (part.type === "reasoning") {
+      return part.detail.trim() ? [{ type: "reasoning" as const, text: part.detail }] : [];
+    }
+    if (part.type === "text-delta") {
+      return part.delta.trim() ? [{ type: "text" as const, text: part.delta }] : [];
+    }
+    if (part.type === "text") {
+      return part.text.trim() ? [{ type: "text" as const, text: part.text }] : [];
+    }
+    return [];
+  });
 }
 
 function hasToolActivity(parts: AgentPart[]) {
@@ -224,8 +242,8 @@ async function* runStepWithRetry(
     if (isAbortError(error, params.config.abortSignal)) throw error;
     if (isNonRetryableAiRequestError(error)) throw error;
     if (isResponseBodyDecodeError(error) && canCompleteAfterDecodeError(params.eventMessage.parts)) {
-      const content = collectAssistantContent(params.eventMessage.parts);
-      if (content) params.messages.push({ role: "assistant", content });
+      const content = collectAssistantModelContent(params.eventMessage.parts);
+      if (content.length > 0) params.messages.push({ role: "assistant", content });
       params.retryState.consecutiveFailures = 0;
       params.retryState.failureHistory = [];
       params.config.emit?.({ type: "message_end", message: params.eventMessage });

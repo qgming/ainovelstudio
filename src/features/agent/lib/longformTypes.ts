@@ -1,5 +1,3 @@
-import type { AgentReasoningEffort } from "@features/settings/stores/useAgentSettingsStore";
-
 export type LongformAgentMode =
   | "book-design"
   | "volume-plan"
@@ -17,7 +15,6 @@ export type AgentCard = {
   mode: LongformAgentMode | "book" | "autopilot" | "flow";
   modelPresetId: string | null;
   name: string;
-  reasoningEffort: AgentReasoningEffort;
   tools: string[];
   writeScopes: string[];
 };

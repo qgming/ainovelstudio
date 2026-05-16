@@ -18,26 +18,10 @@ import {
 
 let initializePromise: Promise<void> | null = null;
 
-export type AgentReasoningEffort = "low" | "medium" | "high" | "xhigh";
-
-export const DEFAULT_REASONING_EFFORT: AgentReasoningEffort = "xhigh";
-
-export function normalizeReasoningEffort(
-  value?: string,
-): AgentReasoningEffort {
-  if (value === "low" || value === "medium" || value === "high" || value === "xhigh") {
-    return value;
-  }
-
-  return DEFAULT_REASONING_EFFORT;
-}
-
 export type AgentProviderConfig = {
   apiKey: string;
   baseURL: string;
   model: string;
-  enableReasoningEffort?: boolean;
-  reasoningEffort?: AgentReasoningEffort;
   simulateOpencodeBeta?: boolean;
 };
 
@@ -77,8 +61,6 @@ function getDefaultConfig(): AgentProviderConfig {
     apiKey: "",
     baseURL: "",
     model: "",
-    enableReasoningEffort: false,
-    reasoningEffort: DEFAULT_REASONING_EFFORT,
     simulateOpencodeBeta: false,
   };
 }
@@ -113,8 +95,6 @@ function normalizeProviderConfig(
     apiKey: config?.apiKey?.trim() ?? "",
     baseURL: config?.baseURL?.trim() ?? "",
     model: config?.model?.trim() ?? "",
-    enableReasoningEffort: Boolean(config?.enableReasoningEffort),
-    reasoningEffort: normalizeReasoningEffort(config?.reasoningEffort),
     simulateOpencodeBeta: Boolean(config?.simulateOpencodeBeta),
   };
 }

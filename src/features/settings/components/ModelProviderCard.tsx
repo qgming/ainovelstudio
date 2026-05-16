@@ -27,11 +27,7 @@ import { ModelCatalogButton } from "./ModelCatalogButton";
 import { Toast, type ToastTone } from "@shared/components/Toast";
 import { testAgentProviderConnection } from "@features/agent/lib/modelGateway";
 import type { ProviderConnectionTestResult } from "@features/agent/lib/modelGateway";
-import {
-  normalizeReasoningEffort,
-} from "@features/settings/stores/useAgentSettingsStore";
 import type {
-  AgentReasoningEffort,
   AgentProviderConfig,
   AgentProviderPreset,
 } from "@features/settings/stores/useAgentSettingsStore";
@@ -70,17 +66,6 @@ type ToastState = {
   title: string;
   tone: ToastTone;
 };
-
-const REASONING_EFFORT_OPTIONS: Array<{
-  description: string;
-  label: string;
-  value: AgentReasoningEffort;
-}> = [
-  { value: "xhigh", label: "极强", description: "最深度思考" },
-  { value: "high", label: "高", description: "偏重推理" },
-  { value: "medium", label: "中", description: "均衡输出" },
-  { value: "low", label: "低", description: "更快响应" },
-];
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -204,8 +189,6 @@ export function ModelProviderCard({
   const [isTesting, setIsTesting] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const normalizedBaseUrl = normalizeUrlForCompare(baseUrl);
-  const reasoningEffort = normalizeReasoningEffort(config.reasoningEffort);
-  const isReasoningEnabled = Boolean(config.enableReasoningEffort);
   const canTestConnection =
     baseUrl.length > 0 && apiKey.length > 0 && model.length > 0 && !isTesting;
   const canSave = isDirty && !isSaving;
@@ -216,8 +199,6 @@ export function ModelProviderCard({
     baseUrl,
     apiKey,
     model,
-    config.enableReasoningEffort,
-    config.reasoningEffort,
     config.simulateOpencodeBeta,
   ]);
 
@@ -296,7 +277,6 @@ export function ModelProviderCard({
     onChange({
       apiKey: preset.apiKey ?? "",
       baseURL: preset.baseURL,
-      enableReasoningEffort: false,
       model: preset.model,
     });
   }
@@ -309,13 +289,11 @@ export function ModelProviderCard({
   }) {
     onChange({
       baseURL: recommendation.baseURL,
-      enableReasoningEffort: false,
     });
   }
 
   function handleModelChange(nextModel: string) {
     onChange({
-      enableReasoningEffort: nextModel.trim() === model ? config.enableReasoningEffort : false,
       model: nextModel,
     });
   }
@@ -446,87 +424,6 @@ export function ModelProviderCard({
               placeholder="gpt-4.1 / gpt-4o / 自定义模型名"
               value={config.model}
             />
-          </div>
-
-          <div className="lg:col-span-2 -mx-3">
-            <div className="space-y-3 border-t border-border px-3 pt-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 pr-4">
-                  <p className="text-sm font-medium text-foreground">
-                    思考模式 reasoning_effort
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    默认关闭。部分模型不支持该参数，请按模型能力手动开启。
-                  </p>
-                </div>
-                <Switch
-                  checked={isReasoningEnabled}
-                  label="切换思考模式 reasoning_effort"
-                  onChange={(checked) =>
-                    onChange({ enableReasoningEffort: checked })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span
-                    className={cn(
-                      "rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-[0.12em]",
-                      isReasoningEnabled
-                        ? "border-border text-muted-foreground uppercase"
-                        : "border-dashed border-border/70 text-muted-foreground/80",
-                    )}
-                  >
-                    {isReasoningEnabled ? reasoningEffort : "已关闭"}
-                  </span>
-                </div>
-                <div
-                  role="group"
-                  aria-label="选择 reasoning_effort 强度"
-                  className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-                >
-                  {REASONING_EFFORT_OPTIONS.map((option) => {
-                    const selected = isReasoningEnabled && reasoningEffort === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={selected}
-                        disabled={!isReasoningEnabled}
-                        onClick={() =>
-                          onChange({ reasoningEffort: option.value })
-                        }
-                        className={cn(
-                          "rounded-lg border px-3 py-2 text-left transition-colors",
-                          !isReasoningEnabled
-                            ? "cursor-not-allowed border-border/60 bg-muted/35 text-muted-foreground"
-                            : selected
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-border/70 bg-background hover:bg-accent/40",
-                        )}
-                      >
-                        <span className="block text-sm font-medium uppercase">
-                          {option.value}
-                        </span>
-                        <span
-                          className={cn(
-                            "mt-1 block text-[11px] leading-4",
-                            !isReasoningEnabled
-                              ? "text-muted-foreground/80"
-                              : selected
-                              ? "text-background/80"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {option.label} · {option.description}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
           </div>
 
           <div className="lg:col-span-2 -mx-3">

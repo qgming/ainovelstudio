@@ -144,9 +144,7 @@ describe("modelGateway", () => {
     expect(mockProbeProviderConnectionViaTauri).toHaveBeenCalledWith({
       apiKey: "sk-test",
       baseURL: "https://example.com/v1",
-      enableReasoningEffort: false,
       model: "gpt-4.1",
-      reasoningEffort: "xhigh",
       simulateOpencodeBeta: false,
     });
   });
@@ -208,32 +206,6 @@ describe("modelGateway", () => {
       },
       system: "test-system",
     })).resolves.toBe("压缩摘要");
-  });
-
-  it("启用思考模式时通过 providerOptions 注入 reasoning_effort", async () => {
-    mockStreamText.mockReturnValue(createStreamTextResult("你好"));
-
-    await generateAgentText({
-      prompt: "你好",
-      providerConfig: {
-        apiKey: "sk-test",
-        baseURL: "https://example.com/v1",
-        enableReasoningEffort: true,
-        model: "gpt-4.1",
-        reasoningEffort: "high",
-      },
-      system: "test-system",
-    });
-
-    expect(mockStreamText).toHaveBeenCalledWith(
-      expect.objectContaining({
-        providerOptions: {
-          ainovelstudioProvider: {
-            reasoningEffort: "high",
-          },
-        },
-      }),
-    );
   });
 
   it("流式生成不再挂载工具特化修复器", () => {

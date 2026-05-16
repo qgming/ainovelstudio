@@ -80,33 +80,10 @@ describe("ModelProviderCard", () => {
     expect(screen.getByPlaceholderText("https://example.com/v1")).toBeInTheDocument();
     expect(screen.getByText("API Key")).toBeInTheDocument();
     expect(screen.getByText("Model")).toBeInTheDocument();
-    expect(screen.getByText("思考模式 reasoning_effort")).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: /reasoning/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
     expect(screen.queryByText("Temperature")).not.toBeInTheDocument();
     expect(screen.queryByText("Max Tokens")).not.toBeInTheDocument();
-  });
-
-  it("思考模式默认关闭，并禁用强度按钮", () => {
-    render(
-      <ModelProviderCard
-        providerPresets={[]}
-        onAddProviderPreset={() => undefined}
-        onDeleteProviderPreset={() => undefined}
-        config={{
-          apiKey: "sk-test",
-          baseURL: "https://example.com/v1",
-          model: "gpt-4.1",
-        }}
-        isDirty={false}
-        onChange={() => undefined}
-        onReset={() => undefined}
-        onSave={() => undefined}
-      />,
-    );
-
-    expect(screen.getByRole("switch", { name: "切换思考模式 reasoning_effort" })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByText("已关闭")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /xhigh/i })).toBeDisabled();
   });
 
   it("缺少必要配置时禁用测试连接按钮", () => {
@@ -396,7 +373,6 @@ describe("ModelProviderCard", () => {
 
     expect(handleChange).toHaveBeenCalledWith({
       baseURL: "https://api.openai.com/v1",
-      enableReasoningEffort: false,
     });
     expect(handleAddProviderPreset).not.toHaveBeenCalled();
   });
@@ -491,12 +467,11 @@ describe("ModelProviderCard", () => {
     expect(handleChange).toHaveBeenCalledWith({
       apiKey: "sk-openai",
       baseURL: "https://api.openai.com/v1",
-      enableReasoningEffort: false,
       model: "gpt-4.1",
     });
   });
 
-  it("切换模型时默认关闭思考模式", () => {
+  it("切换模型时只更新模型名", () => {
     const handleChange = vi.fn();
 
     render(
@@ -508,8 +483,6 @@ describe("ModelProviderCard", () => {
           apiKey: "sk-test",
           baseURL: "https://example.com/v1",
           model: "gpt-4.1",
-          enableReasoningEffort: true,
-          reasoningEffort: "high",
         }}
         isDirty={true}
         onChange={handleChange}
@@ -523,7 +496,6 @@ describe("ModelProviderCard", () => {
     });
 
     expect(handleChange).toHaveBeenCalledWith({
-      enableReasoningEffort: false,
       model: "gpt-4o",
     });
   });
@@ -634,57 +606,4 @@ describe("ModelProviderCard", () => {
     expect(handleChange).toHaveBeenCalledWith({ simulateOpencodeBeta: true });
   });
 
-  it("支持切换思考模式开关", () => {
-    const handleChange = vi.fn();
-
-    render(
-      <ModelProviderCard
-        providerPresets={[]}
-        onAddProviderPreset={() => undefined}
-        onDeleteProviderPreset={() => undefined}
-        config={{
-          apiKey: "sk-secret",
-          baseURL: "https://example.com/v1",
-          model: "gpt-4.1",
-          enableReasoningEffort: false,
-          reasoningEffort: "xhigh",
-        }}
-        isDirty={false}
-        onChange={handleChange}
-        onReset={() => undefined}
-        onSave={() => undefined}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("switch", { name: "切换思考模式 reasoning_effort" }));
-
-    expect(handleChange).toHaveBeenCalledWith({ enableReasoningEffort: true });
-  });
-
-  it("支持切换 reasoning_effort 强度", () => {
-    const handleChange = vi.fn();
-
-    render(
-      <ModelProviderCard
-        providerPresets={[]}
-        onAddProviderPreset={() => undefined}
-        onDeleteProviderPreset={() => undefined}
-        config={{
-          apiKey: "sk-secret",
-          baseURL: "https://example.com/v1",
-          model: "gpt-4.1",
-          enableReasoningEffort: true,
-          reasoningEffort: "xhigh",
-        }}
-        isDirty={false}
-        onChange={handleChange}
-        onReset={() => undefined}
-        onSave={() => undefined}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /medium/i }));
-
-    expect(handleChange).toHaveBeenCalledWith({ reasoningEffort: "medium" });
-  });
 });

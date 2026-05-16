@@ -4,8 +4,6 @@ export type AgentProviderConfigDocument = {
   apiKey: string;
   baseURL: string;
   model: string;
-  enableReasoningEffort?: boolean;
-  reasoningEffort?: "low" | "medium" | "high" | "xhigh";
   simulateOpencodeBeta?: boolean;
 };
 
