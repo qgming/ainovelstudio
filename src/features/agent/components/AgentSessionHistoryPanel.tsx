@@ -1,5 +1,11 @@
-import { MessageSquareText, Trash2 } from "lucide-react";
+import { MessageSquareText, MoreHorizontal, Trash2 } from "lucide-react";
 import type { ChatSessionSummary } from "@features/agent/chat/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@shared/ui/dropdown-menu";
 
 type AgentSessionHistoryPanelProps = {
   activeSessionId: string | null;
@@ -79,16 +85,31 @@ export function AgentSessionHistoryPanel({
                 </p>
                 <p className="mt-1 text-[11px] text-[#94a3b8] dark:text-[#64748b]">{formatTimestamp(session.lastMessageAt ?? session.updatedAt)}</p>
               </button>
-              <button
-                type="button"
-                aria-label={`删除会话 ${session.title}`}
-                title={`删除会话 ${session.title} — 从历史记录中移除这段对话`}
-                disabled={disabled || isActive}
-                onClick={() => onDelete(session.id)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-[#94a3b8] transition hover:bg-[#fee2e2] hover:text-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#35191c] dark:hover:text-[#fca5a5]"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`更多操作：${session.title}`}
+                    title={`更多操作：${session.title}`}
+                    disabled={disabled}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-[#94a3b8] transition hover:bg-white hover:text-[#334155] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c7d2fe] disabled:cursor-not-allowed disabled:opacity-40 data-[state=open]:bg-white data-[state=open]:text-[#334155] dark:hover:bg-[#1f2532] dark:hover:text-[#e2e8f0] dark:focus-visible:ring-[#334155] dark:data-[state=open]:bg-[#1f2532] dark:data-[state=open]:text-[#e2e8f0]"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[9rem]">
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={isActive}
+                    title={isActive ? "当前会话不能删除" : `删除会话 ${session.title}`}
+                    onSelect={() => onDelete(session.id)}
+                    className="gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    删除会话
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           );
         })}

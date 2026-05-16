@@ -63,6 +63,7 @@ type AgentComposerProps = {
   onFollowUp?: (selection: ManualTurnContextSelection) => void;
   onInputChange: (value: string) => void;
   onModeChange?: (modeId: AgentMode) => void;
+  onSelectionChange?: (selection: ManualTurnContextSelection) => void;
   onStop: () => void;
   onSubmit: (selection: ManualTurnContextSelection) => void;
   onSubmitAskAnswer: (answer: AskToolAnswer) => void;
@@ -73,6 +74,7 @@ type AgentComposerProps = {
   resources: SelectableResource[];
   rootNode: TreeNode | null;
   runStatus: AgentRunStatus;
+  selection?: ManualTurnContextSelection;
 };
 
 function removeValue(values: string[], value: string) {
@@ -147,6 +149,7 @@ export function AgentComposer({
   onFollowUp,
   onInputChange,
   onModeChange,
+  onSelectionChange,
   onStop,
   onSubmit,
   onSubmitAskAnswer,
@@ -157,6 +160,7 @@ export function AgentComposer({
   resources,
   rootNode,
   runStatus,
+  selection: controlledSelection,
 }: AgentComposerProps) {
   const isRunning = runStatus === "running";
   const isAskMode = Boolean(pendingAsk);
@@ -167,10 +171,11 @@ export function AgentComposer({
   const completedCount = countCompletedItems(planningState.items);
   const [isPlanExpanded, setIsPlanExpanded] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [selection, setSelection] = useState<ManualTurnContextSelection>({
+  const [localSelection, setLocalSelection] = useState<ManualTurnContextSelection>({
     filePaths: [],
     skillIds: [],
   });
+  const selection = controlledSelection ?? localSelection;
   const [askSelectedIds, setAskSelectedIds] = useState<string[]>([]);
   const [askCustomInput, setAskCustomInput] = useState("");
   const askRequest = pendingAsk?.request ?? null;
@@ -238,13 +243,23 @@ export function AgentComposer({
       }
       onSubmit(selection);
       if (!isRunning) {
-        setSelection({ filePaths: [], skillIds: [] });
+        updateSelection(() => ({ filePaths: [], skillIds: [] }));
       }
     }
   };
 
+  const updateSelection = (
+    updater: (current: ManualTurnContextSelection) => ManualTurnContextSelection,
+  ) => {
+    const nextSelection = updater(selection);
+    if (controlledSelection === undefined) {
+      setLocalSelection(nextSelection);
+    }
+    onSelectionChange?.(nextSelection);
+  };
+
   const handleResourceToggle = (resource: SelectableResource) => {
-    setSelection((current) => {
+    updateSelection((current) => {
       return {
         ...current,
         skillIds: current.skillIds.includes(resource.id)
@@ -255,7 +270,7 @@ export function AgentComposer({
   };
 
   const handleFileToggle = (path: string) => {
-    setSelection((current) => ({
+    updateSelection((current) => ({
       ...current,
       filePaths: current.filePaths.includes(path)
         ? removeValue(current.filePaths, path)
@@ -267,7 +282,7 @@ export function AgentComposer({
     id: string;
     kind: "file" | "skill";
   }) => {
-    setSelection((current) => {
+    updateSelection((current) => {
       if (item.kind === "skill") {
         return { ...current, skillIds: removeValue(current.skillIds, item.id) };
       }
@@ -277,7 +292,7 @@ export function AgentComposer({
 
   const handleSubmit = () => {
     onSubmit(selection);
-    setSelection({ filePaths: [], skillIds: [] });
+    updateSelection(() => ({ filePaths: [], skillIds: [] }));
   };
 
   const handleModeSelect = (modeId: AgentMode) => {

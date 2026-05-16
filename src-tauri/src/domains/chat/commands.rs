@@ -1,3 +1,4 @@
+use crate::domains::usage::commands::record_usage_from_message_payload;
 use crate::infrastructure::db::open_database;
 use rusqlite::{params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
@@ -597,6 +598,8 @@ pub fn append_chat_entry(
     let seq = next_entry_seq(&connection, &sessionId)?;
     let book_id = read_session(&connection, &sessionId, &bookId)?.book_id;
     let entry_id = entry.id.unwrap_or_else(|| Uuid::new_v4().to_string());
+    let payload = entry.payload;
+    let created_at = now_iso();
     connection
         .execute(
             r#"
@@ -604,16 +607,25 @@ pub fn append_chat_entry(
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
             params![
-                entry_id,
+                entry_id.clone(),
                 sessionId.clone(),
                 seq,
                 entry.entry_type,
-                entry.payload.to_string(),
-                now_iso()
+                payload.to_string(),
+                created_at.clone()
             ],
         )
         .map_err(error_to_string)?;
-    apply_patch(&connection, &sessionId, &book_id, sessionPatch)
+    let summary = apply_patch(&connection, &sessionId, &book_id, sessionPatch)?;
+    record_usage_from_message_payload(
+        &connection,
+        entry_id,
+        sessionId,
+        summary.title.clone(),
+        created_at,
+        &payload,
+    )?;
+    Ok(summary)
 }
 
 #[tauri::command]
@@ -628,6 +640,13 @@ pub fn update_chat_entry(
 ) -> CommandResult<ChatSessionSummary> {
     let connection = open_database(&app)?;
     let book_id = read_session(&connection, &sessionId, &bookId)?.book_id;
+    let created_at = connection
+        .query_row(
+            "SELECT created_at FROM chat_entries WHERE session_id = ?1 AND id = ?2",
+            params![sessionId.clone(), entryId.clone()],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(error_to_string)?;
     connection
         .execute(
             r#"
@@ -635,10 +654,19 @@ pub fn update_chat_entry(
             SET payload_json = ?3
             WHERE session_id = ?1 AND id = ?2
             "#,
-            params![sessionId.clone(), entryId, payload.to_string()],
+            params![sessionId.clone(), entryId.clone(), payload.to_string()],
         )
         .map_err(error_to_string)?;
-    apply_patch(&connection, &sessionId, &book_id, sessionPatch)
+    let summary = apply_patch(&connection, &sessionId, &book_id, sessionPatch)?;
+    record_usage_from_message_payload(
+        &connection,
+        entryId,
+        sessionId,
+        summary.title.clone(),
+        created_at,
+        &payload,
+    )?;
+    Ok(summary)
 }
 
 #[tauri::command]

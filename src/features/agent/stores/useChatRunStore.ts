@@ -26,6 +26,8 @@ type ChatRunStoreActions = {
   coachMessage: () => Promise<void>;
   compactSession: (reason?: "manual") => Promise<void>;
   createNewSession: () => Promise<void>;
+  addManualContextFile: (path: string) => void;
+  clearManualContextSelection: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
   followUpMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
   hardStopCurrentRun: (reason?: RunInterruptReason) => Promise<void>;
@@ -34,6 +36,7 @@ type ChatRunStoreActions = {
   reset: () => void;
   sendMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
   setActiveMode: (modeId: AgentMode) => void;
+  setManualContextSelection: (selection: ManualTurnContextSelection) => void;
   setInput: (value: string) => void;
   stopMessage: () => void;
   submitAskAnswer: (answer: AskToolAnswer) => void;
@@ -51,6 +54,22 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     closeHistory: () => set({ isHistoryOpen: false }),
     coachMessage: () => runtime.coachMessage(),
     compactSession: (reason = "manual") => runtime.compactSession(reason),
+    addManualContextFile: (path) => {
+      set((state) => {
+        if (state.manualContextSelection.filePaths.includes(path)) {
+          return {};
+        }
+        return {
+          manualContextSelection: {
+            ...state.manualContextSelection,
+            filePaths: [...state.manualContextSelection.filePaths, path],
+          },
+        };
+      });
+    },
+    clearManualContextSelection: () => {
+      set({ manualContextSelection: { filePaths: [], skillIds: [] } });
+    },
     createNewSession: async () => {
       if (selectIsAgentRunActive(get())) return;
       try {
@@ -83,6 +102,14 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     sendMessage: (selection) => runtime.sendMessage({ selection }),
     setActiveMode: (modeId) => {
       if (!selectIsAgentRunActive(get())) set({ activeModeId: modeId });
+    },
+    setManualContextSelection: (selection) => {
+      set({
+        manualContextSelection: {
+          filePaths: Array.from(new Set(selection.filePaths)),
+          skillIds: Array.from(new Set(selection.skillIds)),
+        },
+      });
     },
     setInput: (value) => setInputDraft({ get, set }, value),
     stopMessage: () => {

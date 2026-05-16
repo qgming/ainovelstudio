@@ -1,10 +1,13 @@
-import { ChevronRight, Gauge, History, SquarePen } from "lucide-react";
+import { ChevronRight, Gauge, History, MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import { forwardRef, useEffect } from "react";
 import { Button } from "@shared/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@shared/ui/dropdown-menu";
 import { cn } from "@shared/utils";
@@ -85,6 +88,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const compactSession = useChatRunStore((state) => state.compactSession);
   const compactionCount = useChatRunStore((state) => state.compactionCount);
   const createNewSession = useChatRunStore((state) => state.createNewSession);
+  const deleteSession = useChatRunStore((state) => state.deleteSession);
   const errorMessage = useChatRunStore((state) => state.errorMessage);
   const followUpMessage = useChatRunStore((state) => state.followUpMessage);
   const input = useChatRunStore((state) => state.input);
@@ -97,6 +101,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
     return getLatestCompactionEntry(state.entriesBySession[sessionId] ?? [])?.payload.summary ?? null;
   });
   const latestCompactionTokensBefore = useChatRunStore((state) => state.latestCompactionTokensBefore);
+  const manualContextSelection = useChatRunStore((state) => state.manualContextSelection);
   const openHistory = useChatRunStore((state) => state.openHistory);
   const planningState = useChatRunStore((state) => state.planningState);
   const queuedFollowUpMessages = useChatRunStore((state) => state.queuedFollowUpMessages);
@@ -110,6 +115,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const sessions = useChatRunStore((state) => state.sessions);
   const setActiveMode = useChatRunStore((state) => state.setActiveMode);
   const setInput = useChatRunStore((state) => state.setInput);
+  const setManualContextSelection = useChatRunStore((state) => state.setManualContextSelection);
   const stopMessage = useChatRunStore((state) => state.stopMessage);
   const submitAskAnswer = useChatRunStore((state) => state.submitAskAnswer);
   const switchSession = useChatRunStore((state) => state.switchSession);
@@ -148,6 +154,10 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
     void switchSession(sessionId);
   };
 
+  const handleSessionDelete = (sessionId: string) => {
+    void deleteSession(sessionId);
+  };
+
   return (
     <aside
       style={width ? { width } : undefined}
@@ -179,7 +189,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
               />
             </DropdownMenuContent>
           </DropdownMenu>
-          {/* 历史会话：使用 DropdownMenu + DropdownMenuItem */}
+          {/* 历史会话：主区域切换会话，右侧更多按钮承载危险操作 */}
           <DropdownMenu
             open={isHistoryOpen}
             onOpenChange={(open) => (open ? openHistory() : closeHistory())}
@@ -196,14 +206,42 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
                 sessions.map((session) => {
                   const isActive = session.id === activeSessionId;
                   return (
-                    <DropdownMenuItem
+                    <div
                       key={session.id}
-                      disabled={isRunning}
-                      onSelect={() => handleSessionSelect(session.id)}
-                      className={isActive ? "bg-accent text-accent-foreground" : undefined}
+                      className={cn(
+                        "flex items-center gap-1 rounded-md",
+                        isActive ? "bg-accent text-accent-foreground" : undefined,
+                      )}
                     >
-                      <span className="min-w-0 truncate">{session.title}</span>
-                    </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={isRunning}
+                        onSelect={() => handleSessionSelect(session.id)}
+                        className="min-w-0 flex-1 bg-transparent focus:bg-accent focus:text-accent-foreground"
+                      >
+                        <span className="min-w-0 truncate">{session.title}</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger
+                          aria-label={`更多操作：${session.title}`}
+                          title={`更多操作：${session.title}`}
+                          className="h-7 w-7 justify-center px-0 [&>svg:last-child]:hidden"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="min-w-[9rem]">
+                          <DropdownMenuItem
+                            variant="destructive"
+                            disabled={isRunning || isActive}
+                            title={isActive ? "当前会话不能删除" : `删除会话 ${session.title}`}
+                            onSelect={() => handleSessionDelete(session.id)}
+                            className="gap-2"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            删除会话
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    </div>
                   );
                 })
               )}
@@ -233,6 +271,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         onCoach={coachMessage}
         onInputChange={setInput}
         onModeChange={setActiveMode}
+        onSelectionChange={setManualContextSelection}
         onFollowUp={(selection) => {
           void followUpMessage(selection);
         }}
@@ -255,6 +294,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         ]}
         rootNode={rootNode}
         runStatus={displayRunStatus}
+        selection={manualContextSelection}
       />
     </aside>
   );

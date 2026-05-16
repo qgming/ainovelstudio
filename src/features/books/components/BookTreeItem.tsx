@@ -1,4 +1,15 @@
-import { ChevronRight, Ellipsis, FileText, FolderClosed, FolderOpen } from "lucide-react";
+import {
+  AtSign,
+  ChevronRight,
+  Ellipsis,
+  FilePlus2,
+  FileText,
+  FolderClosed,
+  FolderOpen,
+  FolderPlus,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@shared/ui/button";
 import {
   DropdownMenu,
@@ -15,6 +26,8 @@ type BookTreeItemProps = {
   depth: number;
   expandedPaths: string[];
   node: TreeNode;
+  agentContextFilePaths?: string[];
+  onAddToAgentContext?: (path: string) => void;
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (node: TreeNode) => void;
@@ -26,9 +39,11 @@ type BookTreeItemProps = {
 // 文件树节点：操作菜单改用 shadcn DropdownMenu，省去原本的浮层定位逻辑。
 export function BookTreeItem({
   activeFilePath,
+  agentContextFilePaths = [],
   depth,
   expandedPaths,
   node,
+  onAddToAgentContext,
   onCreateFile,
   onCreateFolder,
   onDelete,
@@ -40,6 +55,7 @@ export function BookTreeItem({
   const isExpanded = isDirectory && expandedPaths.includes(node.path);
   const isSelected = activeFilePath === node.path;
   const isEditable = !isDirectory && isTextEditableFile(node.name);
+  const isInAgentContext = agentContextFilePaths.includes(node.path);
 
   return (
     <div>
@@ -121,16 +137,33 @@ export function BookTreeItem({
           <DropdownMenuContent align="end" className="w-44">
             {isDirectory ? (
               <>
-                <DropdownMenuItem onSelect={() => onCreateFolder(node.path)}>
+                <DropdownMenuItem className="gap-2" onSelect={() => onCreateFolder(node.path)}>
+                  <FolderPlus className="h-4 w-4" />
                   新建文件夹
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onCreateFile(node.path)}>
+                <DropdownMenuItem className="gap-2" onSelect={() => onCreateFile(node.path)}>
+                  <FilePlus2 className="h-4 w-4" />
                   新建文件
                 </DropdownMenuItem>
               </>
             ) : null}
-            <DropdownMenuItem onSelect={() => onRename(node)}>重命名</DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={() => onDelete(node)}>
+            {!isDirectory && onAddToAgentContext ? (
+              <DropdownMenuItem
+                disabled={isInAgentContext}
+                onSelect={() => onAddToAgentContext(node.path)}
+                title={isInAgentContext ? "这个文件已在 Agent 上下文中" : "添加到 Agent 上下文"}
+                className="gap-2"
+              >
+                <AtSign className="h-4 w-4" />
+                {isInAgentContext ? "已在上下文中" : "添加到上下文"}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem className="gap-2" onSelect={() => onRename(node)}>
+              <Pencil className="h-4 w-4" />
+              重命名
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2" variant="destructive" onSelect={() => onDelete(node)}>
+              <Trash2 className="h-4 w-4" />
               删除
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -142,9 +175,11 @@ export function BookTreeItem({
             <BookTreeItem
               key={child.path}
               activeFilePath={activeFilePath}
+              agentContextFilePaths={agentContextFilePaths}
               depth={depth + 1}
               expandedPaths={expandedPaths}
               node={child}
+              onAddToAgentContext={onAddToAgentContext}
               onCreateFile={onCreateFile}
               onCreateFolder={onCreateFolder}
               onDelete={onDelete}

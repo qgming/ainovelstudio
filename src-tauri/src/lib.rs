@@ -71,6 +71,8 @@ pub fn run() {
             domains::data_sync::upload_app_data_backup_via_webdav,
             domains::data_sync::download_app_data_backup_via_webdav,
             domains::usage::commands::read_usage_logs,
+            domains::usage::commands::read_usage_summary,
+            domains::usage::commands::read_usage_daily_stats,
             domains::book_workspace::commands::pick_book_directory,
             domains::book_workspace::commands::open_book_folder,
             domains::book_workspace::commands::sync_book_folder_to_workspace,

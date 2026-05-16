@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, DatabaseZap, Filter, History, RefreshCw } from "lucide-react";
-import { readUsageLogs } from "@features/settings/usage/api";
-import type { UsageLogEntry } from "@features/settings/usage/types";
+import { readUsageDailyStats, readUsageLogs, readUsageSummary } from "@features/settings/usage/api";
+import type { UsageDailyStat, UsageLogEntry, UsageSummary } from "@features/settings/usage/types";
 import { UsageHeatmap } from "./UsageHeatmap";
 import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 import { UsageLogTable } from "./UsageLogTable";
@@ -27,6 +27,16 @@ const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
   month: "2-digit",
 });
+const EMPTY_USAGE_SUMMARY: UsageSummary = {
+  requestCount: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  noCacheTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  reasoningTokens: 0,
+};
 
 function parseEpoch(value: string) {
   return Number(value) * 1000;
@@ -43,8 +53,8 @@ export function toLocalDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function toDateKey(value: string) {
-  return toLocalDateKey(new Date(parseEpoch(value)));
+function parseDateKey(value: string) {
+  return new Date(`${value}T00:00:00`).getTime();
 }
 
 function formatDateTime(value: string) {
@@ -77,14 +87,12 @@ export function resolveHeatmapLevel(requestCount: number, maxCount: number): Hea
   return Math.min(4, Math.max(1, Math.ceil((requestCount / maxCount) * 4))) as HeatmapDay["level"];
 }
 
-export function buildHeatmapDays(logs: UsageLogEntry[]) {
+export function buildHeatmapDays(stats: UsageDailyStat[]) {
   const byDay = new Map<string, { requestCount: number; tokenTotal: number }>();
-  for (const log of logs) {
-    const dateKey = toDateKey(log.recordedAt || log.createdAt);
-    const current = byDay.get(dateKey) ?? { requestCount: 0, tokenTotal: 0 };
-    byDay.set(dateKey, {
-      requestCount: current.requestCount + 1,
-      tokenTotal: current.tokenTotal + log.totalTokens,
+  for (const stat of stats) {
+    byDay.set(stat.dateKey, {
+      requestCount: stat.requestCount,
+      tokenTotal: stat.tokenTotal,
     });
   }
 
@@ -135,20 +143,10 @@ function MetricCard({
   );
 }
 
-function summarizeLogs(logs: UsageLogEntry[]) {
-  return logs.reduce(
-    (accumulator, log) => ({
-      requests: accumulator.requests + 1,
-      totalTokens: accumulator.totalTokens + log.totalTokens,
-      inputTokens: accumulator.inputTokens + log.inputTokens,
-      outputTokens: accumulator.outputTokens + log.outputTokens,
-    }),
-    { inputTokens: 0, outputTokens: 0, requests: 0, totalTokens: 0 },
-  );
-}
-
 export function UsageAnalyticsSection() {
   const [logs, setLogs] = useState<UsageLogEntry[]>([]);
+  const [summary, setSummary] = useState<UsageSummary>(EMPTY_USAGE_SUMMARY);
+  const [dailyStats, setDailyStats] = useState<UsageDailyStat[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRangeKey>("30d");
@@ -158,8 +156,14 @@ export function UsageAnalyticsSection() {
     setStatus("loading");
     setErrorMessage(null);
     try {
-      const entries = await readUsageLogs();
+      const [entries, nextSummary, nextDailyStats] = await Promise.all([
+        readUsageLogs(),
+        readUsageSummary(),
+        readUsageDailyStats(),
+      ]);
       setLogs(entries);
+      setSummary(nextSummary);
+      setDailyStats(nextDailyStats);
       setStatus("ready");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "读取用量日志失败。");
@@ -173,11 +177,17 @@ export function UsageAnalyticsSection() {
       setStatus("loading");
       setErrorMessage(null);
       try {
-        const entries = await readUsageLogs();
+        const [entries, nextSummary, nextDailyStats] = await Promise.all([
+          readUsageLogs(),
+          readUsageSummary(),
+          readUsageDailyStats(),
+        ]);
         if (cancelled) {
           return;
         }
         setLogs(entries);
+        setSummary(nextSummary);
+        setDailyStats(nextDailyStats);
         setStatus("ready");
       } catch (error) {
         if (cancelled) {
@@ -212,16 +222,19 @@ export function UsageAnalyticsSection() {
     });
   }, [logs, modelFilter, timeRange]);
 
-  const summary = useMemo(() => summarizeLogs(filteredLogs), [filteredLogs]);
+  const filteredDailyStats = useMemo(() => {
+    const rangeStart = resolveRangeStart(timeRange);
+    return dailyStats.filter((stat) => parseDateKey(stat.dateKey) >= rangeStart);
+  }, [dailyStats, timeRange]);
 
   const heatmapWeeks = useMemo(() => {
-    const days = buildHeatmapDays(filteredLogs);
+    const days = buildHeatmapDays(filteredDailyStats);
     const weeks: HeatmapDay[][] = [];
     for (let index = 0; index < days.length; index += HEATMAP_ROW_COUNT) {
       weeks.push(days.slice(index, index + HEATMAP_ROW_COUNT));
     }
     return weeks;
-  }, [filteredLogs]);
+  }, [filteredDailyStats]);
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
@@ -273,13 +286,14 @@ export function UsageAnalyticsSection() {
               </select>
             </div>
             <span className="text-xs text-[#94a3b8] dark:text-[#64748b]">当前日志 {formatMetric(filteredLogs.length)} 条</span>
+            <span className="text-xs text-[#94a3b8] dark:text-[#64748b]">仅保留最新 100 条日志，累计指标单独保存</span>
           </div>
         </div>
 
         <UsageHeatmap formatMetric={formatMetric} weeks={heatmapWeeks} />
 
         <div className="grid border-b border-border sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="总请求数" value={summary.requests} />
+          <MetricCard label="总请求数" value={summary.requestCount} />
           <MetricCard label="总 Tokens" value={summary.totalTokens} />
           <MetricCard label="总输入数" value={summary.inputTokens} />
           <MetricCard label="总输出数" value={summary.outputTokens} />

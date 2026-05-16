@@ -250,6 +250,50 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
                 root_path TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS usage_summary (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                request_count INTEGER NOT NULL DEFAULT 0,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                no_cache_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS usage_daily_stats (
+                date_key TEXT PRIMARY KEY,
+                request_count INTEGER NOT NULL DEFAULT 0,
+                token_total INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS usage_logs (
+                message_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                session_title TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_name TEXT NOT NULL,
+                book_name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model_id TEXT NOT NULL,
+                finish_reason TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                no_cache_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+                reasoning_tokens INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_usage_logs_recorded_at
+            ON usage_logs(CAST(recorded_at AS INTEGER) DESC, CAST(created_at AS INTEGER) DESC);
             "#,
         )
         .map_err(error_to_string)?;

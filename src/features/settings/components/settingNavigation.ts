@@ -10,8 +10,8 @@ export type SettingNavItem = {
 
 export const settingNavItems: SettingNavItem[] = [
   { key: "agents", title: "AGENTS", icon: Bot },
-  { key: "usage", title: "用量统计", icon: Activity },
   { key: "models", title: "模型设置", icon: Sparkles },
+  { key: "usage", title: "用量统计", icon: Activity },
   { key: "data", title: "数据管理", icon: Database },
   { key: "tools", title: "工具库", icon: Wrench },
   { key: "about", title: "关于我们", icon: Info },

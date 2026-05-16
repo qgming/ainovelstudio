@@ -26,6 +26,7 @@ import { BookWorkspaceEmptyState } from "@features/books/components/BookWorkspac
 import { BookshelfDialog } from "@features/books/components/BookshelfDialog";
 import { ConfirmDialog } from "@shared/components/dialogs/ConfirmDialog";
 import { PromptDialog } from "@shared/components/dialogs/PromptDialog";
+import { useChatRunStore } from "@features/agent/stores/useChatRunStore";
 import { getStoredWorkspaceSnapshot, openBookFolder } from "@features/books/api/bookWorkspaceApi";
 import { getBaseName } from "@features/books/lib/paths";
 import type { TreeNode } from "@features/books/types";
@@ -73,6 +74,8 @@ export function BookWorkspaceView({
   requestedBookId = null,
 }: BookWorkspaceViewProps = {}) {
   const isMobile = useIsMobile();
+  const addManualContextFile = useChatRunStore((state) => state.addManualContextFile);
+  const manualContextFilePaths = useChatRunStore((state) => state.manualContextSelection.filePaths);
 
   // —— useBookWorkspaceStore 订阅（按 selector 切片以减少不必要的重渲染） ——
   const activeFilePath = useBookWorkspaceStore((state) => state.activeFilePath);
@@ -228,6 +231,15 @@ export function BookWorkspaceView({
     }
   }
 
+  function addFileToAgentContext(path: string) {
+    addManualContextFile(path);
+    if (isMobile) {
+      setMobileActiveTab("agent");
+      return;
+    }
+    expandRightPanel();
+  }
+
   function renderDesktopWorkspace() {
     if (!resolvedRootNode) return null;
     return (
@@ -246,10 +258,12 @@ export function BookWorkspaceView({
           <>
             <BookTreePanel
               activeFilePath={activeFilePath}
+              agentContextFilePaths={manualContextFilePaths}
               busy={isBusy}
               expandedPaths={expandedPaths}
               onCreateFile={openCreateFileDialog}
               onCreateFolder={openCreateFolderDialog}
+              onAddToAgentContext={addFileToAgentContext}
               onDelete={requestDelete}
               onNavigateHome={navigateHome}
               onOpenRootFolder={(rootPath) => void openRootFolder(rootPath)}
@@ -304,6 +318,8 @@ export function BookWorkspaceView({
       expandedPaths,
       onCreateFile: openCreateFileDialog,
       onCreateFolder: openCreateFolderDialog,
+      agentContextFilePaths: manualContextFilePaths,
+      onAddToAgentContext: addFileToAgentContext,
       onDelete: requestDelete,
       onNavigateHome: navigateHome,
       onRefresh: () => void refreshWorkspace(),

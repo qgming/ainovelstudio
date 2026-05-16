@@ -13,6 +13,7 @@ import type {
   AskUserRequest,
 } from "@features/agent/lib/types";
 import type { AgentMode } from "@features/agent/lib/modeRules";
+import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
 import { derivePlanningState, type PlanningState } from "@features/agent/lib/planning";
 import {
   buildInitialRun,
@@ -84,6 +85,7 @@ export type ChatRunStoreState = {
   inflightToolRequestIds: string[];
   isHistoryOpen: boolean;
   isHydrated: boolean;
+  manualContextSelection: ManualTurnContextSelection;
   entriesBySession: Record<string, ChatBootstrap["activeSessionEntries"]>;
   messagesBySession: Record<string, AgentMessage[]>;
   planningState: PlanningState;
@@ -115,6 +117,7 @@ export function buildInitialState(): ChatRunStoreState {
     inflightToolRequestIds: [],
     isHistoryOpen: false,
     isHydrated: false,
+    manualContextSelection: { filePaths: [], skillIds: [] },
     entriesBySession: {},
     messagesBySession: {},
     planningState: { items: [], roundsSinceUpdate: 0 },

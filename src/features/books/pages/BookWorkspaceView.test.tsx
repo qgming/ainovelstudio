@@ -294,6 +294,30 @@ describe("BookWorkspaceView", () => {
     expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
   });
 
+  it("可以从文件更多菜单把文件添加到 Agent 上下文", async () => {
+    renderBookWorkspaceView();
+
+    fireEvent.click(screen.getByRole("button", { name: "选择书籍" }));
+    fireEvent.click(await screen.findByRole("button", { name: "北境余烬" }));
+    fireEvent.click(await screen.findByRole("button", { name: "第一卷" }));
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "第001章_待命名.md 更多操作" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "添加到上下文" }));
+
+    expect(useAgentStore.getState().manualContextSelection.filePaths).toContain(chapterPath);
+    expect(screen.getByRole("button", { name: "移除 第001章_待命名.md" })).toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "第001章_待命名.md 更多操作" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+
+    expect(screen.getByRole("menuitem", { name: "已在上下文中" })).toHaveAttribute("aria-disabled", "true");
+  });
+
   it("支持刷新当前书籍且顶部不再显示全部展开收起按钮", async () => {
     renderBookWorkspaceView();
 

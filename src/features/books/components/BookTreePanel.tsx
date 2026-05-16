@@ -12,10 +12,12 @@ import type { TreeNode } from "@features/books/types";
 
 type BookTreePanelProps = {
   activeFilePath: string | null;
+  agentContextFilePaths?: string[];
   busy?: boolean;
   expandedPaths: string[];
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
+  onAddToAgentContext?: (path: string) => void;
   onDelete: (node: TreeNode) => void;
   onNavigateHome: () => void;
   onOpenRootFolder?: (rootPath: string) => void;
@@ -97,10 +99,12 @@ function WorkspaceButton({
 
 export function BookTreePanel({
   activeFilePath,
+  agentContextFilePaths = [],
   busy = false,
   expandedPaths,
   onCreateFile,
   onCreateFolder,
+  onAddToAgentContext,
   onDelete,
   onNavigateHome,
   onOpenRootFolder,
@@ -163,9 +167,11 @@ export function BookTreePanel({
             <BookTreeItem
               key={child.path}
               activeFilePath={activeFilePath}
+              agentContextFilePaths={agentContextFilePaths}
               depth={0}
               expandedPaths={expandedPaths}
               node={child}
+              onAddToAgentContext={onAddToAgentContext}
               onCreateFile={onCreateFile}
               onCreateFolder={onCreateFolder}
               onDelete={onDelete}

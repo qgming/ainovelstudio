@@ -1,27 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { UsageLogEntry } from "@features/settings/usage/types";
+import type { UsageDailyStat } from "@features/settings/usage/types";
 import { buildHeatmapDays, resolveHeatmapLevel, toLocalDateKey } from "./UsageAnalyticsSection";
 
-function createLog(overrides: Partial<UsageLogEntry> = {}): UsageLogEntry {
+function createDailyStat(overrides: Partial<UsageDailyStat> = {}): UsageDailyStat {
   return {
-    bookName: "测试书籍",
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    createdAt: "0",
-    finishReason: "stop",
-    inputTokens: 10,
-    messageId: "message-1",
-    modelId: "test-model",
-    noCacheTokens: 0,
-    outputTokens: 5,
-    provider: "test-provider",
-    reasoningTokens: 0,
-    recordedAt: "0",
-    sessionId: "session-1",
-    sessionTitle: "测试会话",
-    sourceName: "测试会话",
-    sourceType: "chat",
-    totalTokens: 15,
+    dateKey: "1970-01-01",
+    requestCount: 1,
+    tokenTotal: 15,
     ...overrides,
   };
 }
@@ -44,15 +29,14 @@ describe("UsageAnalyticsSection helpers", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 12, 12, 0, 0));
 
-    const logs = [
-      createLog({
-        messageId: "message-2",
-        recordedAt: Math.floor(new Date(2026, 3, 12, 0, 30, 0).getTime() / 1000).toString(),
+    const stats = [
+      createDailyStat({
+        dateKey: "2026-04-12",
       }),
     ];
 
     const todayKey = toLocalDateKey(new Date(2026, 3, 12, 12, 0, 0));
-    const todayEntry = buildHeatmapDays(logs).find((day) => day.dateKey === todayKey);
+    const todayEntry = buildHeatmapDays(stats).find((day) => day.dateKey === todayKey);
 
     expect(todayEntry).toMatchObject({
       level: 1,
