@@ -1,4 +1,4 @@
-import { isLoopFinished, stepCountIs, streamText, tool as defineTool } from "ai";
+import { generateText, isLoopFinished, stepCountIs, streamText, tool as defineTool } from "ai";
 import type { ModelMessage, ToolSet } from "ai";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import type { AgentUsage } from "./types";
@@ -16,38 +16,69 @@ export type {
 } from "./model-gateway/providerProbeShared";
 
 export type AgentTextGenerationInput = {
+  abortSignal?: AbortSignal;
   prompt: string;
   providerConfig: AgentProviderConfig;
   system: string;
 };
 
-function isResponseBodyDecodeError(error: unknown) {
-  return error instanceof Error && error.message.includes("error decoding response body");
+type GenerateTextOptions = Parameters<typeof generateText>[0];
+
+type AgentOutputGenerationInput = AgentTextGenerationInput & {
+  output: NonNullable<GenerateTextOptions["output"]>;
+};
+
+// 所有模型调用都先经过这里，确保配置校验、provider 创建和 providerOptions 注入保持一致。
+function prepareModelRequest(providerConfig: AgentProviderConfig) {
+  const normalizedConfig = normalizeProviderConfig(providerConfig);
+  assertProviderConfigReady(normalizedConfig);
+  const provider = createProvider(normalizedConfig);
+  return {
+    model: provider(normalizedConfig.model),
+    normalizedConfig,
+    providerOptions: buildProviderOptions(normalizedConfig),
+  };
 }
 
-/** 非流式文本生成（子代理等场景） */
-export async function generateAgentText({ prompt, providerConfig, system }: AgentTextGenerationInput) {
-  const result = streamAgentText({
-    messages: [{ role: "user", content: prompt }],
-    providerConfig,
-    singleStep: true,
+function resolveStopWhen(singleStep: boolean | undefined, maxSteps: number | undefined) {
+  if (singleStep) return stepCountIs(1);
+  if (typeof maxSteps === "number" && maxSteps > 0) {
+    return [isLoopFinished(), stepCountIs(maxSteps)];
+  }
+  return isLoopFinished();
+}
+
+/** 非流式文本生成（摘要、轻量判断等场景） */
+export async function generateAgentText({ abortSignal, prompt, providerConfig, system }: AgentTextGenerationInput) {
+  const request = prepareModelRequest(providerConfig);
+  const result = await generateText({
+    abortSignal,
+    model: request.model,
+    prompt,
+    providerOptions: request.providerOptions,
     system,
   });
+  return result.text;
+}
 
-  let text = "";
-  try {
-    for await (const part of result.fullStream) {
-      if (part.type === "text-delta") {
-        text += part.text;
-      }
-    }
-  } catch (error) {
-    if (isResponseBodyDecodeError(error) && text.trim()) {
-      return text;
-    }
-    throw error;
-  }
-  return text;
+/** 非流式结构化生成，统一走 AI SDK Output。 */
+export async function generateAgentOutput<COMPLETE_OUTPUT>({
+  abortSignal,
+  output,
+  prompt,
+  providerConfig,
+  system,
+}: AgentOutputGenerationInput): Promise<COMPLETE_OUTPUT> {
+  const request = prepareModelRequest(providerConfig);
+  const result = await generateText({
+    abortSignal,
+    model: request.model,
+    output,
+    prompt,
+    providerOptions: request.providerOptions,
+    system,
+  });
+  return result.output as COMPLETE_OUTPUT;
 }
 
 export type StreamAgentTextInput = {
@@ -144,22 +175,16 @@ export function streamAgentText({
   system,
   tools,
 }: StreamAgentTextInput): StreamAgentTextResult {
-  const normalizedConfig = normalizeProviderConfig(providerConfig);
-  assertProviderConfigReady(normalizedConfig);
-  const provider = createProvider(normalizedConfig);
+  const request = prepareModelRequest(providerConfig);
 
   const result = streamText({
     abortSignal,
-    model: provider(normalizedConfig.model),
+    model: request.model,
     messages,
-    providerOptions: buildProviderOptions(normalizedConfig),
+    providerOptions: request.providerOptions,
     system,
     tools,
-    stopWhen: singleStep
-      ? stepCountIs(1)
-      : typeof maxSteps === "number" && maxSteps > 0
-        ? [isLoopFinished(), stepCountIs(maxSteps)]
-        : isLoopFinished(),
+    stopWhen: resolveStopWhen(singleStep, maxSteps),
   });
 
   const finishReasonPromise = Promise.resolve(result.finishReason);
@@ -169,7 +194,7 @@ export function streamAgentText({
   const usagePromise = createAbortAwareUsagePromise({
     abortSignal,
     finishReasonPromise,
-    providerConfig: normalizedConfig,
+    providerConfig: request.normalizedConfig,
     responsePromise: result.response,
     totalUsagePromise: result.totalUsage,
   });

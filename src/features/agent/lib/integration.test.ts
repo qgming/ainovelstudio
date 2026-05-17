@@ -1006,7 +1006,10 @@ describe("agent session (streaming)", () => {
         },
         {} as never,
       ),
-    ).resolves.toBe("已迁移到 归档/第一卷/第001章.md");
+    ).resolves.toEqual({
+      ok: true,
+      summary: "已迁移到 归档/第一卷/第001章.md",
+    });
 
     expect(executeMock).toHaveBeenCalledWith(
       {

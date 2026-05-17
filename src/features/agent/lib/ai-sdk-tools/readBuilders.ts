@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineTool } from "../modelGateway";
+import { createAiSdkToolBuilder } from "./output";
 import type { ToolBuilder, ToolRunner } from "./types";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
 
@@ -273,83 +273,11 @@ export const READ_TOOL_SPECS = {
 
 export function createReadToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    leaderboard: (toolName, tool) =>
-      defineTool({
-        description: READ_TOOL_SPECS.leaderboard.description,
-        inputSchema: READ_TOOL_SPECS.leaderboard.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    web_search: (toolName, tool) =>
-      defineTool({
-        description: READ_TOOL_SPECS.web_search.description,
-        inputSchema: READ_TOOL_SPECS.web_search.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    web_read: (toolName, tool) =>
-      defineTool({
-        description: READ_TOOL_SPECS.web_read.description,
-        inputSchema: READ_TOOL_SPECS.web_read.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    workspace_read: (toolName, tool) =>
-      defineTool({
-        description: READ_TOOL_SPECS.workspace_read.description,
-        inputSchema: READ_TOOL_SPECS.workspace_read.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    text_stats: (toolName, tool) =>
-      defineTool({
-        description: READ_TOOL_SPECS.text_stats.description,
-        inputSchema: READ_TOOL_SPECS.text_stats.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    project_memory_search: (toolName, tool) =>
-      defineTool({
-        description: READ_TOOL_SPECS.project_memory_search.description,
-        inputSchema: READ_TOOL_SPECS.project_memory_search.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
+    leaderboard: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.leaderboard),
+    web_search: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.web_search),
+    web_read: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.web_read),
+    workspace_read: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.workspace_read),
+    text_stats: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.text_stats),
+    project_memory_search: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.project_memory_search),
   };
 }

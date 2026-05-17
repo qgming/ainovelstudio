@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineTool } from "../modelGateway";
+import { createAiSdkToolBuilder } from "./output";
 import type { ToolBuilder, ToolRunner } from "./types";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
 
@@ -242,76 +242,20 @@ export const DATA_TOOL_SPECS = {
       "管理本地 skill。用户要求创建或修改技能时用 create/create_reference/write/delete 落盘。write 写的是技能文件完整内容，不是补丁片段。",
     inputSchema: skillManageInputSchema,
   },
+  workspace_delete: {
+    description: "删除工作区文件或文件夹。",
+    inputSchema: z.object({
+      path: z.string().describe("要删除的工作区相对路径，不要传绝对路径。"),
+    }),
+  },
 } satisfies Record<string, AgentToolPromptSpec>;
 
 export function createDataToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    workspace_json: (toolName, tool) =>
-      defineTool({
-        description: DATA_TOOL_SPECS.workspace_json.description,
-        inputSchema: DATA_TOOL_SPECS.workspace_json.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    workspace_path: (toolName, tool) =>
-      defineTool({
-        description: DATA_TOOL_SPECS.workspace_path.description,
-        inputSchema: DATA_TOOL_SPECS.workspace_path.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.summary;
-        },
-      }),
-    workspace_delete: (toolName, tool) =>
-      defineTool({
-        description: "删除工作区文件或文件夹。",
-        inputSchema: z.object({
-          path: z.string().describe("要删除的工作区相对路径，不要传绝对路径。"),
-        }),
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.summary;
-        },
-      }),
-    skill_read: (toolName, tool) =>
-      defineTool({
-        description: DATA_TOOL_SPECS.skill_read.description,
-        inputSchema: DATA_TOOL_SPECS.skill_read.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    skill_manage: (toolName, tool) =>
-      defineTool({
-        description: DATA_TOOL_SPECS.skill_manage.description,
-        inputSchema: DATA_TOOL_SPECS.skill_manage.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
+    workspace_json: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.workspace_json),
+    workspace_path: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.workspace_path),
+    workspace_delete: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.workspace_delete),
+    skill_read: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.skill_read),
+    skill_manage: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.skill_manage),
   };
 }

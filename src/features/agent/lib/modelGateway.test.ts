@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockCreateOpenAICompatible, mockProbeProviderConnectionViaTauri, mockStreamText } = vi.hoisted(() => ({
+const { mockCreateOpenAICompatible, mockGenerateText, mockProbeProviderConnectionViaTauri, mockStreamText } = vi.hoisted(() => ({
   mockCreateOpenAICompatible: vi.fn(),
+  mockGenerateText: vi.fn(),
   mockProbeProviderConnectionViaTauri: vi.fn(),
   mockStreamText: vi.fn(),
 }));
@@ -11,6 +12,7 @@ vi.mock("ai", async () => {
   return {
     ...actual,
     defineTool: vi.fn(),
+    generateText: mockGenerateText,
     isLoopFinished: vi.fn(),
     streamText: mockStreamText,
     tool: vi.fn(),
@@ -46,26 +48,9 @@ function createStreamTextResult(text = "你好") {
   };
 }
 
-function createStreamTextResultWithTrailingDecodeError(text = "摘要正文") {
-  return {
-    finishReason: Promise.resolve("stop"),
-    fullStream: (async function* () {
-      yield { type: "text-delta", text };
-      throw new Error("error decoding response body");
-    })(),
-    response: Promise.resolve({ messages: [], modelId: "gpt-4.1" }),
-    totalUsage: Promise.resolve({
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      inputTokenDetails: {},
-      outputTokenDetails: {},
-    }),
-  };
-}
-
 describe("modelGateway", () => {
   beforeEach(() => {
+    mockGenerateText.mockReset();
     mockProbeProviderConnectionViaTauri.mockReset();
     mockStreamText.mockReset();
     mockCreateOpenAICompatible.mockReset();
@@ -151,7 +136,7 @@ describe("modelGateway", () => {
   });
 
   it("启用模拟 OpenCode 时注入额外请求头", async () => {
-    mockStreamText.mockReturnValue(createStreamTextResult("你好"));
+    mockGenerateText.mockResolvedValue({ text: "你好" });
 
     await expect(generateAgentText({
       prompt: "你好",
@@ -192,11 +177,12 @@ describe("modelGateway", () => {
     ).rejects.toThrow("Base URL 格式无效，请填写完整地址。");
 
     expect(mockCreateOpenAICompatible).not.toHaveBeenCalled();
+    expect(mockGenerateText).not.toHaveBeenCalled();
     expect(mockStreamText).not.toHaveBeenCalled();
   });
 
-  it("非流式生成已有文本时容忍响应体尾部解码错误", async () => {
-    mockStreamText.mockReturnValue(createStreamTextResultWithTrailingDecodeError("压缩摘要"));
+  it("非流式生成使用 generateText", async () => {
+    mockGenerateText.mockResolvedValue({ text: "压缩摘要" });
 
     await expect(generateAgentText({
       prompt: "压缩上下文",
@@ -207,6 +193,13 @@ describe("modelGateway", () => {
       },
       system: "test-system",
     })).resolves.toBe("压缩摘要");
+
+    expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
+      model: "provider:gpt-4.1",
+      prompt: "压缩上下文",
+      system: "test-system",
+    }));
+    expect(mockStreamText).not.toHaveBeenCalled();
   });
 
   it("流式生成不再挂载工具特化修复器", () => {

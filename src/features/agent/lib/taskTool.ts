@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { JSONValue } from "ai";
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
 import { throwIfAborted } from "./asyncUtils";
 import { defineTool, streamAgentText } from "./modelGateway";
@@ -142,6 +143,12 @@ function buildTaskBatchOutput(results: TaskExecutionResult[]) {
   return { mode: "batch", total: results.length, completed, failed: results.length - completed, results };
 }
 
+function taskToolToModelOutput(
+  { output }: { output: TaskExecutionResult | ReturnType<typeof buildTaskBatchOutput> },
+) {
+  return { type: "json" as const, value: output as JSONValue };
+}
+
 async function runTaskRequest(params: {
   abortSignal?: AbortSignal;
   enabledSkills: ResolvedSkill[];
@@ -183,6 +190,7 @@ export function createTaskTool(params: {
   return defineTool({
     description: TASK_TOOL_SPEC.description,
     inputSchema: TASK_TOOL_SPEC.inputSchema,
+    toModelOutput: taskToolToModelOutput,
     execute: async (input: TaskToolInput) => {
       const normalized = normalizeTaskToolInput(input);
       const runOne = (request: NormalizedTaskRequest) => runTaskRequest({

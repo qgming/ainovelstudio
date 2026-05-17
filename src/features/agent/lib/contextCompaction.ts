@@ -1,5 +1,7 @@
+import { Output } from "ai";
+import { z } from "zod";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { generateAgentText } from "./modelGateway";
+import { generateAgentOutput } from "./modelGateway";
 import type { AgentMessage, AgentUsage } from "./types";
 import { extractMessageText } from "../chat/sessionRuntime";
 import type { ChatEntry, CompactionPayload } from "../chat/types";
@@ -8,6 +10,10 @@ import { entriesToMessages, getLatestCompactionEntry, isMessageEntry } from "../
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128000;
 export const DEFAULT_COMPACTION_RESERVE_TOKENS = 16000;
 export const DEFAULT_KEEP_RECENT_TOKENS = 24000;
+
+const compactionOutputSchema = z.object({
+  summary: z.string().min(1).describe("可供后续创作继续使用的高密度上下文摘要。"),
+});
 
 export type CompactionSettings = {
   contextWindowTokens?: number;
@@ -96,14 +102,20 @@ export async function generateCompactionPayload(params: {
   const preparation = prepareCompaction(params.entries, params.settings);
   if (!preparation) return null;
 
-  const summary = await generateAgentText({
+  const output = await generateAgentOutput<z.infer<typeof compactionOutputSchema>>({
+    abortSignal: params.abortSignal,
+    output: Output.object({
+      description: "网文创作长会话压缩摘要。",
+      name: "compaction_summary",
+      schema: compactionOutputSchema,
+    }),
     prompt: buildCompactionPrompt(preparation, params.customInstructions),
     providerConfig: params.providerConfig,
     system: "你是神笔写作的线性长会话压缩器，只输出可供后续创作继续使用的摘要。",
   });
 
   return {
-    summary,
+    summary: output.summary,
     tokensBefore: preparation.tokensBefore,
     firstKeptMessageId: preparation.firstKeptMessageId,
     modelId: params.modelId ?? params.providerConfig.model,

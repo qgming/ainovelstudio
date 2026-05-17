@@ -1,7 +1,9 @@
 import type { ToolSet } from "ai";
+import { Output } from "ai";
+import { z } from "zod";
 import { buildAiSdkTools } from "./buildAiSdkTools";
 import { logPromptDebug, normalizeDebugMessageContent } from "./debug";
-import { generateAgentText, streamAgentText } from "./modelGateway";
+import { generateAgentOutput, streamAgentText } from "./modelGateway";
 import { buildLinearConversationMessages } from "./linearConversationContext";
 import type { HistorySummaryOptions } from "./messageContext";
 import { getPlanningIntervention } from "./planning";
@@ -25,6 +27,10 @@ type RunWritingAgentOptions = {
   toolContext: WritingRuntimeContext;
 };
 
+const historySummaryOutputSchema = z.object({
+  summary: z.string().min(1).describe("压缩后的任务记忆摘要。"),
+});
+
 function buildHistorySummaryFn(
   providerConfig: WritingRuntimeContext["providerConfig"],
 ): NonNullable<HistorySummaryOptions["summarizeHistory"]> {
@@ -38,7 +44,12 @@ function buildHistorySummaryFn(
       taskMemory.tools.length ? `已用工具：${taskMemory.tools.join(", ")}` : null,
     ].filter(Boolean).join("\n");
 
-    return generateAgentText({
+    const output = await generateAgentOutput<z.infer<typeof historySummaryOutputSchema>>({
+      output: Output.object({
+        description: "当前任务继续执行所需的高密度会话记忆摘要。",
+        name: "history_summary",
+        schema: historySummaryOutputSchema,
+      }),
       prompt: [
         "请把下面的会话任务记忆压缩成一段高密度摘要。",
         "只保留继续当前任务真正需要的信息，优先保留目标、事实、约束、相关文件和下一步。",
@@ -51,6 +62,7 @@ function buildHistorySummaryFn(
       providerConfig,
       system: "你是任务记忆压缩器。只输出一段精炼摘要。",
     });
+    return output.summary;
   };
 }
 

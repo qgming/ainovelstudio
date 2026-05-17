@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { defineTool } from "../modelGateway";
 import { MODE_CONTROL_DEFAULT_MODE } from "../modeControl";
+import { createAiSdkToolBuilder } from "./output";
 import type { ToolBuilder, ToolRunner } from "./types";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
 
@@ -21,17 +21,6 @@ const todoItemSchema = z.object({
       "可选：所属阶段标签。建议网文链路使用 plot / bible / outline / chapter / write / review / polish 等短词。",
     ),
 });
-
-function parseTodoItemsInput(value: unknown) {
-  if (typeof value !== "string") {
-    return value;
-  }
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
 
 const askInputSchema = z.object({
   title: z.string().min(1).describe("问题标题，用一句话说明需要用户决定什么。"),
@@ -77,17 +66,6 @@ const todoObjectInputSchema = z.object({
     .array(todoItemSchema)
     .describe("当前整份计划数组。每次传完整计划，保持最多一个 in_progress；简单任务可不用 todo。"),
 });
-
-const todoInputSchema = z.preprocess((value) => {
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-  const input = value as Record<string, unknown>;
-  return {
-    ...input,
-    items: parseTodoItemsInput(input.items ?? input.todos),
-  };
-}, todoObjectInputSchema);
 
 const modeControlInputSchema = z.object({
   mode: z
@@ -241,72 +219,10 @@ export const INTERACTION_TOOL_SPECS = {
 
 export function createInteractionToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    ask_user: (toolName, tool) =>
-      defineTool({
-        description: INTERACTION_TOOL_SPECS.ask_user.description,
-        inputSchema: INTERACTION_TOOL_SPECS.ask_user.inputSchema,
-        execute: async (input, options) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-            { toolCallId: options?.toolCallId },
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    update_plan: (toolName, tool) =>
-      defineTool({
-        description: INTERACTION_TOOL_SPECS.update_plan.description,
-        inputSchema: todoInputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    run_control: (toolName, tool) =>
-      defineTool({
-        description: INTERACTION_TOOL_SPECS.run_control.description,
-        inputSchema: INTERACTION_TOOL_SPECS.run_control.inputSchema,
-        execute: async (input, options) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-            { toolCallId: options?.toolCallId },
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    workspace_browse: (toolName, tool) =>
-      defineTool({
-        description: INTERACTION_TOOL_SPECS.workspace_browse.description,
-        inputSchema: INTERACTION_TOOL_SPECS.workspace_browse.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
-    workspace_search: (toolName, tool) =>
-      defineTool({
-        description: INTERACTION_TOOL_SPECS.workspace_search.description,
-        inputSchema: INTERACTION_TOOL_SPECS.workspace_search.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.data ?? result.summary;
-        },
-      }),
+    ask_user: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.ask_user, ({ toolCallId }) => ({ toolCallId })),
+    update_plan: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.update_plan),
+    run_control: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.run_control, ({ toolCallId }) => ({ toolCallId })),
+    workspace_browse: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workspace_browse),
+    workspace_search: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workspace_search),
   };
 }

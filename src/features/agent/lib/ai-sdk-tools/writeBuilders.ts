@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineTool } from "../modelGateway";
+import { createAiSdkToolBuilder } from "./output";
 import type { ToolBuilder, ToolRunner } from "./types";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
 
@@ -108,31 +108,7 @@ export const WRITE_TOOL_SPECS = {
 
 export function createWriteToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
   return {
-    workspace_write: (toolName, tool) =>
-      defineTool({
-        description: WRITE_TOOL_SPECS.workspace_write.description,
-        inputSchema: WRITE_TOOL_SPECS.workspace_write.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.summary;
-        },
-      }),
-    workspace_edit: (toolName, tool) =>
-      defineTool({
-        description: WRITE_TOOL_SPECS.workspace_edit.description,
-        inputSchema: WRITE_TOOL_SPECS.workspace_edit.inputSchema,
-        execute: async (input) => {
-          const result = await runTool(
-            toolName,
-            tool,
-            input as unknown as Record<string, unknown>,
-          );
-          return result.summary;
-        },
-      }),
+    workspace_write: createAiSdkToolBuilder(runTool, WRITE_TOOL_SPECS.workspace_write),
+    workspace_edit: createAiSdkToolBuilder(runTool, WRITE_TOOL_SPECS.workspace_edit),
   };
 }

@@ -82,12 +82,34 @@ vi.mock("./providerApi", () => ({
 import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./tools";
 import { createInteractionToolBuilders } from "./ai-sdk-tools/interactionBuilders";
 import { createReadToolBuilders } from "./ai-sdk-tools/readBuilders";
+import { runAiSdkTool } from "./ai-sdk-tools/output";
 import { MODE_CONTROL_KIND } from "./modeControl";
 import { searxngSearchService } from "./tools/searxngSearchService";
 
 function createFanqieRankApiJson(bookList: unknown[]) {
   return JSON.stringify({ code: 0, data: { book_list: bookList } });
 }
+
+describe("runAiSdkTool", () => {
+  it("工具数据存在循环引用时降级为可序列化输出", async () => {
+    const data: Record<string, unknown> = { title: "循环数据" };
+    data.self = data;
+
+    await expect(runAiSdkTool(
+      async () => ({ data, ok: true, summary: "ok" }),
+      "test_tool",
+      { description: "test", execute: vi.fn() },
+      {},
+    )).resolves.toEqual({
+      data: {
+        self: "[Circular]",
+        title: "循环数据",
+      },
+      ok: true,
+      summary: "ok",
+    });
+  });
+});
 
 describe("createWorkspaceToolset", () => {
   beforeEach(() => {
@@ -2026,14 +2048,14 @@ describe("createLocalResourceToolset", () => {
     ).rejects.toThrow("Only one item can be in_progress");
   });
 
-  it("update_plan 工具兼容 todos 字段和字符串化数组", async () => {
+  it("update_plan 工具只接受标准 items 数组", async () => {
     const toolset = createLocalResourceToolset();
 
     const result = await toolset.update_plan.execute({
-      todos: JSON.stringify([
+      items: [
         { content: "Inspect workspace", status: "completed" },
         { activeForm: "正在修复 todo", content: "Patch todo tool", status: "in_progress" },
-      ]),
+      ],
     });
 
     expect(result).toMatchObject({
@@ -2045,9 +2067,15 @@ describe("createLocalResourceToolset", () => {
         ],
       },
     });
+
+    await expect(toolset.update_plan.execute({
+      todos: [
+        { content: "Inspect workspace", status: "completed" },
+      ],
+    })).rejects.toThrow("update_plan.items 必须是数组。");
   });
 
-  it("update_plan AI schema 会把 todos 字符串预处理为 items 数组", () => {
+  it("update_plan AI schema 只暴露 items 数组", () => {
     const builders = createInteractionToolBuilders(async (_toolName, _tool, input) => ({
       ok: true,
       summary: "ok",
@@ -2055,10 +2083,11 @@ describe("createLocalResourceToolset", () => {
     }));
     const tool = builders.update_plan("update_plan", { description: "update_plan", execute: vi.fn() });
 
-    const parsed = (tool as { inputSchema: { parse: (input: unknown) => unknown } }).inputSchema.parse({
-      todos: JSON.stringify([
+    const schema = (tool as { inputSchema: { parse: (input: unknown) => unknown } }).inputSchema;
+    const parsed = schema.parse({
+      items: [
         { content: "Inspect workspace", status: "in_progress", activeForm: "正在检查" },
-      ]),
+      ],
     });
 
     expect(parsed).toEqual({
@@ -2066,6 +2095,11 @@ describe("createLocalResourceToolset", () => {
         { activeForm: "正在检查", content: "Inspect workspace", status: "in_progress" },
       ],
     });
+    expect(() => schema.parse({
+      todos: JSON.stringify([
+        { content: "Inspect workspace", status: "in_progress", activeForm: "正在检查" },
+      ]),
+    })).toThrow();
   });
 
   it("ask_user 工具会自动追加用户输入选项并返回结构化答案", async () => {
