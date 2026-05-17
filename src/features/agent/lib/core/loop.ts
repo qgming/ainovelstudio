@@ -107,18 +107,6 @@ function canCompleteAfterDecodeError(parts: AgentPart[]) {
   );
 }
 
-function collectAssistantContent(parts: AgentPart[]) {
-  return parts
-    .map((part) => {
-      if (part.type === "text-delta") return part.delta;
-      if (part.type === "text") return part.text;
-      if (part.type === "reasoning") return part.detail;
-      return "";
-    })
-    .join("")
-    .trim();
-}
-
 function collectAssistantModelContent(parts: AgentPart[]): ModelAssistantPart[] {
   return parts.flatMap<ModelAssistantPart>((part) => {
     if (part.type === "reasoning") {
@@ -132,34 +120,6 @@ function collectAssistantModelContent(parts: AgentPart[]): ModelAssistantPart[] 
     }
     return [];
   });
-}
-
-function hasToolActivity(parts: AgentPart[]) {
-  return parts.some((part) => part.type === "tool-call" || part.type === "tool-result");
-}
-
-function shouldAutoContinueAfterPossibleDroppedToolCall(
-  finishReason: string | undefined,
-  parts: AgentPart[],
-) {
-  if (finishReason === "tool-calls" || hasToolActivity(parts)) return false;
-  const content = collectAssistantContent(parts);
-  if (!content) return false;
-  return /(?:先|准备|继续|接下来|随后|然后|马上|开始).{0,36}(?:落盘|写入|回写|保存|同步|更新|创建|调用|执行|处理|补完|补上|补齐)/.test(content)
-    || /(?:会|将|要).{0,36}(?:落盘|写入|回写|保存|同步|更新|创建|调用|执行|处理|补完|补上|补齐)/.test(content)
-    || /(?:落盘|写入|回写|保存|同步|更新|创建|调用|执行|处理|补完|补上|补齐).{0,36}(?:正文|章节|状态|文件|工具|内容)/.test(content)
-    || /(?:I\s+(?:need|should|will|must)|need to|should|must|planning|draft|append|continue|task requires)/i.test(content);
-}
-
-function buildDroppedToolCallRecoveryPrompt(content: string) {
-  return [
-    "系统检测到上一条助手消息只输出了行动预告，但没有产生可执行的工具调用，不能结束本轮任务。",
-    "请把下面这段助手内容当作上一轮未完成的执行意图，继续下一轮并完成它：",
-    "",
-    content,
-    "",
-    "不要重复这段预告，也不要只解释计划；请继续执行必要动作，完成后再汇报结果。",
-  ].join("\n");
 }
 
 async function collectStepUsage(
@@ -291,7 +251,6 @@ export async function* agentLoop(
   const retryState = createRetryState();
   let totalSteps = 0;
   let stepsSinceUserMessage = 0;
-  let recoveredDroppedToolCall = false;
 
   config.emit?.({ type: "agent_start", sessionId: config.sessionId });
   while (true) {
@@ -316,19 +275,8 @@ export async function* agentLoop(
     }
 
     if (finishReason === "tool-calls") {
-      recoveredDroppedToolCall = false;
       const steeringMessages = config.takeSteeringMessages?.() ?? [];
       if (appendUserMessagesAndCheck(messages, steeringMessages)) stepsSinceUserMessage = 0;
-      continue;
-    }
-
-    if (
-      !recoveredDroppedToolCall
-      && shouldAutoContinueAfterPossibleDroppedToolCall(finishReason, eventMessage.parts)
-    ) {
-      recoveredDroppedToolCall = true;
-      appendUserMessages(messages, [buildDroppedToolCallRecoveryPrompt(collectAssistantContent(eventMessage.parts))]);
-      stepsSinceUserMessage = 0;
       continue;
     }
 
@@ -336,7 +284,6 @@ export async function* agentLoop(
     if (lateSteering.length > 0) {
       appendUserMessages(messages, lateSteering);
       stepsSinceUserMessage = 0;
-      recoveredDroppedToolCall = false;
       continue;
     }
 

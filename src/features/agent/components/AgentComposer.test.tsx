@@ -105,6 +105,19 @@ describe("AgentComposer", () => {
     expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute("placeholder", "输入想法、问题或要处理的任务");
   });
 
+  it("输入区超过最大高度后在内部滚动", () => {
+    const scrollHeightMock = vi
+      .spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get")
+      .mockReturnValue(260);
+
+    render(<AgentComposer {...buildComposerProps()} input={"很长的输入\n".repeat(20)} />);
+
+    const textarea = screen.getByLabelText("Agent 输入框");
+    expect(textarea).toHaveStyle({ maxHeight: "240px", height: "240px", overflowY: "auto" });
+
+    scrollHeightMock.mockRestore();
+  });
+
   it("默认模式菜单显示工作流模式", () => {
     render(<AgentComposer {...buildComposerProps()} />);
 

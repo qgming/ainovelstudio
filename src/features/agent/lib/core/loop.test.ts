@@ -99,16 +99,13 @@ describe("agentLoop", () => {
     });
   });
 
-  it("疑似工具调用被供应商吞成普通 content 时会自动续跑一次", async () => {
+  it("纯文本行动预告不会被自动续跑", async () => {
     const messageSnapshots: ModelMessage[][] = [];
     const streamFn = vi.fn((input: { messages: ModelMessage[] }) => {
       messageSnapshots.push([...input.messages]);
-      if (messageSnapshots.length === 1) {
-        return streamResult([
-          { type: "text-delta", id: "text-1", text: "先继续正文落盘，再回写章节与状态文件。" },
-        ], "stop", [{ role: "assistant", content: "先继续正文落盘，再回写章节与状态文件。" }]);
-      }
-      return streamResult([{ type: "text-delta", id: "text-2", text: "已继续执行" }]);
+      return streamResult([
+        { type: "text-delta", id: "text-1", text: "先继续正文落盘，再回写章节与状态文件。" },
+      ], "stop", [{ role: "assistant", content: "先继续正文落盘，再回写章节与状态文件。" }]);
     });
 
     const parts: AgentPart[] = [];
@@ -119,59 +116,9 @@ describe("agentLoop", () => {
       parts.push(part);
     }
 
-    expect(streamFn).toHaveBeenCalledTimes(2);
-    expect(messageSnapshots[1]?.at(-1)?.role).toBe("user");
-    expect(messageSnapshots[1]?.at(-1)?.content).toContain("只输出了行动预告");
-    expect(messageSnapshots[1]?.at(-1)?.content).toContain("先继续正文落盘，再回写章节与状态文件。");
-    expect(parts.map((part) => part.type)).toEqual(["text-delta", "text-delta"]);
-  });
-
-  it("只输出补完预告 content 时也会用该 content 触发下一轮", async () => {
-    const messageSnapshots: ModelMessage[][] = [];
-    const prelude = "先把第001章从当前断点补完：会补上林远离开电视台后的低谷、系统绑定和第一个任务。";
-    const streamFn = vi.fn((input: { messages: ModelMessage[] }) => {
-      messageSnapshots.push([...input.messages]);
-      if (messageSnapshots.length === 1) {
-        return streamResult([
-          { type: "text-delta", id: "text-1", text: prelude },
-        ], "stop", [{ role: "assistant", content: prelude }]);
-      }
-      return streamResult([{ type: "text-delta", id: "text-2", text: "继续完成" }]);
-    });
-
-    for await (const _part of agentLoop(
-      { messages: [{ role: "user", content: "继续写" }], system: "test" },
-      { providerConfig: { apiKey: "k", baseURL: "u", model: "m" }, streamFn: streamFn as never },
-    )) {
-      // drain stream
-    }
-
-    expect(streamFn).toHaveBeenCalledTimes(2);
-    expect(messageSnapshots[1]?.at(-1)?.content).toContain(prelude);
-  });
-
-  it("只输出 reasoning_content 转来的英文规划内容时也会触发下一轮", async () => {
-    const messageSnapshots: ModelMessage[][] = [];
-    const reasoning = "**Planning project details** I need to draft additional text, possibly breaking it into smaller chunks.";
-    const streamFn = vi.fn((input: { messages: ModelMessage[] }) => {
-      messageSnapshots.push([...input.messages]);
-      if (messageSnapshots.length === 1) {
-        return streamResult([
-          { type: "text-delta", id: "text-1", text: reasoning },
-        ], "stop", [{ role: "assistant", content: reasoning }]);
-      }
-      return streamResult([{ type: "text-delta", id: "text-2", text: "continued" }]);
-    });
-
-    for await (const _part of agentLoop(
-      { messages: [{ role: "user", content: "继续写" }], system: "test" },
-      { providerConfig: { apiKey: "k", baseURL: "u", model: "m" }, streamFn: streamFn as never },
-    )) {
-      // drain stream
-    }
-
-    expect(streamFn).toHaveBeenCalledTimes(2);
-    expect(messageSnapshots[1]?.at(-1)?.content).toContain(reasoning);
+    expect(streamFn).toHaveBeenCalledTimes(1);
+    expect(messageSnapshots).toHaveLength(1);
+    expect(parts.map((part) => part.type)).toEqual(["text-delta"]);
   });
 
   it("默认单步上限是 1000", async () => {

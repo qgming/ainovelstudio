@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
-import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
+import { buildRuntimeControlBlock, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 import type { ProjectContextPayload } from "./projectContext";
 
 function createSkill(overrides: Partial<ResolvedSkill> = {}): ResolvedSkill {
@@ -63,16 +63,32 @@ describe("prompt context", () => {
     expect(sectionKeys).toHaveLength(unique.size);
   });
 
-  it("user prompt 使用纯 Markdown 标题且不暴露内部 section key", () => {
+  it("runtime control 使用纯 Markdown 标题且不暴露内部 section key", () => {
+    const runtime = buildRuntimeControlBlock({
+      activeFilePath: "章节/第一章.md",
+      prompt: "继续写这一章",
+      workspaceRootPath: "C:/books/北境余烬",
+    });
+
+    expect(runtime).toContain("## 程序可信元数据");
+    expect(runtime).toContain("## 执行控制");
+    expect(runtime).not.toMatch(/^## s\d+[a-z]?\s/gmu);
+  });
+
+  it("user material prompt 使用纯 Markdown 标题且不暴露内部 section key", () => {
     const prompt = buildUserTurnContent({
       activeFilePath: "章节/第一章.md",
+      manualContext: {
+        files: [{ name: "人物.md", path: "设定/人物.md" }],
+        skills: [],
+      },
       prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
     expect(prompt).not.toContain("## 用户请求");
     expect(prompt).not.toMatch(/^## s\d+[a-z]?\s/gmu);
-    expect(prompt).toContain("## 当前轮动态上下文");
+    expect(prompt).toContain("## 手动指定上下文");
 
     const sectionKeys = [...prompt.matchAll(/^## (s\d+[a-z]?)\s/gmu)].map(
       (match) => match[1],
@@ -127,17 +143,17 @@ describe("prompt context", () => {
     expect(prompt).toContain("系统不会自动注入文件正文");
   });
 
-  it("用户上下文会注入当前系统日期到年月日", () => {
+  it("runtime control 会注入当前系统日期到年月日", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-18T09:30:00+08:00"));
 
-    const prompt = buildUserTurnContent({
+    const runtime = buildRuntimeControlBlock({
       activeFilePath: "章节/第一章.md",
       prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
-    expect(prompt).toContain("- 当前系统日期：2026年4月18日");
+    expect(runtime).toContain("- 当前系统日期：2026年4月18日");
   });
 
   it("项目默认上下文会注入 .project/AGENTS.md、.project/README.md 和状态 JSON", () => {

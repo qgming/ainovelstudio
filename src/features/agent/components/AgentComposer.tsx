@@ -107,6 +107,7 @@ function buildInitialAskSelection(_pendingAsk: PendingAskState | null) {
 }
 
 const COMPOSER_MIN_ROWS = 2;
+const COMPOSER_MAX_HEIGHT_PX = 240;
 const DEFAULT_COMPOSER_MODE_ID: AgentMode = "book";
 const MODE_INPUT_PLACEHOLDERS: Record<AgentMode, string> = {
   autopilot: "输入全自动目标：YOLO 会按工作流循环执行、验证和回写，直到目标完成",
@@ -190,7 +191,9 @@ export function AgentComposer({
     }
 
     textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
+    const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT_PX);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > COMPOSER_MAX_HEIGHT_PX ? "auto" : "hidden";
   }, [input]);
 
   useEffect(() => {
@@ -572,11 +575,12 @@ export function AgentComposer({
             <textarea
               ref={textareaRef}
               aria-label="Agent 输入框"
-              className="editor-textarea px-3 py-3 leading-6"
+              className="editor-textarea overscroll-contain px-3 py-3 leading-6"
               onChange={(event) => onInputChange(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={inputPlaceholder}
               rows={COMPOSER_MIN_ROWS}
+              style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
               value={input}
             />
             <div className="flex h-11 items-center gap-2 border-t border-border px-2">

@@ -7,7 +7,7 @@ import { generateAgentOutput, streamAgentText } from "./modelGateway";
 import { buildLinearConversationMessages } from "./linearConversationContext";
 import type { HistorySummaryOptions } from "./messageContext";
 import { getPlanningIntervention } from "./planning";
-import { buildSystemPrompt, buildUserTurnContent } from "./promptContext";
+import { buildRuntimeControlBlock, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
 import { throwIfAborted } from "./asyncUtils";
 import { agentLoop } from "./core/loop";
 import { createAsyncQueue } from "./core/partQueue";
@@ -66,9 +66,17 @@ function buildHistorySummaryFn(
   };
 }
 
-function buildPromptContent(prompt: string, context: WritingRuntimeContext) {
+function buildPromptPieces(prompt: string, context: WritingRuntimeContext) {
   const planningIntervention = getPlanningIntervention(context.planningState, prompt);
-  return buildUserTurnContent({
+  const runtimeControl = buildRuntimeControlBlock({
+    activeFilePath: context.activeFilePath,
+    planningIntervention,
+    planningState: context.planningState,
+    workspaceRootPath: context.workspaceRootPath,
+    prompt,
+    subagentAnalysis: null,
+  });
+  const materialContext = buildUserTurnContent({
     activeFilePath: context.activeFilePath,
     manualContext: context.manualContext,
     planningIntervention,
@@ -78,6 +86,7 @@ function buildPromptContent(prompt: string, context: WritingRuntimeContext) {
     prompt,
     subagentAnalysis: null,
   });
+  return { materialContext, runtimeControl };
 }
 
 function buildTools(
@@ -109,18 +118,21 @@ function buildTools(
 }
 
 async function buildLoopContext(prompt: string, context: WritingRuntimeContext) {
-  const system = buildSystemPrompt({
-    defaultAgentMarkdown: context.defaultAgentMarkdown,
-    enabledSkills: context.enabledSkills,
-    enabledToolIds: context.enabledToolIds,
-    mode: context.mode,
-    modeContext: context.modeContext,
-  });
-  const currentUserContent = buildPromptContent(prompt, context);
+  const { materialContext, runtimeControl } = buildPromptPieces(prompt, context);
+  const system = [
+    buildSystemPrompt({
+      defaultAgentMarkdown: context.defaultAgentMarkdown,
+      enabledSkills: context.enabledSkills,
+      enabledToolIds: context.enabledToolIds,
+      mode: context.mode,
+      modeContext: context.modeContext,
+    }),
+    runtimeControl,
+  ].filter((section) => section.trim()).join("\n\n");
   const messages = await buildLinearConversationMessages({
     entries: context.conversationEntries as never,
     history: context.conversationHistory,
-    currentUserContent: [currentUserContent, prompt],
+    currentUserContent: [materialContext, prompt],
     summaryOptions: { summarizeHistory: buildHistorySummaryFn(context.providerConfig) },
   });
 
