@@ -54,26 +54,38 @@ describe("workflowControl", () => {
       stage: "inspect",
       evidence: ["已读取上下文"],
     }).state;
+    const flowPart = {
+      type: "tool-call" as const,
+      toolName: MODE_CONTROL_TOOL_ID,
+      toolCallId: "flow-control-1",
+      status: "completed" as const,
+      inputSummary: "{}",
+      output: {
+        kind: MODE_CONTROL_KIND,
+        mode: "flow",
+        action: "complete_stage",
+        createdAt: "2026-05-10T00:00:00.000Z",
+        workflow: { accepted: true, missing: [], message: "ok", state },
+      },
+    };
     const messages: AgentMessage[] = [{
       author: "主代理",
       id: "assistant-1",
       role: "assistant",
-      parts: [{
-        type: "tool-call",
-        toolName: MODE_CONTROL_TOOL_ID,
-        toolCallId: "flow-control-1",
-        status: "completed",
-        inputSummary: "{}",
-        output: {
-          kind: MODE_CONTROL_KIND,
-          mode: "flow",
-          action: "complete_stage",
-          createdAt: "2026-05-10T00:00:00.000Z",
-          workflow: { accepted: true, missing: [], message: "ok", state },
-        },
-      }],
+      parts: [flowPart],
     }];
 
     expect(deriveFlowWorkflowState(messages).currentStage).toBe("skill_load");
+    expect(deriveFlowWorkflowState([{
+      ...messages[0],
+      parts: [{
+        ...flowPart,
+        output: {
+          data: flowPart.output,
+          ok: true,
+          summary: "flow 阶段已推进。",
+        },
+      }],
+    }]).currentStage).toBe("skill_load");
   });
 });

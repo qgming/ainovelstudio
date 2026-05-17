@@ -22,6 +22,10 @@ export type ModeControlData = {
   createdAt: string;
 };
 
+type ToolResultEnvelope = {
+  data?: unknown;
+};
+
 export function createModeControlData(input: {
   action: ModeControlAction;
   mode: string;
@@ -41,17 +45,18 @@ export function createModeControlData(input: {
 }
 
 export function isModeControlCompletionOutput(output: unknown, mode: string) {
-  if (!isRecord(output)) return false;
-  return output.kind === MODE_CONTROL_KIND
-    && output.mode === mode
-    && output.action === MODE_CONTROL_COMPLETE_ACTION;
+  const data = extractModeControlData(output);
+  return Boolean(data)
+    && data?.kind === MODE_CONTROL_KIND
+    && data.mode === mode
+    && data.action === MODE_CONTROL_COMPLETE_ACTION;
 }
 
-export function isModeControlCompletionPart(part: AgentPart, mode: string) {
-  if (part.type !== "tool-call" && part.type !== "tool-result") return false;
-  return part.toolName === MODE_CONTROL_TOOL_ID
-    && part.status === "completed"
-    && isModeControlCompletionOutput(part.output, mode);
+export function extractModeControlData(output: unknown): ModeControlData | null {
+  if (isModeControlData(output)) return output;
+  if (!isRecord(output)) return null;
+  const envelope = output as ToolResultEnvelope;
+  return isModeControlData(envelope.data) ? envelope.data : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,4 +69,11 @@ export function isModeControlData(value: unknown): value is ModeControlData {
     && typeof value.mode === "string"
     && typeof value.action === "string"
     && typeof value.createdAt === "string";
+}
+
+export function isModeControlCompletionPart(part: AgentPart, mode: string) {
+  if (part.type !== "tool-call" && part.type !== "tool-result") return false;
+  return part.toolName === MODE_CONTROL_TOOL_ID
+    && part.status === "completed"
+    && isModeControlCompletionOutput(part.output, mode);
 }

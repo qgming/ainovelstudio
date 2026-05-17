@@ -50,6 +50,14 @@ describe("YOLO autopilot", () => {
     };
 
     expect(isAutopilotGoalCompleted([assistantWithParts([completedPart])])).toBe(true);
+    expect(isAutopilotGoalCompleted([assistantWithParts([{
+      ...completedPart,
+      output: {
+        data: completedPart.output,
+        ok: true,
+        summary: "autopilot 模式控制：已标记完成。",
+      },
+    }])])).toBe(true);
     expect(isAutopilotGoalCompleted([assistant("YOLO目标完成，文件已回写。")])).toBe(false);
     expect(isAutopilotGoalCompleted([assistant("目标未完成，下一轮动作是补状态。")])).toBe(false);
     expect(isAutopilotGoalCompleted([assistantWithParts([{

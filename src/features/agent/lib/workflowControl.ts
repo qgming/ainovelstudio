@@ -1,5 +1,6 @@
 import type { AgentMessage } from "./types";
 import {
+  extractModeControlData,
   MODE_CONTROL_TOOL_ID,
   isModeControlData,
 } from "./modeControl";
@@ -145,7 +146,7 @@ function findLatestWorkflowState(messages: AgentMessage[]) {
   for (const message of [...messages].reverse()) {
     for (const part of [...message.parts].reverse()) {
       if ((part.type !== "tool-call" && part.type !== "tool-result") || part.toolName !== MODE_CONTROL_TOOL_ID) continue;
-      const output = part.output;
+      const output = extractModeControlData(part.output);
       if (!isModeControlData(output) || output.mode !== "flow") continue;
       const workflowState = getWorkflowState(output.workflow);
       if (workflowState) return workflowState;
