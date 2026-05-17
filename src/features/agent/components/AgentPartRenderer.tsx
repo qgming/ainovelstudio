@@ -1,9 +1,11 @@
 import { useState, memo } from "react";
-import { ChevronDown, ChevronRight, Brain, Wrench, Check, X, LoaderCircle, Users, Circle } from "lucide-react";
+import { ChevronDown, ChevronRight, Brain, Wrench, Check, X, LoaderCircle, Users, Circle, GitBranch, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
 import { getTodoItemsFromPart, type PlanItem } from "@features/agent/lib/planning";
+import { getWorkflowControlFromPart } from "@features/agent/lib/workflowControl";
+import { getYoloControlDataFromPart } from "@features/agent/lib/yoloControl";
 
 const markdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0 text-inherit">{children}</p>,
@@ -88,14 +90,14 @@ function PlanProgressCard({
     : activeItem?.activeForm || activeItem?.content || `已完成 ${completedCount}/${items.length}`;
 
   return (
-    <section className="rounded-[8px] border border-border bg-message-card">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="text-[12px] font-medium text-foreground">任务进度</span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{summary}</span>
-        <StatusPill status={normalizeRenderableStatus(part.status)} />
-      </div>
-      <div className="px-3 py-2.5">
+    <AccordionCard
+      collapseOnContentClick
+      icon={Wrench}
+      label="任务进度"
+      summary={summary}
+      status={normalizeRenderableStatus(part.status)}
+    >
+      <div>
         {items.length === 0 ? (
           <p className="text-sm leading-6 text-muted-foreground">当前没有待办任务。</p>
         ) : (
@@ -131,7 +133,70 @@ function PlanProgressCard({
           </div>
         ) : null}
       </div>
-    </section>
+    </AccordionCard>
+  );
+}
+
+function YoloControlCard({ part }: { part: Extract<AgentPart, { type: "tool-call" }> }) {
+  const data = getYoloControlDataFromPart(part);
+  if (!data) return null;
+  const summary = data.accepted
+    ? data.action === "complete"
+      ? "目标已完成"
+      : data.action === "blocked"
+        ? "目标已阻塞"
+        : data.nextAction || "继续下一轮"
+    : data.missing.join("；");
+  return (
+    <AccordionCard
+      collapseOnContentClick
+      icon={Zap}
+      label="YOLO 检查"
+      summary={summary}
+      status={data.accepted ? normalizeRenderableStatus(part.status) : "failed"}
+    >
+      <div className="space-y-2 text-sm leading-6 text-foreground">
+        <div>{data.reason}</div>
+        {data.evidence.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">证据：{data.evidence.join("；")}</div> : null}
+        {data.verification.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">验证：{data.verification.join("；")}</div> : null}
+        {data.remaining.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">剩余：{data.remaining.join("；")}</div> : null}
+      </div>
+    </AccordionCard>
+  );
+}
+
+function WorkflowControlCard({ part }: { part: Extract<AgentPart, { type: "tool-call" }> }) {
+  const result = getWorkflowControlFromPart(part);
+  if (!result) return null;
+  const state = result.state;
+  const title = state.definition?.title ?? "工作流";
+  const currentNode = state.definition?.nodes.find((node) => node.id === state.currentNodeId);
+  const summary = currentNode ? `${state.status} · ${currentNode.title}` : state.status;
+  return (
+    <AccordionCard
+      collapseOnContentClick
+      icon={GitBranch}
+      label={title}
+      summary={summary}
+      status={result.accepted ? normalizeRenderableStatus(part.status) : "failed"}
+    >
+      <div className="space-y-2 text-sm leading-6 text-foreground">
+        <div>{result.message}</div>
+        {result.missing.length > 0 ? (
+          <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
+            {result.missing.join("；")}
+          </div>
+        ) : null}
+        {state.definition ? (
+          <div className="space-y-1 text-xs leading-5 text-muted-foreground">
+            {state.definition.nodes.slice(0, 5).map((node, index) => {
+              const nodeState = state.nodes.find((item) => item.nodeId === node.id);
+              return <div key={node.id}>{index + 1}. {nodeState?.status ?? "pending"} · {node.title}</div>;
+            })}
+          </div>
+        ) : null}
+      </div>
+    </AccordionCard>
   );
 }
 
@@ -321,6 +386,14 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
         return <PlanProgressCard items={items} part={part} />;
       }
     }
+    if (part.toolName === "yolo_control") {
+      const card = <YoloControlCard part={part} />;
+      if (card) return card;
+    }
+    if (part.toolName === "workflow_control") {
+      const card = <WorkflowControlCard part={part} />;
+      if (card) return card;
+    }
 
     const formattedOutput = part.outputSummary ? formatStructuredText(part.outputSummary) : null;
     const summary = part.outputSummary
@@ -439,7 +512,7 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
   const timeline = buildSubagentTimeline(part.parts);
 
   return (
-    <AccordionCard icon={Users} label={part.name} summary={part.summary} status={normalizeRenderableStatus(part.status)}>
+    <AccordionCard collapseOnContentClick icon={Users} label={part.name} summary={part.summary} status={normalizeRenderableStatus(part.status)}>
       <div className="space-y-3">
         <div>
           <h3 className="text-sm font-medium leading-6 text-foreground">时间线</h3>

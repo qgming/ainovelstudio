@@ -1,5 +1,6 @@
 import type { AgentCard } from "./longformTypes";
-import { MODE_CONTROL_TOOL_ID } from "./modeControl";
+import { WORKFLOW_CONTROL_TOOL_ID } from "./workflowControl";
+import { YOLO_CONTROL_TOOL_ID } from "./yoloControl";
 
 export const SUBAGENT_CARDS = {
   continuity: "连续性检查",
@@ -30,7 +31,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "autopilot",
     modelPresetId: null,
     name: "YOLO 全自动目标",
-    tools: [MODE_CONTROL_TOOL_ID, "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
+    tools: [YOLO_CONTROL_TOOL_ID, "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
     writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
   },
   {
@@ -51,7 +52,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "flow",
     modelPresetId: null,
     name: "严格工作流",
-    tools: [MODE_CONTROL_TOOL_ID, "ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "leaderboard", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
+    tools: [WORKFLOW_CONTROL_TOOL_ID, "ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "leaderboard", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
     writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
   },
   {

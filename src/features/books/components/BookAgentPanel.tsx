@@ -17,6 +17,8 @@ import { AgentComposer, DEFAULT_AGENT_COMPOSER_MODES } from "@features/agent/com
 import { AgentContextOverview } from "@features/agent/components/AgentContextOverview";
 import { AgentInfoDisplay } from "@features/agent/components/AgentInfoDisplay";
 import { AgentMessageList } from "@features/agent/components/AgentMessageList";
+import { deriveWorkflowState } from "@features/agent/lib/workflowControl";
+import { deriveLatestYoloControl, type YoloControlData } from "@features/agent/lib/yoloControl";
 import { getLatestCompactionEntry } from "@features/agent/chat/entries";
 import { selectIsAgentRunActive } from "@features/agent/stores/chat-run/helpers";
 import { useChatRunStore } from "@features/agent/stores/useChatRunStore";
@@ -77,6 +79,18 @@ function AgentHeaderButton({ modeLabel }: { modeLabel: string }) {
   );
 }
 
+function getYoloActionLabel(action: YoloControlData["action"]) {
+  if (action === "complete") return "已完成";
+  if (action === "blocked") return "已阻塞";
+  return "继续执行";
+}
+
+function buildYoloStatusLine(goal: string, control: YoloControlData | null) {
+  if (!control) return `YOLO：${goal}`;
+  const status = control.accepted ? getYoloActionLabel(control.action) : "未通过";
+  return `YOLO：${status} · ${goal}`;
+}
+
 export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
@@ -120,6 +134,8 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   const submitAskAnswer = useChatRunStore((state) => state.submitAskAnswer);
   const switchSession = useChatRunStore((state) => state.switchSession);
   const initializeAgentHistory = useChatRunStore((state) => state.initialize);
+  const workflowState = deriveWorkflowState(run.messages);
+  const yoloControlState = deriveLatestYoloControl(run.messages);
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
@@ -260,8 +276,8 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
       ) : null}
       {activeModeId === "autopilot" && autopilotGoal ? (
         <AgentInfoDisplay
-          description={autopilotGoal}
-          title="YOLO 目标"
+          description={buildYoloStatusLine(autopilotGoal, yoloControlState)}
+          title="YOLO 状态"
         />
       ) : null}
       <AgentMessageList messages={run.messages} runStatus={displayRunStatus} />
@@ -295,6 +311,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         rootNode={rootNode}
         runStatus={displayRunStatus}
         selection={manualContextSelection}
+        workflowState={workflowState}
       />
     </aside>
   );

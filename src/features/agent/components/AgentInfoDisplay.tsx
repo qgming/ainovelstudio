@@ -12,7 +12,7 @@ export function AgentInfoDisplay({
       aria-label={title}
       className="editor-panel-header min-h-0 justify-start bg-transparent px-3 py-2"
     >
-      <div className="min-w-0 break-words text-xs leading-5 text-muted-foreground">
+      <div className="min-w-0 truncate text-xs leading-5 text-muted-foreground">
         {description}
       </div>
     </div>

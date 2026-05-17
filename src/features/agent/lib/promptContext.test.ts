@@ -226,7 +226,7 @@ describe("prompt context", () => {
     expect(system).toContain("完成第一章审校并写回文件");
     expect(system).toContain("第 1 轮");
     expect(system).toContain("不用 ask");
-    expect(system).toContain("run_control");
+    expect(system).toContain("yolo_control");
     expect(system).toContain('action="complete"');
   });
 
@@ -234,17 +234,17 @@ describe("prompt context", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
-      enabledToolIds: ["run_control", "update_plan", "workspace_read", "workspace_json", "project_memory_search"],
+      enabledToolIds: ["workflow_control", "update_plan", "workspace_read", "workspace_json", "project_memory_search"],
       mode: "flow",
     });
 
     expect(system).toContain("# 模式：WORKFLOW");
-    expect(system).toContain("Skill Load");
-    expect(system).toContain("SKILL.md");
-    expect(system).toContain("currentStage：Inspect（inspect）");
-    expect(system).toContain("complete_stage");
-    expect(system).toContain("程序接受后再进入下一阶段");
-    expect(system).toContain(".project/status/*.json");
+    expect(system).toContain("workflow_control");
+    expect(system).toContain("request_approval");
+    expect(system).toContain("currentNode");
+    expect(system).toContain("complete_node");
+    expect(system).toContain("程序接受后再进入下一节点");
+    expect(system).toContain("Verify / State Maintain 不再是固定阶段");
     expect(system).not.toContain(".project/runs/chapter-NNN.json");
   });
 

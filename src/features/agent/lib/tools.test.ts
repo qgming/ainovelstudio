@@ -83,7 +83,8 @@ import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset
 import { createInteractionToolBuilders } from "./ai-sdk-tools/interactionBuilders";
 import { createReadToolBuilders } from "./ai-sdk-tools/readBuilders";
 import { runAiSdkTool } from "./ai-sdk-tools/output";
-import { MODE_CONTROL_KIND } from "./modeControl";
+import { WORKFLOW_CONTROL_KIND } from "./workflowControl";
+import { YOLO_CONTROL_KIND } from "./yoloControl";
 import { searxngSearchService } from "./tools/searxngSearchService";
 
 function createFanqieRankApiJson(bookList: unknown[]) {
@@ -1424,59 +1425,72 @@ describe("createGlobalToolset", () => {
     ]);
   });
 
-  it("run_control 会返回结构化流程控制信号", async () => {
+  it("yolo_control 会返回结构化结果检查信号", async () => {
     const toolset = createGlobalToolset();
 
-    const result = await toolset.run_control.execute({
-      mode: "autopilot",
+    const result = await toolset.yolo_control.execute({
       action: "complete",
+      evidence: ["文件已写回"],
+      goal: "完成第一章",
       reason: "文件已写回，验证通过。",
+      stateUpdated: true,
+      verification: ["已重新读取正文"],
     });
 
     expect(result.ok).toBe(true);
-    expect(result.summary).toContain("autopilot 模式控制：已标记完成。");
+    expect(result.summary).toContain("YOLO 目标完成");
     expect(result.data).toMatchObject({
-      kind: MODE_CONTROL_KIND,
-      mode: "autopilot",
+      accepted: true,
       action: "complete",
+      kind: YOLO_CONTROL_KIND,
       reason: "文件已写回，验证通过。",
     });
     expect(result.data).toHaveProperty("createdAt");
   });
 
-  it("run_control 在 flow 模式由程序校验阶段推进", async () => {
+  it("workflow_control 会草拟、启动并推进节点", async () => {
     const toolset = createGlobalToolset();
 
-    const rejected = await toolset.run_control.execute({
-      mode: "flow",
-      action: "complete_stage",
-      stage: "plan",
-      evidence: ["已有计划"],
+    const workflow = {
+      edges: [{ from: "inspect", to: "act" }],
+      id: "chapter-flow",
+      nodes: [
+        { agentCardId: "book", gate: "已读取上下文", id: "inspect", title: "读取上下文", type: "task" },
+        { agentCardId: "chapter-write", gate: "已写回正文", id: "act", title: "执行写作", type: "task" },
+      ],
+      title: "章节流程",
+    };
+    const started = await toolset.workflow_control.execute({
+      action: "start_workflow",
+      workflow,
     });
-    const accepted = await toolset.run_control.execute({
-      mode: "flow",
-      action: "complete_stage",
-      stage: "inspect",
+    const rejected = await toolset.workflow_control.execute({
+      action: "complete_node",
+      nodeId: "act",
+      evidence: ["已有正文"],
+    });
+    const accepted = await toolset.workflow_control.execute({
+      action: "complete_node",
+      nodeId: "inspect",
       evidence: ["已读取 .project/AGENTS.md"],
     });
 
+    expect(started.data).toMatchObject({
+      accepted: true,
+      kind: WORKFLOW_CONTROL_KIND,
+      state: { currentNodeId: "inspect", status: "running" },
+    });
     expect(rejected.data).toMatchObject({
-      mode: "flow",
-      action: "complete_stage",
-      workflow: {
-        accepted: false,
-        state: { currentStage: "inspect" },
-      },
+      accepted: false,
+      state: { currentNodeId: "inspect" },
     });
     expect(accepted.data).toMatchObject({
-      mode: "flow",
-      action: "complete_stage",
-      workflow: {
-        accepted: true,
-        state: {
-          completedStages: ["inspect"],
-          currentStage: "skill_load",
-        },
+      accepted: true,
+      state: {
+        currentNodeId: "act",
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ nodeId: "inspect", status: "completed" }),
+        ]),
       },
     });
   });

@@ -22,10 +22,16 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "更新当前会话的显式计划状态；参数使用 items 数组；同一时间最多保留一个进行中的步骤；可选 phase 字段标记长链路阶段。",
   },
   {
-    id: "run_control",
-    name: "运行控制",
+    id: "yolo_control",
+    name: "YOLO 检查",
     description:
-      "向应用提交当前模式的流程控制信号；YOLO 目标完成时用 action=complete，flow 模式下可推进阶段或标记阻塞。",
+      "YOLO 模式每轮结果检查专用工具；用 complete、continue 或 blocked 明确控制自动循环是否结束。",
+  },
+  {
+    id: "workflow_control",
+    name: "工作流控制",
+    description:
+      "工作流模式专用工具；用于草拟流程、请求确认、启动执行、推进节点、选择分支、循环、阻塞和完成工作流。",
   },
   {
     id: "delegate_task",

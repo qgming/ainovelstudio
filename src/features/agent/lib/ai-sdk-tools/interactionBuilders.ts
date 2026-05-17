@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { MODE_CONTROL_DEFAULT_MODE } from "../modeControl";
 import { normalizeTodoToolInput } from "../tools/resourceHelpers";
 import { createAiSdkToolBuilder } from "./output";
 import type { ToolBuilder, ToolRunner } from "./types";
@@ -68,23 +67,65 @@ const todoObjectInputSchema = z.preprocess((value) => normalizeTodoToolInput(val
     .describe("当前整份计划数组。每次传完整计划，保持最多一个 in_progress；简单任务可不用 todo。"),
 }));
 
-const modeControlInputSchema = z.object({
-  mode: z
-    .string()
-    .min(1)
-    .default(MODE_CONTROL_DEFAULT_MODE)
-    .describe("当前受控模式，例如 autopilot、flow、book。YOLO 使用 autopilot；不确定则保持默认。"),
+const yoloControlInputSchema = z.object({
   action: z
-    .enum(["complete", "blocked", "continue", "complete_stage", "complete_workflow"])
-    .describe("控制动作。YOLO 任务完成用 complete；flow 阶段完成用 complete_stage；遇到无法继续用 blocked；全部流程完成用 complete_workflow。"),
-  workflowId: z.string().optional().describe("flow 模式使用，默认 chapter-harness。"),
-  stage: z
-    .enum(["inspect", "skill_load", "plan", "act", "verify", "state_maintain", "report"])
+    .enum(["complete", "continue", "blocked"])
+    .describe("YOLO 检查动作。complete=目标完成；continue=还需继续下一轮；blocked=需要用户授权或补充信息。"),
+  evidence: z.array(z.string()).default([]).describe("完成证据。complete 时至少 1 条，写具体文件、工具结果或落地事项。"),
+  goal: z.string().min(1).describe("当前 YOLO 总目标，必须复述用户目标。"),
+  nextAction: z.string().optional().describe("continue 时必填，写下一轮最重要动作。"),
+  reason: z.string().min(1).describe("本次检查结论的原因。"),
+  remaining: z.array(z.string()).default([]).describe("continue 时必填，列出剩余任务；complete 时必须为空。"),
+  requiredUserAction: z.string().optional().describe("blocked 时必填，说明需要用户做什么。"),
+  stateUpdated: z.boolean().default(false).describe("成果涉及项目状态时是否已维护状态文件；complete 时必须为 true。"),
+  verification: z.array(z.string()).default([]).describe("验证结果。complete 时至少 1 条，写已读取/统计/搜索核对的结果。"),
+});
+
+const workflowNodeSchema = z.object({
+  agentCardId: z.string().min(1).describe("执行该节点的固定 agent card，例如 chapter-write、continuity-review、state-maintain、book。"),
+  gate: z.string().min(1).describe("节点完成门禁，必须能通过 evidence 验证。"),
+  id: z.string().min(1).describe("节点稳定 id，短横线或下划线命名。"),
+  title: z.string().min(1).describe("节点名称，短而清楚。"),
+  tools: z.array(z.string()).optional().describe("该节点建议使用的工具 id。"),
+  type: z.enum(["task", "decision", "loop", "parallel", "report"]).default("task"),
+});
+
+const workflowEdgeSchema = z.object({
+  condition: z.string().optional().describe("可选分支条件；普通顺序边可不填。"),
+  from: z.string().min(1),
+  id: z.string().optional(),
+  to: z.string().min(1),
+});
+
+const workflowDefinitionSchema = z.object({
+  edges: z.array(workflowEdgeSchema).default([]),
+  id: z.string().min(1),
+  nodes: z.array(workflowNodeSchema).min(1),
+  title: z.string().min(1),
+});
+
+const workflowControlInputSchema = z.object({
+  action: z
+    .enum([
+      "draft_workflow",
+      "request_approval",
+      "start_workflow",
+      "complete_node",
+      "choose_branch",
+      "loop",
+      "blocked",
+      "complete_workflow",
+    ])
+    .describe("工作流控制动作：草拟、请求确认、启动、完成节点、选择分支、循环、阻塞或完成。"),
+  branchReason: z.string().optional().describe("choose_branch 时必填，解释为什么选择该分支。"),
+  evidence: z.array(z.string()).optional().describe("完成节点或工作流的证据列表。"),
+  nextNodeId: z.string().optional().describe("complete_node / choose_branch / loop 后要进入的节点。"),
+  nodeId: z.string().optional().describe("当前控制的节点 id。"),
+  reason: z.string().optional().describe("阻塞、循环或完成说明。"),
+  workflow: workflowDefinitionSchema
     .optional()
-    .describe("flow 模式使用，必须等于当前程序阶段；不要跳阶段。"),
-  evidence: z.array(z.string()).optional().describe("flow 模式阶段完成或工作流完成的证据列表，写具体已完成事项或工具结果。"),
-  reason: z.string().optional().describe("控制信号原因，简洁说明验证证据或阻塞原因。"),
-  nextAction: z.string().optional().describe("blocked 或 continue 时填写下一步动作。"),
+    .describe("draft_workflow、request_approval 或 start_workflow 可传入的流程定义。"),
+  workflowId: z.string().optional().describe("当前工作流 id。"),
 });
 
 const browseInputSchema = z.object({
@@ -201,10 +242,15 @@ export const INTERACTION_TOOL_SPECS = {
       "更新当前会话短计划。≥3 步或长链路任务使用；每次传完整 items，并保持最多一个 in_progress。简单单步任务不要为了形式调用。",
     inputSchema: todoObjectInputSchema,
   },
-  run_control: {
+  yolo_control: {
     description:
-      "向应用提交当前模式的流程控制信号。YOLO 完成时用 complete；flow 模式阶段推进用 complete_stage、blocked、complete_workflow。",
-    inputSchema: modeControlInputSchema,
+      "YOLO 模式每轮结果检查专用工具。每轮结束必须调用一次；不要用自然语言代替 complete/continue/blocked。",
+    inputSchema: yoloControlInputSchema,
+  },
+  workflow_control: {
+    description:
+      "工作流模式专用工具。用于草拟可确认流程、启动执行、推进节点、选择分支、循环、阻塞和完成工作流。",
+    inputSchema: workflowControlInputSchema,
   },
   workspace_browse: {
     description:
@@ -222,7 +268,8 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
   return {
     ask_user: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.ask_user, ({ toolCallId }) => ({ toolCallId })),
     update_plan: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.update_plan),
-    run_control: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.run_control, ({ toolCallId }) => ({ toolCallId })),
+    yolo_control: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.yolo_control, ({ toolCallId }) => ({ toolCallId })),
+    workflow_control: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workflow_control, ({ toolCallId }) => ({ toolCallId })),
     workspace_browse: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workspace_browse),
     workspace_search: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workspace_search),
   };

@@ -6,8 +6,8 @@ import { derivePlanningState } from "@features/agent/lib/planning";
 import { buildBookWorkspaceTools } from "@features/agent/lib/toolsets/factory";
 import { applyAgentCardToolPolicy } from "@features/agent/lib/agentCards";
 import type { AgentMode, ModeContextMap } from "@features/agent/lib/modeRules";
-import { MODE_CONTROL_TOOL_ID } from "@features/agent/lib/modeControl";
-import { deriveFlowWorkflowState, type FlowWorkflowState } from "@features/agent/lib/workflowControl";
+import { deriveWorkflowState, WORKFLOW_CONTROL_TOOL_ID, type WorkflowState } from "@features/agent/lib/workflowControl";
+import { YOLO_CONTROL_TOOL_ID } from "@features/agent/lib/yoloControl";
 import type { AgentMessage, AgentUsage } from "@features/agent/lib/types";
 import type { ChatEntry } from "@features/agent/chat/types";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
@@ -45,8 +45,8 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
   const enabledSkills = getEnabledSkills(useSkillsStore.getState());
   const defaultAgentMarkdown = await ensureMainAgentMarkdown();
   const manualContext = await resolveManualContext(params, enabledSkills);
-  const flowWorkflowState = params.activeModeId === "flow"
-    ? deriveFlowWorkflowState(params.getLatestMessages())
+  const workflowState = params.activeModeId === "flow"
+    ? deriveWorkflowState(params.getLatestMessages())
     : undefined;
   const projectContext = await loadProjectContext({
     activeFilePath: workspaceState.activeFilePath,
@@ -67,7 +67,7 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
     enabledToolIds: getEnabledToolIds(params.activeModeId),
     manualContext,
     mode: params.activeModeId,
-    modeContext: buildModeContext(params, flowWorkflowState),
+    modeContext: buildModeContext(params, workflowState),
     onAskUser: createAskHandler({
       ...params,
       getSessionId: () => params.sessionId,
@@ -83,9 +83,9 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
     providerConfig: params.providerConfig,
     workspaceRootPath: workspaceState.rootPath,
     workspaceTools: buildBookWorkspaceTools({
-      flowWorkflowState,
       rootPath: workspaceState.rootPath,
       includeAsk: true,
+      workflowState,
     }),
   });
 }
@@ -109,9 +109,9 @@ async function resolveManualContext(
 
 function buildModeContext(
   params: SessionFactoryParams,
-  flowWorkflowState?: FlowWorkflowState,
+  workflowState?: WorkflowState,
 ): ModeContextMap[AgentMode] | undefined {
-  if (params.activeModeId === "flow") return { workflowState: flowWorkflowState };
+  if (params.activeModeId === "flow") return { workflowState };
   if (params.activeModeId !== "autopilot") return undefined;
   return {
     goal: params.autopilotGoal ?? params.nextInput,
@@ -119,16 +119,23 @@ function buildModeContext(
   };
 }
 
-function requiresModeControl(mode: AgentMode) {
-  return mode === "autopilot" || mode === "flow";
+function getRequiredControlToolId(mode: AgentMode) {
+  if (mode === "autopilot") return YOLO_CONTROL_TOOL_ID;
+  if (mode === "flow") return WORKFLOW_CONTROL_TOOL_ID;
+  return null;
 }
 
 function getEnabledToolIds(mode: AgentMode) {
+  const requiredControlToolId = getRequiredControlToolId(mode);
   const enabledToolIds = Object.entries(useAgentSettingsStore.getState().enabledTools)
     .filter(([, value]) => value)
-    .map(([id]) => id);
-  const toolIds = requiresModeControl(mode) && !enabledToolIds.includes(MODE_CONTROL_TOOL_ID)
-    ? [MODE_CONTROL_TOOL_ID, ...enabledToolIds]
+    .map(([id]) => id)
+    .filter((id) => {
+      if (id !== YOLO_CONTROL_TOOL_ID && id !== WORKFLOW_CONTROL_TOOL_ID) return true;
+      return id === requiredControlToolId;
+    });
+  const toolIds = requiredControlToolId && !enabledToolIds.includes(requiredControlToolId)
+    ? [requiredControlToolId, ...enabledToolIds]
     : enabledToolIds;
   return applyAgentCardToolPolicy(mode, toolIds);
 }

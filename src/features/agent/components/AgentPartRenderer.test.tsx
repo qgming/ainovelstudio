@@ -162,8 +162,126 @@ describe("AgentPartRenderer", () => {
     );
 
     expect(screen.getByText("任务进度")).toBeInTheDocument();
+    expect(screen.queryByText("1. 定位问题")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /任务进度/ }));
+
     expect(screen.getByText("1. 定位问题")).toBeInTheDocument();
     expect(screen.getByText("2. 修复 UI")).toBeInTheDocument();
     expect(screen.getAllByText("正在修复 UI").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button")[1]);
+    expect(screen.queryByText("1. 定位问题")).not.toBeInTheDocument();
+  });
+
+  it("YOLO 检查卡片可展开并点击内容收起", () => {
+    render(
+      <AgentPartRenderer
+        part={{
+          type: "tool-call",
+          toolName: "yolo_control",
+          toolCallId: "yolo-1",
+          status: "completed",
+          inputSummary: "{\"action\":\"complete\"}",
+          output: {
+            accepted: true,
+            action: "complete",
+            createdAt: "2026-05-10T00:00:00.000Z",
+            evidence: ["文件已写回"],
+            goal: "完成第一章",
+            kind: "yolo-control",
+            missing: [],
+            reason: "验证完毕",
+            remaining: [],
+            stateUpdated: true,
+            verification: ["已读取正文"],
+          },
+          outputSummary: "",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("YOLO 检查")).toBeInTheDocument();
+    expect(screen.queryByText("验证完毕")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /YOLO 检查/ }));
+    expect(screen.getByText("验证完毕")).toBeInTheDocument();
+    expect(screen.getByText("证据：文件已写回")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button")[1]);
+    expect(screen.queryByText("验证完毕")).not.toBeInTheDocument();
+  });
+
+  it("工作流控制卡片可展开并点击内容收起", () => {
+    render(
+      <AgentPartRenderer
+        part={{
+          type: "tool-call",
+          toolName: "workflow_control",
+          toolCallId: "workflow-1",
+          status: "completed",
+          inputSummary: "{\"action\":\"start_workflow\"}",
+          output: {
+            accepted: true,
+            kind: "workflow-control",
+            message: "工作流已启动",
+            missing: [],
+            state: {
+              currentNodeId: "inspect",
+              definition: {
+                edges: [],
+                id: "chapter-flow",
+                nodes: [
+                  { agentCardId: "book", gate: "已读取上下文", id: "inspect", title: "读取上下文", type: "task" },
+                ],
+                title: "章节流程",
+              },
+              history: [],
+              nodes: [{ evidence: [], loopCount: 0, nodeId: "inspect", status: "running" }],
+              status: "running",
+              workflowId: "chapter-flow",
+            },
+          },
+          outputSummary: "",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("章节流程")).toBeInTheDocument();
+    expect(screen.queryByText("工作流已启动")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /章节流程/ }));
+    expect(screen.getByText("工作流已启动")).toBeInTheDocument();
+    expect(screen.getByText("1. running · 读取上下文")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button")[1]);
+    expect(screen.queryByText("工作流已启动")).not.toBeInTheDocument();
+  });
+
+  it("子代理卡片展开后点击内容区域可以折叠", () => {
+    render(
+      <AgentPartRenderer
+        part={{
+          type: "subagent",
+          id: "subagent-1",
+          name: "连续性检查",
+          status: "completed",
+          summary: "已完成检查",
+          parts: [
+            { type: "text", text: "发现一处时间线问题。" },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("连续性检查")).toBeInTheDocument();
+    expect(screen.queryByText("时间线")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /连续性检查/ }));
+    expect(screen.getByText("时间线")).toBeInTheDocument();
+    expect(screen.getByText("生成结果")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button")[1]);
+    expect(screen.queryByText("时间线")).not.toBeInTheDocument();
   });
 });

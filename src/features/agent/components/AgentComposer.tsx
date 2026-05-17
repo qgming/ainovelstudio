@@ -5,6 +5,7 @@ import {
   Circle,
   Clock3,
   GitBranch,
+  ListChecks,
   LucideIcon,
   Maximize2,
   Minimize2,
@@ -37,6 +38,7 @@ import type { TreeNode } from "@features/books/types";
 import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
 import type { PlanItem, PlanningState } from "@features/agent/lib/planning";
 import type { AgentRunStatus, AskToolAnswer } from "@features/agent/lib/types";
+import type { WorkflowNodeRunStatus, WorkflowState } from "@features/agent/lib/workflowControl";
 import type { PendingAskState } from "@features/agent/stores/chat-run/helpers";
 import { AgentManualResourcePicker } from "./AgentManualResourcePicker";
 import { AgentWorkspaceFilePicker } from "./AgentWorkspaceFilePicker";
@@ -75,6 +77,7 @@ type AgentComposerProps = {
   rootNode: TreeNode | null;
   runStatus: AgentRunStatus;
   selection?: ManualTurnContextSelection;
+  workflowState?: WorkflowState;
 };
 
 function removeValue(values: string[], value: string) {
@@ -99,6 +102,75 @@ function hasIncompleteItems(items: PlanItem[]) {
   return items.some((item) => item.status !== "completed");
 }
 
+function WorkflowNodeStatusIcon({ status }: { status: WorkflowNodeRunStatus }) {
+  if (status === "completed") return <Check className="h-3 w-3 text-[#1d6a4d] dark:text-[#9fe2bb]" />;
+  if (status === "running") return <Clock3 className="h-3 w-3 text-[#8a6412] dark:text-[#f3c96b]" />;
+  if (status === "blocked") return <SquareSlash className="h-3 w-3 text-[#dc2626] dark:text-[#f87171]" />;
+  if (status === "skipped") return <X className="h-3 w-3 text-muted-foreground" />;
+  return <Circle className="h-3 w-3 text-muted-foreground" />;
+}
+
+function getWorkflowStatusLabel(status: WorkflowState["status"]) {
+  const labels: Record<WorkflowState["status"], string> = {
+    blocked: "已阻塞",
+    completed: "已完成",
+    draft: "草案",
+    empty: "未创建",
+    pending_approval: "待确认",
+    running: "运行中",
+  };
+  return labels[status];
+}
+
+function WorkflowRunPanel({ state }: { state: WorkflowState }) {
+  if (!state.definition) return null;
+  const currentNode = state.definition.nodes.find((node) => node.id === state.currentNodeId);
+  const completedCount = state.nodes.filter((node) => node.status === "completed").length;
+  return (
+    <div className="border-b border-border bg-panel-subtle px-3 py-2">
+      <div className="flex min-h-8 items-center gap-2">
+        <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12px] font-medium text-foreground">
+            {state.definition.title}
+          </div>
+          <div className="truncate text-[11px] leading-5 text-muted-foreground">
+            {getWorkflowStatusLabel(state.status)}
+            {currentNode ? ` · 当前：${currentNode.title}` : ""}
+            {` · ${completedCount}/${state.definition.nodes.length}`}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 max-h-[144px] overflow-y-auto pr-1">
+        <div className="space-y-2">
+          {state.definition.nodes.map((node, index) => {
+            const nodeState = state.nodes.find((item) => item.nodeId === node.id);
+            const status = nodeState?.status ?? "pending";
+            return (
+              <div key={node.id} className="flex items-start gap-3">
+                <span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center">
+                  <WorkflowNodeStatusIcon status={status} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className={cn(
+                    "break-words text-xs font-medium leading-5",
+                    status === "completed" ? "text-muted-foreground line-through decoration-muted-foreground/50" : "text-foreground",
+                  )}>
+                    {index + 1}. {node.title}
+                  </div>
+                  <div className="truncate text-[11px] leading-5 text-muted-foreground">
+                    {node.type} · {node.agentCardId} · {node.gate}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function buildInitialAskSelection(_pendingAsk: PendingAskState | null) {
   return {
     customInput: "",
@@ -115,7 +187,7 @@ const MODE_INPUT_PLACEHOLDERS: Record<AgentMode, string> = {
   book: "输入想法、问题或要处理的任务",
   "chapter-write": "输入要规划、续写或生产的章节目标",
   "continuity-review": "输入要检查的章节、人物、伏笔或时间线问题",
-  flow: "输入工作流任务：按 Inspect、Plan、Act、Verify、State Maintain 严格推进",
+  flow: "描述要编排的任务：AI 会先生成可确认工作流，再按节点、分支和循环执行",
   "state-maintain": "输入要抽取和回写的章节状态变化",
   "style-polish": "输入要润色、统一文风或去 AI 味的章节",
   "volume-plan": "输入要规划的卷、阶段冲突或升级节奏",
@@ -162,6 +234,7 @@ export function AgentComposer({
   rootNode,
   runStatus,
   selection: controlledSelection,
+  workflowState,
 }: AgentComposerProps) {
   const isRunning = runStatus === "running";
   const isAskMode = Boolean(pendingAsk);
@@ -368,12 +441,18 @@ export function AgentComposer({
 
   return (
     <div className="bg-app">
+      {activeMode.id === "flow" && workflowState?.definition ? (
+        <WorkflowRunPanel state={workflowState} />
+      ) : null}
       {showPlan ? (
-        <div className="bg-panel-subtle px-3 py-2">
-          <div className="flex min-h-8 items-center justify-between gap-3">
-            <div className="min-w-0 text-[12px] font-medium text-muted-foreground">
-              共 {planningState.items.length} 个任务，已经完成 {completedCount}{" "}
-              个
+        <div className={cn("border-t border-border bg-panel-subtle px-3", isPlanExpanded ? "py-2" : "py-1")}>
+          <div className={cn("flex items-center justify-between gap-3", isPlanExpanded ? "min-h-8" : "min-h-7")}>
+            <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium text-muted-foreground">
+              <ListChecks aria-hidden="true" className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate">
+                共 {planningState.items.length} 个任务，已经完成 {completedCount}{" "}
+                个
+              </span>
             </div>
             <Button
               type="button"

@@ -109,8 +109,8 @@ describe("BookAgentPanel", () => {
     render(<BookAgentPanel width={420} />);
 
     expect(screen.getByLabelText("当前 Agent 模式")).toHaveTextContent("YOLO");
-    expect(screen.getByLabelText("YOLO 目标")).toBeInTheDocument();
-    expect(screen.getByText("完成第一章审校并写回文件")).toBeInTheDocument();
+    expect(screen.getByLabelText("YOLO 状态")).toBeInTheDocument();
+    expect(screen.getByText("YOLO：完成第一章审校并写回文件")).toBeInTheDocument();
     expect(screen.queryByText("目标模式")).not.toBeInTheDocument();
   });
 

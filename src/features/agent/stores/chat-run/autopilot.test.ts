@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  MODE_CONTROL_KIND,
-  MODE_CONTROL_TOOL_ID,
-} from "@features/agent/lib/modeControl";
+  YOLO_CONTROL_KIND,
+  YOLO_CONTROL_TOOL_ID,
+} from "@features/agent/lib/yoloControl";
 import type { AgentMessage, AgentPart } from "@features/agent/lib/types";
 import {
   buildAutopilotContinuePrompt,
@@ -30,22 +30,29 @@ describe("YOLO autopilot", () => {
     expect(prompt).toContain("读取相关资料");
     expect(prompt).toContain("Inspect -> Skill Load -> Plan -> Act -> Verify -> State Maintain -> Report");
     expect(prompt).toContain("SKILL.md");
-    expect(prompt).toContain("run_control");
+    expect(prompt).toContain("yolo_control");
     expect(prompt).toContain('action="complete"');
   });
 
-  it("只有 run_control complete 工具结果会判定目标完成", () => {
+  it("只有 yolo_control complete 工具结果会判定目标完成", () => {
     const completedPart: AgentPart = {
       type: "tool-call",
-      toolName: MODE_CONTROL_TOOL_ID,
+      toolName: YOLO_CONTROL_TOOL_ID,
       toolCallId: "mode-control-1",
       status: "completed",
-      inputSummary: '{"mode":"autopilot","action":"complete"}',
+      inputSummary: '{"action":"complete"}',
       output: {
-        kind: MODE_CONTROL_KIND,
-        mode: "autopilot",
+        accepted: true,
         action: "complete",
         createdAt: "2026-05-10T00:00:00.000Z",
+        evidence: ["已写回"],
+        goal: "完成第一章",
+        kind: YOLO_CONTROL_KIND,
+        missing: [],
+        reason: "完成",
+        remaining: [],
+        stateUpdated: true,
+        verification: ["已读取验证"],
       },
     };
 

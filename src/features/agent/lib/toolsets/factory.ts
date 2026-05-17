@@ -15,7 +15,7 @@ import {
   createWorkspaceToolset,
 } from "../tools";
 import type { AgentTool } from "../runtime";
-import type { FlowWorkflowState } from "../workflowControl";
+import type { WorkflowState } from "../workflowControl";
 
 export type AgentToolMap = Record<string, AgentTool>;
 
@@ -69,12 +69,12 @@ export function createDefaultBookWorkspaceToolset(options: {
  */
 export function buildBookWorkspaceTools(options: {
   rootPath: string | null;
-  flowWorkflowState?: FlowWorkflowState;
   guardRootMatch?: boolean;
   includeAsk?: boolean;
+  workflowState?: WorkflowState;
 }): AgentToolMap {
   return {
-    ...createGlobalToolset({ flowWorkflowState: options.flowWorkflowState }),
+    ...createGlobalToolset({ workflowState: options.workflowState }),
     ...createDefaultBookWorkspaceToolset({
       rootPath: options.rootPath,
       guardRootMatch: options.guardRootMatch,

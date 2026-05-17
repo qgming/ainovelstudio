@@ -300,30 +300,50 @@ describe("useChatRunStore", () => {
     let callCount = 0;
     streamControl.runPrompt.mockImplementation(async function* () {
       callCount += 1;
-      if (callCount === 9) {
-        yield {
-          type: "tool-call",
-          toolName: "run_control",
-          toolCallId: "mode-control-9",
-          status: "running",
-          inputSummary: '{"mode":"autopilot","action":"complete"}',
-        };
-        yield {
-          type: "tool-result",
-          toolName: "run_control",
-          toolCallId: "mode-control-9",
-          status: "completed",
-          outputSummary: '{"kind":"mode-control","mode":"autopilot","action":"complete"}',
-          output: {
-            kind: "mode-control",
-            mode: "autopilot",
+      yield { type: "text-delta", delta: `第 ${callCount} 轮继续推进。` };
+      const complete = callCount === 8;
+      yield {
+        type: "tool-call",
+        toolName: "yolo_control",
+        toolCallId: `yolo-control-${callCount}`,
+        status: "running",
+        inputSummary: complete ? '{"action":"complete"}' : '{"action":"continue"}',
+      };
+      yield {
+        type: "tool-result",
+        toolName: "yolo_control",
+        toolCallId: `yolo-control-${callCount}`,
+        status: "completed",
+        outputSummary: complete ? '{"kind":"yolo-control","action":"complete"}' : '{"kind":"yolo-control","action":"continue"}',
+        output: complete
+          ? {
+            accepted: true,
             action: "complete",
             createdAt: "2026-05-10T00:00:00.000Z",
+            evidence: ["文件已写回"],
+            goal: "完成第一章审校并写回文件",
+            kind: "yolo-control",
+            missing: [],
+            reason: "完成",
+            remaining: [],
+            stateUpdated: true,
+            verification: ["已读取验证"],
+          }
+          : {
+            accepted: true,
+            action: "continue",
+            createdAt: "2026-05-10T00:00:00.000Z",
+            evidence: [],
+            goal: "完成第一章审校并写回文件",
+            kind: "yolo-control",
+            missing: [],
+            nextAction: "继续审校",
+            reason: "未完成",
+            remaining: ["继续审校"],
+            stateUpdated: false,
+            verification: [],
           },
-        };
-        return;
-      }
-      yield { type: "text-delta", delta: `第 ${callCount} 轮继续推进。` };
+      };
     });
 
     useAgentStore.setState({
@@ -343,16 +363,16 @@ describe("useChatRunStore", () => {
 
     await useAgentStore.getState().sendMessage();
 
-    expect(streamControl.runPrompt).toHaveBeenCalledTimes(9);
+    expect(streamControl.runPrompt).toHaveBeenCalledTimes(8);
     expect(streamControl.runPrompt.mock.calls[0]?.[0]?.mode).toBe("autopilot");
     expect(streamControl.runPrompt.mock.calls[0]?.[0]?.modeContext).toMatchObject({
       goal: "完成第一章审校并写回文件",
       iteration: 1,
     });
-	    expect(streamControl.runPrompt.mock.calls[1]?.[0]?.prompt).toContain("YOLO 自动检查");
-    expect(streamControl.runPrompt.mock.calls[8]?.[0]?.modeContext).toMatchObject({
+    expect(streamControl.runPrompt.mock.calls[1]?.[0]?.prompt).toContain("YOLO 自动检查");
+    expect(streamControl.runPrompt.mock.calls[7]?.[0]?.modeContext).toMatchObject({
       goal: "完成第一章审校并写回文件",
-      iteration: 9,
+      iteration: 8,
     });
     expect(useAgentStore.getState().autopilotGoalsBySession["session-1"]).toBe("完成第一章审校并写回文件");
     expect(useAgentStore.getState().run.status).toBe("completed");

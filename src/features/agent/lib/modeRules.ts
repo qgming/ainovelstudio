@@ -11,9 +11,9 @@
 import { resolveAgentCard } from "./agentCards";
 import type { LongformAgentMode } from "./longformTypes";
 import {
-  createInitialFlowWorkflowState,
-  formatFlowWorkflowState,
-  type FlowWorkflowState,
+  createInitialWorkflowState,
+  formatWorkflowState,
+  type WorkflowState,
 } from "./workflowControl";
 
 export type AgentMode = "book" | "autopilot" | "flow" | LongformAgentMode;
@@ -24,7 +24,7 @@ export type AutopilotModeContext = {
   iteration: number;
 };
 export type FlowModeContext = {
-  workflowState?: FlowWorkflowState;
+  workflowState?: WorkflowState;
 };
 
 export type ModeContextMap = {
@@ -81,37 +81,39 @@ function buildAutopilotModeRules(context: AutopilotModeContext) {
     "- 目标未满足验收时，直接推进下一步；普通过程选择自行决策，不用 ask。",
     "- 遇到外部授权或高风险破坏性操作时，报告阻塞项和所需授权。",
     "- 涉及创作、规划、设定、审校的成果必须写回工作区文件；章节任务默认只维护 `.project/status/`，需要专题记录时再创建补充文件。",
-    '- 只有成果、验证、状态回写全部完成时，调用 `run_control`，参数为 mode="autopilot"、action="complete"，reason 写明验收证据。',
-    "- 未完成时继续推进下一步；不要调用 `run_control` 的 complete 动作。",
+    "- 每一轮结束必须进入“YOLO 结果检查节”，并调用 `yolo_control`；禁止只用自然语言宣布完成或继续。",
+    '- 只有成果、验证、状态回写全部完成时，调用 `yolo_control`，参数为 action="complete"，evidence/verification 写明验收证据，stateUpdated=true。',
+    '- 未完成时调用 `yolo_control`，参数为 action="continue"，remaining 写剩余任务，nextAction 写下一轮动作。',
+    '- 遇到外部授权、高风险操作或缺关键输入时调用 `yolo_control`，参数为 action="blocked"，requiredUserAction 写明用户要做什么。',
   ].join("\n");
 }
 
 function buildFlowModeRules(context: FlowModeContext) {
-  const workflowState = context.workflowState ?? createInitialFlowWorkflowState();
+  const workflowState = context.workflowState ?? createInitialWorkflowState();
   return [
-    "# 模式：WORKFLOW（程序控制工作流）",
+    "# 模式：WORKFLOW（对话生成的程序工作流）",
     "",
     "**身份**",
-    "- 你是长篇写作工作流执行器，当前阶段由程序状态机控制。",
+    "- 你是长篇写作工作流编排器和执行器；流程由你先与用户对话生成，再由用户确认后执行。",
     "",
     "**程序状态**",
-    formatFlowWorkflowState(workflowState),
+    formatWorkflowState(workflowState),
     "",
-    "**强制工作流**",
-    "- 只处理 currentStage 对应工作；完成本阶段后调用 `run_control` 提交 complete_stage。",
-    "- complete_stage 必须包含 stage 与 evidence；程序接受后再进入下一阶段。",
-    "- 被程序 rejected 时，按 missing 补齐证据或动作，然后重新提交当前阶段。",
-    "- 遇到外部授权或高风险操作时调用 `run_control` 提交 blocked，并写 reason。",
-    "- 所有阶段完成后调用 `run_control` 提交 complete_workflow，并提供最终验收 evidence。",
+    "**工作流协议**",
+    "- 没有工作流时，先澄清目标，再调用 `workflow_control` action=draft_workflow 提交 workflow 草案。",
+    "- 草案必须包含 nodes 和 edges；每个节点都要有 type、agentCardId、gate，判断和循环必须写清条件。",
+    "- 草案完成后调用 `workflow_control` action=request_approval，并用 `ask_user` 给出“确认执行 / 调整流程”选择；用户未确认前不要启动执行。",
+    "- 用户确认后调用 `workflow_control` action=start_workflow，然后只处理 currentNode 对应工作。",
+    "- 节点完成必须调用 `workflow_control` action=complete_node，并提供 evidence；程序接受后再进入下一节点。",
+    "- 判断分支必须调用 `workflow_control` action=choose_branch，并提供 branchReason 和 nextNodeId。",
+    "- 循环必须调用 `workflow_control` action=loop，并说明继续循环或退出条件；循环节点应设置可验证 gate。",
+    "- 遇到外部授权或高风险操作时调用 `workflow_control` action=blocked，并写 reason。",
+    "- 所有节点完成后调用 `workflow_control` action=complete_workflow，并提供最终验收 evidence。",
     "",
-    "**阶段门禁**",
-    "- Inspect：读取 `.project/AGENTS.md`、`.project/README.md`、相关 status JSON，以及当前阶段直接相关的设定/大纲/正文。",
-    "- Skill Load：任务明显匹配已启用 skill 时，必须读取对应 `SKILL.md`；需要参考材料时再读 references。",
-    "- Plan：用 update_plan 写出当前阶段计划，只保留一个 in_progress。",
-    "- Act：按阶段执行，正文、卷纲、细纲由主代理串行写入。",
-    "- Verify：用 workspace_read / text_stats / project_memory_search / workspace_search 核对落地结果。",
-    "- State Maintain：更新 `.project/status/*.json`；只有任务明确需要长期专题记录时，才创建额外补充文件。",
-    "- Report：只汇报阶段、改动文件、验证结果、下一阶段。",
+    "**节点执行边界**",
+    "- 每个节点默认由其 agentCardId 对应的固定子代理/职责执行；主代理负责节点交接、状态推进和最终一致性。",
+    "- 节点内部若超过三步，用 update_plan 写局部待办；update_plan 只表示节点内计划，不代替 workflow_control。",
+    "- Verify / State Maintain 不再是固定阶段；需要时应作为节点或节点 gate 写入 workflow。",
     "",
     "**边界**",
     "- 可以使用 delegate_task 做市场、拆解、连续性、风格、状态维护等检查任务。",
