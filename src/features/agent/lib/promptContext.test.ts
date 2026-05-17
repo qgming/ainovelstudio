@@ -117,14 +117,14 @@ describe("prompt context", () => {
     expect(system).not.toContain("MEMORY.md");
   });
 
-  it("未启用 task 时不注入临时 subagent 提示", () => {
+  it("系统提示词描述工作流节点执行能力", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [createSkill()],
       enabledToolIds: [],
     });
 
-    expect(system).not.toContain("## 临时 Subagent");
+    expect(system).toContain("执行工作流节点");
   });
 
   it("手动指定文件只注入路径，不注入正文", () => {
@@ -200,13 +200,13 @@ describe("prompt context", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [createSkill()],
-      enabledToolIds: ["delegate_task"],
+      enabledToolIds: ["update_plan"],
       mode: "book",
     });
 
     expect(system).toContain("# 模式：BOOK");
     expect(system).toContain(".project/AGENTS.md");
-    expect(system).toContain("## 临时 Subagent");
+    expect(system).toContain("按工作流节点切换职责");
   });
 
   it("autopilot 模式渲染 YOLO 契约与目标上下文", () => {

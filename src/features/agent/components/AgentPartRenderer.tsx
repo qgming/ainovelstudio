@@ -1,5 +1,5 @@
 import { useState, memo } from "react";
-import { ChevronDown, ChevronRight, Brain, Wrench, Check, X, LoaderCircle, Users, Circle, GitBranch, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Brain, Wrench, Check, LoaderCircle, Circle, GitBranch, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
@@ -47,22 +47,6 @@ const markdownComponents = {
   th: ({ children }: { children?: React.ReactNode }) => <th className="border border-current/15 px-2 py-1 font-semibold">{children}</th>,
   td: ({ children }: { children?: React.ReactNode }) => <td className="border border-current/15 px-2 py-1 align-top">{children}</td>,
 } as const;
-
-function StepStatusIcon({ status }: { status: "idle" | "running" | "completed" | "failed" }) {
-  if (status === "running") {
-    return <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 text-[#8a6412] animate-spin dark:text-[#f3c96b]" />;
-  }
-
-  if (status === "completed") {
-    return <Check aria-hidden="true" className="h-3.5 w-3.5 text-[#1d6a4d] dark:text-[#9fe2bb]" />;
-  }
-
-  if (status === "failed") {
-    return <X aria-hidden="true" className="h-3.5 w-3.5 text-[#dc2626] dark:text-[#f87171]" />;
-  }
-
-  return <Circle aria-hidden="true" className="h-3.5 w-3.5 text-[#94a3b8] dark:text-[#64748b]" />;
-}
 
 function PlanItemIcon({ status }: { status: PlanItem["status"] }) {
   if (status === "completed") {
@@ -308,48 +292,6 @@ function normalizeRenderableStatus(status: AgentRunStatus): "idle" | "running" |
   return status === "awaiting_user" ? "running" : status;
 }
 
-function buildSubagentTimeline(parts: AgentPart[]) {
-  const timeline: Array<{
-    key: string;
-    label: string;
-    preview: string;
-    status: "idle" | "running" | "completed" | "failed";
-  }> = [];
-
-  for (const [index, part] of parts.entries()) {
-    if (part.type === "reasoning") {
-      timeline.push({
-        key: `reasoning-${index}`,
-        label: "深度思考",
-        preview: part.detail,
-        status: "running",
-      });
-      continue;
-    }
-
-    if (part.type === "tool-call") {
-      timeline.push({
-        key: `tool-${index}-${part.toolName}`,
-        label: `调用工具：${part.toolName}`,
-        preview: part.outputSummary ?? part.inputSummary,
-        status: normalizeRenderableStatus(part.status),
-      });
-      continue;
-    }
-
-    if (part.type === "text") {
-      timeline.push({
-        key: `text-${index}`,
-        label: "生成结果",
-        preview: part.text,
-        status: "completed",
-      });
-    }
-  }
-
-  return timeline;
-}
-
 export function AgentPartRenderer({ part, renderMarkdown = true }: { part: AgentPart; renderMarkdown?: boolean }) {
   if (part.type === "placeholder") {
     return (
@@ -505,45 +447,5 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
     );
   }
 
-  if (part.type !== "subagent") {
-    return null;
-  }
-
-  const timeline = buildSubagentTimeline(part.parts);
-
-  return (
-    <AccordionCard collapseOnContentClick icon={Users} label={part.name} summary={part.summary} status={normalizeRenderableStatus(part.status)}>
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-medium leading-6 text-foreground">时间线</h3>
-          <div>
-            <div className="flex items-start gap-3">
-              <div className="flex w-4 shrink-0 flex-col items-center self-stretch pt-1">
-                <StepStatusIcon status="completed" />
-                <div className="mt-1 w-px flex-1 border-l border-dashed border-[#cbd5e1] dark:border-[#334155]" />
-              </div>
-              <div className="min-w-0 flex-1 pb-3">
-                <p className="text-sm leading-6 text-foreground">已接收任务</p>
-              </div>
-            </div>
-            {timeline.map((item, index) => {
-              const isLast = index === timeline.length - 1;
-              return (
-                <div key={item.key} className="flex items-start gap-3">
-                  <div className="flex w-4 shrink-0 flex-col items-center self-stretch pt-1">
-                    <StepStatusIcon status={item.status} />
-                    {!isLast ? <div className="mt-1 w-px flex-1 border-l border-dashed border-[#cbd5e1] dark:border-[#334155]" /> : null}
-                  </div>
-                  <div className={`min-w-0 flex-1 ${!isLast ? "pb-3" : ""}`}>
-                    <p className="text-sm font-medium leading-6 text-foreground">{item.label}</p>
-                    <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{item.preview}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </AccordionCard>
-  );
+  return null;
 }

@@ -635,14 +635,6 @@ describe("useChatRunStore", () => {
                   status: "running",
                   inputSummary: "{\"path\":\"章节/第一章.md\"}",
                 },
-                {
-                  type: "subagent",
-                  id: "subagent-1",
-                  name: "editor",
-                  status: "running",
-                  summary: "已派发子任务：editor",
-                  parts: [{ type: "placeholder", text: "正在思考" }],
-                },
               ],
             },
           },
@@ -679,15 +671,6 @@ describe("useChatRunStore", () => {
         status: "failed",
         inputSummary: '{"path":"章节/第一章.md"}',
         outputSummary: "已中断",
-      },
-      {
-        type: "subagent",
-        id: "subagent-1",
-        name: "editor",
-        status: "failed",
-        summary: "已派发子任务：editor",
-        detail: "执行已中断。",
-        parts: [],
       },
     ]);
   });

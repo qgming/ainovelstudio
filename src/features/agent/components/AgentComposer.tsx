@@ -159,8 +159,13 @@ function WorkflowRunPanel({ state }: { state: WorkflowState }) {
                     {index + 1}. {node.title}
                   </div>
                   <div className="truncate text-[11px] leading-5 text-muted-foreground">
-                    {node.type} · {node.agentCardId} · {node.gate}
+                    {node.type} · {node.roleId} · {node.gate}
                   </div>
+                  {status === "running" ? (
+                    <div className="line-clamp-2 text-[11px] leading-5 text-muted-foreground">
+                      {node.systemPrompt}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );

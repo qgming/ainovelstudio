@@ -13,7 +13,6 @@ describe("agent cards", () => {
     expect(card?.tools).toContain("project_memory_search");
     expect(card?.writeScopes).toContain(".project/status/");
     expect(card?.writeScopes).not.toContain(".project/runs/");
-    expect(card?.allowedSubagents).toContain("连续性检查");
   });
 
   it("解析严格工作流 card", () => {

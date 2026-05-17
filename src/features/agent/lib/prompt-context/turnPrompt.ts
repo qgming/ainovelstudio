@@ -12,10 +12,6 @@ type BuildUserTurnContentInput = {
   projectContext?: ProjectContextPayload | null;
   workspaceRootPath?: string | null;
   prompt: string;
-  subagentAnalysis?: {
-    agentName: string;
-    text: string;
-  } | null;
 };
 
 type BuildRuntimeControlBlockInput = Pick<
@@ -24,7 +20,6 @@ type BuildRuntimeControlBlockInput = Pick<
   | "planningIntervention"
   | "planningState"
   | "prompt"
-  | "subagentAnalysis"
   | "workspaceRootPath"
 >;
 
@@ -140,7 +135,6 @@ export function buildRuntimeControlBlock({
   planningIntervention,
   planningState,
   prompt,
-  subagentAnalysis,
   workspaceRootPath,
 }: BuildRuntimeControlBlockInput) {
   const taskProfile = inferTaskProfile(prompt);
@@ -163,9 +157,7 @@ export function buildRuntimeControlBlock({
           `- 当前文件类型：${fileKind}`,
           `- 本轮任务类型：${taskProfile.label}`,
           `- 预期输出：${taskProfile.outputHint}`,
-          subagentAnalysis?.text
-            ? `- 本轮已收到子任务摘要：${subagentAnalysis.agentName}`
-            : "- 本轮默认由主代理直接完成。",
+          "- 本轮由主代理按当前模式与工作流节点直接完成。",
         ].join("\n"),
       },
       {
@@ -191,18 +183,8 @@ export function buildRuntimeControlBlock({
 export function buildUserTurnContent({
   manualContext,
   projectContext,
-  subagentAnalysis,
 }: BuildUserTurnContentInput) {
   const materialSections = renderPromptSections([
-    subagentAnalysis?.text
-      ? {
-          title: `子任务摘要（${subagentAnalysis.agentName}）`,
-          body: subagentAnalysis.text.trim(),
-        }
-      : {
-          title: "子任务摘要",
-          body: null,
-        },
     {
       title: "项目默认上下文",
       body: buildProjectContextBlock(projectContext),

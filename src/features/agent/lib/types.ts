@@ -96,15 +96,7 @@ export type AgentPart =
       answer?: AskToolAnswer;
       errorMessage?: string;
     }
-  | {
-      type: "subagent";
-      id: string;
-      name: string;
-      status: AgentRunStatus;
-      summary: string;
-      detail?: string;
-      parts: AgentPart[];
-    };
+  ;
 
 export type AgentMessageMeta = {
   activeFilePath?: string | null;

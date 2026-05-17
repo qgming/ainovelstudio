@@ -2,25 +2,8 @@ import type { AgentCard } from "./longformTypes";
 import { WORKFLOW_CONTROL_TOOL_ID } from "./workflowControl";
 import { YOLO_CONTROL_TOOL_ID } from "./yoloControl";
 
-export const SUBAGENT_CARDS = {
-  continuity: "连续性检查",
-  market: "市场侦察",
-  quality: "章节质检",
-  state: "状态维护",
-  storyAnalysis: "爆款拆解",
-  style: "风格审校",
-} as const;
-
 export const BUILTIN_AGENT_CARDS: AgentCard[] = [
   {
-    allowedSubagents: [
-      SUBAGENT_CARDS.continuity,
-      SUBAGENT_CARDS.market,
-      SUBAGENT_CARDS.quality,
-      SUBAGENT_CARDS.state,
-      SUBAGENT_CARDS.storyAnalysis,
-      SUBAGENT_CARDS.style,
-    ],
     banTools: [],
     body: [
       "按目标全自动执行，主动读取资料、规划、写回、验证和维护状态。",
@@ -31,16 +14,10 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "autopilot",
     modelPresetId: null,
     name: "YOLO 全自动目标",
-    tools: [YOLO_CONTROL_TOOL_ID, "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
+    tools: [YOLO_CONTROL_TOOL_ID, "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
     writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
   },
   {
-    allowedSubagents: [
-      SUBAGENT_CARDS.continuity,
-      SUBAGENT_CARDS.quality,
-      SUBAGENT_CARDS.state,
-      SUBAGENT_CARDS.style,
-    ],
     banTools: [],
     body: [
       "严格执行长篇工作流，不跳过读取、技能加载、计划、执行、验证和状态维护。",
@@ -52,15 +29,10 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "flow",
     modelPresetId: null,
     name: "严格工作流",
-    tools: [WORKFLOW_CONTROL_TOOL_ID, "ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "leaderboard", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
+    tools: [WORKFLOW_CONTROL_TOOL_ID, "ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "leaderboard", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
     writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
   },
   {
-    allowedSubagents: [
-      SUBAGENT_CARDS.market,
-      SUBAGENT_CARDS.storyAnalysis,
-      SUBAGENT_CARDS.quality,
-    ],
     banTools: [],
     body: [
       "聚焦立项、题材、平台、读者、卖点和差异化。",
@@ -71,26 +43,24 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "book-design",
     modelPresetId: null,
     name: "长篇立项",
-    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete"],
+    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete"],
     writeScopes: [".project/README.md", "设定/", "大纲/", ".project/status/"],
   },
   {
-    allowedSubagents: [SUBAGENT_CARDS.continuity, SUBAGENT_CARDS.quality],
     banTools: [],
     body: [
       "聚焦卷纲、阶段冲突、升级节奏、卷末钩子和前后卷承接。",
-      "卷纲和细纲由主代理串行产出，子代理只返回检查和备选材料。",
+      "卷纲和细纲由主代理串行产出，必要的检查和备选材料作为工作流节点完成。",
     ].join("\n"),
     contextPolicyId: "volume-plan",
     id: "volume-plan",
     mode: "volume-plan",
     modelPresetId: null,
     name: "卷纲规划",
-    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "project_memory_search"],
+    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "project_memory_search"],
     writeScopes: ["大纲/", "设定/", ".project/status/"],
   },
   {
-    allowedSubagents: [SUBAGENT_CARDS.continuity, SUBAGENT_CARDS.quality],
     banTools: [],
     body: [
       "正文由主代理串行直写，保证文风、人物声音和连续性。",
@@ -102,11 +72,10 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "chapter-write",
     modelPresetId: null,
     name: "章节生产",
-    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
+    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
     writeScopes: ["正文/", "大纲/", ".project/status/"],
   },
   {
-    allowedSubagents: [SUBAGENT_CARDS.continuity, SUBAGENT_CARDS.state],
     banTools: [],
     body: [
       "检查人物状态、时间线、伏笔账本、能力边界和设定冲突。",
@@ -117,11 +86,10 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "continuity-review",
     modelPresetId: null,
     name: "连续性审校",
-    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "delegate_task", "workspace_edit", "workspace_write", "workspace_json", "project_memory_search"],
+    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "project_memory_search"],
     writeScopes: [".project/status/", "设定/", "大纲/"],
   },
   {
-    allowedSubagents: [SUBAGENT_CARDS.style, SUBAGENT_CARDS.quality],
     banTools: [],
     body: [
       "统一作者声音，降低 AI 味，保留剧情事实、人物意图和章节功能。",
@@ -136,7 +104,6 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     writeScopes: ["正文/", ".project/README.md", ".project/status/"],
   },
   {
-    allowedSubagents: [SUBAGENT_CARDS.state],
     banTools: [],
     body: [
       "从已完成章节抽取剧情、人物和连续性变化，并用 JSON patch 更新状态真值层。",
@@ -164,7 +131,6 @@ export function resolveAgentCard(
   if (!base && !override) return null;
   return {
     ...(base ?? {
-      allowedSubagents: [],
       banTools: [],
       body: "",
       contextPolicyId: mode,

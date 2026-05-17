@@ -34,7 +34,6 @@ export type WritingRuntimeContext = {
   }) => void;
   onUsage?: (usage: AgentUsage) => void;
   streamFn?: typeof streamAgentText;
-  subagentStreamFn?: typeof streamAgentText;
 };
 
 export function hasProviderConfig(config: AgentProviderConfig): boolean {

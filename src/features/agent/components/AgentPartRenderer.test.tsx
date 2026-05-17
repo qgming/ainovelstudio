@@ -232,7 +232,14 @@ describe("AgentPartRenderer", () => {
                 edges: [],
                 id: "chapter-flow",
                 nodes: [
-                  { agentCardId: "book", gate: "已读取上下文", id: "inspect", title: "读取上下文", type: "task" },
+                  {
+                    gate: "已读取上下文",
+                    id: "inspect",
+                    roleId: "book",
+                    systemPrompt: "读取项目上下文并给出可验证证据。",
+                    title: "读取上下文",
+                    type: "task",
+                  },
                 ],
                 title: "章节流程",
               },
@@ -258,30 +265,4 @@ describe("AgentPartRenderer", () => {
     expect(screen.queryByText("工作流已启动")).not.toBeInTheDocument();
   });
 
-  it("子代理卡片展开后点击内容区域可以折叠", () => {
-    render(
-      <AgentPartRenderer
-        part={{
-          type: "subagent",
-          id: "subagent-1",
-          name: "连续性检查",
-          status: "completed",
-          summary: "已完成检查",
-          parts: [
-            { type: "text", text: "发现一处时间线问题。" },
-          ],
-        }}
-      />,
-    );
-
-    expect(screen.getByText("连续性检查")).toBeInTheDocument();
-    expect(screen.queryByText("时间线")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /连续性检查/ }));
-    expect(screen.getByText("时间线")).toBeInTheDocument();
-    expect(screen.getByText("生成结果")).toBeInTheDocument();
-
-    fireEvent.click(screen.getAllByRole("button")[1]);
-    expect(screen.queryByText("时间线")).not.toBeInTheDocument();
-  });
 });

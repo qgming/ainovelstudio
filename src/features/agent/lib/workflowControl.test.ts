@@ -16,9 +16,31 @@ const workflow: WorkflowDefinition = {
   ],
   id: "chapter-flow",
   nodes: [
-    { agentCardId: "book", gate: "已读取上下文", id: "inspect", title: "读取上下文", type: "task" },
-    { agentCardId: "chapter-write", gate: "已写回正文", id: "act", title: "执行写作", type: "task" },
-    { agentCardId: "book", gate: "已汇报结果", id: "report", title: "汇报", type: "report" },
+    {
+      gate: "已读取上下文",
+      id: "inspect",
+      roleId: "book",
+      systemPrompt: "读取项目上下文并列出证据。",
+      title: "读取上下文",
+      type: "task",
+    },
+    {
+      gate: "已写回正文",
+      id: "act",
+      outputContract: "写回章节正文并返回路径。",
+      roleId: "chapter-write",
+      systemPrompt: "串行完成章节写作，保持文风一致。",
+      title: "执行写作",
+      type: "task",
+    },
+    {
+      gate: "已汇报结果",
+      id: "report",
+      roleId: "book",
+      systemPrompt: "汇总完成内容、证据和后续建议。",
+      title: "汇报",
+      type: "report",
+    },
   ],
   title: "章节流程",
 };
@@ -35,6 +57,7 @@ describe("workflowControl", () => {
 
     expect(drafted.accepted).toBe(true);
     expect(drafted.state.status).toBe("draft");
+    expect(drafted.currentNodeInstruction).toContain("读取项目上下文");
     expect(approval.accepted).toBe(true);
     expect(approval.state.status).toBe("pending_approval");
   });
@@ -69,9 +92,30 @@ describe("workflowControl", () => {
       ],
       id: "branch-flow",
       nodes: [
-        { agentCardId: "continuity-review", gate: "已给出审校结论", id: "review", title: "审校", type: "decision" },
-        { agentCardId: "chapter-write", gate: "已返修", id: "act", title: "返修", type: "loop" },
-        { agentCardId: "book", gate: "已汇报", id: "report", title: "汇报", type: "report" },
+        {
+          gate: "已给出审校结论",
+          id: "review",
+          roleId: "continuity-review",
+          systemPrompt: "审校连续性并判断是否需要返修。",
+          title: "审校",
+          type: "decision",
+        },
+        {
+          gate: "已返修",
+          id: "act",
+          roleId: "chapter-write",
+          systemPrompt: "根据审校意见进行返修。",
+          title: "返修",
+          type: "loop",
+        },
+        {
+          gate: "已汇报",
+          id: "report",
+          roleId: "book",
+          systemPrompt: "汇报返修结果。",
+          title: "汇报",
+          type: "report",
+        },
       ],
       title: "分支流程",
     };

@@ -1455,8 +1455,22 @@ describe("createGlobalToolset", () => {
       edges: [{ from: "inspect", to: "act" }],
       id: "chapter-flow",
       nodes: [
-        { agentCardId: "book", gate: "已读取上下文", id: "inspect", title: "读取上下文", type: "task" },
-        { agentCardId: "chapter-write", gate: "已写回正文", id: "act", title: "执行写作", type: "task" },
+        {
+          gate: "已读取上下文",
+          id: "inspect",
+          roleId: "book",
+          systemPrompt: "读取项目上下文并列出证据。",
+          title: "读取上下文",
+          type: "task",
+        },
+        {
+          gate: "已写回正文",
+          id: "act",
+          roleId: "chapter-write",
+          systemPrompt: "串行完成章节写作并写回文件。",
+          title: "执行写作",
+          type: "task",
+        },
       ],
       title: "章节流程",
     };

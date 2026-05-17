@@ -1,7 +1,7 @@
 import type { JSONValue } from "ai";
 import { defineTool } from "../modelGateway";
 import type { AgentTool, ToolResult } from "../runtime";
-import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "../subagentOutput";
+import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "../textTruncation";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
 import type { ToolBuilder, ToolExecutionOptions, ToolRunner } from "./types";
 

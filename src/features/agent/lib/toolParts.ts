@@ -1,5 +1,5 @@
 import type { AgentPart, AgentRunStatus } from "./types";
-import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "./subagentOutput";
+import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "./textTruncation";
 
 const MISSING_TOOL_CALL_ID_ERROR = "toolCallId 缺失。";
 const TOOL_CALL_NOT_FOUND_ERROR = "未匹配到对应的工具调用。";

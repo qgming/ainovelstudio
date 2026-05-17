@@ -241,13 +241,6 @@ export function serializeAgentMessageToModelMessages(message: AgentMessage): Mod
       return;
     }
 
-    if (part.type === "subagent") {
-      if (assistantHasToolCall) flushAssistant();
-      const text = [part.summary, part.detail ?? ""].filter(Boolean).join("\n").trim();
-      if (text) assistantContent.push({ type: "text", text } as ModelAssistantPart);
-      return;
-    }
-
     const fallback = buildFallbackTextPart(part, normalizedParts, index);
     if (fallback) {
       if (assistantHasToolCall) flushAssistant();
@@ -303,13 +296,6 @@ function serializeAgentPart(
       return hasPreviousToolCall(parts, index) ? null : serializeToolExecution(part, undefined, mode);
     case "ask-user":
       return null;
-    case "subagent":
-      return [
-        `子任务（${part.name}）：${truncateText(part.summary, textLimit)}`,
-        truncateText(part.detail ?? "", textLimit) || null,
-      ]
-        .filter(Boolean)
-        .join("\n");
     default:
       return null;
   }
@@ -367,9 +353,6 @@ function serializeCompactAgentMessage(message: AgentMessage): SerializedHistoryM
       }
       if (part.type === "reasoning") {
         return [serializeReasoning(part, MAX_COMPACT_MESSAGE_CHARS)];
-      }
-      if (part.type === "subagent") {
-        return [truncateText([part.summary, part.detail ?? ""].filter(Boolean).join(" "), MAX_COMPACT_MESSAGE_CHARS)];
       }
       return [];
     })

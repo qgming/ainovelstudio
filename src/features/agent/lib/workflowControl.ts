@@ -18,9 +18,11 @@ export type WorkflowRunStatus = "empty" | "draft" | "pending_approval" | "runnin
 export type WorkflowNodeRunStatus = "pending" | "running" | "completed" | "blocked" | "skipped";
 
 export type WorkflowNodeDefinition = {
-  agentCardId: string;
   gate: string;
   id: string;
+  outputContract?: string;
+  roleId: string;
+  systemPrompt: string;
   title: string;
   tools?: string[];
   type: WorkflowNodeType;
@@ -68,6 +70,7 @@ export type WorkflowState = {
 
 export type WorkflowControlResult = {
   accepted: boolean;
+  currentNodeInstruction?: string;
   kind: typeof WORKFLOW_CONTROL_KIND;
   message: string;
   missing: string[];
@@ -137,9 +140,11 @@ function normalizeNode(value: unknown, index: number): WorkflowNodeDefinition | 
   const title = normalizeString(value.title, `节点 ${index + 1}`);
   const id = slugifyId(normalizeString(value.id, title), `node-${index + 1}`);
   return {
-    agentCardId: normalizeString(value.agentCardId, "book"),
     gate: normalizeString(value.gate, "提交可验证完成证据。"),
     id,
+    outputContract: normalizeOptionalString(value.outputContract),
+    roleId: normalizeString(value.roleId, "book"),
+    systemPrompt: normalizeString(value.systemPrompt, `只执行“${title}”节点，满足节点门禁后提交证据。`),
     title,
     tools: normalizeTools(value.tools),
     type: normalizeNodeType(value.type),
@@ -214,12 +219,49 @@ export function createInitialWorkflowState(): WorkflowState {
   };
 }
 
+export function getCurrentWorkflowNode(state: WorkflowState) {
+  if (!state.definition || !state.currentNodeId) return null;
+  return state.definition.nodes.find((node) => node.id === state.currentNodeId) ?? null;
+}
+
+export function formatCurrentWorkflowNodeInstruction(state: WorkflowState) {
+  const node = getCurrentWorkflowNode(state);
+  if (!node) return undefined;
+  return [
+    `# 当前工作流节点：${node.title}`,
+    `- nodeId：${node.id}`,
+    `- type：${node.type}`,
+    `- roleId：${node.roleId}`,
+    node.tools?.length ? `- 建议工具：${node.tools.join(", ")}` : null,
+    `- 完成门禁：${node.gate}`,
+    node.outputContract ? `- 输出契约：${node.outputContract}` : null,
+    "",
+    "## 节点补充系统提示词",
+    node.systemPrompt,
+  ].filter((line): line is string => line !== null).join("\n");
+}
+
 function accept(state: WorkflowState, message: string): WorkflowControlResult {
-  return { accepted: true, kind: WORKFLOW_CONTROL_KIND, message, missing: [], state };
+  return {
+    accepted: true,
+    currentNodeInstruction: formatCurrentWorkflowNodeInstruction(state),
+    kind: WORKFLOW_CONTROL_KIND,
+    message,
+    missing: [],
+    state,
+  };
 }
 
 function reject(state: WorkflowState, message: string, missing: string[]): WorkflowControlResult {
-  return { accepted: false, kind: WORKFLOW_CONTROL_KIND, message, missing, state: cloneState(state) };
+  const clonedState = cloneState(state);
+  return {
+    accepted: false,
+    currentNodeInstruction: formatCurrentWorkflowNodeInstruction(clonedState),
+    kind: WORKFLOW_CONTROL_KIND,
+    message,
+    missing,
+    state: clonedState,
+  };
 }
 
 function appendHistory(
@@ -482,7 +524,11 @@ export function formatWorkflowState(state: WorkflowState) {
         : runtime?.status === "blocked"
           ? "[!]"
           : "[ ]";
-    return `${index + 1}. ${marker} ${node.title}（${node.type} / ${node.agentCardId}）门禁：${node.gate}`;
+    return [
+      `${index + 1}. ${marker} ${node.title}（${node.type} / ${node.roleId}）门禁：${node.gate}`,
+      runtime?.status === "running" ? `   节点提示：${node.systemPrompt}` : null,
+      runtime?.status === "running" && node.outputContract ? `   输出契约：${node.outputContract}` : null,
+    ].filter(Boolean).join("\n");
   });
 
   return [

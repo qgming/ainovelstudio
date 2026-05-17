@@ -82,9 +82,11 @@ const yoloControlInputSchema = z.object({
 });
 
 const workflowNodeSchema = z.object({
-  agentCardId: z.string().min(1).describe("执行该节点的固定 agent card，例如 chapter-write、continuity-review、state-maintain、book。"),
   gate: z.string().min(1).describe("节点完成门禁，必须能通过 evidence 验证。"),
   id: z.string().min(1).describe("节点稳定 id，短横线或下划线命名。"),
+  outputContract: z.string().optional().describe("可选。该节点必须产出的格式、写回路径、证据要求或汇报结构。"),
+  roleId: z.string().min(1).describe("该节点的执行职责 ID，例如 inspect、chapter-write、continuity-review、state-maintain、report。"),
+  systemPrompt: z.string().min(1).describe("节点专属补充系统提示词。写清身份、执行边界、判断标准、禁止事项和输出要求。"),
   title: z.string().min(1).describe("节点名称，短而清楚。"),
   tools: z.array(z.string()).optional().describe("该节点建议使用的工具 id。"),
   type: z.enum(["task", "decision", "loop", "parallel", "report"]).default("task"),

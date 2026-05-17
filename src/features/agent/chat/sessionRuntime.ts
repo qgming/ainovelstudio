@@ -27,8 +27,6 @@ function extractPartText(part: AgentPart): string {
       return [part.inputSummary, part.outputSummary].filter(Boolean).join(" ");
     case "tool-result":
       return part.outputSummary;
-    case "subagent":
-      return [part.summary, part.detail].filter(Boolean).join(" ");
     default:
       return "";
   }
@@ -85,17 +83,6 @@ function normalizeRecoveredPart(part: AgentPart): AgentPart | null {
       ...part,
       status: "failed",
       errorMessage: part.errorMessage ?? "等待用户输入的交互已中断，请重新发起。",
-    };
-  }
-
-  if (part.type === "subagent") {
-    return {
-      ...part,
-      status: part.status === "running" ? "failed" : part.status,
-      detail: part.status === "running"
-        ? part.detail ?? "执行已中断。"
-        : part.detail,
-      parts: normalizeRecoveredMessageParts(part.parts),
     };
   }
 
@@ -169,16 +156,6 @@ export function mergePart(parts: AgentPart[], part: AgentPart): AgentPart[] {
     const last = nextParts[nextParts.length - 1];
     if (last?.type === "reasoning") {
       return [...nextParts.slice(0, -1), { ...last, detail: last.detail + part.detail }];
-    }
-    return [...nextParts, part];
-  }
-
-  if (part.type === "subagent") {
-    const existingIndex = nextParts.findIndex(
-      (candidate) => candidate.type === "subagent" && candidate.id === part.id,
-    );
-    if (existingIndex >= 0) {
-      return nextParts.map((candidate, index) => (index === existingIndex ? { ...candidate, ...part } : candidate));
     }
     return [...nextParts, part];
   }

@@ -13,7 +13,6 @@ import { agentLoop } from "./core/loop";
 import { createAsyncQueue } from "./core/partQueue";
 import { resolveAgentStepLimit } from "./core/stepLimits";
 import { createScopedAskUser } from "./askRuntime";
-import { createTaskTool } from "./taskTool";
 import type { AgentSessionEvent } from "./core/events";
 import type { AgentPart } from "./types";
 import { hasProviderConfig, type WritingRuntimeContext } from "./writingRuntimeContext";
@@ -74,7 +73,6 @@ function buildPromptPieces(prompt: string, context: WritingRuntimeContext) {
     planningState: context.planningState,
     workspaceRootPath: context.workspaceRootPath,
     prompt,
-    subagentAnalysis: null,
   });
   const materialContext = buildUserTurnContent({
     activeFilePath: context.activeFilePath,
@@ -84,7 +82,6 @@ function buildPromptPieces(prompt: string, context: WritingRuntimeContext) {
     projectContext: context.projectContext,
     workspaceRootPath: context.workspaceRootPath,
     prompt,
-    subagentAnalysis: null,
   });
   return { materialContext, runtimeControl };
 }
@@ -103,17 +100,6 @@ function buildTools(
     { askUser },
   );
 
-  if (context.enabledToolIds.includes("delegate_task")) {
-    aiTools.delegate_task = createTaskTool({
-      abortSignal,
-      enabledSkills: context.enabledSkills,
-      enabledToolIds: context.enabledToolIds,
-      enqueuePart,
-      providerConfig: context.providerConfig,
-      streamFn: context.subagentStreamFn ?? streamAgentText,
-      workspaceTools: context.workspaceTools,
-    });
-  }
   return aiTools;
 }
 

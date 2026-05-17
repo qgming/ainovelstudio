@@ -4,13 +4,11 @@ import { INTERACTION_TOOL_SPECS } from "../ai-sdk-tools/interactionBuilders";
 import { READ_TOOL_SPECS } from "../ai-sdk-tools/readBuilders";
 import { renderToolParameters, type AgentToolPromptSpec } from "../ai-sdk-tools/toolPromptSpecs";
 import { WRITE_TOOL_SPECS } from "../ai-sdk-tools/writeBuilders";
-import { TASK_TOOL_SPEC } from "../taskTool";
 import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "../toolDefs";
 import { joinSections } from "./shared";
 
 const TOOL_SPECS: Record<string, AgentToolPromptSpec> = {
   ...INTERACTION_TOOL_SPECS,
-  delegate_task: TASK_TOOL_SPEC,
   ...READ_TOOL_SPECS,
   ...WRITE_TOOL_SPECS,
   ...DATA_TOOL_SPECS,

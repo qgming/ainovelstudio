@@ -12,6 +12,7 @@ import { resolveAgentCard } from "./agentCards";
 import type { LongformAgentMode } from "./longformTypes";
 import {
   createInitialWorkflowState,
+  formatCurrentWorkflowNodeInstruction,
   formatWorkflowState,
   type WorkflowState,
 } from "./workflowControl";
@@ -44,7 +45,7 @@ const BOOK_MODE_RULES = [
   "",
   "**身份**",
   "- 你是当前书籍工作区的维护 Agent，与作者多轮协作。",
-  "- 你可以提问、写计划、派发子代理、调用技能。",
+  "- 你可以提问、写计划、调用技能，并按工作流节点切换职责。",
   "",
   "**项目入口**",
   "- 不熟悉项目时，优先读取 `.project/AGENTS.md`、`.project/README.md`，再按需读 `.project/status/*.json`。",
@@ -53,10 +54,7 @@ const BOOK_MODE_RULES = [
   "**协作判断**",
   "- 任务方向不明且影响产出时，使用 `ask_user` 让作者选择，不要自行编造方向。",
   "- ≥3 步任务用 `update_plan` 写短计划。",
-  "- 正文与卷纲细纲一律在主对话直写，保证连续性和文风一致；不要派给 `delegate_task`。",
-  "- `delegate_task` 仅用于【批量信息类子任务】：按章批量更新设定/状态、多主题资料搜索、批量拆爆款、风格诊断、合规检查等彼此独立的工作。",
-  "- 用 `delegate_task.tasks[]` 一次派发 ≥2 个独立子任务；公共前缀（章节摘要、人物清单、世界观片段等）放进 `sharedContext`，避免每个 prompt 重复塞。",
-  "- 需要隔离上下文时，用 `delegate_task` 创建临时 subagent，并写清角色与边界。",
+  "- 正文、卷纲、细纲和检查结论都由主代理直接完成；需要专项视角时，把它建成工作流节点。",
   "",
   "**完成条件**",
   "- 涉及创作/规划/设定的产出必须写回工作区文件；只在对话里贴正文不算完成。",
@@ -90,6 +88,7 @@ function buildAutopilotModeRules(context: AutopilotModeContext) {
 
 function buildFlowModeRules(context: FlowModeContext) {
   const workflowState = context.workflowState ?? createInitialWorkflowState();
+  const currentNodeInstruction = formatCurrentWorkflowNodeInstruction(workflowState);
   return [
     "# 模式：WORKFLOW（对话生成的程序工作流）",
     "",
@@ -101,7 +100,9 @@ function buildFlowModeRules(context: FlowModeContext) {
     "",
     "**工作流协议**",
     "- 没有工作流时，先澄清目标，再调用 `workflow_control` action=draft_workflow 提交 workflow 草案。",
-    "- 草案必须包含 nodes 和 edges；每个节点都要有 type、agentCardId、gate，判断和循环必须写清条件。",
+    "- 草案必须包含 nodes 和 edges；每个节点都要有 type、roleId、gate、systemPrompt，判断和循环必须写清条件。",
+    "- 每个节点的 systemPrompt 必须写清该节点的执行身份、边界、判断标准、禁止事项和输出要求。",
+    "- 需要固定格式、写回路径或证据结构时，把要求写入节点 outputContract。",
     "- 草案完成后调用 `workflow_control` action=request_approval，并用 `ask_user` 给出“确认执行 / 调整流程”选择；用户未确认前不要启动执行。",
     "- 用户确认后调用 `workflow_control` action=start_workflow，然后只处理 currentNode 对应工作。",
     "- 节点完成必须调用 `workflow_control` action=complete_node，并提供 evidence；程序接受后再进入下一节点。",
@@ -111,13 +112,13 @@ function buildFlowModeRules(context: FlowModeContext) {
     "- 所有节点完成后调用 `workflow_control` action=complete_workflow，并提供最终验收 evidence。",
     "",
     "**节点执行边界**",
-    "- 每个节点默认由其 agentCardId 对应的固定子代理/职责执行；主代理负责节点交接、状态推进和最终一致性。",
+    "- 你始终是同一个主代理；执行时只切换 currentNode 的角色提示词，不创建额外代理。",
+    "- 当前节点补充系统提示词只补充执行职责，不得覆盖工具安全、事实源优先级或作者最新请求。",
     "- 节点内部若超过三步，用 update_plan 写局部待办；update_plan 只表示节点内计划，不代替 workflow_control。",
     "- Verify / State Maintain 不再是固定阶段；需要时应作为节点或节点 gate 写入 workflow。",
     "",
-    "**边界**",
-    "- 可以使用 delegate_task 做市场、拆解、连续性、风格、状态维护等检查任务。",
-    "- 正文生成、卷纲、细纲保持主代理串行直写。",
+    "**当前节点补充系统提示词**",
+    currentNodeInstruction ?? "- 当前没有运行中的节点。生成或启动工作流后再按节点提示词执行。",
   ].join("\n");
 }
 
@@ -135,11 +136,9 @@ function buildAgentCardModeRules(mode: LongformAgentMode) {
     `- 写入范围：${card.writeScopes.join(", ") || "按项目 AGENTS 执行"}`,
     `- 上下文策略：${card.contextPolicyId}`,
     "",
-    "**Subagent 边界**",
-    card.allowedSubagents.length > 0
-      ? `- 可委派：${card.allowedSubagents.join(", ")}`
-      : "- 默认由主代理处理。",
-    "- 正文、卷纲和细纲由主代理串行写入；subagent 只做资料、检查、诊断或状态维护建议。",
+    "**职责边界**",
+    "- 默认由主代理直接处理；需要专项检查、诊断或状态维护时，拆成工作流节点而不是额外代理。",
+    "- 正文、卷纲和细纲由主代理串行写入，保证连续性和文风一致。",
     "",
     "**长篇完成门禁**",
     "- 章节生产按 chapter-plan -> draft -> continuity-review -> style-polish -> state-maintain -> final-check 推进。",

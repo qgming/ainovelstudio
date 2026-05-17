@@ -7,7 +7,6 @@ export type LongformAgentMode =
   | "state-maintain";
 
 export type AgentCard = {
-  allowedSubagents: string[];
   banTools: string[];
   body: string;
   contextPolicyId: string;

@@ -196,7 +196,7 @@ describe("BookWorkspaceView", () => {
     expect(screen.getByRole("tree", { name: "书籍文件树" })).toBeInTheDocument();
     expect(screen.getByText("第一卷")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Agent" })).toBeInTheDocument();
-    expect(screen.queryByText("支持消息流、工具调用、子代理和深度思考展示")).not.toBeInTheDocument();
+    expect(screen.queryByText("支持消息流、工具调用和深度思考展示")).not.toBeInTheDocument();
   });
 
   it("点击文本文件后会自动保存编辑内容", async () => {

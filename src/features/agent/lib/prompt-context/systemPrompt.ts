@@ -1,7 +1,5 @@
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
 import { buildModeRules, type AgentMode, type ModeContextMap } from "../modeRules";
-import type { RuntimeSubAgentProfile } from "../subagentProfile";
-import { normalizeSuggestedToolIds } from "../toolDefs";
 import { buildDynamicResourceDirectory } from "./dynamicResources";
 import { joinSections, renderPromptSections } from "./shared";
 
@@ -45,22 +43,6 @@ const AGENT_OS_KERNEL = [
   "- 工具 schema 是调用依据；技能目录只用于发现，完整规则必须读取 SKILL.md。",
 ].join("\n");
 
-function buildSubAgentManifestSummary(agent: RuntimeSubAgentProfile) {
-  return [
-    `- id：${agent.id}`,
-    `- name：${agent.name}`,
-    `- description：${agent.description}`,
-    `- role：${agent.role || "未填写"}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function readSkillHeaderString(skill: ResolvedSkill, key: string) {
-  const value = skill.frontmatter?.[key];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 export function buildSystemPrompt<M extends AgentMode = AgentMode>({
   defaultAgentMarkdown,
   enabledSkills,
@@ -84,7 +66,7 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
     return buildModeRules(effectiveMode, (modeContext ?? {}) as ModeContextMap[typeof effectiveMode]);
   })();
 
-  const envBody = "你正在神笔写作的图书项目编辑模式运行。你可以多轮协作，按当前启用资源调用工具、读取技能和创建临时 subagent。";
+  const envBody = "你正在神笔写作的图书项目编辑模式运行。你可以多轮协作，按当前启用资源调用工具、读取技能并执行工作流节点。";
 
   return joinSections([
     "# 主代理系统上下文",
@@ -112,90 +94,6 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
       {
         title: "模式规则",
         body: modeRulesBody,
-      },
-      {
-        title: "临时 Subagent",
-        body: enabledToolIds.includes("delegate_task")
-          ? "需要并行、隔离上下文或专项视角时，调用 delegate_task 并写清 agentName、role、instructions 和任务边界。"
-          : null,
-      },
-    ]),
-  ]);
-}
-
-export function buildSubAgentSystem(
-  agent: RuntimeSubAgentProfile,
-  enabledSkills: ResolvedSkill[],
-) {
-  const skillBlock =
-    enabledSkills.length > 0
-      ? enabledSkills
-          .map((skill) => {
-            const suggestedTools = normalizeSuggestedToolIds(
-              skill.suggestedTools,
-            );
-            return [
-              `### 技能：${readSkillHeaderString(skill, "name") ?? skill.name}`,
-              `- 说明：${readSkillHeaderString(skill, "description") ?? skill.description}`,
-              suggestedTools.length > 0
-                ? `- 推荐工具：${suggestedTools.join(", ")}`
-                : "- 推荐工具：无",
-              '- 需要完整规则时，使用 skill_read 工具读取 relativePath="SKILL.md"。',
-            ].join("\n");
-          })
-          .join("\n\n")
-      : "- 当前没有额外技能。";
-
-  return joinSections([
-    "# 子任务执行上下文",
-    renderPromptSections([
-      {
-        title: "执行模型",
-        body: [
-          "你正在替父代理执行一个一次性子任务。",
-          "这是全新的独立上下文，不继承父对话 messages。",
-          "你的中间过程不会自动写回父上下文，只有最终摘要会被带回。",
-        ].join("\n"),
-      },
-      {
-        title: "子任务档案",
-        body: [
-          `- 子任务来源：${agent.name}`,
-          agent.role ? `- 专长方向：${agent.role}` : null,
-          `- 任务说明：${agent.description}`,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      },
-      {
-        title: "上下文边界",
-        body: [
-          "- 只处理当前被拆出的局部任务，不要扩展成主任务总控。",
-          "- 只使用当前提供的工具与资料，不要继续派生新的子任务。",
-          "- 继承父代理当前已启用的全部工具。",
-          "- 如果信息不足，基于现有工具做最小读取与最小验证。",
-        ].join("\n"),
-      },
-      {
-        title: "任务资料",
-        body: [
-          "AGENTS.md：",
-          agent.body,
-          "临时档案：",
-          buildSubAgentManifestSummary(agent),
-        ].join("\n\n"),
-      },
-      {
-        title: "返回格式",
-        body: [
-          "- 只返回对子任务真正有价值的摘要、结论、建议或结果。",
-          "- 不要解释你的内部执行过程，不要回放完整工具流水。",
-          "- 输出将由父代理继续整合，因此优先给高密度结论。",
-        ].join("\n"),
-      },
-      {
-        title: "可参考技能",
-        body: skillBlock,
       },
     ]),
   ]);

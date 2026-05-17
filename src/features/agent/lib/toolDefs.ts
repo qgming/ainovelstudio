@@ -34,12 +34,6 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "工作流模式专用工具；用于草拟流程、请求确认、启动执行、推进节点、选择分支、循环、阻塞和完成工作流。",
   },
   {
-    id: "delegate_task",
-    name: "临时子任务",
-    description:
-      "按需创建一次性 subagent，在独立上下文中执行局部任务；可直接传入角色、职责和补充指令，无需预装代理。",
-  },
-  {
     id: "workspace_browse",
     name: "浏览工作区",
     description:
