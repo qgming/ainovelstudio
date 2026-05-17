@@ -111,6 +111,48 @@ describe("planning", () => {
     });
   });
 
+  it("兼容 AI SDK 工具输出包装后的 update_plan 数据", () => {
+    const messages: AgentMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        author: "主代理",
+        parts: [
+          {
+            type: "tool-call",
+            toolCallId: "update-plan-1",
+            toolName: "update_plan",
+            status: "completed",
+            inputSummary: "{\"items\":[]}",
+            output: {
+              ok: true,
+              summary: "[>] Inspect runtime",
+              data: {
+                items: [
+                  { content: "Inspect runtime", status: "in_progress", activeForm: "Inspecting runtime" },
+                ],
+                rendered: "[>] Inspect runtime",
+              },
+            },
+            outputSummary: JSON.stringify({
+              ok: true,
+              summary: "[>] Inspect runtime",
+              data: {
+                items: [
+                  { content: "Inspect runtime", status: "in_progress", activeForm: "Inspecting runtime" },
+                ],
+              },
+            }),
+          },
+        ],
+      },
+    ];
+
+    expect(derivePlanningState(messages).items).toEqual([
+      { content: "Inspect runtime", status: "in_progress", activeForm: "Inspecting runtime" },
+    ]);
+  });
+
   it("把计划渲染成稳定的状态文本", () => {
     expect(
       renderPlanItems([

@@ -18,7 +18,7 @@ import type {
 import {
   mapSkillForTool,
   normalizeSkillAction,
-  normalizeTodoItems,
+  normalizeTodoToolInput,
 } from "./resourceHelpers";
 import {
   asPositiveInt,
@@ -175,7 +175,7 @@ export function createLocalResourceToolset({
     update_plan: {
       description: "更新当前会话中的待办计划",
       execute: async (input) => {
-        const items = normalizeTodoItems(input.items);
+        const { items } = normalizeTodoToolInput(input);
         const rendered = renderPlanItems(items);
         return ok(rendered || "当前计划已清空。", {
           items,

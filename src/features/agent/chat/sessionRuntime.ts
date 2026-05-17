@@ -22,7 +22,7 @@ function extractPartText(part: AgentPart): string {
     case "text":
       return part.text;
     case "reasoning":
-      return [part.summary, part.detail].filter(Boolean).join(" ");
+      return part.detail;
     case "tool-call":
       return [part.inputSummary, part.outputSummary].filter(Boolean).join(" ");
     case "tool-result":

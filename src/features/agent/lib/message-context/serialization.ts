@@ -79,16 +79,12 @@ function serializeReasoning(
   part: Extract<AgentPart, { type: "reasoning" }>,
   maxChars: number,
 ) {
-  const summary = compactText(part.summary);
   const detail = compactText(part.detail);
-  const content = summary && detail && summary !== detail
-    ? `${stripTrailingSentencePunctuation(summary)}；${detail}`
-    : summary || detail;
-  return content ? `思考摘要：${truncateText(content, maxChars)}` : null;
+  return detail ? `思考摘要：${truncateText(detail, maxChars)}` : null;
 }
 
 function getReasoningText(part: Extract<AgentPart, { type: "reasoning" }>) {
-  return (part.detail || part.summary).trim();
+  return part.detail.trim();
 }
 
 function tryParseJson(value: string) {

@@ -2048,7 +2048,7 @@ describe("createLocalResourceToolset", () => {
     ).rejects.toThrow("Only one item can be in_progress");
   });
 
-  it("update_plan 工具只接受标准 items 数组", async () => {
+  it("update_plan 工具兼容 items/todos 和 task/content 字段", async () => {
     const toolset = createLocalResourceToolset();
 
     const result = await toolset.update_plan.execute({
@@ -2068,14 +2068,25 @@ describe("createLocalResourceToolset", () => {
       },
     });
 
-    await expect(toolset.update_plan.execute({
-      todos: [
-        { content: "Inspect workspace", status: "completed" },
-      ],
-    })).rejects.toThrow("update_plan.items 必须是数组。");
+    const aliasResult = await toolset.update_plan.execute({
+      todos: JSON.stringify([
+        { status: "completed", task: "(inspect) Inspect workspace" },
+        { status: "in_progress", task: "(write) Patch todo tool", active: "正在修复 todo" },
+      ]),
+    });
+
+    expect(aliasResult).toMatchObject({
+      ok: true,
+      data: {
+        items: [
+          { activeForm: "", content: "Inspect workspace", phase: "inspect", status: "completed" },
+          { activeForm: "正在修复 todo", content: "Patch todo tool", phase: "write", status: "in_progress" },
+        ],
+      },
+    });
   });
 
-  it("update_plan AI schema 只暴露 items 数组", () => {
+  it("update_plan AI schema 会把常见别名规范化成 items 数组", () => {
     const builders = createInteractionToolBuilders(async (_toolName, _tool, input) => ({
       ok: true,
       summary: "ok",
@@ -2095,11 +2106,15 @@ describe("createLocalResourceToolset", () => {
         { activeForm: "正在检查", content: "Inspect workspace", status: "in_progress" },
       ],
     });
-    expect(() => schema.parse({
+    expect(schema.parse({
       todos: JSON.stringify([
-        { content: "Inspect workspace", status: "in_progress", activeForm: "正在检查" },
+        { task: "(inspect) Inspect workspace", status: "in_progress", activeForm: "正在检查" },
       ]),
-    })).toThrow();
+    })).toEqual({
+      items: [
+        { activeForm: "正在检查", content: "Inspect workspace", phase: "inspect", status: "in_progress" },
+      ],
+    });
   });
 
   it("ask_user 工具会自动追加用户输入选项并返回结构化答案", async () => {

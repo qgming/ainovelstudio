@@ -204,7 +204,7 @@ function mapSubagentStreamPart(part: SubagentStreamPart): AgentPart | null {
     case "reasoning-delta":
       return {
         type: "reasoning",
-        summary: "正在思考",
+        summary: "",
         detail: part.text,
       };
     case "tool-call":

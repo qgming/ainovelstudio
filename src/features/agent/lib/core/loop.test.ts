@@ -306,7 +306,7 @@ describe("agentLoop", () => {
     }
 
     expect(streamFn).toHaveBeenCalledTimes(1);
-    expect(parts).toEqual([{ type: "reasoning", summary: "正在思考", detail: "只返回了思考。" }]);
+    expect(parts).toEqual([{ type: "reasoning", summary: "", detail: "只返回了思考。" }]);
   });
 
   it("AI 请求连续失败 5 次时只展示最近一次失败报告", async () => {

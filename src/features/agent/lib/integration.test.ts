@@ -1613,7 +1613,7 @@ describe("agent session (streaming)", () => {
       parts: [],
     });
     expect(subagentParts[3].parts).toEqual([
-      { type: "reasoning", summary: "正在思考", detail: "正在分析人物动机。" },
+      { type: "reasoning", summary: "", detail: "正在分析人物动机。" },
       {
         type: "tool-call",
         toolName: "workspace_read",

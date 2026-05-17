@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MODE_CONTROL_DEFAULT_MODE } from "../modeControl";
+import { normalizeTodoToolInput } from "../tools/resourceHelpers";
 import { createAiSdkToolBuilder } from "./output";
 import type { ToolBuilder, ToolRunner } from "./types";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
@@ -61,11 +62,11 @@ const askInputSchema = z.object({
     .describe("确认按钮文案；通常不填。"),
 });
 
-const todoObjectInputSchema = z.object({
+const todoObjectInputSchema = z.preprocess((value) => normalizeTodoToolInput(value), z.object({
   items: z
     .array(todoItemSchema)
     .describe("当前整份计划数组。每次传完整计划，保持最多一个 in_progress；简单任务可不用 todo。"),
-});
+}));
 
 const modeControlInputSchema = z.object({
   mode: z

@@ -8,8 +8,8 @@ describe("AgentPartRenderer", () => {
       <AgentPartRenderer
         part={{
           type: "reasoning",
-          summary: "**思考重点**",
-          detail: "- 条目一\n- 条目二",
+          summary: "",
+          detail: "**思考重点**\n\n- 条目一\n- 条目二",
         }}
       />,
     );
@@ -21,7 +21,7 @@ describe("AgentPartRenderer", () => {
     expect(screen.getByText("条目二").tagName).toBe("LI");
   });
 
-  it("工具卡片展开后对输入和输出都使用 Markdown 渲染", () => {
+  it("工具卡片展开后只渲染输出内容", () => {
     render(
       <AgentPartRenderer
         part={{
@@ -37,13 +37,13 @@ describe("AgentPartRenderer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /read_file/ }));
 
-    expect(screen.getByText("章节/第一章.md").tagName).toBe("LI");
+    expect(screen.queryByText("章节/第一章.md")).not.toBeInTheDocument();
     const codeBlock = screen.getByText('{"ok":true}');
     expect(codeBlock.tagName).toBe("CODE");
     expect(codeBlock.closest("pre")).not.toBeNull();
   });
 
-  it("工具卡片会格式化显示 JSON 参数和结果", () => {
+  it("工具卡片会格式化显示 JSON 结果且不显示 JSON 参数", () => {
     render(
       <AgentPartRenderer
         part={{
@@ -60,11 +60,11 @@ describe("AgentPartRenderer", () => {
     fireEvent.click(screen.getByRole("button", { name: /read_workspace_tree/ }));
 
     const codeBlocks = screen.getAllByText((_, element) => element?.tagName === "CODE");
-    expect(codeBlocks).toHaveLength(2);
-    expect(codeBlocks[0]).toHaveTextContent('"path": "章节/第一章.md"');
-    expect(codeBlocks[0]).toHaveTextContent('"deep": true');
-    expect(codeBlocks[1]).toHaveTextContent('"name": "北境余烬"');
-    expect(codeBlocks[1]).toHaveTextContent('"children": [');
+    expect(codeBlocks).toHaveLength(1);
+    expect(codeBlocks[0]).not.toHaveTextContent('"path": "章节/第一章.md"');
+    expect(codeBlocks[0]).not.toHaveTextContent('"deep": true');
+    expect(codeBlocks[0]).toHaveTextContent('"name": "北境余烬"');
+    expect(codeBlocks[0]).toHaveTextContent('"children": [');
   });
 
   it("思考卡片展开后点击内容区域可以折叠", () => {
@@ -79,10 +79,11 @@ describe("AgentPartRenderer", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /思考/ }));
-    expect(screen.getByText("正在分析请求。")).toBeInTheDocument();
+    expect(screen.getAllByText("正在分析请求。").length).toBeGreaterThan(0);
+    expect(screen.queryByText("正在思考")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button")[1]);
-    expect(screen.queryByText("正在分析请求。")).not.toBeInTheDocument();
+    expect(screen.getAllByText("正在分析请求。")).toHaveLength(1);
   });
 
   it("ask 卡片在等待输入时显示题面，在完成后显示已提交摘要", () => {
@@ -134,5 +135,35 @@ describe("AgentPartRenderer", () => {
 
     expect(screen.getByText(/已提交：推进主线/)).toBeInTheDocument();
     expect(screen.getByLabelText("运行成功")).toBeInTheDocument();
+  });
+
+  it("update_plan 工具调用渲染为任务进度卡片", () => {
+    render(
+      <AgentPartRenderer
+        part={{
+          type: "tool-call",
+          toolName: "update_plan",
+          toolCallId: "plan-1",
+          status: "completed",
+          inputSummary: "{\"items\":[]}",
+          output: {
+            ok: true,
+            summary: "[x] 定位问题\n[>] 修复 UI",
+            data: {
+              items: [
+                { content: "定位问题", status: "completed", activeForm: "" },
+                { content: "修复 UI", status: "in_progress", activeForm: "正在修复 UI" },
+              ],
+            },
+          },
+          outputSummary: "",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("任务进度")).toBeInTheDocument();
+    expect(screen.getByText("1. 定位问题")).toBeInTheDocument();
+    expect(screen.getByText("2. 修复 UI")).toBeInTheDocument();
+    expect(screen.getAllByText("正在修复 UI").length).toBeGreaterThan(0);
   });
 });

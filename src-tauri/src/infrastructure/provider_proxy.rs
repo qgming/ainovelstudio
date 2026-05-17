@@ -3,6 +3,7 @@ use super::provider_forward::{
     ForwardProviderResponse, FORWARD_REQUEST_TIMEOUT_SECS,
 };
 use crate::app::ToolCancellationRegistry;
+use crate::domains::debug::commands::{record_ai_call_log, NewAiCallLog};
 use futures_util::StreamExt;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
@@ -126,29 +127,67 @@ fn build_request_headers(
 }
 
 async fn send_request(
+    app: Option<&AppHandle>,
     config: AgentProviderConfig,
     path: &str,
     method: reqwest::Method,
     body: Option<Value>,
 ) -> CommandResult<ProviderHttpResponse> {
     let url = format!("{}{}", normalize_base_url(&config.base_url), path);
+    let method_label = method.as_str().to_string();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .build()
         .map_err(|error| error.to_string())?;
 
     let mut request = client
-        .request(method, url)
+        .request(method, url.clone())
         .headers(build_request_headers(&config, body.is_some())?);
 
-    if let Some(body) = body {
-        request = request.json(&body);
+    let request_body = body.as_ref().map(Value::to_string).unwrap_or_default();
+    if let Some(body) = body.as_ref() {
+        request = request.json(body);
     }
 
-    let response = request.send().await.map_err(|error| error.to_string())?;
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(error) => {
+            let message = error.to_string();
+            if let Some(app) = app.filter(|_| path == "/chat/completions") {
+                let _ = record_ai_call_log(
+                    app,
+                    NewAiCallLog {
+                        method: method_label,
+                        url,
+                        status: 0,
+                        ok: false,
+                        request_json: request_body,
+                        response_json: String::new(),
+                        error: message.clone(),
+                    },
+                );
+            }
+            return Err(message);
+        }
+    };
     let status = response.status().as_u16();
     let ok = response.status().is_success();
     let body = response.text().await.map_err(|error| error.to_string())?;
+
+    if let Some(app) = app.filter(|_| path == "/chat/completions") {
+        let _ = record_ai_call_log(
+            app,
+            NewAiCallLog {
+                method: method_label,
+                url,
+                status,
+                ok,
+                request_json: request_body,
+                response_json: body.clone(),
+                error: String::new(),
+            },
+        );
+    }
 
     Ok(ProviderHttpResponse { ok, status, body })
 }
@@ -157,11 +196,12 @@ async fn send_request(
 pub async fn fetch_provider_models(
     config: AgentProviderConfig,
 ) -> CommandResult<ProviderHttpResponse> {
-    send_request(config, "/models", reqwest::Method::GET, None).await
+    send_request(None, config, "/models", reqwest::Method::GET, None).await
 }
 
 #[tauri::command]
 pub async fn probe_provider_connection(
+    app: AppHandle,
     config: AgentProviderConfig,
 ) -> CommandResult<ProviderHttpResponse> {
     let body = json!({
@@ -179,6 +219,7 @@ pub async fn probe_provider_connection(
     });
 
     send_request(
+        Some(&app),
         config,
         "/chat/completions",
         reqwest::Method::POST,
@@ -244,11 +285,24 @@ pub async fn stream_provider_request(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "流式请求缺少 requestId。".to_string())?;
+    let request_for_error_log = request.clone();
     registry.begin(Some(&request_id));
 
     let result = stream_provider_request_inner(&app, request, &request_id, &registry).await;
     registry.finish(Some(&request_id));
     if let Err(message) = result {
+        let _ = record_ai_call_log(
+            &app,
+            NewAiCallLog {
+                method: request_for_error_log.method,
+                url: request_for_error_log.url,
+                status: 0,
+                ok: false,
+                request_json: request_for_error_log.body.unwrap_or_default(),
+                response_json: String::new(),
+                error: message.clone(),
+            },
+        );
         emit_stream_event(
             &app,
             ProviderStreamEvent::Error {
@@ -276,6 +330,9 @@ async fn stream_provider_request_inner(
     request_id: &str,
     registry: &ToolCancellationRegistry,
 ) -> CommandResult<()> {
+    let log_method = request.method.clone();
+    let log_url = request.url.clone();
+    let log_request_json = request.body.clone().unwrap_or_default();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(FORWARD_REQUEST_TIMEOUT_SECS))
         .build()
@@ -320,10 +377,12 @@ async fn stream_provider_request_inner(
         },
     );
 
+    let mut response_body = Vec::<u8>::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         registry.check(Some(request_id))?;
         let chunk = chunk.map_err(|error| error.to_string())?;
+        response_body.extend_from_slice(&chunk);
         emit_stream_event(
             app,
             ProviderStreamEvent::Chunk {
@@ -337,6 +396,18 @@ async fn stream_provider_request_inner(
         app,
         ProviderStreamEvent::End {
             request_id: request_id.to_string(),
+        },
+    );
+    let _ = record_ai_call_log(
+        app,
+        NewAiCallLog {
+            method: log_method,
+            url: log_url,
+            status,
+            ok,
+            request_json: log_request_json,
+            response_json: String::from_utf8_lossy(&response_body).into_owned(),
+            error: String::new(),
         },
     );
     Ok(())

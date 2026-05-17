@@ -24,7 +24,7 @@ export function mapStreamPart(part: AgentStreamPart): AgentPart | null {
     case "text-delta":
       return { type: "text-delta", delta: part.text };
     case "reasoning-delta":
-      return { type: "reasoning", summary: "正在思考", detail: part.text };
+      return { type: "reasoning", summary: "", detail: part.text };
     case "tool-call":
       return {
         type: "tool-call",

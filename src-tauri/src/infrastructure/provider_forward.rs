@@ -13,7 +13,7 @@ pub(crate) const FORWARD_REQUEST_TIMEOUT_SECS: u64 = 60;
 const FORWARD_MODE_PROVIDER: &str = "provider";
 const MAX_FORWARD_BODY_BYTES: usize = 32 * 1024 * 1024;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForwardProviderRequest {
     #[serde(default, rename = "baseUrl")]

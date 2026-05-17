@@ -16,24 +16,74 @@ function normalizePlanItemStatus(value: unknown): PlanItemStatus {
     : "pending";
 }
 
-export function normalizeTodoItems(items: unknown): PlanItem[] {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseMaybeJsonArray(value: unknown) {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function resolveTodoItemsInput(input: unknown) {
+  if (Array.isArray(input)) {
+    return input;
+  }
+
+  if (!isRecord(input)) {
+    return undefined;
+  }
+
+  return parseMaybeJsonArray(input.items ?? input.todos ?? input.todo);
+}
+
+function normalizePlanContent(rawContent: string) {
+  const content = rawContent.trim();
+  const phaseMatch = content.match(/^\(([^)]+)\)\s*(.+)$/);
+  if (!phaseMatch) {
+    return { content };
+  }
+
+  return {
+    content: phaseMatch[2]?.trim() || content,
+    phase: phaseMatch[1]?.trim(),
+  };
+}
+
+export function normalizeTodoItems(input: unknown): PlanItem[] {
+  const items = resolveTodoItemsInput(input);
   if (!Array.isArray(items)) {
     throw new Error("update_plan.items 必须是数组。");
   }
 
   const validated = items.map((item, index) => {
-    if (!item || typeof item !== "object") {
+    if (!isRecord(item)) {
       throw new Error(`update_plan.items[${index}] 必须是对象。`);
     }
 
-    const content = String(item.content ?? "").trim();
+    const normalizedContent = normalizePlanContent(
+      String(item.content ?? item.task ?? item.title ?? item.text ?? "").trim(),
+    );
+    const content = normalizedContent.content;
     if (!content) {
       throw new Error(`update_plan.items[${index}].content 不能为空。`);
     }
 
-    const phase = String(item.phase ?? "").trim();
+    const phase = String(item.phase ?? normalizedContent.phase ?? "").trim();
     const result: PlanItem = {
-      activeForm: String(item.activeForm ?? "").trim(),
+      activeForm: String(item.activeForm ?? item.active ?? item.doing ?? "").trim(),
       content,
       status: normalizePlanItemStatus(item.status),
     };
@@ -51,6 +101,12 @@ export function normalizeTodoItems(items: unknown): PlanItem[] {
   }
 
   return validated;
+}
+
+export function normalizeTodoToolInput(input: unknown) {
+  return {
+    items: normalizeTodoItems(input),
+  };
 }
 
 export function normalizeSkillAction(value: unknown): SkillAction {

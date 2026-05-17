@@ -2,14 +2,8 @@ import { useState, memo } from "react";
 import { ChevronDown, ChevronRight, Brain, Wrench, Check, X, LoaderCircle, Users, Circle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getRunStatusTone, type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
-
-const statusClasses = {
-  danger: "border-[#5d2626] bg-[#2b1719] text-[#f6b6b0] dark:border-[#6f2e2e] dark:bg-[#2b1719] dark:text-[#f6b6b0]",
-  neutral: "border-[#dde4f0] bg-[#f8fafc] text-[#5b6475] dark:border-[#2a2f37] dark:bg-[#171a1f] dark:text-[#9ca7b8]",
-  success: "border-[#1f5b44] bg-[#eafaf2] text-[#1d6a4d] dark:border-[#22553f] dark:bg-[#13221a] dark:text-[#9fe2bb]",
-  warning: "border-[#6d5321] bg-[#fff6de] text-[#8a6412] dark:border-[#5c4620] dark:bg-[#261f12] dark:text-[#f3c96b]",
-} as const;
+import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
+import { getTodoItemsFromPart, type PlanItem } from "@features/agent/lib/planning";
 
 const markdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0 text-inherit">{children}</p>,
@@ -68,59 +62,99 @@ function StepStatusIcon({ status }: { status: "idle" | "running" | "completed" |
   return <Circle aria-hidden="true" className="h-3.5 w-3.5 text-[#94a3b8] dark:text-[#64748b]" />;
 }
 
+function PlanItemIcon({ status }: { status: PlanItem["status"] }) {
+  if (status === "completed") {
+    return <Check aria-hidden="true" className="h-3.5 w-3.5 text-[#1d6a4d] dark:text-[#9fe2bb]" />;
+  }
+
+  if (status === "in_progress") {
+    return <LoaderCircle aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-[#8a6412] dark:text-[#f3c96b]" />;
+  }
+
+  return <Circle aria-hidden="true" className="h-3.5 w-3.5 text-[#94a3b8] dark:text-[#64748b]" />;
+}
+
+function PlanProgressCard({
+  items,
+  part,
+}: {
+  items: PlanItem[];
+  part: Extract<AgentPart, { type: "tool-call" }>;
+}) {
+  const completedCount = items.filter((item) => item.status === "completed").length;
+  const activeItem = items.find((item) => item.status === "in_progress");
+  const summary = items.length === 0
+    ? "当前计划已清空"
+    : activeItem?.activeForm || activeItem?.content || `已完成 ${completedCount}/${items.length}`;
+
+  return (
+    <section className="rounded-[8px] border border-border bg-message-card">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="text-[12px] font-medium text-foreground">任务进度</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{summary}</span>
+        <StatusPill status={normalizeRenderableStatus(part.status)} />
+      </div>
+      <div className="px-3 py-2.5">
+        {items.length === 0 ? (
+          <p className="text-sm leading-6 text-muted-foreground">当前没有待办任务。</p>
+        ) : (
+          <div className="space-y-2.5">
+            {items.map((item, index) => (
+              <div key={`${index}-${item.content}-${item.status}`} className="flex items-start gap-3">
+                <span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center">
+                  <PlanItemIcon status={item.status} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div
+                    className={[
+                      "break-words text-sm font-medium leading-6",
+                      item.status === "completed"
+                        ? "text-muted-foreground line-through decoration-muted-foreground/50"
+                        : "text-foreground",
+                    ].join(" ")}
+                  >
+                    {index + 1}. {item.phase ? <span className="text-muted-foreground">[{item.phase}] </span> : null}
+                    {item.content}
+                  </div>
+                  {item.status === "in_progress" && item.activeForm ? (
+                    <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{item.activeForm}</div>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {part.validationError ? (
+          <div className="mt-3 rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-sm text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
+            {part.validationError}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function StatusPill({ status }: { status: "idle" | "running" | "completed" | "failed" }) {
-  const tone = getRunStatusTone(status);
   const labelMap = {
     idle: "空闲",
     running: "运行中",
     completed: "运行成功",
     failed: "运行失败",
   } as const;
-
-  if (status === "running") {
-    return (
-      <span
-        aria-label={labelMap[status]}
-        title={labelMap[status]}
-        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${statusClasses[tone]}`}
-      >
-        <LoaderCircle aria-hidden="true" className="h-3 w-3 animate-spin" />
-      </span>
-    );
-  }
-
-  if (status === "completed") {
-    return (
-      <span
-        aria-label={labelMap[status]}
-        title={labelMap[status]}
-        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${statusClasses[tone]}`}
-      >
-        <Check aria-hidden="true" className="h-3 w-3" />
-      </span>
-    );
-  }
-
-  if (status === "failed") {
-    return (
-      <span
-        aria-label={labelMap[status]}
-        title={labelMap[status]}
-        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${statusClasses[tone]}`}
-      >
-        <X aria-hidden="true" className="h-3 w-3" />
-      </span>
-    );
-  }
+  const colorClassName =
+    status === "completed"
+      ? "bg-emerald-500"
+      : status === "failed"
+        ? "bg-red-500"
+        : "bg-amber-400";
 
   return (
     <span
       aria-label={labelMap[status]}
       title={labelMap[status]}
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${statusClasses[tone]}`}
-    >
-      <span aria-hidden="true" className="h-2 w-2 rounded-full bg-current" />
-    </span>
+      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${colorClassName}`}
+    />
   );
 }
 
@@ -274,31 +308,42 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
 
   if (part.type === "reasoning") {
     return (
-      <AccordionCard collapseOnContentClick icon={Brain} label="思考" summary={part.summary}>
-        <MarkdownText className="text-foreground" text={[part.summary, part.detail].filter(Boolean).join("\n\n")} />
+      <AccordionCard collapseOnContentClick icon={Brain} label="思考" summary={part.detail}>
+        <MarkdownText className="text-foreground" text={part.detail} />
       </AccordionCard>
     );
   }
 
   if (part.type === "tool-call") {
-    const formattedInput = formatStructuredText(part.inputSummary);
+    if (part.toolName === "update_plan") {
+      const items = getTodoItemsFromPart(part);
+      if (items) {
+        return <PlanProgressCard items={items} part={part} />;
+      }
+    }
+
     const formattedOutput = part.outputSummary ? formatStructuredText(part.outputSummary) : null;
+    const summary = part.outputSummary
+      || (part.status === "running" || part.status === "awaiting_user" ? "正在执行..." : "无输出内容");
 
     return (
       <AccordionCard
         collapseOnContentClick
         icon={Wrench}
         label={part.toolName}
-        summary={part.status === "running" || part.status === "awaiting_user" ? part.inputSummary : part.outputSummary ?? part.inputSummary}
+        summary={summary}
         status={normalizeRenderableStatus(part.status)}
       >
         <div className="space-y-2 text-sm leading-6 text-foreground">
-          <MarkdownText text={formattedInput} />
           {formattedOutput ? (
             <div className="px-0 py-0 text-foreground">
               <MarkdownText text={formattedOutput} />
             </div>
-          ) : null}
+          ) : (
+            <div className="text-sm leading-6 text-muted-foreground">
+              {part.status === "running" || part.status === "awaiting_user" ? "正在等待工具返回结果。" : "无输出内容。"}
+            </div>
+          )}
           {part.validationError ? (
             <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
               {part.validationError}

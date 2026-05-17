@@ -19,6 +19,9 @@ export type PlanningIntervention = {
 };
 
 type TodoPayload = {
+  data?: {
+    items?: unknown;
+  };
   items?: unknown;
 };
 
@@ -48,28 +51,50 @@ function normalizePlanItem(value: unknown): PlanItem | null {
   return item;
 }
 
-function parseTodoPayload(raw: string | undefined): PlanItem[] | null {
+function normalizePlanItems(value: unknown): PlanItem[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.map(normalizePlanItem).filter((item): item is PlanItem => item !== null);
+}
+
+export function parseTodoPayload(raw: string | undefined): PlanItem[] | null {
   if (!raw) {
     return null;
   }
 
   try {
     const parsed = JSON.parse(raw) as TodoPayload;
-    if (!Array.isArray(parsed.items)) {
-      return null;
-    }
-    return parsed.items.map(normalizePlanItem).filter((item): item is PlanItem => item !== null);
+    return normalizePlanItems(parsed.items) ?? normalizePlanItems(parsed.data?.items);
   } catch {
     return null;
   }
 }
 
-function getTodoItemsFromPart(part: AgentPart): PlanItem[] | null {
-  if (part.type !== "tool-call" || part.toolName !== "update_plan" || part.status !== "completed") {
+function getTodoItemsFromOutput(output: unknown): PlanItem[] | null {
+  if (!output || typeof output !== "object") {
     return null;
   }
 
-  return parseTodoPayload(part.outputSummary);
+  const payload = output as TodoPayload;
+  return normalizePlanItems(payload.items) ?? normalizePlanItems(payload.data?.items);
+}
+
+export function getTodoItemsFromPart(part: AgentPart): PlanItem[] | null {
+  if (part.type !== "tool-call" || part.toolName !== "update_plan") {
+    return null;
+  }
+
+  if (part.status === "running" || part.status === "awaiting_user") {
+    return parseTodoPayload(part.inputSummary);
+  }
+
+  if (part.status !== "completed") {
+    return null;
+  }
+
+  return getTodoItemsFromOutput(part.output) ?? parseTodoPayload(part.outputSummary);
 }
 
 function countUserRounds(messages: AgentMessage[], startIndex: number) {
