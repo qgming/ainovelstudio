@@ -237,10 +237,34 @@ describe("agentLoop", () => {
     expect(streamFn).toHaveBeenCalledTimes(1);
   });
 
-  it("AI 解码尾错已有文本或思考片段时会按完成收尾", async () => {
+  it("AI 解码尾错只有思考片段时会自动续跑", async () => {
+    const streamFn = vi
+      .fn()
+      .mockReturnValueOnce(streamFailure("error decoding response body", [
+        { type: "reasoning-delta", id: "reasoning-0", text: "只返回了思考。" },
+      ]))
+      .mockReturnValueOnce(streamResult([{ type: "text-delta", id: "text-1", text: "续跑完成" }]));
+
+    const parts: AgentPart[] = [];
+    for await (const part of agentLoop(
+      { messages: [{ role: "user", content: "继续写" }], system: "test" },
+      { providerConfig: { apiKey: "k", baseURL: "u", model: "m" }, streamFn: streamFn as never },
+    )) {
+      parts.push(part);
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(2);
+    expect(parts).toEqual([
+      { type: "reasoning", summary: "", detail: "只返回了思考。" },
+      { type: "text-delta", delta: "续跑完成" },
+    ]);
+  });
+
+  it("AI 解码尾错已有正文片段时会按完成收尾", async () => {
     const streamFn = vi.fn(() =>
       streamFailure("error decoding response body", [
-        { type: "reasoning-delta", id: "reasoning-0", text: "只返回了思考。" },
+        { type: "reasoning-delta", id: "reasoning-0", text: "准备写正文。" },
+        { type: "text-delta", id: "text-1", text: "已有正文。" },
       ]),
     );
 
@@ -253,7 +277,10 @@ describe("agentLoop", () => {
     }
 
     expect(streamFn).toHaveBeenCalledTimes(1);
-    expect(parts).toEqual([{ type: "reasoning", summary: "", detail: "只返回了思考。" }]);
+    expect(parts).toEqual([
+      { type: "reasoning", summary: "", detail: "准备写正文。" },
+      { type: "text-delta", delta: "已有正文。" },
+    ]);
   });
 
   it("AI 请求连续失败 5 次时只展示最近一次失败报告", async () => {

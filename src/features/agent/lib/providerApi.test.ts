@@ -45,6 +45,17 @@ async function readResponseText(response: Response) {
   return new TextDecoder().decode(merged);
 }
 
+function emitProviderTextChunks(requestId: string, text: string, chunkSize = 64 * 1024) {
+  const encoded = new TextEncoder().encode(text);
+  for (let offset = 0; offset < encoded.length; offset += chunkSize) {
+    emitProviderStream({
+      type: "chunk",
+      requestId,
+      chunk: Array.from(encoded.slice(offset, offset + chunkSize)),
+    });
+  }
+}
+
 describe("streamProviderRequestViaTauri", () => {
   beforeEach(() => {
     listeners.clear();
@@ -220,7 +231,7 @@ describe("streamProviderRequestViaTauri", () => {
     expect(text).toContain("\"finish_reason\":\"tool_calls\"");
   });
 
-  it("缺失 finish_reason 的非流式工具调用会忽略 tool_calls 并保留 content", async () => {
+  it("缺失 finish_reason 的非流式工具调用仍会转换为可执行工具流", async () => {
     mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
       const requestId = payload.request.requestId;
       emitProviderStream({
@@ -249,8 +260,9 @@ describe("streamProviderRequestViaTauri", () => {
                     id: "call_write",
                     type: "function",
                     function: {
-                      name: "write",
+                      name: "workspace_write",
                       arguments: {
+                        path: "正文/第001章.md",
                         content: "# 第001章\n\n正文",
                       },
                     },
@@ -274,10 +286,207 @@ describe("streamProviderRequestViaTauri", () => {
     });
 
     const text = await readResponseText(response);
-    expect(text).toContain("\"content\":\"先直接落盘。\"");
-    expect(text).not.toContain("\"tool_calls\"");
-    expect(text).not.toContain("\"id\":\"call_write\"");
-    expect(text).toContain("\"finish_reason\":\"stop\"");
+    expect(text).not.toContain("\"content\":\"先直接落盘。\"");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"id\":\"call_write\"");
+    expect(text).toContain("\"name\":\"workspace_write\"");
+    expect(text).toContain("\\\"path\\\":\\\"正文/第001章.md\\\"");
+    expect(text).toContain("\"finish_reason\":\"tool_calls\"");
+  });
+
+  it("完整输出显式 stop 但包含已知工具调用时会修正为 tool_calls", async () => {
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(JSON.stringify({
+          id: "chatcmpl-stop-with-tools",
+          object: "chat.completion",
+          created: 1779029132,
+          model: "deepseek-v4-pro",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: "开始写入文件。",
+                tool_calls: [
+                  {
+                    id: "call_stop_write",
+                    type: "function",
+                    function: {
+                      name: "workspace_write",
+                      arguments: "{\"path\":\"大纲/细纲_第291-300章.md\",\"content\":\"正文\"}",
+                    },
+                  },
+                ],
+              },
+              finish_reason: "stop",
+            },
+          ],
+        }))),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(text).not.toContain("\"content\":\"开始写入文件。\"");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"id\":\"call_stop_write\"");
+    expect(text).toContain("\"name\":\"workspace_write\"");
+    expect(text).toContain("\"finish_reason\":\"tool_calls\"");
+    expect(text).not.toContain("\"finish_reason\":\"stop\"");
+  });
+
+  it("大体积非流式工具调用 JSON 超过旧缓冲上限时仍会转换", async () => {
+    const content = [
+      "# 第五卷细纲：第291-300章",
+      "",
+      "## 第291章：招收弟子，声望冲刺",
+      "化神之后，落霞宗声望继续扩散。",
+      "细纲段落。".repeat(80_000),
+    ].join("\n");
+    const rawCompletion = JSON.stringify({
+      id: "chatcmpl-large-tool-json",
+      object: "chat.completion",
+      created: 1779029132,
+      model: "deepseek-v4-pro",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "所有六个文件都是空的，从291-300开始写入。",
+            tool_calls: [
+              {
+                id: "call_large_write",
+                type: "function",
+                function: {
+                  name: "workspace_write",
+                  arguments: JSON.stringify({
+                    path: "大纲/细纲_第291-300章.md",
+                    content,
+                  }),
+                },
+                index: 0,
+              },
+            ],
+            reasoning_content: "I need to start writing the detailed outlines.",
+          },
+        },
+      ],
+    });
+    expect(new TextEncoder().encode(rawCompletion).byteLength).toBeGreaterThan(256 * 1024);
+
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderTextChunks(requestId, rawCompletion);
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    expect(text).not.toContain("\"content\":\"所有六个文件都是空的，从291-300开始写入。\"");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"id\":\"call_large_write\"");
+    expect(text).toContain("\"name\":\"workspace_write\"");
+    expect(text).toContain("\\\"path\\\":\\\"大纲/细纲_第291-300章.md\\\"");
+    expect(text).toContain("\"finish_reason\":\"tool_calls\"");
+  });
+
+  it("完整输出已缓冲但随后流解码报错时仍会抢救为工具调用", async () => {
+    const rawCompletion = JSON.stringify({
+      id: "chatcmpl-buffered-before-decode-error",
+      object: "chat.completion",
+      created: 1779032853,
+      model: "gpt-5.5",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            tool_calls: [
+              {
+                id: "call_buffered_write",
+                type: "function",
+                function: {
+                  name: "workspace_write",
+                  arguments: JSON.stringify({
+                    action: "replace",
+                    path: "大纲/细纲_第291-300章.md",
+                    content: "# 细纲_第291-300章\n\n正文",
+                  }),
+                },
+                index: 0,
+              },
+            ],
+            reasoning_content: "Continuing the writing process.",
+          },
+        },
+      ],
+    });
+
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderTextChunks(requestId, rawCompletion);
+      emitProviderStream({ type: "error", requestId, message: "error decoding response body" });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"id\":\"call_buffered_write\"");
+    expect(text).toContain("\"name\":\"workspace_write\"");
+    expect(text).toContain("\"finish_reason\":\"tool_calls\"");
   });
 
   it("即使响应头标成 SSE，也会识别完整 chat.completion JSON 并转换", async () => {
@@ -364,7 +573,7 @@ describe("streamProviderRequestViaTauri", () => {
                   id: "call_write_chapter",
                   type: "function",
                   function: {
-                    name: "write",
+                    name: "workspace_write",
                     arguments: "{\"content\":\"# 第001章\\n\\n正文\",\"path\":\"正文/第001章.md\"}",
                   },
                   index: 0,
@@ -408,10 +617,11 @@ describe("streamProviderRequestViaTauri", () => {
     const text = await readResponseText(response);
     expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
     expect(text).toContain("\"object\":\"chat.completion.chunk\"");
-    expect(text).toContain("\"content\":\"先直接落盘第001章正文。\"");
-    expect(text).not.toContain("\"tool_calls\"");
-    expect(text).not.toContain("\"id\":\"call_write_chapter\"");
-    expect(text).toContain("\"finish_reason\":\"stop\"");
+    expect(text).not.toContain("\"content\":\"先直接落盘第001章正文。\"");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"id\":\"call_write_chapter\"");
+    expect(text).toContain("\"name\":\"workspace_write\"");
+    expect(text).toContain("\"finish_reason\":\"tool_calls\"");
   });
 
   it("缺失 finish_reason 且没有 content 时会用 choice.reasoning_content 作为续跑内容", async () => {

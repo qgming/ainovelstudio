@@ -102,7 +102,10 @@ function isResponseBodyDecodeError(error: unknown) {
 }
 
 function canCompleteAfterDecodeError(parts: AgentPart[]) {
-  return parts.length > 0 && parts.every((part) =>
+  return parts.some((part) =>
+    (part.type === "text-delta" && part.delta.trim().length > 0)
+    || (part.type === "text" && part.text.trim().length > 0)
+  ) && parts.every((part) =>
     part.type === "text-delta" || part.type === "reasoning" || part.type === "text"
   );
 }

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
+import { ALL_TOOL_DEFS } from "./toolDefs";
 
 export type ProviderHttpResponse = {
   ok: boolean;
@@ -27,7 +28,8 @@ export type ForwardProviderResponse = {
 
 type JsonRecord = Record<string, unknown>;
 
-const MAX_BUFFERED_STREAM_SNIFF_BYTES = 256 * 1024;
+const MAX_BUFFERED_STREAM_SNIFF_BYTES = 8 * 1024 * 1024;
+const KNOWN_TOOL_IDS = new Set(ALL_TOOL_DEFS.map((tool) => tool.id));
 
 export function fetchProviderModelsViaTauri(config: AgentProviderConfig) {
   return invoke<ProviderHttpResponse>("fetch_provider_models", { config });
@@ -217,6 +219,16 @@ function extractToolCalls(choice: JsonRecord) {
     .filter((toolCall): toolCall is JsonRecord => toolCall !== null);
 }
 
+function getToolCallName(toolCall: JsonRecord) {
+  return isRecord(toolCall.function) && typeof toolCall.function.name === "string"
+    ? toolCall.function.name
+    : "";
+}
+
+function isKnownToolCall(toolCall: JsonRecord) {
+  return KNOWN_TOOL_IDS.has(getToolCallName(toolCall));
+}
+
 function isToolCallsFinishReason(choice: JsonRecord) {
   const finishReason = choice.finish_reason ?? choice.finishReason ?? choice.native_finish_reason ?? choice.nativeFinishReason;
   return finishReason === "tool_calls" || finishReason === "tool-calls";
@@ -275,10 +287,13 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
 
   parsed.choices.forEach((choice, fallbackIndex) => {
     if (!isRecord(choice)) return;
-	    const index = typeof choice.index === "number" ? choice.index : fallbackIndex;
-	    const text = extractChoiceText(choice);
-	    const reasoning = extractChoiceReasoning(choice);
-	    const toolCalls = isToolCallsFinishReason(choice) ? extractToolCalls(choice) : [];
+    const index = typeof choice.index === "number" ? choice.index : fallbackIndex;
+    const text = extractChoiceText(choice);
+    const reasoning = extractChoiceReasoning(choice);
+    const extractedToolCalls = extractToolCalls(choice);
+    const toolCalls = isToolCallsFinishReason(choice)
+      ? extractedToolCalls
+      : extractedToolCalls.filter(isKnownToolCall);
 
     payloads.push(createChatCompletionChunk({
       created,
@@ -289,21 +304,21 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
       model,
     }));
 
-	    if (reasoning.length > 0) {
-	      payloads.push(createChatCompletionChunk({
-	        created,
-	        delta: { reasoning_content: reasoning },
-	        finishReason: null,
-	        id,
-	        index,
-	        model,
-	      }));
-	    }
+    if (reasoning.length > 0) {
+      payloads.push(createChatCompletionChunk({
+        created,
+        delta: { reasoning_content: reasoning },
+        finishReason: null,
+        id,
+        index,
+        model,
+      }));
+    }
 
-	    if (text.length > 0 && toolCalls.length === 0) {
-	      payloads.push(createChatCompletionChunk({
-	        created,
-	        delta: { content: text },
+    if (text.length > 0 && toolCalls.length === 0) {
+      payloads.push(createChatCompletionChunk({
+        created,
+        delta: { content: text },
         finishReason: null,
         id,
         index,
@@ -325,7 +340,7 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
     payloads.push(createChatCompletionChunk({
       created,
       delta: {},
-      finishReason: choice.finish_reason ?? (toolCalls.length > 0 ? "tool_calls" : "stop"),
+      finishReason: toolCalls.length > 0 ? "tool_calls" : choice.finish_reason ?? "stop",
       id,
       index,
       model,
@@ -455,21 +470,48 @@ export async function streamProviderRequestViaTauri(
   const start = new Promise<Response>((resolve, reject) => {
     rejectStart = reject;
 
-    const handleError = (message: string) => {
-      cleanup();
-      if (hasResolved) {
-        controller?.error(new Error(message));
-        return;
-      }
-      reject(new Error(message));
-    };
-
     const resolvePassthroughStream = (headers: Record<string, string>, status: number, chunks: Uint8Array[]) => {
       hasResolved = true;
       resolve(new Response(stream, { headers, status }));
       chunks.forEach((chunk) => controller?.enqueue(chunk));
       bufferedJsonChunks = null;
       bufferedResponseMeta = null;
+    };
+
+    const resolveConvertedBufferedResponse = () => {
+      if (!bufferedJsonChunks || !bufferedResponseMeta) return false;
+      const merged = mergeChunks(bufferedJsonChunks);
+      const rawBody = new TextDecoder().decode(merged);
+      const converted = convertChatCompletionJsonToSse(rawBody) ?? convertChatCompletionSseToSse(rawBody);
+      if (!converted) return false;
+
+      const headers: Record<string, string> = {
+        ...bufferedResponseMeta.headers,
+        "content-type": "text/event-stream; charset=utf-8",
+        "x-ainovelstudio-stream-fallback": "chat-completion-json",
+      };
+      delete headers["content-length"];
+      hasResolved = true;
+      resolve(createBufferedResponse({
+        body: converted,
+        headers,
+        status: bufferedResponseMeta.status,
+      }));
+      bufferedJsonChunks = null;
+      bufferedResponseMeta = null;
+      return true;
+    };
+
+    const handleError = (message: string) => {
+      cleanup();
+      if (!hasResolved && resolveConvertedBufferedResponse()) {
+        return;
+      }
+      if (hasResolved) {
+        controller?.error(new Error(message));
+        return;
+      }
+      reject(new Error(message));
     };
 
     void (async () => {
@@ -525,25 +567,11 @@ export async function streamProviderRequestViaTauri(
           providerStreamClosed = true;
           cleanup();
           if (bufferedJsonChunks && bufferedResponseMeta) {
-            const merged = mergeChunks(bufferedJsonChunks);
-            const rawBody = new TextDecoder().decode(merged);
-            const converted = convertChatCompletionJsonToSse(rawBody) ?? convertChatCompletionSseToSse(rawBody);
-            if (converted) {
-              const headers: Record<string, string> = {
-                ...bufferedResponseMeta.headers,
-                "content-type": "text/event-stream; charset=utf-8",
-                "x-ainovelstudio-stream-fallback": "chat-completion-json",
-              };
-              delete headers["content-length"];
-              hasResolved = true;
-              resolve(createBufferedResponse({
-                body: converted,
-                headers,
-                status: bufferedResponseMeta.status,
-              }));
+            if (resolveConvertedBufferedResponse()) {
               return;
             }
 
+            const merged = mergeChunks(bufferedJsonChunks);
             hasResolved = true;
             resolve(createBufferedResponse({
               body: merged,
