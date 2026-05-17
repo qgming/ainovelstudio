@@ -1,8 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockTestAgentProviderConnection } = vi.hoisted(() => ({
+const { mockFetchProviderModels, mockTestAgentProviderConnection } = vi.hoisted(() => ({
+  mockFetchProviderModels: vi.fn(),
   mockTestAgentProviderConnection: vi.fn(),
+}));
+
+vi.mock("@features/agent/lib/modelCatalog", () => ({
+  fetchProviderModels: mockFetchProviderModels,
 }));
 
 vi.mock("@features/agent/lib/modelGateway", () => ({
@@ -54,11 +59,12 @@ function mockViewport(width: number) {
 
 describe("ModelProviderCard", () => {
   beforeEach(() => {
+    mockFetchProviderModels.mockReset();
     mockTestAgentProviderConnection.mockReset();
     mockViewport(1280);
   });
 
-  it("隐藏温度和最大 token 配置，仅保留核心字段", () => {
+  it("隐藏温度和最大 token 配置，并显示思考强度", () => {
     render(
       <ModelProviderCard
         providerPresets={[]}
@@ -80,10 +86,98 @@ describe("ModelProviderCard", () => {
     expect(screen.getByPlaceholderText("https://example.com/v1")).toBeInTheDocument();
     expect(screen.getByText("API Key")).toBeInTheDocument();
     expect(screen.getByText("Model")).toBeInTheDocument();
-    expect(screen.queryByRole("switch", { name: /reasoning/i })).not.toBeInTheDocument();
+    expect(screen.getByText("思考强度")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "自动" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "保存" })).toBeDisabled();
     expect(screen.queryByText("Temperature")).not.toBeInTheDocument();
     expect(screen.queryByText("Max Tokens")).not.toBeInTheDocument();
+  });
+
+  it("支持切换思考强度", () => {
+    const handleChange = vi.fn();
+
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-5.4",
+          reasoningEffort: "auto",
+        }}
+        isDirty={false}
+        onChange={handleChange}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "高" }));
+
+    expect(handleChange).toHaveBeenCalledWith({ reasoningEffort: "high" });
+  });
+
+  it("切换思考强度时自动保存", async () => {
+    const handleAutoSaveChange = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-5.4",
+          reasoningEffort: "auto",
+        }}
+        isDirty={false}
+        onAutoSaveChange={handleAutoSaveChange}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "高" }));
+
+    expect(handleAutoSaveChange).toHaveBeenCalledWith({ reasoningEffort: "high" });
+    expect(await screen.findByRole("status")).toHaveTextContent("已自动保存");
+    expect(screen.getByRole("status")).toHaveTextContent("思考强度已保存。");
+  });
+
+  it("从模型目录选择模型时自动保存", async () => {
+    const handleAutoSaveChange = vi.fn().mockResolvedValue(undefined);
+    mockFetchProviderModels.mockResolvedValue(["gpt-4.1", "gpt-5.4"]);
+
+    render(
+      <ModelProviderCard
+        providerPresets={[]}
+        onAddProviderPreset={() => undefined}
+        onDeleteProviderPreset={() => undefined}
+        config={{
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+        }}
+        isDirty={false}
+        onAutoSaveChange={handleAutoSaveChange}
+        onChange={() => undefined}
+        onReset={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "获取模型" }));
+
+    expect(await screen.findByText("选择模型")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "gpt-5.4" }));
+
+    expect(handleAutoSaveChange).toHaveBeenCalledWith({ model: "gpt-5.4" });
+    expect(await screen.findByRole("status")).toHaveTextContent("已自动保存");
+    expect(screen.getByRole("status")).toHaveTextContent("模型选择已保存。");
   });
 
   it("缺少必要配置时禁用测试连接按钮", () => {
@@ -310,7 +404,7 @@ describe("ModelProviderCard", () => {
     expect(detailButtons).toHaveLength(14);
   });
 
-  it("显示预存供应商标题，且卡片背景与推荐供应商区域一致", () => {
+  it("模型供应商使用紧凑网格且不显示 logo", () => {
     render(
       <ModelProviderCard
         providerPresets={[
@@ -339,11 +433,12 @@ describe("ModelProviderCard", () => {
       />,
     );
 
-    expect(screen.getByText("预存供应商")).toBeInTheDocument();
+    expect(screen.getByText("模型供应商")).toBeInTheDocument();
 
     const presetCard = screen.getByText("gpt-4.1").closest("article");
-    expect(presetCard).toHaveClass("editor-block-tile", "aspect-square");
-    expect(presetCard).not.toHaveClass("bg-background");
+    expect(presetCard).toHaveClass("min-w-0", "rounded-[8px]", "bg-background");
+    expect(presetCard).not.toHaveClass("aspect-square");
+    expect(presetCard?.querySelector('[data-testid="provider-icon-openai"]')).toBeNull();
     const presetButton = presetCard?.querySelector('[role="button"][aria-label="使用 OpenAI 地址"]');
     expect(presetButton).not.toHaveClass("bg-accent/35");
   });
@@ -427,6 +522,7 @@ describe("ModelProviderCard", () => {
         apiKey: "sk-openai",
         baseURL: "https://api.openai.com/v1",
         model: "gpt-4.1",
+        reasoningEffort: "auto",
       }),
     );
   });
@@ -468,6 +564,7 @@ describe("ModelProviderCard", () => {
       apiKey: "sk-openai",
       baseURL: "https://api.openai.com/v1",
       model: "gpt-4.1",
+      reasoningEffort: "auto",
     });
   });
 

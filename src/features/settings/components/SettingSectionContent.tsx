@@ -22,6 +22,7 @@ function isSameProviderConfig(
     left.apiKey === right.apiKey &&
     left.baseURL === right.baseURL &&
     left.model === right.model &&
+    (left.reasoningEffort ?? "auto") === (right.reasoningEffort ?? "auto") &&
     Boolean(left.simulateOpencodeBeta) === Boolean(right.simulateOpencodeBeta)
   );
 }
@@ -184,6 +185,23 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
     });
   }
 
+  async function handleAutoSaveModelDraftChange(patch: Partial<typeof modelDraft>) {
+    const next = { ...modelDraft, ...patch };
+    setModelDraft(next);
+    setModelDirty(!isSameProviderConfig(next, config));
+    setIsSavingModel(true);
+
+    try {
+      await saveConfig(next);
+      setModelDirty(false);
+    } catch (error) {
+      setModelDirty(true);
+      throw error;
+    } finally {
+      setIsSavingModel(false);
+    }
+  }
+
   function handleResetModel() {
     const next = getDefaultAgentProviderConfig();
     setModelDraft(next);
@@ -226,6 +244,7 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
         isSaving={isSavingModel}
         providerPresets={providerPresets}
         onAddProviderPreset={addProviderPreset}
+        onAutoSaveChange={handleAutoSaveModelDraftChange}
         onChange={handleModelDraftChange}
         onDeleteProviderPreset={deleteProviderPreset}
         onReset={handleResetModel}

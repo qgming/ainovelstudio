@@ -16,7 +16,7 @@ import { SettingsHeaderResponsiveButton } from "./SettingsSectionHeader";
 type ModelCatalogButtonProps = {
   config: AgentProviderConfig;
   iconOnly?: boolean;
-  onSelectModel: (model: string) => void;
+  onSelectModel: (model: string) => void | Promise<void>;
   onError: (message: string) => void;
 };
 
@@ -26,12 +26,13 @@ function formatModelCount(count: number) {
 
 export function ModelCatalogButton({ config, iconOnly = false, onSelectModel, onError }: ModelCatalogButtonProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
   const baseURL = config.baseURL.trim();
   const apiKey = config.apiKey.trim();
-  const canFetchModels = baseURL.length > 0 && apiKey.length > 0 && !isLoading;
+  const canFetchModels = baseURL.length > 0 && apiKey.length > 0 && !isLoading && !isApplying;
   const dialogDescription = useMemo(() => formatModelCount(models.length), [models.length]);
 
   async function handleOpenCatalog() {
@@ -62,13 +63,25 @@ export function ModelCatalogButton({ config, iconOnly = false, onSelectModel, on
     }
   }
 
-  function handleUseModel() {
-    if (!selectedModel) {
+  async function handleUseModel(model = selectedModel) {
+    if (!model || isApplying) {
       return;
     }
 
-    onSelectModel(selectedModel);
-    setIsDialogOpen(false);
+    setSelectedModel(model);
+    setIsApplying(true);
+
+    try {
+      await onSelectModel(model);
+      setIsDialogOpen(false);
+    } catch (error) {
+      const message = error instanceof Error && error.message.trim()
+        ? error.message
+        : "应用模型失败，请稍后重试。";
+      onError(message);
+    } finally {
+      setIsApplying(false);
+    }
   }
 
   return (
@@ -101,12 +114,13 @@ export function ModelCatalogButton({ config, iconOnly = false, onSelectModel, on
                     <button
                       key={model}
                       type="button"
-                      onClick={() => setSelectedModel(model)}
+                      disabled={isApplying}
+                      onClick={() => void handleUseModel(model)}
                       className={[
                         "flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-sm transition-colors",
                         isSelected
                           ? "bg-[#eef4ff] text-[#0f172a] dark:bg-[#1a2433] dark:text-zinc-100"
-                          : "text-[#334155] hover:bg-[#f8fafc] dark:text-zinc-300 dark:hover:bg-[#1b2029]",
+                          : "text-[#334155] hover:bg-[#f8fafc] disabled:cursor-wait disabled:opacity-60 dark:text-zinc-300 dark:hover:bg-[#1b2029]",
                       ].join(" ")}
                     >
                       <span className="truncate pr-3">{model}</span>
@@ -122,8 +136,8 @@ export function ModelCatalogButton({ config, iconOnly = false, onSelectModel, on
             <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
               取消
             </Button>
-            <Button type="button" disabled={!selectedModel} onClick={handleUseModel}>
-              使用模型
+            <Button type="button" disabled={!selectedModel || isApplying} onClick={() => void handleUseModel()}>
+              {isApplying ? "保存中..." : "使用模型"}
             </Button>
           </DialogFooter>
         </DialogContent>

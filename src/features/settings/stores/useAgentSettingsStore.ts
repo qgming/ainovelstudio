@@ -15,6 +15,10 @@ import {
   getDefaultEnabledTools,
   migrateEnabledTools,
 } from "@features/agent/lib/toolDefs";
+import {
+  normalizeReasoningEffort,
+  type ReasoningEffort,
+} from "@features/agent/lib/reasoningEffort";
 
 let initializePromise: Promise<void> | null = null;
 
@@ -22,6 +26,7 @@ export type AgentProviderConfig = {
   apiKey: string;
   baseURL: string;
   model: string;
+  reasoningEffort?: ReasoningEffort;
   simulateOpencodeBeta?: boolean;
 };
 
@@ -61,6 +66,7 @@ function getDefaultConfig(): AgentProviderConfig {
     apiKey: "",
     baseURL: "",
     model: "",
+    reasoningEffort: "auto",
     simulateOpencodeBeta: false,
   };
 }
@@ -87,7 +93,9 @@ function readState(): AgentSettingsState {
 }
 
 function normalizeProviderConfig(
-  config?: Partial<AgentProviderConfig>,
+  config?: Partial<Omit<AgentProviderConfig, "reasoningEffort">> & {
+    reasoningEffort?: unknown;
+  },
 ): AgentProviderConfig {
   return {
     ...getDefaultConfig(),
@@ -95,6 +103,7 @@ function normalizeProviderConfig(
     apiKey: config?.apiKey?.trim() ?? "",
     baseURL: config?.baseURL?.trim() ?? "",
     model: config?.model?.trim() ?? "",
+    reasoningEffort: normalizeReasoningEffort(config?.reasoningEffort),
     simulateOpencodeBeta: Boolean(config?.simulateOpencodeBeta),
   };
 }
@@ -105,6 +114,7 @@ function normalizeProviderPreset(preset: AgentProviderPreset): AgentProviderPres
     apiKey: preset.apiKey ?? "",
     baseURL: preset.baseURL ?? "",
     model: preset.model ?? "",
+    reasoningEffort: normalizeReasoningEffort(preset.reasoningEffort),
   };
 }
 

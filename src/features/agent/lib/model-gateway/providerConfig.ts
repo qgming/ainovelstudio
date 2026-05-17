@@ -1,10 +1,14 @@
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
+import { isExplicitReasoningEffort } from "../reasoningEffort";
+
+const PROVIDER_OPTIONS_KEY = "ainovelstudioProvider";
 
 export function normalizeProviderConfig(providerConfig: AgentProviderConfig): AgentProviderConfig {
   return {
     apiKey: providerConfig.apiKey.trim(),
     baseURL: providerConfig.baseURL.trim(),
     model: providerConfig.model.trim(),
+    reasoningEffort: providerConfig.reasoningEffort ?? "auto",
     simulateOpencodeBeta: Boolean(providerConfig.simulateOpencodeBeta),
   };
 }
@@ -42,6 +46,14 @@ export function assertProviderConfigReady(providerConfig: AgentProviderConfig) {
 }
 
 export function buildProviderOptions(providerConfig: AgentProviderConfig) {
-  void providerConfig;
-  return undefined;
+  const reasoningEffort = providerConfig.reasoningEffort ?? "auto";
+  if (!isExplicitReasoningEffort(reasoningEffort)) {
+    return undefined;
+  }
+
+  return {
+    [PROVIDER_OPTIONS_KEY]: {
+      reasoningEffort,
+    },
+  };
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockFetchProviderModels } = vi.hoisted(() => ({
@@ -56,7 +56,7 @@ describe("ModelCatalogButton", () => {
     expect(handleSelectModel).toHaveBeenCalledWith("gpt-4.1");
   });
 
-  it("支持直接点击列表项切换模型", async () => {
+  it("支持直接点击列表项应用模型", async () => {
     const handleSelectModel = vi.fn();
     mockFetchProviderModels.mockResolvedValue(["gpt-4.1", "gpt-4o"]);
 
@@ -76,9 +76,11 @@ describe("ModelCatalogButton", () => {
 
     expect(await screen.findByText("选择模型")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "gpt-4o" }));
-    fireEvent.click(screen.getByRole("button", { name: "使用模型" }));
 
     expect(handleSelectModel).toHaveBeenCalledWith("gpt-4o");
+    await waitFor(() => {
+      expect(screen.queryByText("选择模型")).not.toBeInTheDocument();
+    });
   });
 
   it("获取失败时回调错误信息", async () => {

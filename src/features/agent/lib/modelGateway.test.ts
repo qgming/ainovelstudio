@@ -145,6 +145,7 @@ describe("modelGateway", () => {
       apiKey: "sk-test",
       baseURL: "https://example.com/v1",
       model: "gpt-4.1",
+      reasoningEffort: "auto",
       simulateOpencodeBeta: false,
     });
   });
@@ -239,6 +240,27 @@ describe("modelGateway", () => {
     });
 
     expect(mockStreamText.mock.calls[0]?.[0]?.experimental_repairToolCall).toBeUndefined();
+  });
+
+  it("显式思考强度会通过 openai-compatible providerOptions 注入", () => {
+    mockStreamText.mockReturnValue(createStreamTextResult(""));
+
+    streamAgentText({
+      messages: [{ role: "user", content: "分析剧情结构" }],
+      providerConfig: {
+        apiKey: "sk-test",
+        baseURL: "https://example.com/v1",
+        model: "gpt-5.4",
+        reasoningEffort: "high",
+      },
+      system: "test-system",
+    });
+
+    expect(mockStreamText.mock.calls[0]?.[0]?.providerOptions).toEqual({
+      ainovelstudioProvider: {
+        reasoningEffort: "high",
+      },
+    });
   });
 
   it("流式生成遇到非法 Base URL 时返回清晰配置错误", () => {

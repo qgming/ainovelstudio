@@ -15,18 +15,27 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Gauge,
   KeyRound,
   LoaderCircle,
   MoreHorizontal,
   PlugZap,
   RotateCcw,
   Save,
+  Server,
+  Sparkles,
+  Terminal,
   Trash2,
 } from "lucide-react";
 import { ModelCatalogButton } from "./ModelCatalogButton";
 import { Toast, type ToastTone } from "@shared/components/Toast";
 import { testAgentProviderConnection } from "@features/agent/lib/modelGateway";
 import type { ProviderConnectionTestResult } from "@features/agent/lib/modelGateway";
+import {
+  normalizeReasoningEffort,
+  REASONING_EFFORT_OPTIONS,
+  type ReasoningEffort,
+} from "@features/agent/lib/reasoningEffort";
 import type {
   AgentProviderConfig,
   AgentProviderPreset,
@@ -55,6 +64,7 @@ type ModelProviderCardProps = {
   isSaving?: boolean;
   providerPresets: AgentProviderPreset[];
   onAddProviderPreset: (preset: AgentProviderPreset) => void;
+  onAutoSaveChange?: (patch: Partial<AgentProviderConfig>) => Promise<void>;
   onChange: (patch: Partial<AgentProviderConfig>) => void;
   onDeleteProviderPreset: (id: string) => void;
   onReset: () => void;
@@ -65,6 +75,15 @@ type ToastState = {
   description?: string;
   title: string;
   tone: ToastTone;
+};
+
+const REASONING_EFFORT_LABELS: Record<ReasoningEffort, string> = {
+  auto: "自动",
+  minimal: "极低",
+  low: "低",
+  medium: "中",
+  high: "高",
+  xhigh: "极高",
 };
 
 function generateId() {
@@ -129,6 +148,18 @@ function hasRequiredPresetFields(config: AgentProviderConfig) {
   );
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  return fallback;
+}
+
 function deriveProviderFromUrl(url: string) {
   const host = extractHost(url).toLowerCase();
   if (host.includes("deepseek")) return "deepseek";
@@ -176,6 +207,7 @@ export function ModelProviderCard({
   isSaving = false,
   providerPresets,
   onAddProviderPreset,
+  onAutoSaveChange,
   onChange,
   onDeleteProviderPreset,
   onReset,
@@ -185,6 +217,7 @@ export function ModelProviderCard({
   const baseUrl = config.baseURL.trim();
   const apiKey = config.apiKey.trim();
   const model = config.model.trim();
+  const reasoningEffort = normalizeReasoningEffort(config.reasoningEffort);
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -199,6 +232,7 @@ export function ModelProviderCard({
     baseUrl,
     apiKey,
     model,
+    reasoningEffort,
     config.simulateOpencodeBeta,
   ]);
 
@@ -261,6 +295,7 @@ export function ModelProviderCard({
       name: extractHost(baseUrl) || baseUrl,
       apiKey: config.apiKey,
       model,
+      reasoningEffort,
       provider: deriveProviderFromUrl(baseUrl),
       baseURL: config.baseURL,
       createdAt: now,
@@ -278,6 +313,7 @@ export function ModelProviderCard({
       apiKey: preset.apiKey ?? "",
       baseURL: preset.baseURL,
       model: preset.model,
+      reasoningEffort: normalizeReasoningEffort(preset.reasoningEffort),
     });
   }
 
@@ -296,6 +332,42 @@ export function ModelProviderCard({
     onChange({
       model: nextModel,
     });
+  }
+
+  async function handleAutoSaveChange(
+    patch: Partial<AgentProviderConfig>,
+    description: string,
+  ) {
+    if (!onAutoSaveChange) {
+      onChange(patch);
+      return;
+    }
+
+    try {
+      await onAutoSaveChange(patch);
+      setToast({
+        title: "已自动保存",
+        description,
+        tone: "success",
+      });
+    } catch (error) {
+      setToast({
+        title: "保存失败",
+        description: getErrorMessage(error, "自动保存失败，请稍后重试。"),
+        tone: "error",
+      });
+    }
+  }
+
+  function handleCatalogModelSelect(nextModel: string) {
+    return handleAutoSaveChange({ model: nextModel }, "模型选择已保存。");
+  }
+
+  function handleReasoningEffortChange(nextReasoningEffort: ReasoningEffort) {
+    void handleAutoSaveChange(
+      { reasoningEffort: nextReasoningEffort },
+      "思考强度已保存。",
+    );
   }
 
   return (
@@ -323,7 +395,7 @@ export function ModelProviderCard({
             <ModelCatalogButton
               config={config}
               iconOnly={isMobile}
-              onSelectModel={handleModelChange}
+              onSelectModel={handleCatalogModelSelect}
               onError={handleCatalogError}
             />
             <SettingsHeaderResponsiveButton
@@ -427,9 +499,50 @@ export function ModelProviderCard({
           </div>
 
           <div className="lg:col-span-2 -mx-3">
+            <div className="border-t border-border px-3 pt-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Gauge className="h-3.5 w-3.5" />
+                    思考强度
+                  </p>
+                </div>
+                <div
+                  role="group"
+                  aria-label="思考强度"
+                  className="grid grid-cols-3 gap-1 rounded-[8px] border border-border bg-background p-1 sm:flex"
+                >
+                  {REASONING_EFFORT_OPTIONS.map((option) => {
+                    const selected = option === reasoningEffort;
+
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        disabled={isSaving}
+                        aria-pressed={selected}
+                        onClick={() => handleReasoningEffortChange(option)}
+                        className={cn(
+                          "h-7 min-w-12 rounded-[6px] px-2 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-60",
+                          selected
+                            ? "bg-foreground text-background"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                        )}
+                      >
+                        {REASONING_EFFORT_LABELS[option]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 -mx-3">
             <div className="flex items-start justify-between gap-4 border-t border-border px-3 pt-3">
               <div className="min-w-0 pr-4">
-                <p className="text-sm font-medium text-foreground">
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
                   模拟 OpenCode（beta）
                 </p>
               </div>
@@ -443,23 +556,26 @@ export function ModelProviderCard({
             </div>
           </div>
 
-          {/* 预存供应商 */}
+          {/* 模型供应商 */}
           <div className="lg:col-span-2 -mx-3">
             <div className="border-t border-border pt-3">
               <div className="border-b border-border px-3 pb-3">
-                <p className="text-sm font-medium text-foreground">预存供应商</p>
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                  模型供应商
+                </p>
               </div>
               {providerPresets.length === 0 ? (
                 <p className="px-3 pb-3 text-sm text-muted-foreground">
-                  暂无预存供应商，点击顶部"预存配置"添加。
+                  暂无模型供应商，点击顶部"预存配置"添加。
                 </p>
               ) : (
-                <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2 px-3 py-3">
                   {providerPresets.map((preset) => {
                     return (
                       <article
                         key={preset.id}
-                        className="editor-block-tile aspect-square"
+                        className="min-w-0 rounded-[8px] border border-border bg-background transition-colors hover:bg-accent/35"
                       >
                         <div
                           role="button"
@@ -472,8 +588,20 @@ export function ModelProviderCard({
                               handleApplyProviderPreset(preset);
                             }
                           }}
-                          className="editor-block-content relative h-full cursor-pointer overflow-hidden rounded-none border border-transparent transition-colors hover:bg-accent/40"
+                          className="relative flex min-h-[64px] cursor-pointer items-center gap-2 px-3 py-2.5"
                         >
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate text-sm font-medium text-foreground">
+                              {preset.model || preset.name}
+                            </h3>
+                            <p
+                              title={preset.baseURL}
+                              className="mt-1 truncate text-xs leading-5 text-muted-foreground"
+                            >
+                              {preset.baseURL}
+                            </p>
+                          </div>
+
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -483,7 +611,7 @@ export function ModelProviderCard({
                                 variant="outline"
                                 size="icon-sm"
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute top-3 right-3"
+                                className="shrink-0"
                               >
                                 <MoreHorizontal className="h-3.5 w-3.5" />
                               </Button>
@@ -501,29 +629,6 @@ export function ModelProviderCard({
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-
-                          <div className="flex h-full flex-col">
-                            <div className="flex min-h-[40px] items-center">
-                              {renderProviderLogo(preset.provider)}
-                            </div>
-
-                            <div className="mt-3 min-w-0">
-                              <h3 className="pr-8 text-base font-semibold tracking-[-0.03em] text-foreground">
-                                {preset.model || preset.name}
-                              </h3>
-                              <p
-                                title={preset.baseURL}
-                                className="mt-2 overflow-hidden break-all pr-8 text-xs leading-5 text-muted-foreground"
-                                style={{
-                                  display: "-webkit-box",
-                                  WebkitBoxOrient: "vertical",
-                                  WebkitLineClamp: 4,
-                                }}
-                              >
-                                {preset.baseURL}
-                              </p>
-                            </div>
-                          </div>
                         </div>
                       </article>
                     );
@@ -537,7 +642,10 @@ export function ModelProviderCard({
           <div className="lg:col-span-2 -mx-3">
             <div className="border-t border-border pt-3">
               <div className="border-b border-border px-3 pb-3">
-                <p className="text-sm font-medium text-foreground">推荐供应商</p>
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                  推荐供应商
+                </p>
               </div>
               <div
                 data-testid="model-provider-recommendations"

@@ -83,6 +83,8 @@ pub struct AgentProviderConfig {
     #[serde(default)]
     model: String,
     #[serde(default)]
+    reasoning_effort: String,
+    #[serde(default)]
     simulate_opencode_beta: bool,
 }
 
@@ -97,6 +99,8 @@ pub struct AgentProviderPreset {
     api_key: String,
     #[serde(default)]
     model: String,
+    #[serde(default)]
+    reasoning_effort: String,
     #[serde(default)]
     provider: String,
     #[serde(default, rename = "baseURL")]

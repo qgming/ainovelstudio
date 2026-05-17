@@ -46,6 +46,7 @@ describe("agent settings store", () => {
         apiKey: "test-key",
         baseURL: "https://example.com/v1",
         model: "gpt-4o-mini",
+        reasoningEffort: "high",
         simulateOpencodeBeta: true,
       },
       enabledTools: {},
@@ -55,6 +56,7 @@ describe("agent settings store", () => {
       baseURL: "https://example.com/v1",
       apiKey: "test-key",
       model: "gpt-4o-mini",
+      reasoningEffort: "high",
       simulateOpencodeBeta: true,
     });
     await Promise.resolve();
@@ -64,6 +66,7 @@ describe("agent settings store", () => {
         config: expect.objectContaining({
           baseURL: "https://example.com/v1",
           model: "gpt-4o-mini",
+          reasoningEffort: "high",
           simulateOpencodeBeta: true,
         }),
       }),
@@ -110,6 +113,7 @@ describe("agent settings store", () => {
             apiKey: "sqlite-key",
             baseURL: "https://example.com/v1",
             model: "sqlite-model",
+            reasoningEffort: "high",
             simulateOpencodeBeta: true,
           },
           enabledTools: { workspace_read: false },
@@ -127,6 +131,7 @@ describe("agent settings store", () => {
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("sqlite-model");
+    expect(state.config.reasoningEffort).toBe("high");
     expect(state.config.simulateOpencodeBeta).toBe(true);
     expect(state.enabledTools.workspace_read).toBe(false);
     expect(state.enabledTools.workspace_write).toBe(true);
@@ -169,6 +174,7 @@ describe("agent settings store", () => {
     expect(state.config.apiKey).toBe("sqlite-key");
     expect(state.config.baseURL).toBe("https://example.com/v1");
     expect(state.config.model).toBe("sqlite-model");
+    expect(state.config.reasoningEffort).toBe("auto");
     expect(state.config.simulateOpencodeBeta).toBe(false);
   });
 
@@ -218,6 +224,7 @@ describe("agent settings store", () => {
         apiKey: "",
         baseURL: "https://api.openai.com/v1",
         model: "gpt-4.1",
+        reasoningEffort: "auto",
       }),
     ]);
   });
@@ -250,6 +257,7 @@ describe("agent settings store", () => {
       apiKey: "",
       baseURL: "",
       model: "",
+      reasoningEffort: "auto",
       simulateOpencodeBeta: false,
     });
   });
@@ -366,12 +374,14 @@ describe("agent settings store", () => {
 
     const state = useAgentSettingsStore.getState();
     expect(state.config.model).toBe("");
+    expect(state.config.reasoningEffort).toBe("auto");
     expect(state.config.simulateOpencodeBeta).toBe(false);
     expect(state.defaultAgentMarkdown).toBe("# 文件主代理");
   });
 
   it("默认模型配置不注入 Base URL", () => {
     expect(useAgentSettingsStore.getState().config.baseURL).toBe("");
+    expect(useAgentSettingsStore.getState().config.reasoningEffort).toBe("auto");
     expect(useAgentSettingsStore.getState().config.simulateOpencodeBeta).toBe(false);
   });
 
@@ -390,6 +400,7 @@ describe("agent settings store", () => {
     const state = useAgentSettingsStore.getState();
     expect(state.enabledTools.workspace_write).toBe(true);
     expect(state.config.model).toBe("");
+    expect(state.config.reasoningEffort).toBe("auto");
     expect(state.config.simulateOpencodeBeta).toBe(false);
     expect(state.defaultAgentMarkdown).toBe("");
   });

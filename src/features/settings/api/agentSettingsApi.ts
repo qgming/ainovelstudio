@@ -4,6 +4,7 @@ export type AgentProviderConfigDocument = {
   apiKey: string;
   baseURL: string;
   model: string;
+  reasoningEffort?: string;
   simulateOpencodeBeta?: boolean;
 };
 
@@ -12,6 +13,7 @@ export type AgentProviderPreset = {
   name: string;
   apiKey: string;
   model: string;
+  reasoningEffort?: string;
   provider: string;
   baseURL: string;
   websiteUrl?: string;
