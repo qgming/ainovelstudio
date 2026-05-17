@@ -27,6 +27,8 @@ export type ForwardProviderResponse = {
 
 type JsonRecord = Record<string, unknown>;
 
+const MAX_BUFFERED_STREAM_SNIFF_BYTES = 256 * 1024;
+
 export function fetchProviderModelsViaTauri(config: AgentProviderConfig) {
   return invoke<ProviderHttpResponse>("fetch_provider_models", { config });
 }
@@ -404,6 +406,10 @@ function sniffBufferedStreamBody(chunks: Uint8Array[]) {
   return "passthrough" as const;
 }
 
+function getBufferedByteLength(chunks: Uint8Array[]) {
+  return chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+}
+
 export async function streamProviderRequestViaTauri(
   request: ForwardProviderRequest,
   abortSignal?: AbortSignal,
@@ -490,6 +496,14 @@ export async function streamProviderRequestViaTauri(
           const chunk = new Uint8Array(payload.chunk);
           if (bufferedJsonChunks) {
             bufferedJsonChunks.push(chunk);
+            if (getBufferedByteLength(bufferedJsonChunks) > MAX_BUFFERED_STREAM_SNIFF_BYTES) {
+              resolvePassthroughStream(
+                bufferedResponseMeta?.headers ?? {},
+                bufferedResponseMeta?.status ?? 200,
+                bufferedJsonChunks,
+              );
+              return;
+            }
             const sniffedBodyType = sniffBufferedStreamBody(bufferedJsonChunks);
             if (sniffedBodyType === "sse-chat-completion-json") {
               return;

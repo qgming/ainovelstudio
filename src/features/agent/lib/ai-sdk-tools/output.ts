@@ -1,6 +1,7 @@
 import type { JSONValue } from "ai";
 import { defineTool } from "../modelGateway";
 import type { AgentTool, ToolResult } from "../runtime";
+import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "../subagentOutput";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
 import type { ToolBuilder, ToolExecutionOptions, ToolRunner } from "./types";
 
@@ -14,24 +15,43 @@ function isJsonPrimitive(value: unknown): value is null | boolean | number | str
   return value === null || ["boolean", "number", "string"].includes(typeof value);
 }
 
-function toJsonValue(value: unknown, seen = new WeakSet<object>()): JSONValue | undefined {
+const MAX_TOOL_DATA_STRING_CHARS = 4_000;
+const MAX_TOOL_DATA_ARRAY_ITEMS = 80;
+const MAX_TOOL_DATA_OBJECT_KEYS = 80;
+const MAX_TOOL_DATA_DEPTH = 6;
+
+function toJsonValue(value: unknown, seen = new WeakSet<object>(), depth = 0): JSONValue | undefined {
   if (value === undefined) return undefined;
+  if (typeof value === "string") {
+    return truncateTextWithMeta(value, MAX_TOOL_DATA_STRING_CHARS).text;
+  }
   if (isJsonPrimitive(value)) return value;
+  if (depth >= MAX_TOOL_DATA_DEPTH) return "[MaxDepth]";
   if (Array.isArray(value)) {
     if (seen.has(value)) return "[Circular]";
     seen.add(value);
     const items = value
-      .map((item) => toJsonValue(item, seen))
+      .slice(0, MAX_TOOL_DATA_ARRAY_ITEMS)
+      .map((item) => toJsonValue(item, seen, depth + 1))
       .filter((item): item is JSONValue => item !== undefined);
+    if (value.length > MAX_TOOL_DATA_ARRAY_ITEMS) {
+      items.push(`[Truncated ${value.length - MAX_TOOL_DATA_ARRAY_ITEMS} items]`);
+    }
     return items;
   }
   if (typeof value === "object" && value !== null) {
     if (seen.has(value)) return "[Circular]";
     seen.add(value);
-    const entries = Object.entries(value)
-      .map(([key, item]) => [key, toJsonValue(item, seen)] as const)
+    const objectEntries = Object.entries(value);
+    const entries = objectEntries
+      .slice(0, MAX_TOOL_DATA_OBJECT_KEYS)
+      .map(([key, item]) => [key, toJsonValue(item, seen, depth + 1)] as const)
       .filter((entry): entry is readonly [string, JSONValue] => entry[1] !== undefined);
-    return Object.fromEntries(entries) as JSONValue;
+    const result = Object.fromEntries(entries) as Record<string, JSONValue>;
+    if (objectEntries.length > MAX_TOOL_DATA_OBJECT_KEYS) {
+      result.__truncated = `${objectEntries.length - MAX_TOOL_DATA_OBJECT_KEYS} keys omitted`;
+    }
+    return result as JSONValue;
   }
   return String(value);
 }
@@ -39,9 +59,10 @@ function toJsonValue(value: unknown, seen = new WeakSet<object>()): JSONValue | 
 // 工具内部保留 ok/summary/data 语义；进入 AI SDK 前统一压成可序列化输出。
 function toAiSdkToolOutput(result: ToolResult): AiSdkToolOutput {
   const data = toJsonValue(result.data);
+  const summary = truncateTextWithMeta(result.summary, MAX_TOOL_OUTPUT_SUMMARY_CHARS).text;
   return data === undefined
-    ? { ok: result.ok, summary: result.summary }
-    : { data, ok: result.ok, summary: result.summary };
+    ? { ok: result.ok, summary }
+    : { data, ok: result.ok, summary };
 }
 
 export async function runAiSdkTool(

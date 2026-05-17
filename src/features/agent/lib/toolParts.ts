@@ -1,4 +1,5 @@
 import type { AgentPart, AgentRunStatus } from "./types";
+import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "./subagentOutput";
 
 const MISSING_TOOL_CALL_ID_ERROR = "toolCallId 缺失。";
 const TOOL_CALL_NOT_FOUND_ERROR = "未匹配到对应的工具调用。";
@@ -11,15 +12,18 @@ function normalizeToolCallId(toolCallId: string) {
 }
 
 export function summarizeToolOutput(output: unknown) {
+  let summary = "";
   if (typeof output === "string") {
-    return output;
+    summary = output;
+  } else {
+    try {
+      summary = JSON.stringify(output) ?? "";
+    } catch {
+      summary = "";
+    }
   }
 
-  try {
-    return JSON.stringify(output) ?? "";
-  } catch {
-    return "";
-  }
+  return truncateTextWithMeta(summary, MAX_TOOL_OUTPUT_SUMMARY_CHARS).text;
 }
 
 type ToolResultPart = Extract<AgentPart, { type: "tool-result" }>;

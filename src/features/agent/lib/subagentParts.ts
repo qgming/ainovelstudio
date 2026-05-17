@@ -5,6 +5,7 @@
 
 import type { AgentPart } from "./types";
 import { mergeToolResultPart } from "./toolParts";
+import { compactSubagentSnapshotParts } from "./subagentOutput";
 
 /** 构造 subagent 类型的 AgentPart 快照，用于 onProgress 回调。 */
 export function createSubagentSnapshot({
@@ -29,7 +30,7 @@ export function createSubagentSnapshot({
     status,
     summary,
     detail,
-    parts: [...parts],
+    parts: compactSubagentSnapshotParts(parts),
   };
 }
 

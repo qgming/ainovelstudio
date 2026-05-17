@@ -21,6 +21,7 @@ type CommandResult<T> = Result<T, String>;
 
 const CONNECTION_TEST_SYSTEM: &str = "你是连接测试助手。请直接回复一句不超过20字的自然语言，确认你已收到这条测试消息。不要调用工具，不要返回 JSON。";
 const CONNECTION_TEST_PROMPT: &str = "请直接回复一句简短的话，确认你已收到这条测试消息。";
+const STREAM_RESPONSE_LOG_LIMIT_BYTES: usize = 128 * 1024;
 const OPENCODE_CLIENT: &str = "cli";
 const OPENCODE_PROJECT: &str = "global";
 
@@ -377,12 +378,17 @@ async fn stream_provider_request_inner(
         },
     );
 
-    let mut response_body = Vec::<u8>::new();
+    let mut response_body_log = Vec::<u8>::new();
+    let mut response_body_bytes = 0usize;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         registry.check(Some(request_id))?;
         let chunk = chunk.map_err(|error| error.to_string())?;
-        response_body.extend_from_slice(&chunk);
+        response_body_bytes += chunk.len();
+        if response_body_log.len() < STREAM_RESPONSE_LOG_LIMIT_BYTES {
+            let remaining = STREAM_RESPONSE_LOG_LIMIT_BYTES - response_body_log.len();
+            response_body_log.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+        }
         emit_stream_event(
             app,
             ProviderStreamEvent::Chunk {
@@ -403,16 +409,28 @@ async fn stream_provider_request_inner(
         NewAiCallLog {
             method: log_method,
             url: log_url,
-            status,
-            ok,
-            request_json: log_request_json,
-            response_json: String::from_utf8_lossy(&response_body).into_owned(),
-            error: String::new(),
-        },
-    );
+                status,
+                ok,
+                request_json: log_request_json,
+                response_json: format_stream_response_log(&response_body_log, response_body_bytes),
+                error: String::new(),
+            },
+        );
     Ok(())
 }
 
 fn emit_stream_event(app: &AppHandle, payload: ProviderStreamEvent) {
     let _ = app.emit("provider-stream", payload);
+}
+
+fn format_stream_response_log(bytes: &[u8], total_bytes: usize) -> String {
+    let mut body = String::from_utf8_lossy(bytes).into_owned();
+    if total_bytes > bytes.len() {
+        body.push_str(&format!(
+            "\n\n[stream log truncated: captured {} of {} bytes]",
+            bytes.len(),
+            total_bytes
+        ));
+    }
+    body
 }

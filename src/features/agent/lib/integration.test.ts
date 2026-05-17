@@ -1608,24 +1608,27 @@ describe("agent session (streaming)", () => {
       summary: "已派发子任务：临时 Subagent",
       parts: [],
     });
-    expect(subagentParts[3].parts).toEqual([
+    const toolProgress = subagentParts.find(
+      (part) => part.parts.some((inner) => inner.type === "tool-call" && inner.toolName === "workspace_read"),
+    );
+    expect(toolProgress?.parts).toEqual(expect.arrayContaining([
       { type: "reasoning", summary: "", detail: "正在分析人物动机。" },
-      {
+      expect.objectContaining({
         type: "tool-call",
         toolName: "workspace_read",
         toolCallId: "sub-call-1",
         status: "completed",
         inputSummary: '{"path":"章节/第一章.md"}',
-        output: "已读取当前章节",
         outputSummary: "已读取当前章节",
-      },
-    ]);
-    expect(subagentParts[5]).toMatchObject({
+      }),
+    ]));
+    const finalSubagentPart = subagentParts[subagentParts.length - 1];
+    expect(finalSubagentPart).toMatchObject({
       status: "completed",
       summary: "临时 Subagent 子任务已完成",
       detail: "建议先补一段主角迟疑。",
     });
-    expect(subagentParts[5].parts[subagentParts[5].parts.length - 1]).toEqual({
+    expect(finalSubagentPart.parts[finalSubagentPart.parts.length - 1]).toEqual({
       type: "text",
       text: "建议先补一段主角迟疑。",
     });
@@ -1646,6 +1649,7 @@ describe("agent session (streaming)", () => {
     expect(taskResult?.status).toBe("completed");
     expect(taskResult?.output).toMatchObject({
       agentName: "临时 Subagent",
+      mode: "execute",
     });
     expect(taskResult?.outputSummary).toContain('"agentName":"临时 Subagent"');
     expect(taskResult?.outputSummary).toContain(
@@ -2014,6 +2018,200 @@ describe("agent session (streaming)", () => {
     expect(subagentTools?.workspace_json).toBeDefined();
     expect(subagentTools?.workspace_path).toBeDefined();
     expect(subagentTools?.delegate_task).toBeUndefined();
+  });
+
+  it("readonly 子代理会过滤写入类工具", async () => {
+    async function* mockSubagentFullStream() {
+      yield { type: "text-delta" as const, text: "只读分析完成。" };
+    }
+
+    const mockSubagentStreamFn = vi.fn().mockReturnValue({
+      fullStream: mockSubagentFullStream(),
+    });
+    const mockStreamFn = vi.fn().mockImplementation(
+      (request: {
+        tools?: Record<
+          string,
+          {
+            execute?: (
+              input: { mode: "readonly"; prompt: string },
+              options: unknown,
+            ) => Promise<unknown>;
+          }
+        >;
+      }) => ({
+        fullStream: (async function* () {
+          await request.tools?.delegate_task?.execute?.(
+            { mode: "readonly", prompt: "只读检查项目状态" },
+            {} as never,
+          );
+        })(),
+      }),
+    );
+
+    const stream = runSessionPrompt({
+      activeFilePath: "章节/第一章.md",
+      enabledSkills: [],
+      enabledToolIds: [
+        "delegate_task",
+        "workspace_read",
+        "workspace_write",
+        "workspace_edit",
+        "workspace_json",
+        "workspace_path",
+        "workspace_delete",
+      ],
+      prompt: "只读检查项目状态",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {
+        workspace_delete: { description: "删除", execute: async () => ({ ok: true, summary: "删除" }) },
+        workspace_edit: { description: "编辑", execute: async () => ({ ok: true, summary: "编辑" }) },
+        workspace_json: { description: "JSON", execute: async () => ({ ok: true, summary: "JSON" }) },
+        workspace_path: { description: "路径", execute: async () => ({ ok: true, summary: "路径" }) },
+        workspace_read: { description: "读取", execute: async () => ({ ok: true, summary: "读取" }) },
+        workspace_write: { description: "写入", execute: async () => ({ ok: true, summary: "写入" }) },
+      },
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    for await (const _part of stream) {
+      // drain stream
+    }
+
+    const subagentTools = mockSubagentStreamFn.mock.calls[0][0].tools;
+    expect(subagentTools?.workspace_read).toBeDefined();
+    expect(subagentTools?.workspace_write).toBeUndefined();
+    expect(subagentTools?.workspace_edit).toBeUndefined();
+    expect(subagentTools?.workspace_json).toBeUndefined();
+    expect(subagentTools?.workspace_path).toBeUndefined();
+    expect(subagentTools?.workspace_delete).toBeUndefined();
+  });
+
+  it("子代理长输出会裁剪后回传给父代理", async () => {
+    const longText = "长输出".repeat(2500);
+    const parts: AgentPart[] = [];
+
+    const mockSubagentStreamFn = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: "text-delta" as const, text: longText };
+      })(),
+    });
+    const mockStreamFn = vi.fn().mockImplementation(
+      (request: {
+        tools?: Record<string, { execute?: (input: { prompt: string }, options: unknown) => Promise<unknown> }>;
+      }) => ({
+        fullStream: (async function* () {
+          const output = await request.tools?.delegate_task?.execute?.(
+            { prompt: "生成长报告" },
+            {} as never,
+          );
+          yield {
+            type: "tool-result" as const,
+            toolName: "delegate_task",
+            toolCallId: "task-call-long-1",
+            output: output ?? "",
+          };
+        })(),
+      }),
+    );
+
+    const stream = runSessionPrompt({
+      activeFilePath: "章节/第一章.md",
+      enabledSkills: [],
+      enabledToolIds: ["delegate_task"],
+      prompt: "生成长报告",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    const taskResult = parts.find(
+      (part): part is Extract<AgentPart, { type: "tool-result" }> =>
+        part.type === "tool-result" && part.toolName === "delegate_task",
+    );
+    expect(taskResult?.output).toMatchObject({
+      originalSummaryChars: longText.length,
+      summaryTruncated: true,
+    });
+    expect((taskResult?.output as { summary?: string } | undefined)?.summary?.length).toBeLessThan(6500);
+    expect(taskResult?.outputSummary.length).toBeLessThan(6500);
+  });
+
+  it("子代理流式解码异常时会保留已生成文本完成", async () => {
+    const parts: AgentPart[] = [];
+
+    const mockSubagentStreamFn = vi.fn().mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: "text-delta" as const, text: "已生成的可用摘要。" };
+        throw new Error("error decoding response body");
+      })(),
+    });
+    const mockStreamFn = vi.fn().mockImplementation(
+      (request: {
+        tools?: Record<string, { execute?: (input: { prompt: string }, options: unknown) => Promise<unknown> }>;
+      }) => ({
+        fullStream: (async function* () {
+          const output = await request.tools?.delegate_task?.execute?.(
+            { prompt: "分析到一半供应商断流" },
+            {} as never,
+          );
+          yield {
+            type: "tool-result" as const,
+            toolName: "delegate_task",
+            toolCallId: "task-call-decode-1",
+            output: output ?? "",
+          };
+        })(),
+      }),
+    );
+
+    const stream = runSessionPrompt({
+      activeFilePath: "章节/第一章.md",
+      enabledSkills: [],
+      enabledToolIds: ["delegate_task"],
+      prompt: "分析到一半供应商断流",
+      providerConfig: {
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+        model: "test-model",
+      },
+      workspaceTools: {},
+      _streamFn: mockStreamFn,
+      _subagentStreamFn: mockSubagentStreamFn,
+    });
+
+    for await (const part of stream) {
+      parts.push(part);
+    }
+
+    expect(parts.some(
+      (part) =>
+        part.type === "subagent" &&
+        part.status === "completed" &&
+        part.summary.includes("流式解码异常"),
+    )).toBe(true);
+    const taskResult = parts.find(
+      (part): part is Extract<AgentPart, { type: "tool-result" }> =>
+        part.type === "tool-result" && part.toolName === "delegate_task",
+    );
+    expect(taskResult?.output).toMatchObject({
+      status: "completed",
+      summary: "已生成的可用摘要。",
+    });
   });
 });
 
