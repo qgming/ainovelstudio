@@ -125,10 +125,18 @@ function setUserAgent(value: string) {
   });
 }
 
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+}
+
 describe("App shell", () => {
   beforeEach(() => {
     window.location.hash = "";
     setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    setViewportWidth(1280);
     window.localStorage.clear();
     document.documentElement.className = "";
     useThemeStore.setState({ theme: "light", initialized: false });
@@ -193,6 +201,11 @@ describe("App shell", () => {
     render(<App />);
 
     expect(screen.getByText("神笔写作")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "书架" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "技能" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "排行榜" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "主题切换" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "设置" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "最小化窗口" }));
     fireEvent.click(screen.getByRole("button", { name: "最大化窗口" }));
@@ -237,10 +250,12 @@ describe("App shell", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
+    const homeActions = screen.getByRole("button", { name: "查看 0.2.4 更新" }).parentElement;
     expect(screen.getByRole("button", { name: "查看 0.2.4 更新" })).toBeInTheDocument();
+    expect(homeActions?.firstElementChild).toHaveAttribute("aria-label", "查看 0.2.4 更新");
   });
 
-  it("非书架页面检测到新版本时不会显示浮动更新入口", async () => {
+  it("非书架页面检测到新版本时不会显示首页顶部更新按钮", async () => {
     window.location.hash = "#/setting";
     updateStoreState.status = "available";
     updateStoreState.updateSummary = {
@@ -314,6 +329,15 @@ describe("App shell", () => {
     });
 
     expect(mockWindow.onCloseRequested).not.toHaveBeenCalled();
+  });
+
+  it("窄屏桌面环境会显示底部导航", async () => {
+    setViewportWidth(390);
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "最小化窗口" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "首页" })).toBeInTheDocument();
   });
 
   it("默认进入首页并展示书籍入口动作", async () => {
@@ -528,7 +552,7 @@ describe("App shell", () => {
     });
   });
 
-  it("点击侧边栏主题按钮会切换深色模式且不会离开当前页面", async () => {
+  it("点击顶部栏主题按钮会切换深色模式且不会离开当前页面", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("link", { name: "技能" }));

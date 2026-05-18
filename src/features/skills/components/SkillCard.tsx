@@ -24,7 +24,7 @@ export function SkillCard({ onOpen, onToggle, skill }: SkillCardProps) {
         tabIndex={0}
         onClick={onOpen}
         onKeyDown={handleKeyDown}
-        className="editor-block-content cursor-pointer overflow-hidden rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
+        className="editor-block-content cursor-pointer overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:ring-inset"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">

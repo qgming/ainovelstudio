@@ -50,6 +50,9 @@ export function DefaultAgentSection({
           {errorMessage}
         </div>
       ) : null}
+      <div className="flex h-9 shrink-0 items-center px-4">
+        <h3 className="truncate text-[15px] font-medium tracking-[-0.03em] text-foreground">AGENTS.md</h3>
+      </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         <textarea
           aria-label="默认 AGENTS 编辑器"

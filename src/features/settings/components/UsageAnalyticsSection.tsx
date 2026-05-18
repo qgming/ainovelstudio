@@ -254,6 +254,9 @@ export function UsageAnalyticsSection() {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex h-9 items-center px-4">
+          <h3 className="truncate text-[15px] font-medium tracking-[-0.03em] text-foreground">用量概览</h3>
+        </div>
         <div className="border-b border-border px-4 py-3">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <div className="inline-flex items-center gap-2 border border-[#dbe3ee] px-3 py-2 dark:border-[#2a3038]">

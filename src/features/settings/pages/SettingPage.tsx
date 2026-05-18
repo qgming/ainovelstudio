@@ -23,7 +23,7 @@ function DetailTitle({
   parentTo: string;
 }) {
   return (
-    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
+    <div className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">
       <Link
         to={parentTo}
         className="text-muted-foreground transition-colors hover:text-foreground"
@@ -44,8 +44,11 @@ function DesktopSettingNav({
   onSelect: (sectionKey: SettingSectionKey) => void;
 }) {
   return (
-    <aside className="w-full shrink-0 overflow-hidden border-b border-border bg-app lg:w-[240px] lg:border-r lg:border-b-0">
-      <div>
+    <aside className="flex h-full w-[252px] shrink-0 flex-col overflow-hidden bg-app">
+      <div className="flex min-h-9 shrink-0 items-center px-4">
+        <h1 className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">设置</h1>
+      </div>
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-2" aria-label="设置导航">
         {settingNavItems.map(({ icon: Icon, key, title }) => {
           const isActive = activeSection === key;
           return (
@@ -55,10 +58,10 @@ function DesktopSettingNav({
               aria-label={title}
               onClick={() => onSelect(key)}
               className={[
-                "flex h-11 w-full items-center gap-3 border-b border-border px-3 text-left transition",
+                "flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left transition",
                 isActive
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  ? "bg-panel text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.045)] dark:shadow-none"
+                  : "text-muted-foreground hover:bg-panel-subtle hover:text-foreground",
               ].join(" ")}
             >
               <Icon className="h-4.5 w-4.5 shrink-0" />
@@ -66,7 +69,7 @@ function DesktopSettingNav({
             </button>
           );
         })}
-      </div>
+      </nav>
     </aside>
   );
 }
@@ -77,7 +80,7 @@ function MobileSettingListPage() {
 
   return (
     <PageShell
-      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">设置</h1>}
+      title={<h1 className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">设置</h1>}
       contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
     >
       <div className="h-full min-h-0 overflow-y-auto bg-app">
@@ -156,26 +159,19 @@ export function SettingPage() {
   }
 
   return (
-    <PageShell
-      title={<h1 className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">设置</h1>}
-      contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
-    >
-      <div className="flex h-full min-h-0 flex-col gap-0 lg:flex-row">
-        <DesktopSettingNav
-          activeSection={desktopActiveSection}
-          onSelect={(nextSection) => {
-            setDesktopActiveSection(nextSection);
-            if (sectionParam) {
-              navigate(`/setting/${nextSection}`);
-            }
-          }}
-        />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <SettingSectionContent sectionKey={desktopActiveSection} />
-          </div>
-        </div>
-      </div>
-    </PageShell>
+    <section className="editor-shell flex h-full min-h-0 overflow-hidden bg-app">
+      <DesktopSettingNav
+        activeSection={desktopActiveSection}
+        onSelect={(nextSection) => {
+          setDesktopActiveSection(nextSection);
+          if (sectionParam) {
+            navigate(`/setting/${nextSection}`);
+          }
+        }}
+      />
+      <main className="min-w-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <SettingSectionContent sectionKey={desktopActiveSection} />
+      </main>
+    </section>
   );
 }

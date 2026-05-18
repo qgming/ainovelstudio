@@ -84,6 +84,9 @@ function ToolLibrarySection({
         actions={<span className="text-xs text-muted-foreground">已启用 {enabledCount}</span>}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex h-9 items-center px-4">
+          <h3 className="truncate text-[15px] font-medium tracking-[-0.03em] text-foreground">内置工具</h3>
+        </div>
         <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
           {toolCards.map((toolDef) => {
             const enabled = enabledTools[toolDef.id] ?? true;

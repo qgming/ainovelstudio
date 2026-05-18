@@ -11,6 +11,7 @@ import { Toast, type ToastTone } from "@shared/components/Toast";
 import { ConfirmDialog } from "@shared/components/dialogs/ConfirmDialog";
 import { PromptDialog } from "@shared/components/dialogs/PromptDialog";
 import { PageShell } from "@shared/components/PageShell";
+import { cn } from "@shared/utils";
 import {
   clearStoredWorkspaceSnapshot,
   createBookWorkspace,
@@ -25,6 +26,12 @@ import { buildBookWorkspaceRoute } from "@features/books/lib/routes";
 import type { BookWorkspaceSummary } from "@features/books/types";
 import { useNavigate } from "react-router-dom";
 
+type BookLibraryUpdateAction = {
+  label: string;
+  onClick: () => void;
+  text: string;
+};
+
 type LoadStatus = "loading" | "ready";
 
 type ToastState = {
@@ -37,7 +44,21 @@ function getReadableError(error: unknown) {
   return error instanceof Error ? error.message : "操作失败，请重试。";
 }
 
-export function BookLibraryPage() {
+function formatBookUpdatedAt(updatedAt: number) {
+  if (!Number.isFinite(updatedAt) || updatedAt <= 0) {
+    return "暂无编辑时间";
+  }
+
+  const timestamp = updatedAt < 10_000_000_000 ? updatedAt * 1000 : updatedAt;
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+export function BookLibraryPage({ updateAction }: { updateAction?: BookLibraryUpdateAction } = {}) {
   const navigate = useNavigate();
   const [books, setBooks] = useState<BookWorkspaceSummary[]>([]);
   const [status, setStatus] = useState<LoadStatus>("loading");
@@ -181,8 +202,11 @@ export function BookLibraryPage() {
   return (
     <>
       <PageShell
-        title={<div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">书架</div>}
+        title={<div className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">书架</div>}
         actions={[
+          ...(updateAction
+            ? [{ icon: Download, label: updateAction.label, text: updateAction.text, tone: "primary" as const, onClick: updateAction.onClick }]
+            : []),
           { icon: RefreshCw, label: "刷新书架", tone: "default", onClick: () => void refreshBooks() },
           {
             icon: Upload,
@@ -228,26 +252,22 @@ export function BookLibraryPage() {
                     return (
                       <article
                         key={book.id}
-                        className={[
-                          "editor-block-tile",
-                          isDeleting || isExporting
-                            ? "opacity-70"
-                            : "",
-                        ].join(" ")}
+                        className={cn(
+                          "editor-block-tile group/book-card",
+                          (isDeleting || isExporting) && "opacity-70",
+                        )}
                       >
                         <div
                           role="link"
+                          aria-label={`Book ${book.name}`}
                           tabIndex={0}
                           onClick={() => navigate(buildBookWorkspaceRoute(book.id))}
                           onKeyDown={(event) => handleBookTileKeyDown(book.id, event)}
-                          className="editor-block-content cursor-pointer overflow-hidden rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
+                          className="editor-block-content cursor-pointer overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:ring-inset"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
                               <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Book</p>
-                              <h2 className="mt-2 line-clamp-3 text-[24px] font-semibold leading-[1.15] tracking-[-0.05em] text-foreground">
-                                {book.name}
-                              </h2>
                             </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -259,7 +279,7 @@ export function BookLibraryPage() {
                                   onClick={(event) => event.stopPropagation()}
                                   variant="ghost"
                                   size="icon-sm"
-                                  className="text-muted-foreground"
+                                  className="rounded-lg text-muted-foreground opacity-80 transition-opacity group-hover/book-card:opacity-100"
                                 >
                                   <Ellipsis className="h-4 w-4" />
                                 </Button>
@@ -283,6 +303,16 @@ export function BookLibraryPage() {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
+
+                          <div className="min-w-0 flex-1">
+                            <h2 className="mt-2 line-clamp-3 text-[24px] font-semibold leading-[1.15] tracking-[-0.05em] text-foreground">
+                              {book.name}
+                            </h2>
+                          </div>
+
+                          <p className="mt-auto truncate border-t border-border/70 pt-3 text-xs text-muted-foreground">
+                            最近编辑 {formatBookUpdatedAt(book.updatedAt)}
+                          </p>
                         </div>
                       </article>
                     );

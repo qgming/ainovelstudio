@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Cable, Download, LoaderCircle, RefreshCw, RotateCcw, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@shared/ui/button";
 import { Input } from "@shared/ui/input";
 import { Label } from "@shared/ui/label";
 import {
@@ -24,7 +23,7 @@ import { useIsMobile } from "@shared/hooks/useMobile";
 import { useDataManagementStore } from "@features/settings/stores/useDataManagementStore";
 import { useSkillsStore } from "@features/skills/stores/useSkillsStore";
 import { BackupScopeCard } from "./BackupScopeCard";
-import { SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
+import { SettingsActionButton, SettingsHeaderResponsiveButton, SettingsSectionHeader } from "./SettingsSectionHeader";
 
 type ResetTarget = "skills";
 
@@ -123,14 +122,23 @@ function SyncCard({
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-4">
-        <Button type="button" variant="outline" disabled={!canOperateCloudBackup} onClick={onUpload}>
-          {uploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          {uploading ? "上传中..." : "上传云备份"}
-        </Button>
-        <Button type="button" disabled={!canOperateCloudBackup} onClick={onDownload}>
-          {downloading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          {downloading ? "下载中..." : "下载云备份"}
-        </Button>
+        <SettingsActionButton
+          type="button"
+          label={uploading ? "上传中..." : "上传云备份"}
+          text={uploading ? "上传中..." : "上传云备份"}
+          disabled={!canOperateCloudBackup}
+          icon={uploading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          onClick={onUpload}
+        />
+        <SettingsActionButton
+          type="button"
+          label={downloading ? "下载中..." : "下载云备份"}
+          text={downloading ? "下载中..." : "下载云备份"}
+          tone="primary"
+          disabled={!canOperateCloudBackup}
+          icon={downloading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          onClick={onDownload}
+        />
       </div>
 
       <BackupScopeCard variant="cloud" className="mt-5" />
@@ -355,14 +363,23 @@ export function DataManagementSection() {
                 <h3 className="text-[17px] font-medium tracking-[-0.03em] text-foreground">本地备份</h3>
               </div>
               <div className="flex flex-nowrap gap-3">
-                <Button type="button" onClick={() => void handleExport()} disabled={isMutating}>
-                  <Download className="h-4 w-4" />
-                  导出数据
-                </Button>
-                <Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={isMutating}>
-                  <Upload className="h-4 w-4" />
-                  导入数据
-                </Button>
+                <SettingsActionButton
+                  type="button"
+                  label="导出数据"
+                  text="导出数据"
+                  tone="primary"
+                  icon={<Download className="h-4 w-4" />}
+                  onClick={() => void handleExport()}
+                  disabled={isMutating}
+                />
+                <SettingsActionButton
+                  type="button"
+                  label="导入数据"
+                  text="导入数据"
+                  icon={<Upload className="h-4 w-4" />}
+                  onClick={() => inputRef.current?.click()}
+                  disabled={isMutating}
+                />
               </div>
             </div>
             <input
@@ -390,15 +407,14 @@ export function DataManagementSection() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button
+                <SettingsActionButton
                   type="button"
-                  variant="outline"
+                  label="重写技能"
+                  text="重写技能"
                   disabled={isMutating}
+                  icon={<RefreshCw className="h-4 w-4" />}
                   onClick={() => setPendingResetTarget("skills")}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  重写技能
-                </Button>
+                />
               </div>
             </div>
           </section>

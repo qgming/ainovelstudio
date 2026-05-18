@@ -441,6 +441,12 @@ export function ModelProviderCard({
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex h-9 items-center px-3">
+          <h3 className="flex items-center gap-2 truncate text-[15px] font-medium tracking-[-0.03em] text-foreground">
+            <PlugZap className="h-3.5 w-3.5 text-muted-foreground" />
+            基础配置
+          </h3>
+        </div>
         <div className="grid gap-3 px-3 py-3 lg:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">

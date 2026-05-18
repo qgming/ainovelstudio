@@ -6,9 +6,8 @@ import packageJson from "../../../../package.json";
 import { normalizeVersionLabel } from "@features/update/lib/version";
 import { useUpdateStore } from "@features/update/stores/useUpdateStore";
 import { UpdateReleaseDialog } from "@features/update/components/UpdateReleaseDialog";
-import { Button } from "@shared/ui/button";
 import { Switch } from "@shared/ui/switch";
-import { SettingsSectionHeader } from "./SettingsSectionHeader";
+import { SettingsActionButton, SettingsActionLink, SettingsSectionHeader } from "./SettingsSectionHeader";
 
 const APP_VERSION = packageJson.version;
 const OFFICIAL_WEBSITE = "https://www.qgming.com";
@@ -35,14 +34,14 @@ function ExternalLinkRow({
           {title}
         </p>
       </div>
-      <a
+      <SettingsActionLink
         href={href}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex h-9 shrink-0 items-center rounded-[10px] border border-[#dbe3ee] px-3 text-sm font-medium text-[#0f172a] transition hover:border-[#cbd5e1] dark:border-[#2b313b] dark:text-zinc-100 dark:hover:border-[#334155]"
-      >
-        {actionLabel}
-      </a>
+        label={actionLabel}
+        text={actionLabel}
+        className="inline-flex shrink-0 items-center"
+      />
     </div>
   );
 }
@@ -120,24 +119,24 @@ export function AboutSection() {
                   {normalizeVersionLabel(APP_VERSION)}
                 </p>
               </div>
-              <Button
+              <SettingsActionButton
                 type="button"
+                label={status === "available" ? "查看更新" : status === "checking" ? "检查中..." : "检查更新"}
+                text={status === "available" ? "查看更新" : status === "checking" ? "检查中..." : "检查更新"}
+                tone="primary"
                 disabled={isBusy}
                 onClick={handleCheckButtonClick}
+                icon={
+                  isBusy ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : status === "available" ? (
+                    <Download className="h-4 w-4" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )
+                }
               >
-                {isBusy ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : (
-                  status === "available"
-                    ? <Download className="h-4 w-4" />
-                    : <RefreshCw className="h-4 w-4" />
-                )}
-                {status === "available"
-                  ? "查看更新"
-                  : status === "checking"
-                    ? "检查中..."
-                    : "检查更新"}
-              </Button>
+              </SettingsActionButton>
             </div>
           </section>
 

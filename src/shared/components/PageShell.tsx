@@ -9,6 +9,7 @@ type PageAction = {
   icon: LucideIcon;
   label: string;
   onClick?: () => void;
+  text?: string;
   tone?: "default" | "dark" | "primary";
 };
 
@@ -41,14 +42,14 @@ export function PageShell({
       {hasHeaderContent ? (
         <header
           className={cn(
-            "flex min-h-10 shrink-0 items-center gap-3 border-b border-border bg-panel-subtle px-4 py-1.5 sm:px-5",
+            "flex min-h-9 shrink-0 items-center gap-3 bg-app px-4 sm:px-5",
             title ? "justify-between" : "justify-end",
           )}
         >
           {title ? <div className="min-w-0 flex-1">{title}</div> : null}
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {headerRight}
-            {actions.map(({ disabled = false, icon: Icon, label, onClick, tone = "default" }) => (
+            {actions.map(({ disabled = false, icon: Icon, label, onClick, text, tone = "default" }) => (
               <Button
                 key={label}
                 aria-label={label}
@@ -58,12 +59,15 @@ export function PageShell({
                 size={isMobile ? "icon-sm" : "sm"}
                 variant={actionVariants[tone]}
                 className={cn(
-                  isMobile ? "px-0" : "gap-1.5",
-                  tone === "dark" && "border-border bg-secondary text-foreground",
+                  "editor-page-action shadow-[0_8px_18px_rgba(15,23,42,0.045)] hover:shadow-[0_10px_22px_rgba(15,23,42,0.07)] dark:shadow-none dark:hover:shadow-none",
+                  isMobile ? "h-9 w-9 rounded-xl px-0" : "h-9 rounded-xl gap-1.5 px-3.5 text-[13px]",
+                  tone === "default" && "border-border/55 bg-panel text-foreground hover:border-border/75 hover:bg-panel-subtle dark:bg-panel dark:hover:bg-panel-subtle",
+                  tone === "dark" && "border-border/55 bg-secondary text-foreground hover:border-border/75 hover:bg-accent",
+                  tone === "primary" && "border-primary/25 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_oklab,var(--color-primary)_14%,transparent)] hover:border-primary/28 hover:bg-primary/92 hover:shadow-[0_10px_22px_color-mix(in_oklab,var(--color-primary)_18%,transparent)] dark:shadow-none dark:hover:shadow-none",
                 )}
               >
                 <Icon className="h-4 w-4" strokeWidth={2.1} />
-                {isMobile ? null : <span>{label}</span>}
+                {isMobile ? null : <span>{text ?? label}</span>}
               </Button>
             ))}
           </div>

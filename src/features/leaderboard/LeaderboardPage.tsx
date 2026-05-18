@@ -142,7 +142,7 @@ export function LeaderboardPage() {
 
   return (
     <PageShell
-      title={<div className="truncate text-[15px] font-semibold text-foreground">排行榜</div>}
+      title={<div className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">排行榜</div>}
       headerRight={
         <div className="hidden text-xs text-muted-foreground sm:block">
           番茄小说 · {formatUpdatedAt(updatedAt)}

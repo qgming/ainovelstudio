@@ -206,7 +206,7 @@ function EmptyStats() {
 
 function StatsTitle() {
   return (
-    <div className="truncate text-[15px] font-semibold tracking-[-0.03em] text-foreground">
+    <div className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">
       <Link to="/leaderboard" className="text-muted-foreground transition-colors hover:text-foreground">
         排行榜
       </Link>

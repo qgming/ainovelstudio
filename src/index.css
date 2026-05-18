@@ -264,26 +264,15 @@ textarea {
   }
 
   .editor-block-grid {
-    @apply relative grid overflow-hidden bg-transparent;
+    @apply grid content-start gap-3 overflow-visible bg-transparent p-4 sm:gap-4 sm:p-5;
   }
 
   .editor-block-tile {
-    @apply relative aspect-square border-r border-b border-border bg-transparent transition-colors hover:bg-accent/45;
+    @apply relative aspect-square overflow-hidden rounded-xl border border-border/45 bg-card text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] transition-all duration-150 hover:-translate-y-0.5 hover:border-border/70 hover:bg-card hover:shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:bg-panel dark:shadow-none dark:hover:border-border/70 dark:hover:bg-accent/25;
   }
 
   .editor-block-content {
-    @apply flex h-full flex-col gap-3 px-4 py-4;
-  }
-
-  .editor-block-grid::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--color-border);
-    pointer-events: none;
+    @apply flex h-full flex-col gap-3 rounded-xl px-4 py-4;
   }
 
   .editor-empty-state-title {
