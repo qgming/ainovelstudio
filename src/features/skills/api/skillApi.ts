@@ -70,10 +70,6 @@ export function initializeBuiltinSkills() {
   return invoke<BuiltinSkillsInitializationResult>("initialize_builtin_skills");
 }
 
-export function resetBuiltinSkills() {
-  return invoke<BuiltinSkillsInitializationResult>("reset_builtin_skills");
-}
-
 export function readSkillDetail(skillId: string) {
   return invoke<SkillManifest>("read_skill_detail", { skillId });
 }

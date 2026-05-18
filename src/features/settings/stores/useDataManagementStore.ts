@@ -12,10 +12,6 @@ import {
   type DataSyncSettingsDocument,
 } from "@features/settings/data-sync/dataSyncApi";
 import { collectAppClientState } from "@features/settings/data-sync/clientState";
-import {
-  resetBuiltinSkills,
-  type BuiltinSkillsInitializationResult,
-} from "@features/skills/api/skillApi";
 
 type DataManagementState = {
   config: DataSyncSettingsDocument;
@@ -28,7 +24,6 @@ type DataManagementActions = {
   exportBackup: () => Promise<string | null>;
   importBackup: (fileName: string, archiveBytes: number[]) => Promise<BackupRestoreResult>;
   initialize: () => Promise<void>;
-  reinitializeSkills: () => Promise<BuiltinSkillsInitializationResult>;
   saveConfig: (config: DataSyncSettingsDocument) => Promise<DataSyncSettingsDocument>;
   uploadCloudBackup: () => Promise<CloudBackupUploadResult>;
 };
@@ -118,17 +113,6 @@ export const useDataManagementStore = create<DataManagementStore>((set, get) => 
       return saved;
     } catch (error) {
       const message = formatError(error, "保存云备份配置失败。");
-      set((state) => ({ ...state, errorMessage: message, status: "error" }));
-      throw error;
-    }
-  },
-  reinitializeSkills: async () => {
-    try {
-      const result = await resetBuiltinSkills();
-      set((state) => ({ ...state, errorMessage: null }));
-      return result;
-    } catch (error) {
-      const message = formatError(error, "重写技能内置数据失败。");
       set((state) => ({ ...state, errorMessage: message, status: "error" }));
       throw error;
     }

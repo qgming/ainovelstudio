@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DataManagementSection } from "./DataManagementSection";
 import { useDataManagementStore } from "@features/settings/stores/useDataManagementStore";
-import { useSkillsStore } from "@features/skills/stores/useSkillsStore";
 
 const { toastMock } = vi.hoisted(() => ({
   toastMock: Object.assign(vi.fn(), {
@@ -30,8 +29,6 @@ vi.mock("@shared/hooks/useMobile", () => ({
 describe("DataManagementSection", () => {
   const downloadCloudBackupMock = vi.fn();
   const initializeMock = vi.fn();
-  const reinitializeSkillsMock = vi.fn();
-  const initializeSkillsStoreMock = vi.fn();
   const uploadCloudBackupMock = vi.fn();
 
   beforeEach(() => {
@@ -42,13 +39,6 @@ describe("DataManagementSection", () => {
     });
     initializeMock.mockReset();
     initializeMock.mockResolvedValue(undefined);
-    reinitializeSkillsMock.mockReset();
-    reinitializeSkillsMock.mockResolvedValue({
-      initializedSkillIds: ["builtin-skill"],
-      skippedSkillIds: [],
-    });
-    initializeSkillsStoreMock.mockReset();
-    initializeSkillsStoreMock.mockResolvedValue(undefined);
     uploadCloudBackupMock.mockReset();
     uploadCloudBackupMock.mockResolvedValue({
       localUpdatedAt: 123,
@@ -72,19 +62,19 @@ describe("DataManagementSection", () => {
       exportBackup: vi.fn(),
       importBackup: vi.fn(),
       initialize: initializeMock,
-      reinitializeSkills: reinitializeSkillsMock,
       saveConfig: vi.fn(),
       status: "ready",
       uploadCloudBackup: uploadCloudBackupMock,
     });
-    useSkillsStore.setState((state) => ({ ...state, initialize: initializeSkillsStoreMock }));
   });
 
-  it("展示技能重写初始化按钮", () => {
+  it("只展示云备份和本地备份卡片", () => {
     render(<DataManagementSection />);
 
-    expect(screen.getByText("重写初始化")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重写技能" })).toBeInTheDocument();
+    expect(screen.getByText("云备份")).toBeInTheDocument();
+    expect(screen.getByText("本地备份")).toBeInTheDocument();
+    expect(screen.queryByText("初始化")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重写技能" })).not.toBeInTheDocument();
   });
 
   it("展示上传和下载云备份按钮", () => {
@@ -101,15 +91,6 @@ describe("DataManagementSection", () => {
     expect(screen.getByText("云备份")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "上传云备份" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "下载云备份" })).toBeInTheDocument();
-  });
-
-  it("展示完整备份范围并明确包含模型配置", () => {
-    render(<DataManagementSection />);
-
-    expect(screen.getAllByText("完整备份范围")).toHaveLength(2);
-    expect(screen.getAllByText("模型配置")).toHaveLength(2);
-    expect(screen.getAllByText("主代理 AGENTS.md")).toHaveLength(2);
-    expect(screen.getAllByText("WebDAV 配置")).toHaveLength(2);
   });
 
   it("确认后会下载云备份并提示刷新", async () => {
@@ -138,41 +119,4 @@ describe("DataManagementSection", () => {
     });
   });
 
-  it("确认后会重写技能并刷新技能 store", async () => {
-    render(<DataManagementSection />);
-
-    fireEvent.click(screen.getByRole("button", { name: "重写技能" }));
-
-    const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText("重写技能初始化")).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "重写技能" }));
-
-    await waitFor(() => {
-      expect(reinitializeSkillsMock).toHaveBeenCalledTimes(1);
-      expect(initializeSkillsStoreMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(toastMock.success).toHaveBeenCalledWith("技能已重写初始化", {
-      description: "已重新写入 1 个内置技能。",
-    });
-  });
-
-  it("重写技能失败时会提示错误", async () => {
-    reinitializeSkillsMock.mockRejectedValue(new Error("技能重写失败"));
-    render(<DataManagementSection />);
-
-    fireEvent.click(screen.getByRole("button", { name: "重写技能" }));
-
-    const dialog = await screen.findByRole("alertdialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "重写技能" }));
-
-    await waitFor(() => {
-      expect(reinitializeSkillsMock).toHaveBeenCalledTimes(1);
-      expect(toastMock.error).toHaveBeenCalledWith("重写初始化失败", {
-        description: "技能重写失败",
-      });
-    });
-
-    expect(initializeSkillsStoreMock).not.toHaveBeenCalled();
-  });
 });

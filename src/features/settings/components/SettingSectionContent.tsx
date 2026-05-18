@@ -7,7 +7,6 @@ import {
 } from "@features/settings/stores/useAgentSettingsStore";
 import { DefaultAgentSection } from "./DefaultAgentSection";
 import { ModelProviderCard } from "./ModelProviderCard";
-import { SettingsSectionHeader } from "./SettingsSectionHeader";
 import { UsageAnalyticsSection } from "./UsageAnalyticsSection";
 import { Switch } from "@shared/ui/switch";
 import type { SettingSectionKey } from "./settingNavigation";
@@ -60,11 +59,9 @@ function ToolCard({
 }
 
 function ToolLibrarySection({
-  enabledCount,
   enabledTools,
   toggleTool,
 }: {
-  enabledCount: number;
   enabledTools: Record<string, boolean>;
   toggleTool: (toolId: string) => void;
 }) {
@@ -79,14 +76,7 @@ function ToolLibrarySection({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
-      <SettingsSectionHeader
-        title="工具库"
-        actions={<span className="text-xs text-muted-foreground">已启用 {enabledCount}</span>}
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex h-9 items-center px-4">
-          <h3 className="truncate text-[15px] font-medium tracking-[-0.03em] text-foreground">内置工具</h3>
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
         <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
           {toolCards.map((toolDef) => {
             const enabled = enabledTools[toolDef.id] ?? true;
@@ -153,8 +143,6 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
     setModelDraft(config);
     setModelDirty(false);
   }, [config]);
-
-  const enabledCount = useMemo(() => Object.values(enabledTools).filter(Boolean).length, [enabledTools]);
 
   function handleAgentDraftChange(value: string) {
     setAgentsDraft(value);
@@ -263,7 +251,6 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
 
   return (
     <ToolLibrarySection
-      enabledCount={enabledCount}
       enabledTools={enabledTools}
       toggleTool={toggleTool}
     />

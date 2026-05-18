@@ -15,6 +15,7 @@ vi.mock("@features/skills/api/skillApi", () => ({
 
 import {
   clearSkillPreferences,
+  initializeBuiltinSkills,
   readSkillPreferences,
   scanInstalledSkills,
   writeSkillPreferences,
@@ -27,6 +28,7 @@ describe("skills store", () => {
     vi.mocked(readSkillPreferences).mockResolvedValue({ enabledById: {} });
     vi.mocked(writeSkillPreferences).mockClear();
     vi.mocked(writeSkillPreferences).mockResolvedValue({ enabledById: {} });
+    vi.mocked(initializeBuiltinSkills).mockClear();
     vi.mocked(scanInstalledSkills).mockReset();
     useSkillsStore.setState({
       errorMessage: null,
@@ -124,6 +126,35 @@ describe("skills store", () => {
     expect(skills).toHaveLength(1);
     expect(skills[0]?.id).toBe("zip-skill");
     expect(skills[0]?.enabled).toBe(true);
+  });
+
+  it("initialize 只扫描技能，不再主动重写内置技能", async () => {
+    vi.mocked(scanInstalledSkills).mockResolvedValue([
+      {
+        body: "技能正文",
+        defaultEnabled: true,
+        description: "内置技能",
+        discoveredAt: 1,
+        id: "builtin-skill",
+        isBuiltin: true,
+        name: "内置技能",
+        rawMarkdown: "---\nname: 内置技能\n---\n技能正文",
+        references: [],
+        sourceKind: "builtin-package",
+        suggestedTools: [],
+        tags: [],
+        validation: {
+          errors: [],
+          isValid: true,
+          warnings: [],
+        },
+      },
+    ]);
+
+    await useSkillsStore.getState().initialize();
+
+    expect(vi.mocked(initializeBuiltinSkills)).not.toHaveBeenCalled();
+    expect(vi.mocked(scanInstalledSkills)).toHaveBeenCalledTimes(1);
   });
 
   it("reset 清空偏好后回到默认启用策略", async () => {

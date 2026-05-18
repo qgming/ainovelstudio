@@ -5,7 +5,6 @@ import {
   createSkillReferenceFile,
   deleteInstalledSkill,
   importSkillZip,
-  initializeBuiltinSkills,
   readSkillPreferences,
   scanInstalledSkills,
   writeSkillPreferences,
@@ -234,7 +233,6 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
     set((state) => ({ ...state, status: "loading", errorMessage: null }));
 
     try {
-      await initializeBuiltinSkills();
       const [manifests, preferences] = await Promise.all([loadInstalledManifests(), loadPreferences()]);
       set((state) => ({
         ...state,

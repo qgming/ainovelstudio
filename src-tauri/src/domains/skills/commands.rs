@@ -32,6 +32,8 @@ const SKILL_REFERENCES_DIR: &str = "references";
 const SKILL_REFERENCES_PREFIX: &str = "references/";
 const SKILL_TEMPLATES_DIR: &str = "templates";
 const SKILL_TEMPLATES_PREFIX: &str = "templates/";
+const BUILTIN_SKILLS_SYNC_VERSION_KEY: &str = "skills.builtin_sync_version";
+const BUILTIN_SKILLS_SYNC_SIGNATURE_KEY: &str = "skills.builtin_sync_signature";
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -632,6 +634,69 @@ fn embedded_skill_ids() -> Vec<String> {
     ids
 }
 
+fn current_builtin_skills_sync_version(app: &AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+fn current_builtin_skills_sync_signature() -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for file in EMBEDDED_SKILL_FILES {
+        for byte in file.path.bytes().chain([0]).chain(file.content.bytes()) {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    format!("{}:{hash:016x}", EMBEDDED_SKILL_FILES.len())
+}
+
+fn read_app_state_string(connection: &Connection, key: &str) -> CommandResult<Option<String>> {
+    Ok(connection
+        .query_row(
+            "SELECT value_json FROM app_state WHERE key = ?1",
+            params![key],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(error_to_string)?
+        .and_then(|raw| serde_json::from_str::<String>(&raw).ok())
+        .filter(|value| !value.is_empty()))
+}
+
+fn write_app_state_string(connection: &Connection, key: &str, value: &str) -> CommandResult<()> {
+    let value_json = serde_json::to_string(value).map_err(error_to_string)?;
+    connection
+        .execute(
+            r#"
+            INSERT INTO app_state (key, value_json, updated_at)
+            VALUES (?1, ?2, strftime('%s', 'now'))
+            ON CONFLICT(key) DO UPDATE
+            SET value_json = excluded.value_json,
+                updated_at = excluded.updated_at
+            "#,
+            params![key, value_json],
+        )
+        .map_err(error_to_string)?;
+    Ok(())
+}
+
+fn has_missing_embedded_skill_record(connection: &Connection) -> CommandResult<bool> {
+    for skill_id in embedded_skill_ids() {
+        let exists = connection
+            .query_row(
+                "SELECT 1 FROM skill_packages WHERE id = ?1",
+                params![skill_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(error_to_string)?
+            .is_some();
+        if !exists {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn sync_builtin_skills_to_database(
     app: &AppHandle,
 ) -> CommandResult<BuiltinSkillsInitializationResult> {
@@ -668,7 +733,46 @@ fn sync_builtin_skills_to_database(
 }
 
 fn ensure_builtin_skills_seeded(app: &AppHandle) -> CommandResult<()> {
-    sync_builtin_skills_to_database(app).map(|_| ())
+    sync_builtin_skills_if_needed(app).map(|_| ())
+}
+
+fn sync_builtin_skills_if_needed(
+    app: &AppHandle,
+) -> CommandResult<BuiltinSkillsInitializationResult> {
+    let connection = open_database(app)?;
+    let current_version = current_builtin_skills_sync_version(app);
+    let current_signature = current_builtin_skills_sync_signature();
+    let saved_version = read_app_state_string(&connection, BUILTIN_SKILLS_SYNC_VERSION_KEY)?;
+    let saved_signature = read_app_state_string(&connection, BUILTIN_SKILLS_SYNC_SIGNATURE_KEY)?;
+    let has_missing_embedded_skill = has_missing_embedded_skill_record(&connection)?;
+
+    let needs_sync = saved_version.as_deref() != Some(current_version.as_str())
+        || saved_signature.as_deref() != Some(current_signature.as_str())
+        || has_missing_embedded_skill;
+
+    drop(connection);
+
+    if !needs_sync {
+        return Ok(BuiltinSkillsInitializationResult {
+            initialized_skill_ids: Vec::new(),
+            skipped_skill_ids: Vec::new(),
+        });
+    }
+
+    let result = sync_builtin_skills_to_database(app)?;
+
+    let connection = open_database(app)?;
+    write_app_state_string(
+        &connection,
+        BUILTIN_SKILLS_SYNC_VERSION_KEY,
+        &current_version,
+    )?;
+    write_app_state_string(
+        &connection,
+        BUILTIN_SKILLS_SYNC_SIGNATURE_KEY,
+        &current_signature,
+    )?;
+    Ok(result)
 }
 
 fn scan_all_skills(
@@ -1055,24 +1159,7 @@ pub fn scan_installed_skills(
 pub fn initialize_builtin_skills(
     app: AppHandle,
 ) -> CommandResult<BuiltinSkillsInitializationResult> {
-    sync_builtin_skills_to_database(&app)
-}
-
-fn reset_builtin_skills_in_database(
-    app: &AppHandle,
-) -> CommandResult<BuiltinSkillsInitializationResult> {
-    let connection = open_database(app)?;
-    connection
-        .execute("DELETE FROM skill_packages", [])
-        .map_err(error_to_string)?;
-    drop(connection);
-    crate::domains::chat::commands::clear_skill_preferences(app.clone())?;
-    sync_builtin_skills_to_database(app)
-}
-
-#[tauri::command]
-pub fn reset_builtin_skills(app: AppHandle) -> CommandResult<BuiltinSkillsInitializationResult> {
-    reset_builtin_skills_in_database(&app)
+    sync_builtin_skills_if_needed(&app)
 }
 
 #[tauri::command]

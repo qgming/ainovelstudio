@@ -23,6 +23,11 @@ pub fn run() {
         .setup(|app| {
             crate::infrastructure::db::open_database(app.handle())
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+            if let Err(error) =
+                crate::domains::skills::commands::initialize_builtin_skills(app.handle().clone())
+            {
+                eprintln!("内置技能同步失败：{error}");
+            }
             setup_tray(app.handle())?;
             Ok(())
         })
@@ -98,7 +103,6 @@ pub fn run() {
             domains::book_workspace::commands::delete_workspace_entry,
             domains::skills::commands::scan_installed_skills,
             domains::skills::commands::initialize_builtin_skills,
-            domains::skills::commands::reset_builtin_skills,
             domains::skills::commands::read_skill_detail,
             domains::skills::commands::read_skill_reference_content,
             domains::skills::commands::read_skill_file_content,
