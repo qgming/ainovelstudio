@@ -5,7 +5,7 @@ use serde_json::Value;
 use tauri::AppHandle;
 
 type CommandResult<T> = Result<T, String>;
-const USAGE_LOG_LIMIT: usize = 100;
+const USAGE_LOGS_INITIALIZED_KEY: &str = "usage.logs_initialized";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,27 +29,6 @@ pub struct UsageLogEntry {
     cache_read_tokens: u64,
     cache_write_tokens: u64,
     reasoning_tokens: u64,
-}
-
-#[derive(Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UsageSummary {
-    request_count: u64,
-    input_tokens: u64,
-    output_tokens: u64,
-    total_tokens: u64,
-    no_cache_tokens: u64,
-    cache_read_tokens: u64,
-    cache_write_tokens: u64,
-    reasoning_tokens: u64,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UsageDailyStat {
-    date_key: String,
-    request_count: u64,
-    token_total: u64,
 }
 
 #[derive(Default, Deserialize)]
@@ -115,131 +94,6 @@ fn extract_book_name(workspace_root_path: Option<&str>) -> String {
         .to_string()
 }
 
-fn add_summary_delta(connection: &Connection, delta: &UsageSummary) -> CommandResult<()> {
-    connection
-        .execute(
-            r#"
-            INSERT INTO usage_summary (
-                id, request_count, input_tokens, output_tokens, total_tokens,
-                no_cache_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, updated_at
-            )
-            VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime('%s', 'now'))
-            ON CONFLICT(id) DO UPDATE SET
-                request_count = usage_summary.request_count + excluded.request_count,
-                input_tokens = usage_summary.input_tokens + excluded.input_tokens,
-                output_tokens = usage_summary.output_tokens + excluded.output_tokens,
-                total_tokens = usage_summary.total_tokens + excluded.total_tokens,
-                no_cache_tokens = usage_summary.no_cache_tokens + excluded.no_cache_tokens,
-                cache_read_tokens = usage_summary.cache_read_tokens + excluded.cache_read_tokens,
-                cache_write_tokens = usage_summary.cache_write_tokens + excluded.cache_write_tokens,
-                reasoning_tokens = usage_summary.reasoning_tokens + excluded.reasoning_tokens,
-                updated_at = excluded.updated_at
-            "#,
-            params![
-                as_i64(delta.request_count),
-                as_i64(delta.input_tokens),
-                as_i64(delta.output_tokens),
-                as_i64(delta.total_tokens),
-                as_i64(delta.no_cache_tokens),
-                as_i64(delta.cache_read_tokens),
-                as_i64(delta.cache_write_tokens),
-                as_i64(delta.reasoning_tokens),
-            ],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
-}
-
-fn subtract_summary_delta(connection: &Connection, delta: &UsageSummary) -> CommandResult<()> {
-    connection
-        .execute(
-            r#"
-            UPDATE usage_summary SET
-                request_count = MAX(0, request_count - ?1),
-                input_tokens = MAX(0, input_tokens - ?2),
-                output_tokens = MAX(0, output_tokens - ?3),
-                total_tokens = MAX(0, total_tokens - ?4),
-                no_cache_tokens = MAX(0, no_cache_tokens - ?5),
-                cache_read_tokens = MAX(0, cache_read_tokens - ?6),
-                cache_write_tokens = MAX(0, cache_write_tokens - ?7),
-                reasoning_tokens = MAX(0, reasoning_tokens - ?8),
-                updated_at = strftime('%s', 'now')
-            WHERE id = 1
-            "#,
-            params![
-                as_i64(delta.request_count),
-                as_i64(delta.input_tokens),
-                as_i64(delta.output_tokens),
-                as_i64(delta.total_tokens),
-                as_i64(delta.no_cache_tokens),
-                as_i64(delta.cache_read_tokens),
-                as_i64(delta.cache_write_tokens),
-                as_i64(delta.reasoning_tokens),
-            ],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
-}
-
-fn date_key_for_epoch(connection: &Connection, epoch: &str) -> CommandResult<String> {
-    connection
-        .query_row(
-            "SELECT COALESCE(strftime('%Y-%m-%d', ?1, 'unixepoch', 'localtime'), '')",
-            params![epoch],
-            |row| row.get::<_, String>(0),
-        )
-        .map_err(error_to_string)
-}
-
-fn add_daily_delta(
-    connection: &Connection,
-    recorded_at: &str,
-    total_tokens: u64,
-) -> CommandResult<()> {
-    let date_key = date_key_for_epoch(connection, recorded_at)?;
-    if date_key.is_empty() {
-        return Ok(());
-    }
-    connection
-        .execute(
-            r#"
-            INSERT INTO usage_daily_stats (date_key, request_count, token_total, updated_at)
-            VALUES (?1, 1, ?2, strftime('%s', 'now'))
-            ON CONFLICT(date_key) DO UPDATE SET
-                request_count = usage_daily_stats.request_count + 1,
-                token_total = usage_daily_stats.token_total + excluded.token_total,
-                updated_at = excluded.updated_at
-            "#,
-            params![date_key, as_i64(total_tokens)],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
-}
-
-fn subtract_daily_delta(
-    connection: &Connection,
-    recorded_at: &str,
-    total_tokens: u64,
-) -> CommandResult<()> {
-    let date_key = date_key_for_epoch(connection, recorded_at)?;
-    if date_key.is_empty() {
-        return Ok(());
-    }
-    connection
-        .execute(
-            r#"
-            UPDATE usage_daily_stats SET
-                request_count = MAX(0, request_count - 1),
-                token_total = MAX(0, token_total - ?2),
-                updated_at = strftime('%s', 'now')
-            WHERE date_key = ?1
-            "#,
-            params![date_key, as_i64(total_tokens)],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
-}
-
 fn map_usage_log(row: &Row<'_>) -> rusqlite::Result<UsageLogEntry> {
     Ok(UsageLogEntry {
         message_id: row.get("message_id")?,
@@ -261,58 +115,6 @@ fn map_usage_log(row: &Row<'_>) -> rusqlite::Result<UsageLogEntry> {
         cache_write_tokens: read_u64(row, "cache_write_tokens")?,
         reasoning_tokens: read_u64(row, "reasoning_tokens")?,
     })
-}
-
-fn read_usage_log_by_message_id(
-    connection: &Connection,
-    message_id: &str,
-) -> CommandResult<Option<UsageLogEntry>> {
-    connection
-        .query_row(
-            r#"
-            SELECT message_id, session_id, session_title, source_type, source_name, book_name,
-                   created_at, recorded_at, provider, model_id, finish_reason,
-                   input_tokens, output_tokens, total_tokens, no_cache_tokens,
-                   cache_read_tokens, cache_write_tokens, reasoning_tokens
-            FROM usage_logs
-            WHERE message_id = ?1
-            "#,
-            params![message_id],
-            map_usage_log,
-        )
-        .optional()
-        .map_err(error_to_string)
-}
-
-fn usage_summary_from_log(log: &UsageLogEntry) -> UsageSummary {
-    UsageSummary {
-        request_count: 1,
-        input_tokens: log.input_tokens,
-        output_tokens: log.output_tokens,
-        total_tokens: log.total_tokens,
-        no_cache_tokens: log.no_cache_tokens,
-        cache_read_tokens: log.cache_read_tokens,
-        cache_write_tokens: log.cache_write_tokens,
-        reasoning_tokens: log.reasoning_tokens,
-    }
-}
-
-fn prune_usage_logs(connection: &Connection) -> CommandResult<()> {
-    connection
-        .execute(
-            r#"
-            DELETE FROM usage_logs
-            WHERE message_id NOT IN (
-                SELECT message_id
-                FROM usage_logs
-                ORDER BY CAST(recorded_at AS INTEGER) DESC, CAST(created_at AS INTEGER) DESC, message_id DESC
-                LIMIT ?1
-            )
-            "#,
-            params![USAGE_LOG_LIMIT as i64],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
 }
 
 fn insert_usage_log(connection: &Connection, log: &UsageLogEntry) -> CommandResult<()> {
@@ -370,20 +172,6 @@ fn insert_usage_log(connection: &Connection, log: &UsageLogEntry) -> CommandResu
     Ok(())
 }
 
-fn upsert_usage_log_and_stats(connection: &Connection, log: &UsageLogEntry) -> CommandResult<()> {
-    if let Some(previous) = read_usage_log_by_message_id(connection, &log.message_id)? {
-        let previous_summary = usage_summary_from_log(&previous);
-        subtract_summary_delta(connection, &previous_summary)?;
-        subtract_daily_delta(connection, &previous.recorded_at, previous.total_tokens)?;
-    }
-
-    let next_summary = usage_summary_from_log(log);
-    add_summary_delta(connection, &next_summary)?;
-    add_daily_delta(connection, &log.recorded_at, log.total_tokens)?;
-    insert_usage_log(connection, log)?;
-    prune_usage_logs(connection)
-}
-
 fn build_usage_log(
     message_id: String,
     session_id: String,
@@ -416,21 +204,38 @@ fn build_usage_log(
     })
 }
 
-fn clear_usage_tables(connection: &Connection) -> CommandResult<()> {
+fn has_initialized_usage_logs(connection: &Connection) -> CommandResult<bool> {
     connection
-        .execute("DELETE FROM usage_logs", [])
-        .map_err(error_to_string)?;
+        .query_row(
+            "SELECT key FROM app_state WHERE key = ?1",
+            params![USAGE_LOGS_INITIALIZED_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map(|value| value.is_some())
+        .map_err(error_to_string)
+}
+
+fn mark_usage_logs_initialized(connection: &Connection) -> CommandResult<()> {
     connection
-        .execute("DELETE FROM usage_daily_stats", [])
-        .map_err(error_to_string)?;
-    connection
-        .execute("DELETE FROM usage_summary", [])
+        .execute(
+            r#"
+            INSERT INTO app_state (key, value_json, updated_at)
+            VALUES (?1, 'true', strftime('%s', 'now'))
+            ON CONFLICT(key) DO UPDATE SET
+                value_json = excluded.value_json,
+                updated_at = excluded.updated_at
+            "#,
+            params![USAGE_LOGS_INITIALIZED_KEY],
+        )
         .map_err(error_to_string)?;
     Ok(())
 }
 
-fn backfill_usage_tables(connection: &Connection) -> CommandResult<()> {
-    clear_usage_tables(connection)?;
+fn backfill_usage_logs(connection: &Connection) -> CommandResult<()> {
+    connection
+        .execute("DELETE FROM usage_logs", [])
+        .map_err(error_to_string)?;
 
     let rows = {
         let mut statement = connection
@@ -475,38 +280,18 @@ fn backfill_usage_tables(connection: &Connection) -> CommandResult<()> {
         else {
             continue;
         };
-        upsert_usage_log_and_stats(connection, &log)?;
+        insert_usage_log(connection, &log)?;
     }
 
-    connection
-        .execute(
-            r#"
-            INSERT OR IGNORE INTO usage_summary (
-                id, request_count, input_tokens, output_tokens, total_tokens,
-                no_cache_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, updated_at
-            )
-            VALUES (1, 0, 0, 0, 0, 0, 0, 0, 0, strftime('%s', 'now'))
-            "#,
-            [],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
+    mark_usage_logs_initialized(connection)
 }
 
-pub fn ensure_usage_tables_initialized(connection: &Connection) -> CommandResult<()> {
-    let exists = connection
-        .query_row("SELECT id FROM usage_summary WHERE id = 1", [], |row| {
-            row.get::<_, i64>(0)
-        })
-        .optional()
-        .map_err(error_to_string)?
-        .is_some();
-
-    if exists {
+pub fn ensure_usage_logs_initialized(connection: &Connection) -> CommandResult<()> {
+    if has_initialized_usage_logs(connection)? {
         return Ok(());
     }
 
-    backfill_usage_tables(connection)
+    backfill_usage_logs(connection)
 }
 
 pub fn record_usage_from_message_payload(
@@ -517,18 +302,18 @@ pub fn record_usage_from_message_payload(
     created_at: String,
     payload: &Value,
 ) -> CommandResult<()> {
-    ensure_usage_tables_initialized(connection)?;
+    ensure_usage_logs_initialized(connection)?;
     let Some(log) = build_usage_log(message_id, session_id, session_title, created_at, payload)
     else {
         return Ok(());
     };
-    upsert_usage_log_and_stats(connection, &log)
+    insert_usage_log(connection, &log)
 }
 
 #[tauri::command]
 pub fn read_usage_logs(app: AppHandle) -> CommandResult<Vec<UsageLogEntry>> {
     let connection = open_database(&app)?;
-    ensure_usage_tables_initialized(&connection)?;
+    ensure_usage_logs_initialized(&connection)?;
     let mut statement = connection
         .prepare(
             r#"
@@ -538,73 +323,14 @@ pub fn read_usage_logs(app: AppHandle) -> CommandResult<Vec<UsageLogEntry>> {
                    cache_read_tokens, cache_write_tokens, reasoning_tokens
             FROM usage_logs
             ORDER BY CAST(recorded_at AS INTEGER) DESC, CAST(created_at AS INTEGER) DESC, message_id DESC
-            LIMIT ?1
             "#,
         )
         .map_err(error_to_string)?;
 
     let logs = statement
-        .query_map(params![USAGE_LOG_LIMIT as i64], map_usage_log)
+        .query_map([], map_usage_log)
         .map_err(error_to_string)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(error_to_string)?;
     Ok(logs)
-}
-
-#[tauri::command]
-pub fn read_usage_summary(app: AppHandle) -> CommandResult<UsageSummary> {
-    let connection = open_database(&app)?;
-    ensure_usage_tables_initialized(&connection)?;
-    connection
-        .query_row(
-            r#"
-            SELECT request_count, input_tokens, output_tokens, total_tokens,
-                   no_cache_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens
-            FROM usage_summary
-            WHERE id = 1
-            "#,
-            [],
-            |row| {
-                Ok(UsageSummary {
-                    request_count: read_u64(row, "request_count")?,
-                    input_tokens: read_u64(row, "input_tokens")?,
-                    output_tokens: read_u64(row, "output_tokens")?,
-                    total_tokens: read_u64(row, "total_tokens")?,
-                    no_cache_tokens: read_u64(row, "no_cache_tokens")?,
-                    cache_read_tokens: read_u64(row, "cache_read_tokens")?,
-                    cache_write_tokens: read_u64(row, "cache_write_tokens")?,
-                    reasoning_tokens: read_u64(row, "reasoning_tokens")?,
-                })
-            },
-        )
-        .map_err(error_to_string)
-}
-
-#[tauri::command]
-pub fn read_usage_daily_stats(app: AppHandle) -> CommandResult<Vec<UsageDailyStat>> {
-    let connection = open_database(&app)?;
-    ensure_usage_tables_initialized(&connection)?;
-    let mut statement = connection
-        .prepare(
-            r#"
-            SELECT date_key, request_count, token_total
-            FROM usage_daily_stats
-            WHERE request_count > 0 OR token_total > 0
-            ORDER BY date_key ASC
-            "#,
-        )
-        .map_err(error_to_string)?;
-
-    let stats = statement
-        .query_map([], |row| {
-            Ok(UsageDailyStat {
-                date_key: row.get("date_key")?,
-                request_count: read_u64(row, "request_count")?,
-                token_total: read_u64(row, "token_total")?,
-            })
-        })
-        .map_err(error_to_string)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(error_to_string)?;
-    Ok(stats)
 }

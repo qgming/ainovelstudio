@@ -251,26 +251,6 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
                 created_at TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS usage_summary (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                request_count INTEGER NOT NULL DEFAULT 0,
-                input_tokens INTEGER NOT NULL DEFAULT 0,
-                output_tokens INTEGER NOT NULL DEFAULT 0,
-                total_tokens INTEGER NOT NULL DEFAULT 0,
-                no_cache_tokens INTEGER NOT NULL DEFAULT 0,
-                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-                cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS usage_daily_stats (
-                date_key TEXT PRIMARY KEY,
-                request_count INTEGER NOT NULL DEFAULT 0,
-                token_total INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL
-            );
-
             CREATE TABLE IF NOT EXISTS usage_logs (
                 message_id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
@@ -294,6 +274,9 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
 
             CREATE INDEX IF NOT EXISTS idx_usage_logs_recorded_at
             ON usage_logs(CAST(recorded_at AS INTEGER) DESC, CAST(created_at AS INTEGER) DESC);
+
+            DROP TABLE IF EXISTS usage_summary;
+            DROP TABLE IF EXISTS usage_daily_stats;
 
             CREATE TABLE IF NOT EXISTS ai_call_logs (
                 id TEXT PRIMARY KEY,

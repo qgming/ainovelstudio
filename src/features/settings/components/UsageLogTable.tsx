@@ -35,63 +35,9 @@ export function UsageLogTable({
   }, [filteredLogs, page]);
 
   return (
-    <div className="mt-3 overflow-hidden border border-[#e2e8f0] dark:border-[#20242b]">
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-[#fafcff] dark:bg-[#11151a]">
-            <tr className="border-b border-[#e2e8f0] dark:border-[#20242b]">
-              {["时间", "会话", "项目", "模型", "输入", "输出", "缓存命中", "缓存创建", "总计"].map((column) => (
-                <th
-                  key={column}
-                  className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.18em] text-[#94a3b8] dark:text-[#64748b]"
-                >
-                  {column}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {status === "loading" ? (
-              <tr>
-                <td className="px-4 py-8 text-sm text-[#64748b] dark:text-zinc-400" colSpan={9}>
-                  正在读取用量日志...
-                </td>
-              </tr>
-            ) : null}
-            {status === "error" ? (
-              <tr>
-                <td className="px-4 py-8 text-sm text-[#b45309] dark:text-[#fbbf24]" colSpan={10}>
-                  {errorMessage ?? "读取失败。"}
-                </td>
-              </tr>
-            ) : null}
-            {status === "ready" && filteredLogs.length === 0 ? (
-              <tr>
-                <td className="px-4 py-8 text-sm text-[#64748b] dark:text-zinc-400" colSpan={9}>
-                  当前筛选条件下还没有可显示的日志。
-                </td>
-              </tr>
-            ) : null}
-            {status === "ready"
-              ? pagedLogs.map((log) => (
-                  <tr key={log.messageId} className="border-b border-[#e2e8f0] last:border-b-0 dark:border-[#20242b]">
-                    <td className="whitespace-nowrap px-4 py-3 text-[#334155] dark:text-zinc-300">{formatDateTime(log.recordedAt || log.createdAt)}</td>
-                    <td className="max-w-[180px] px-4 py-3 text-[#334155] dark:text-zinc-300">{log.sourceName || log.sessionTitle || "图书 Agent"}</td>
-                    <td className="max-w-[180px] px-4 py-3 text-[#334155] dark:text-zinc-300">{log.bookName || "未关联项目"}</td>
-                    <td className="max-w-[240px] px-4 py-3 font-medium text-[#0f172a] dark:text-zinc-100">{log.modelId || "未知模型"}</td>
-                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.inputTokens)}</td>
-                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.outputTokens)}</td>
-                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.cacheReadTokens)}</td>
-                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.cacheWriteTokens)}</td>
-                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.totalTokens)}</td>
-                  </tr>
-                ))
-              : null}
-          </tbody>
-        </table>
-      </div>
+    <div className="overflow-hidden rounded-[8px] border border-border/45">
       {status === "ready" && filteredLogs.length > 0 ? (
-        <div className="flex items-center justify-between gap-3 border-t border-[#e2e8f0] px-4 py-3 text-sm dark:border-[#20242b]">
+        <div className="flex flex-col gap-2 border-b border-[#e2e8f0] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between dark:border-[#20242b]">
           <span className="text-[#64748b] dark:text-zinc-400">
             第 {page} / {totalPages} 页，每页 20 条
           </span>
@@ -115,6 +61,58 @@ export function UsageLogTable({
           </div>
         </div>
       ) : null}
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="bg-[#fafcff] dark:bg-[#11151a]">
+            <tr className="border-b border-[#e2e8f0] dark:border-[#20242b]">
+              {["时间", "项目", "模型", "输入", "输出", "缓存命中", "缓存创建"].map((column) => (
+                <th
+                  key={column}
+                  className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.18em] text-[#94a3b8] dark:text-[#64748b]"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {status === "loading" ? (
+              <tr>
+                <td className="px-4 py-8 text-sm text-[#64748b] dark:text-zinc-400" colSpan={7}>
+                  正在读取用量日志...
+                </td>
+              </tr>
+            ) : null}
+            {status === "error" ? (
+              <tr>
+                <td className="px-4 py-8 text-sm text-[#b45309] dark:text-[#fbbf24]" colSpan={7}>
+                  {errorMessage ?? "读取失败。"}
+                </td>
+              </tr>
+            ) : null}
+            {status === "ready" && filteredLogs.length === 0 ? (
+              <tr>
+                <td className="px-4 py-8 text-sm text-[#64748b] dark:text-zinc-400" colSpan={7}>
+                  当前筛选条件下还没有可显示的日志。
+                </td>
+              </tr>
+            ) : null}
+            {status === "ready"
+              ? pagedLogs.map((log) => (
+                  <tr key={log.messageId} className="border-b border-[#e2e8f0] last:border-b-0 dark:border-[#20242b]">
+                    <td className="whitespace-nowrap px-4 py-3 text-[#334155] dark:text-zinc-300">{formatDateTime(log.recordedAt || log.createdAt)}</td>
+                    <td className="max-w-[180px] px-4 py-3 text-[#334155] dark:text-zinc-300">{log.bookName || "未关联项目"}</td>
+                    <td className="max-w-[240px] px-4 py-3 font-medium text-[#0f172a] dark:text-zinc-100">{log.modelId || "未知模型"}</td>
+                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.inputTokens)}</td>
+                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.outputTokens)}</td>
+                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.cacheReadTokens)}</td>
+                    <td className="px-4 py-3 font-mono text-[#0f172a] dark:text-zinc-100">{formatMetric(log.cacheWriteTokens)}</td>
+                  </tr>
+                ))
+              : null}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

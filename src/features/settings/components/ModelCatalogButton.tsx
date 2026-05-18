@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, LoaderCircle, Sparkles } from "lucide-react";
+import { Check, Download, LoaderCircle } from "lucide-react";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import { fetchProviderModels } from "@features/agent/lib/modelCatalog";
 import { Button } from "@shared/ui/button";
@@ -11,11 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@shared/ui/dialog";
-import { SettingsHeaderResponsiveButton } from "./SettingsSectionHeader";
+import { cn } from "@shared/utils";
 
 type ModelCatalogButtonProps = {
+  className?: string;
   config: AgentProviderConfig;
-  iconOnly?: boolean;
   onSelectModel: (model: string) => void | Promise<void>;
   onError: (message: string) => void;
 };
@@ -24,7 +24,7 @@ function formatModelCount(count: number) {
   return `已获取 ${count} 个模型`;
 }
 
-export function ModelCatalogButton({ config, iconOnly = false, onSelectModel, onError }: ModelCatalogButtonProps) {
+export function ModelCatalogButton({ className, config, onSelectModel, onError }: ModelCatalogButtonProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -86,15 +86,18 @@ export function ModelCatalogButton({ config, iconOnly = false, onSelectModel, on
 
   return (
     <>
-      <SettingsHeaderResponsiveButton
+      <Button
         type="button"
-        label={isLoading ? "获取中..." : "获取模型"}
+        aria-label={isLoading ? "获取中..." : "获取模型"}
+        title={isLoading ? "获取中..." : "获取模型"}
         disabled={!canFetchModels}
-        size={iconOnly ? "icon-sm" : "sm"}
-        text="获取模型"
-        icon={isLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+        variant="ghost"
+        size="icon-sm"
+        className={cn("text-muted-foreground", className)}
         onClick={() => void handleOpenCatalog()}
-      />
+      >
+        {isLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+      </Button>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md">

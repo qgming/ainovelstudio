@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Claude,
   Gemini,
@@ -10,6 +10,7 @@ import {
   Zhipu,
 } from "@lobehub/icons";
 import {
+  Bot,
   Bookmark,
   Cable,
   ExternalLink,
@@ -19,10 +20,8 @@ import {
   KeyRound,
   LoaderCircle,
   MoreHorizontal,
-  PlugZap,
   RotateCcw,
   Save,
-  Server,
   Sparkles,
   Terminal,
   Trash2,
@@ -51,10 +50,7 @@ import { Input } from "@shared/ui/input";
 import { Label } from "@shared/ui/label";
 import { Switch } from "@shared/ui/switch";
 import { MODEL_PROVIDER_RECOMMENDATIONS } from "./modelProviderRecommendations";
-import {
-  SettingsHeaderResponsiveButton,
-  SettingsSectionHeader,
-} from "./SettingsSectionHeader";
+import { SettingsHeaderResponsiveButton } from "./SettingsSectionHeader";
 import { cn } from "@shared/utils";
 import { useIsMobile } from "@shared/hooks/useMobile";
 
@@ -199,6 +195,31 @@ function renderProviderLogo(provider: string) {
   }
 
   return <ProviderIcon provider={provider} size={28} type="color" />;
+}
+
+function ModelSettingsPanelSection({
+  actions,
+  children,
+  icon,
+  title,
+}: {
+  actions?: ReactNode;
+  children: ReactNode;
+  icon?: ReactNode;
+  title: string;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/45 bg-card text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none">
+      <div className="flex min-h-10 items-center justify-between gap-3 px-3 pt-3 pb-1">
+        <div className="flex min-w-0 items-center gap-2">
+          {icon ? <span className="flex shrink-0 text-muted-foreground">{icon}</span> : null}
+          <h3 className="truncate text-[16px] font-medium tracking-[-0.03em] text-foreground">{title}</h3>
+        </div>
+        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-1.5">{actions}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function ModelProviderCard({
@@ -379,75 +400,63 @@ export function ModelProviderCard({
         tone={toast?.tone}
         onClose={() => setToast(null)}
       />
-      <SettingsSectionHeader
-        title="模型设置"
-        icon={<PlugZap className="h-4 w-4" />}
-        actions={
-          <>
-            <SettingsHeaderResponsiveButton
-              type="button"
-              label="预存配置"
-              size={isMobile ? "icon-sm" : "sm"}
-              text="预存配置"
-              icon={<Bookmark className="h-3.5 w-3.5" />}
-              onClick={handleSaveCurrentAsProviderPreset}
-            />
-            <ModelCatalogButton
-              config={config}
-              iconOnly={isMobile}
-              onSelectModel={handleCatalogModelSelect}
-              onError={handleCatalogError}
-            />
-            <SettingsHeaderResponsiveButton
-              type="button"
-              label={isSaving ? "保存中..." : "保存"}
-              disabled={!canSave}
-              size={isMobile ? "icon-sm" : "sm"}
-              text="保存"
-              icon={
-                isSaving ? (
-                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )
-              }
-              onClick={() => void onSave()}
-            />
-            <SettingsHeaderResponsiveButton
-              type="button"
-              label={isTesting ? "测试中..." : "测试连接"}
-              disabled={!canTestConnection}
-              size={isMobile ? "icon-sm" : "sm"}
-              text="测试连接"
-              icon={
-                isTesting ? (
-                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Cable className="h-3.5 w-3.5" />
-                )
-              }
-              onClick={() => void handleTestConnection()}
-            />
-            <SettingsHeaderResponsiveButton
-              type="button"
-              label="重置"
-              size={isMobile ? "icon-sm" : "sm"}
-              text="重置"
-              icon={<RotateCcw className="h-3.5 w-3.5" />}
-              onClick={onReset}
-            />
-          </>
-        }
-      />
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex h-9 items-center px-3">
-          <h3 className="flex items-center gap-2 truncate text-[15px] font-medium tracking-[-0.03em] text-foreground">
-            <PlugZap className="h-3.5 w-3.5 text-muted-foreground" />
-            基础配置
-          </h3>
-        </div>
-        <div className="grid gap-3 px-3 py-3 lg:grid-cols-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+        <div className="space-y-2">
+          <ModelSettingsPanelSection
+            title="模型设置"
+            icon={<Bot className="h-4 w-4" />}
+            actions={
+              <>
+                <SettingsHeaderResponsiveButton
+                  type="button"
+                  label="预存配置"
+                  size={isMobile ? "icon-sm" : "sm"}
+                  text="预存配置"
+                  icon={<Bookmark className="h-3.5 w-3.5" />}
+                  onClick={handleSaveCurrentAsProviderPreset}
+                />
+                <SettingsHeaderResponsiveButton
+                  type="button"
+                  label={isSaving ? "保存中..." : "保存"}
+                  disabled={!canSave}
+                  size={isMobile ? "icon-sm" : "sm"}
+                  text="保存"
+                  icon={
+                    isSaving ? (
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )
+                  }
+                  onClick={() => void onSave()}
+                />
+                <SettingsHeaderResponsiveButton
+                  type="button"
+                  label={isTesting ? "测试中..." : "测试连接"}
+                  disabled={!canTestConnection}
+                  size={isMobile ? "icon-sm" : "sm"}
+                  text="测试连接"
+                  icon={
+                    isTesting ? (
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Cable className="h-3.5 w-3.5" />
+                    )
+                  }
+                  onClick={() => void handleTestConnection()}
+                />
+                <SettingsHeaderResponsiveButton
+                  type="button"
+                  label="重置"
+                  size={isMobile ? "icon-sm" : "sm"}
+                  text="重置"
+                  icon={<RotateCcw className="h-3.5 w-3.5" />}
+                  onClick={onReset}
+                />
+              </>
+            }
+          >
+        <div className="grid gap-4 px-4 pt-3 pb-4 sm:px-5 sm:pt-4 sm:pb-5 lg:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
               <Cable className="h-3.5 w-3.5" />
@@ -461,6 +470,26 @@ export function ModelProviderCard({
             />
           </div>
           <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              <Bot className="h-3.5 w-3.5" />
+              Model
+            </Label>
+            <div className="relative">
+              <Input
+                className="h-9 pr-11"
+                onChange={(event) => handleModelChange(event.target.value)}
+                placeholder="gpt-4.1 / gpt-4o / 自定义模型名"
+                value={config.model}
+              />
+              <ModelCatalogButton
+                config={config}
+                onSelectModel={handleCatalogModelSelect}
+                onError={handleCatalogError}
+                className="absolute inset-y-0 right-0 my-auto mr-1"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5 lg:col-span-2">
             <Label className="text-xs text-muted-foreground">
               <KeyRound className="h-3.5 w-3.5" />
               API Key
@@ -494,18 +523,9 @@ export function ModelProviderCard({
               </Button>
             </div>
           </div>
-          <div className="space-y-1.5 lg:col-span-2">
-            <Label className="text-xs text-muted-foreground">Model</Label>
-            <Input
-              className="h-9"
-              onChange={(event) => handleModelChange(event.target.value)}
-              placeholder="gpt-4.1 / gpt-4o / 自定义模型名"
-              value={config.model}
-            />
-          </div>
 
-          <div className="lg:col-span-2 -mx-3">
-            <div className="border-t border-border px-3 pt-3">
+          <div className="lg:col-span-2">
+            <div>
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -544,8 +564,8 @@ export function ModelProviderCard({
             </div>
           </div>
 
-          <div className="lg:col-span-2 -mx-3">
-            <div className="flex items-start justify-between gap-4 border-t border-border px-3 pt-3">
+          <div className="lg:col-span-2">
+            <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 pr-4">
                 <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                   <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
@@ -561,176 +581,166 @@ export function ModelProviderCard({
               />
             </div>
           </div>
-
-          {/* 模型供应商 */}
-          <div className="lg:col-span-2 -mx-3">
-            <div className="border-t border-border pt-3">
-              <div className="border-b border-border px-3 pb-3">
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Server className="h-3.5 w-3.5 text-muted-foreground" />
-                  模型供应商
-                </p>
-              </div>
-              {providerPresets.length === 0 ? (
-                <p className="px-3 pb-3 text-sm text-muted-foreground">
-                  暂无模型供应商，点击顶部"预存配置"添加。
-                </p>
-              ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2 px-3 py-3">
-                  {providerPresets.map((preset) => {
-                    return (
-                      <article
-                        key={preset.id}
-                        className="min-w-0 rounded-[8px] border border-border bg-background transition-colors hover:bg-accent/35"
-                      >
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`使用 ${preset.name} 地址`}
-                          onClick={() => handleApplyProviderPreset(preset)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              handleApplyProviderPreset(preset);
-                            }
-                          }}
-                          className="relative flex min-h-[64px] cursor-pointer items-center gap-2 px-3 py-2.5"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <h3 className="truncate text-sm font-medium text-foreground">
-                              {preset.model || preset.name}
-                            </h3>
-                            <p
-                              title={preset.baseURL}
-                              className="mt-1 truncate text-xs leading-5 text-muted-foreground"
-                            >
-                              {preset.baseURL}
-                            </p>
-                          </div>
-
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                aria-label={`${preset.name} 更多操作`}
-                                title={`${preset.name} 更多操作 — 打开该预存供应商的操作菜单`}
-                                variant="outline"
-                                size="icon-sm"
-                                onClick={(e) => e.stopPropagation()}
-                                className="shrink-0"
-                              >
-                                <MoreHorizontal className="h-3.5 w-3.5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteProviderPreset(preset.id);
-                                }}
-                                className="text-destructive"
-                              >
-                                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                删除
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
           </div>
+          </ModelSettingsPanelSection>
 
-          {/* 推荐供应商 */}
-          <div className="lg:col-span-2 -mx-3">
-            <div className="border-t border-border pt-3">
-              <div className="border-b border-border px-3 pb-3">
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-                  推荐供应商
-                </p>
-              </div>
-              <div
-                data-testid="model-provider-recommendations"
-                className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
-              >
-                {MODEL_PROVIDER_RECOMMENDATIONS.map((recommendation) => {
-                  const isSelected =
-                    normalizeUrlForCompare(recommendation.baseURL) ===
-                    normalizedBaseUrl;
-
+          <ModelSettingsPanelSection
+            title="预存供应商"
+            icon={<Bookmark className="h-4 w-4" />}
+          >
+            {providerPresets.length === 0 ? (
+              <p className="px-3 pt-2 pb-3 text-sm text-muted-foreground">
+                暂无预存供应商，填写模型设置后点击上方的预存配置添加。
+              </p>
+            ) : (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2 px-3 pt-2 pb-3">
+                {providerPresets.map((preset) => {
                   return (
                     <article
-                      key={recommendation.id}
-                      className="editor-block-tile aspect-square"
+                      key={preset.id}
+                      className="min-w-0 rounded-[8px] border border-border bg-background transition-colors hover:bg-accent/35"
                     >
                       <div
                         role="button"
                         tabIndex={0}
-                        aria-label={`使用 ${recommendation.name} 地址`}
-                        onClick={() =>
-                          handleApplyRecommendation(recommendation)
-                        }
+                        aria-label={`使用 ${preset.name} 地址`}
+                        onClick={() => handleApplyProviderPreset(preset)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            handleApplyRecommendation(recommendation);
+                            handleApplyProviderPreset(preset);
                           }
                         }}
-                        className={cn(
-                          "editor-block-content relative h-full cursor-pointer overflow-hidden rounded-none border border-transparent transition-colors",
-                          isSelected
-                            ? "bg-accent/35 text-foreground ring-1 ring-border"
-                            : "hover:bg-accent/40",
-                        )}
+                        className="relative flex min-h-[64px] cursor-pointer items-center gap-2 px-3 py-2.5"
                       >
-                        <Button
-                          type="button"
-                          aria-label={`查看 ${recommendation.name} 详情`}
-                          title={`查看 ${recommendation.name} 详情 — 打开该供应商的官方网站`}
-                          variant="outline"
-                          size="icon-sm"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void openUrl(recommendation.websiteUrl);
-                          }}
-                          className="absolute top-3 right-3"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </Button>
-
-                        <div className="flex h-full flex-col">
-                          <div className="flex min-h-[40px] items-center">
-                            {renderProviderLogo(recommendation.provider)}
-                          </div>
-
-                          <div className="mt-3 min-w-0">
-                            <h3 className="pr-8 text-base font-semibold tracking-[-0.03em] text-foreground">
-                              {recommendation.name}
-                            </h3>
-                            <p
-                              title={recommendation.baseURL}
-                              className="mt-2 overflow-hidden break-all pr-8 text-xs leading-5 text-muted-foreground"
-                              style={{
-                                display: "-webkit-box",
-                                WebkitBoxOrient: "vertical",
-                                WebkitLineClamp: 4,
-                              }}
-                            >
-                              {recommendation.baseURL}
-                            </p>
-                          </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-sm font-medium text-foreground">
+                            {preset.model || preset.name}
+                          </h3>
+                          <p
+                            title={preset.baseURL}
+                            className="mt-1 truncate text-xs leading-5 text-muted-foreground"
+                          >
+                            {preset.baseURL}
+                          </p>
                         </div>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              aria-label={`${preset.name} 更多操作`}
+                              title={`${preset.name} 更多操作 — 打开该预存供应商的操作菜单`}
+                              variant="outline"
+                              size="icon-sm"
+                              onClick={(e) => e.stopPropagation()}
+                              className="shrink-0"
+                            >
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteProviderPreset(preset.id);
+                              }}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </article>
                   );
                 })}
               </div>
+            )}
+          </ModelSettingsPanelSection>
+
+          <ModelSettingsPanelSection
+            title="推荐供应商"
+            icon={<Sparkles className="h-4 w-4" />}
+          >
+            <div
+              data-testid="model-provider-recommendations"
+              className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
+            >
+              {MODEL_PROVIDER_RECOMMENDATIONS.map((recommendation) => {
+                const isSelected =
+                  normalizeUrlForCompare(recommendation.baseURL) ===
+                  normalizedBaseUrl;
+
+                return (
+                  <article
+                    key={recommendation.id}
+                    className="editor-block-tile aspect-square"
+                  >
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`使用 ${recommendation.name} 地址`}
+                      onClick={() =>
+                        handleApplyRecommendation(recommendation)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleApplyRecommendation(recommendation);
+                        }
+                      }}
+                      className={cn(
+                        "editor-block-content relative h-full cursor-pointer overflow-hidden rounded-none border border-transparent transition-colors",
+                        isSelected
+                          ? "bg-accent/35 text-foreground ring-1 ring-border"
+                          : "hover:bg-accent/40",
+                      )}
+                    >
+                      <Button
+                        type="button"
+                        aria-label={`查看 ${recommendation.name} 详情`}
+                        title={`查看 ${recommendation.name} 详情 — 打开该供应商的官方网站`}
+                        variant="outline"
+                        size="icon-sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openUrl(recommendation.websiteUrl);
+                        }}
+                        className="absolute top-3 right-3"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+
+                      <div className="flex h-full flex-col">
+                        <div className="flex min-h-[40px] items-center">
+                          {renderProviderLogo(recommendation.provider)}
+                        </div>
+
+                        <div className="mt-3 min-w-0">
+                          <h3 className="pr-8 text-base font-semibold tracking-[-0.03em] text-foreground">
+                            {recommendation.name}
+                          </h3>
+                          <p
+                            title={recommendation.baseURL}
+                            className="mt-2 overflow-hidden break-all pr-8 text-xs leading-5 text-muted-foreground"
+                            style={{
+                              display: "-webkit-box",
+                              WebkitBoxOrient: "vertical",
+                              WebkitLineClamp: 4,
+                            }}
+                          >
+                            {recommendation.baseURL}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-          </div>
+          </ModelSettingsPanelSection>
         </div>
       </div>
     </section>

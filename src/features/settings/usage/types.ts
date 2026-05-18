@@ -22,20 +22,3 @@ export type UsageLogEntry = {
   cacheWriteTokens: number;
   reasoningTokens: number;
 };
-
-export type UsageSummary = {
-  requestCount: number;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  noCacheTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  reasoningTokens: number;
-};
-
-export type UsageDailyStat = {
-  dateKey: string;
-  requestCount: number;
-  tokenTotal: number;
-};

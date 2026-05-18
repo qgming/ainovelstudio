@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { UsageDailyStat } from "@features/settings/usage/types";
-import { buildHeatmapDays, resolveHeatmapLevel, toLocalDateKey } from "./UsageAnalyticsSection";
+import { buildHeatmapDays, formatSemanticTokenCount, resolveHeatmapLevel, toLocalDateKey } from "./UsageAnalyticsSection";
+
+type UsageDailyStat = Parameters<typeof buildHeatmapDays>[0][number];
 
 function createDailyStat(overrides: Partial<UsageDailyStat> = {}): UsageDailyStat {
   return {
@@ -43,5 +44,12 @@ describe("UsageAnalyticsSection helpers", () => {
       requestCount: 1,
       tokenTotal: 15,
     });
+  });
+
+  it("按亿、千万、百万语义化展示 token 数", () => {
+    expect(formatSemanticTokenCount(2_880_000_000)).toBe("≈ 28.80 亿 tokens");
+    expect(formatSemanticTokenCount(28_800_000)).toBe("≈ 2.88 千万 tokens");
+    expect(formatSemanticTokenCount(2_880_000)).toBe("≈ 2.88 百万 tokens");
+    expect(formatSemanticTokenCount(288_000)).toBe("");
   });
 });

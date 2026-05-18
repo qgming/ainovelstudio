@@ -409,13 +409,13 @@ async fn stream_provider_request_inner(
         NewAiCallLog {
             method: log_method,
             url: log_url,
-                status,
-                ok,
-                request_json: log_request_json,
-                response_json: format_stream_response_log(&response_body_log, response_body_bytes),
-                error: String::new(),
-            },
-        );
+            status,
+            ok,
+            request_json: log_request_json,
+            response_json: format_stream_response_log(&response_body_log, response_body_bytes),
+            error: String::new(),
+        },
+    );
     Ok(())
 }
 

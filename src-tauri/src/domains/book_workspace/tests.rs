@@ -169,12 +169,7 @@ fn create_book_workspace_db_builds_template_tree() {
         .collect::<Vec<_>>();
     assert_eq!(
         project_child_names,
-        vec![
-            "status",
-            "AGENTS.md",
-            "context-manifest.json",
-            "README.md"
-        ]
+        vec!["status", "AGENTS.md", "context-manifest.json", "README.md"]
     );
 
     let status_child_names = project_children

@@ -404,7 +404,7 @@ describe("ModelProviderCard", () => {
     expect(detailButtons).toHaveLength(14);
   });
 
-  it("模型供应商使用紧凑网格且不显示 logo", () => {
+  it("预存供应商使用紧凑网格且不显示 logo", () => {
     render(
       <ModelProviderCard
         providerPresets={[
@@ -433,7 +433,7 @@ describe("ModelProviderCard", () => {
       />,
     );
 
-    expect(screen.getByText("模型供应商")).toBeInTheDocument();
+    expect(screen.getByText("预存供应商")).toBeInTheDocument();
 
     const presetCard = screen.getByText("gpt-4.1").closest("article");
     expect(presetCard).toHaveClass("min-w-0", "rounded-[8px]", "bg-background");

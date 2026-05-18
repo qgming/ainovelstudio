@@ -110,7 +110,6 @@ pub fn initialize_default_agent_config(
     ensure_default_agent_document(&app)
 }
 
-
 #[tauri::command]
 pub fn reset_default_agent_config(app: AppHandle) -> CommandResult<DefaultAgentConfigDocument> {
     let connection = open_database(&app)?;
