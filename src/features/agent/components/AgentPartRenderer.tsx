@@ -1,10 +1,9 @@
 import { useState, memo } from "react";
-import { ChevronDown, ChevronRight, Brain, Wrench, Check, LoaderCircle, Circle, GitBranch, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Brain, Wrench, Check, LoaderCircle, Circle, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
 import { getTodoItemsFromPart, type PlanItem } from "@features/agent/lib/planning";
-import { getWorkflowControlFromPart } from "@features/agent/lib/workflowControl";
 import { getYoloControlDataFromPart } from "@features/agent/lib/yoloControl";
 
 const markdownComponents = {
@@ -144,41 +143,6 @@ function YoloControlCard({ part }: { part: Extract<AgentPart, { type: "tool-call
         {data.evidence.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">证据：{data.evidence.join("；")}</div> : null}
         {data.verification.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">验证：{data.verification.join("；")}</div> : null}
         {data.remaining.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">剩余：{data.remaining.join("；")}</div> : null}
-      </div>
-    </AccordionCard>
-  );
-}
-
-function WorkflowControlCard({ part }: { part: Extract<AgentPart, { type: "tool-call" }> }) {
-  const result = getWorkflowControlFromPart(part);
-  if (!result) return null;
-  const state = result.state;
-  const title = state.definition?.title ?? "工作流";
-  const currentNode = state.definition?.nodes.find((node) => node.id === state.currentNodeId);
-  const summary = currentNode ? `${state.status} · ${currentNode.title}` : state.status;
-  return (
-    <AccordionCard
-      collapseOnContentClick
-      icon={GitBranch}
-      label={title}
-      summary={summary}
-      status={result.accepted ? normalizeRenderableStatus(part.status) : "failed"}
-    >
-      <div className="space-y-2 text-sm leading-6 text-foreground">
-        <div>{result.message}</div>
-        {result.missing.length > 0 ? (
-          <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
-            {result.missing.join("；")}
-          </div>
-        ) : null}
-        {state.definition ? (
-          <div className="space-y-1 text-xs leading-5 text-muted-foreground">
-            {state.definition.nodes.slice(0, 5).map((node, index) => {
-              const nodeState = state.nodes.find((item) => item.nodeId === node.id);
-              return <div key={node.id}>{index + 1}. {nodeState?.status ?? "pending"} · {node.title}</div>;
-            })}
-          </div>
-        ) : null}
       </div>
     </AccordionCard>
   );
@@ -330,10 +294,6 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
     }
     if (part.toolName === "yolo_control") {
       const card = <YoloControlCard part={part} />;
-      if (card) return card;
-    }
-    if (part.toolName === "workflow_control") {
-      const card = <WorkflowControlCard part={part} />;
       if (card) return card;
     }
 

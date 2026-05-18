@@ -23,7 +23,7 @@ function assistantWithParts(parts: AgentPart[]): AgentMessage {
 }
 
 describe("YOLO autopilot", () => {
-  it("自动续跑提示要求读取资料并执行工作流", () => {
+  it("自动续跑提示要求读取资料并执行任务循环", () => {
     const prompt = buildAutopilotContinuePrompt("完成第一章", 2);
 
     expect(prompt).toContain("YOLO 自动检查");

@@ -11,7 +11,7 @@ export type AgentCard = {
   body: string;
   contextPolicyId: string;
   id: string;
-  mode: LongformAgentMode | "book" | "autopilot" | "flow";
+  mode: LongformAgentMode | "book" | "autopilot";
   modelPresetId: string | null;
   name: string;
   tools: string[];

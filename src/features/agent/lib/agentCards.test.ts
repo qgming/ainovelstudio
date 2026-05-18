@@ -15,17 +15,6 @@ describe("agent cards", () => {
     expect(card?.writeScopes).not.toContain(".project/runs/");
   });
 
-  it("解析严格工作流 card", () => {
-    const card = getBuiltinAgentCard("flow");
-
-    expect(card?.name).toBe("严格工作流");
-    expect(card?.contextPolicyId).toBe("flow");
-    expect(card?.tools).toContain("workflow_control");
-    expect(card?.tools).toContain("workspace_json");
-    expect(card?.writeScopes).toContain(".project/status/");
-    expect(card?.writeScopes).not.toContain(".project/runs/");
-  });
-
   it("解析 YOLO card", () => {
     const card = getBuiltinAgentCard("autopilot");
 

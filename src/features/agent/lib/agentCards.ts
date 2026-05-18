@@ -1,5 +1,4 @@
 import type { AgentCard } from "./longformTypes";
-import { WORKFLOW_CONTROL_TOOL_ID } from "./workflowControl";
 import { YOLO_CONTROL_TOOL_ID } from "./yoloControl";
 
 export const BUILTIN_AGENT_CARDS: AgentCard[] = [
@@ -20,21 +19,6 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
   {
     banTools: [],
     body: [
-      "严格执行长篇工作流，不跳过读取、技能加载、计划、执行、验证和状态维护。",
-      "任务匹配已启用 skill 时，先读取对应 SKILL.md，再进入执行阶段。",
-      "每个章节任务默认维护 status；需要专题记录时再创建补充文件。",
-    ].join("\n"),
-    contextPolicyId: "flow",
-    id: "flow",
-    mode: "flow",
-    modelPresetId: null,
-    name: "严格工作流",
-    tools: [WORKFLOW_CONTROL_TOOL_ID, "ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "leaderboard", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
-    writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
-  },
-  {
-    banTools: [],
-    body: [
       "聚焦立项、题材、平台、读者、卖点和差异化。",
       "输出必须能指导下一步写入作品定位、剧情梗概、角色与卷纲。",
     ].join("\n"),
@@ -50,7 +34,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     banTools: [],
     body: [
       "聚焦卷纲、阶段冲突、升级节奏、卷末钩子和前后卷承接。",
-      "卷纲和细纲由主代理串行产出，必要的检查和备选材料作为工作流节点完成。",
+      "卷纲和细纲由主代理串行产出，必要的检查和备选材料作为计划步骤完成。",
     ].join("\n"),
     contextPolicyId: "volume-plan",
     id: "volume-plan",

@@ -81,55 +81,6 @@ const yoloControlInputSchema = z.object({
   verification: z.array(z.string()).default([]).describe("验证结果。complete 时至少 1 条，写已读取/统计/搜索核对的结果。"),
 });
 
-const workflowNodeSchema = z.object({
-  gate: z.string().min(1).describe("节点完成门禁，必须能通过 evidence 验证。"),
-  id: z.string().min(1).describe("节点稳定 id，短横线或下划线命名。"),
-  outputContract: z.string().optional().describe("可选。该节点必须产出的格式、写回路径、证据要求或汇报结构。"),
-  roleId: z.string().min(1).describe("该节点的执行职责 ID，例如 inspect、chapter-write、continuity-review、state-maintain、report。"),
-  systemPrompt: z.string().min(1).describe("节点专属补充系统提示词。写清身份、执行边界、判断标准、禁止事项和输出要求。"),
-  title: z.string().min(1).describe("节点名称，短而清楚。"),
-  tools: z.array(z.string()).optional().describe("该节点建议使用的工具 id。"),
-  type: z.enum(["task", "decision", "loop", "parallel", "report"]).default("task"),
-});
-
-const workflowEdgeSchema = z.object({
-  condition: z.string().optional().describe("可选分支条件；普通顺序边可不填。"),
-  from: z.string().min(1),
-  id: z.string().optional(),
-  to: z.string().min(1),
-});
-
-const workflowDefinitionSchema = z.object({
-  edges: z.array(workflowEdgeSchema).default([]),
-  id: z.string().min(1),
-  nodes: z.array(workflowNodeSchema).min(1),
-  title: z.string().min(1),
-});
-
-const workflowControlInputSchema = z.object({
-  action: z
-    .enum([
-      "draft_workflow",
-      "request_approval",
-      "start_workflow",
-      "complete_node",
-      "choose_branch",
-      "loop",
-      "blocked",
-      "complete_workflow",
-    ])
-    .describe("工作流控制动作：草拟、请求确认、启动、完成节点、选择分支、循环、阻塞或完成。"),
-  branchReason: z.string().optional().describe("choose_branch 时必填，解释为什么选择该分支。"),
-  evidence: z.array(z.string()).optional().describe("完成节点或工作流的证据列表。"),
-  nextNodeId: z.string().optional().describe("complete_node / choose_branch / loop 后要进入的节点。"),
-  nodeId: z.string().optional().describe("当前控制的节点 id。"),
-  reason: z.string().optional().describe("阻塞、循环或完成说明。"),
-  workflow: workflowDefinitionSchema
-    .optional()
-    .describe("draft_workflow、request_approval 或 start_workflow 可传入的流程定义。"),
-  workflowId: z.string().optional().describe("当前工作流 id。"),
-});
-
 const browseInputSchema = z.object({
   depth: z
     .number()
@@ -249,11 +200,6 @@ export const INTERACTION_TOOL_SPECS = {
       "YOLO 模式每轮结果检查专用工具。每轮结束必须调用一次；不要用自然语言代替 complete/continue/blocked。",
     inputSchema: yoloControlInputSchema,
   },
-  workflow_control: {
-    description:
-      "工作流模式专用工具。用于草拟可确认流程、启动执行、推进节点、选择分支、循环、阻塞和完成工作流。",
-    inputSchema: workflowControlInputSchema,
-  },
   workspace_browse: {
     description:
       "浏览工作区结构。未知路径或需要了解目录时使用；已知关键词用 search，已知准确文件用 read。",
@@ -271,7 +217,6 @@ export function createInteractionToolBuilders(runTool: ToolRunner): Record<strin
     ask_user: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.ask_user, ({ toolCallId }) => ({ toolCallId })),
     update_plan: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.update_plan),
     yolo_control: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.yolo_control, ({ toolCallId }) => ({ toolCallId })),
-    workflow_control: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workflow_control, ({ toolCallId }) => ({ toolCallId })),
     workspace_browse: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workspace_browse),
     workspace_search: createAiSdkToolBuilder(runTool, INTERACTION_TOOL_SPECS.workspace_search),
   };

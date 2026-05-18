@@ -117,14 +117,14 @@ describe("prompt context", () => {
     expect(system).not.toContain("MEMORY.md");
   });
 
-  it("系统提示词描述工作流节点执行能力", () => {
+  it("系统提示词描述直接完成任务能力", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [createSkill()],
       enabledToolIds: [],
     });
 
-    expect(system).toContain("执行工作流节点");
+    expect(system).toContain("直接完成任务");
   });
 
   it("手动指定文件只注入路径，不注入正文", () => {
@@ -206,7 +206,7 @@ describe("prompt context", () => {
 
     expect(system).toContain("# 模式：BOOK");
     expect(system).toContain(".project/AGENTS.md");
-    expect(system).toContain("按工作流节点切换职责");
+    expect(system).toContain("按当前任务切换职责重点");
   });
 
   it("autopilot 模式渲染 YOLO 契约与目标上下文", () => {
@@ -228,24 +228,6 @@ describe("prompt context", () => {
     expect(system).toContain("不用 ask");
     expect(system).toContain("yolo_control");
     expect(system).toContain('action="complete"');
-  });
-
-  it("flow 模式渲染轻量状态维护工作流", () => {
-    const system = buildSystemPrompt({
-      defaultAgentMarkdown: "# 主代理",
-      enabledSkills: [],
-      enabledToolIds: ["workflow_control", "update_plan", "workspace_read", "workspace_json", "project_memory_search"],
-      mode: "flow",
-    });
-
-    expect(system).toContain("# 模式：WORKFLOW");
-    expect(system).toContain("workflow_control");
-    expect(system).toContain("request_approval");
-    expect(system).toContain("currentNode");
-    expect(system).toContain("complete_node");
-    expect(system).toContain("程序接受后再进入下一节点");
-    expect(system).toContain("Verify / State Maintain 不再是固定阶段");
-    expect(system).not.toContain(".project/runs/chapter-NNN.json");
   });
 
   it("长篇章节模式渲染 AgentCard 契约", () => {

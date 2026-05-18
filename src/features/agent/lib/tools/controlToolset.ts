@@ -4,21 +4,9 @@ import {
   summarizeYoloControl,
   YOLO_CONTROL_TOOL_ID,
 } from "../yoloControl";
-import {
-  createInitialWorkflowState,
-  createWorkflowController,
-  type WorkflowState,
-  WORKFLOW_CONTROL_TOOL_ID,
-} from "../workflowControl";
 import { ok } from "./shared";
 
-export function createControlTools(options?: {
-  workflowState?: WorkflowState;
-}): Record<string, AgentTool> {
-  const workflowController = createWorkflowController(
-    options?.workflowState ?? createInitialWorkflowState(),
-  );
-
+export function createControlTools(): Record<string, AgentTool> {
   return {
     [YOLO_CONTROL_TOOL_ID]: {
       description:
@@ -26,14 +14,6 @@ export function createControlTools(options?: {
       execute: async (input) => {
         const data = createYoloControlData(input);
         return ok(summarizeYoloControl(data), data);
-      },
-    },
-    [WORKFLOW_CONTROL_TOOL_ID]: {
-      description:
-        "工作流模式专用控制工具。用于提交流程草案、请求确认、启动执行、完成节点、选择分支、循环、阻塞或完成整个工作流。",
-      execute: async (input) => {
-        const result = workflowController.process(input);
-        return ok(result.message, result);
       },
     },
   };

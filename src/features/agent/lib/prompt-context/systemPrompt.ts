@@ -66,7 +66,7 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
     return buildModeRules(effectiveMode, (modeContext ?? {}) as ModeContextMap[typeof effectiveMode]);
   })();
 
-  const envBody = "你正在神笔写作的图书项目编辑模式运行。你可以多轮协作，按当前启用资源调用工具、读取技能并执行工作流节点。";
+  const envBody = "你正在神笔写作的图书项目编辑模式运行。你可以多轮协作，按当前启用资源调用工具、读取技能并直接完成任务。";
 
   return joinSections([
     "# 主代理系统上下文",

@@ -157,7 +157,7 @@ export function buildRuntimeControlBlock({
           `- 当前文件类型：${fileKind}`,
           `- 本轮任务类型：${taskProfile.label}`,
           `- 预期输出：${taskProfile.outputHint}`,
-          "- 本轮由主代理按当前模式与工作流节点直接完成。",
+          "- 本轮由主代理按当前模式直接完成。",
         ].join("\n"),
       },
       {

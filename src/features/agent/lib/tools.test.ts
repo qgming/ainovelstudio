@@ -83,7 +83,6 @@ import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset
 import { createInteractionToolBuilders } from "./ai-sdk-tools/interactionBuilders";
 import { createReadToolBuilders } from "./ai-sdk-tools/readBuilders";
 import { runAiSdkTool } from "./ai-sdk-tools/output";
-import { WORKFLOW_CONTROL_KIND } from "./workflowControl";
 import { YOLO_CONTROL_KIND } from "./yoloControl";
 import { searxngSearchService } from "./tools/searxngSearchService";
 
@@ -1446,67 +1445,6 @@ describe("createGlobalToolset", () => {
       reason: "文件已写回，验证通过。",
     });
     expect(result.data).toHaveProperty("createdAt");
-  });
-
-  it("workflow_control 会草拟、启动并推进节点", async () => {
-    const toolset = createGlobalToolset();
-
-    const workflow = {
-      edges: [{ from: "inspect", to: "act" }],
-      id: "chapter-flow",
-      nodes: [
-        {
-          gate: "已读取上下文",
-          id: "inspect",
-          roleId: "book",
-          systemPrompt: "读取项目上下文并列出证据。",
-          title: "读取上下文",
-          type: "task",
-        },
-        {
-          gate: "已写回正文",
-          id: "act",
-          roleId: "chapter-write",
-          systemPrompt: "串行完成章节写作并写回文件。",
-          title: "执行写作",
-          type: "task",
-        },
-      ],
-      title: "章节流程",
-    };
-    const started = await toolset.workflow_control.execute({
-      action: "start_workflow",
-      workflow,
-    });
-    const rejected = await toolset.workflow_control.execute({
-      action: "complete_node",
-      nodeId: "act",
-      evidence: ["已有正文"],
-    });
-    const accepted = await toolset.workflow_control.execute({
-      action: "complete_node",
-      nodeId: "inspect",
-      evidence: ["已读取 .project/AGENTS.md"],
-    });
-
-    expect(started.data).toMatchObject({
-      accepted: true,
-      kind: WORKFLOW_CONTROL_KIND,
-      state: { currentNodeId: "inspect", status: "running" },
-    });
-    expect(rejected.data).toMatchObject({
-      accepted: false,
-      state: { currentNodeId: "inspect" },
-    });
-    expect(accepted.data).toMatchObject({
-      accepted: true,
-      state: {
-        currentNodeId: "act",
-        nodes: expect.arrayContaining([
-          expect.objectContaining({ nodeId: "inspect", status: "completed" }),
-        ]),
-      },
-    });
   });
 
   it("web_search 会返回解析后的公开网页结果", async () => {

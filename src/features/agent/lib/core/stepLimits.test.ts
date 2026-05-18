@@ -6,8 +6,7 @@ describe("resolveAgentStepLimit", () => {
     expect(resolveAgentStepLimit("book")).toBe(COLLAB_AGENT_STEP_LIMIT);
   });
 
-  it("YOLO 和工作流模式使用无限上限", () => {
+  it("YOLO 模式使用无限上限", () => {
     expect(resolveAgentStepLimit("autopilot")).toBeNull();
-    expect(resolveAgentStepLimit("flow")).toBeNull();
   });
 });

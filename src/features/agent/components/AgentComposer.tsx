@@ -4,7 +4,6 @@ import {
   ChevronDown,
   Circle,
   Clock3,
-  GitBranch,
   ListChecks,
   LucideIcon,
   Maximize2,
@@ -38,7 +37,6 @@ import type { TreeNode } from "@features/books/types";
 import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
 import type { PlanItem, PlanningState } from "@features/agent/lib/planning";
 import type { AgentRunStatus, AskToolAnswer } from "@features/agent/lib/types";
-import type { WorkflowNodeRunStatus, WorkflowState } from "@features/agent/lib/workflowControl";
 import type { PendingAskState } from "@features/agent/stores/chat-run/helpers";
 import { AgentManualResourcePicker } from "./AgentManualResourcePicker";
 import { AgentWorkspaceFilePicker } from "./AgentWorkspaceFilePicker";
@@ -77,7 +75,6 @@ type AgentComposerProps = {
   rootNode: TreeNode | null;
   runStatus: AgentRunStatus;
   selection?: ManualTurnContextSelection;
-  workflowState?: WorkflowState;
 };
 
 function removeValue(values: string[], value: string) {
@@ -102,80 +99,6 @@ function hasIncompleteItems(items: PlanItem[]) {
   return items.some((item) => item.status !== "completed");
 }
 
-function WorkflowNodeStatusIcon({ status }: { status: WorkflowNodeRunStatus }) {
-  if (status === "completed") return <Check className="h-3 w-3 text-[#1d6a4d] dark:text-[#9fe2bb]" />;
-  if (status === "running") return <Clock3 className="h-3 w-3 text-[#8a6412] dark:text-[#f3c96b]" />;
-  if (status === "blocked") return <SquareSlash className="h-3 w-3 text-[#dc2626] dark:text-[#f87171]" />;
-  if (status === "skipped") return <X className="h-3 w-3 text-muted-foreground" />;
-  return <Circle className="h-3 w-3 text-muted-foreground" />;
-}
-
-function getWorkflowStatusLabel(status: WorkflowState["status"]) {
-  const labels: Record<WorkflowState["status"], string> = {
-    blocked: "已阻塞",
-    completed: "已完成",
-    draft: "草案",
-    empty: "未创建",
-    pending_approval: "待确认",
-    running: "运行中",
-  };
-  return labels[status];
-}
-
-function WorkflowRunPanel({ state }: { state: WorkflowState }) {
-  if (!state.definition) return null;
-  const currentNode = state.definition.nodes.find((node) => node.id === state.currentNodeId);
-  const completedCount = state.nodes.filter((node) => node.status === "completed").length;
-  return (
-    <div className="border-b border-border bg-panel-subtle px-3 py-2">
-      <div className="flex min-h-8 items-center gap-2">
-        <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[12px] font-medium text-foreground">
-            {state.definition.title}
-          </div>
-          <div className="truncate text-[11px] leading-5 text-muted-foreground">
-            {getWorkflowStatusLabel(state.status)}
-            {currentNode ? ` · 当前：${currentNode.title}` : ""}
-            {` · ${completedCount}/${state.definition.nodes.length}`}
-          </div>
-        </div>
-      </div>
-      <div className="mt-2 max-h-[144px] overflow-y-auto pr-1">
-        <div className="space-y-2">
-          {state.definition.nodes.map((node, index) => {
-            const nodeState = state.nodes.find((item) => item.nodeId === node.id);
-            const status = nodeState?.status ?? "pending";
-            return (
-              <div key={node.id} className="flex items-start gap-3">
-                <span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center">
-                  <WorkflowNodeStatusIcon status={status} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className={cn(
-                    "break-words text-xs font-medium leading-5",
-                    status === "completed" ? "text-muted-foreground line-through decoration-muted-foreground/50" : "text-foreground",
-                  )}>
-                    {index + 1}. {node.title}
-                  </div>
-                  <div className="truncate text-[11px] leading-5 text-muted-foreground">
-                    {node.type} · {node.roleId} · {node.gate}
-                  </div>
-                  {status === "running" ? (
-                    <div className="line-clamp-2 text-[11px] leading-5 text-muted-foreground">
-                      {node.systemPrompt}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function buildInitialAskSelection(_pendingAsk: PendingAskState | null) {
   return {
     customInput: "",
@@ -187,12 +110,11 @@ const COMPOSER_MIN_ROWS = 2;
 const COMPOSER_MAX_HEIGHT_PX = 240;
 const DEFAULT_COMPOSER_MODE_ID: AgentMode = "book";
 const MODE_INPUT_PLACEHOLDERS: Record<AgentMode, string> = {
-  autopilot: "输入全自动目标：YOLO 会按工作流循环执行、验证和回写，直到目标完成",
+  autopilot: "输入全自动目标：YOLO 会循环执行、验证和回写，直到目标完成",
   "book-design": "输入立项目标、平台、题材偏好或卖点方向",
   book: "输入想法、问题或要处理的任务",
   "chapter-write": "输入要规划、续写或生产的章节目标",
   "continuity-review": "输入要检查的章节、人物、伏笔或时间线问题",
-  flow: "描述要编排的任务：AI 会先生成可确认工作流，再按节点、分支和循环执行",
   "state-maintain": "输入要抽取和回写的章节状态变化",
   "style-polish": "输入要润色、统一文风或去 AI 味的章节",
   "volume-plan": "输入要规划的卷、阶段冲突或升级节奏",
@@ -210,12 +132,6 @@ export const DEFAULT_AGENT_COMPOSER_MODES: AgentComposerMode[] = [
     icon: Zap,
     id: "autopilot",
     label: "YOLO",
-  },
-  {
-    description: "严格执行章节生产和状态维护工作流",
-    icon: GitBranch,
-    id: "flow",
-    label: "工作流",
   },
 ];
 
@@ -239,7 +155,6 @@ export function AgentComposer({
   rootNode,
   runStatus,
   selection: controlledSelection,
-  workflowState,
 }: AgentComposerProps) {
   const isRunning = runStatus === "running";
   const isAskMode = Boolean(pendingAsk);
@@ -446,9 +361,6 @@ export function AgentComposer({
 
   return (
     <div className="bg-app">
-      {activeMode.id === "flow" && workflowState?.definition ? (
-        <WorkflowRunPanel state={workflowState} />
-      ) : null}
       {showPlan ? (
         <div className={cn("border-t border-border bg-panel-subtle px-3", isPlanExpanded ? "py-2" : "py-1")}>
           <div className={cn("flex items-center justify-between gap-3", isPlanExpanded ? "min-h-8" : "min-h-7")}>

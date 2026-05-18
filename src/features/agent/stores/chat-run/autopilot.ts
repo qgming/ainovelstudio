@@ -17,7 +17,7 @@ export function buildAutopilotContinuePrompt(goal: string, iteration: number) {
     `当前全自动轮次：${iteration}`,
     "",
     "每轮必须先读取相关资料：项目默认上下文、.project/status/*.json 和任务相关的设定/大纲/正文；缺证据时用 workspace_read / workspace_search / project_memory_search 补证据。",
-    "每轮必须执行工作流：Inspect -> Skill Load -> Plan -> Act -> Verify -> State Maintain -> Report。",
+    "每轮必须执行：Inspect -> Skill Load -> Plan -> Act -> Verify -> State Maintain -> Report。",
     "Skill Load 阶段：任务明显匹配已启用 skill 时，必须用 skill_read 工具读取对应 SKILL.md，再按需读取 references。",
     "每轮最后必须进入 YOLO 结果检查节，并调用 `yolo_control`；不要用普通回复代替工具调用。",
     '如果目标已经完成，必须核对成果、验证结果和状态回写，然后调用 `yolo_control`，参数为 action="complete"，evidence/verification 写明证据，stateUpdated=true。',

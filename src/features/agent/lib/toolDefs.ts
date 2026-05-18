@@ -28,12 +28,6 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "YOLO 模式每轮结果检查专用工具；用 complete、continue 或 blocked 明确控制自动循环是否结束。",
   },
   {
-    id: "workflow_control",
-    name: "工作流控制",
-    description:
-      "工作流模式专用工具；用于草拟流程、请求确认、启动执行、推进节点、选择分支、循环、阻塞和完成工作流。",
-  },
-  {
     id: "workspace_browse",
     name: "浏览工作区",
     description:

@@ -118,7 +118,7 @@ describe("AgentComposer", () => {
     scrollHeightMock.mockRestore();
   });
 
-  it("默认模式菜单显示工作流模式", () => {
+  it("默认模式菜单只显示协作和 YOLO 模式", () => {
     render(<AgentComposer {...buildComposerProps()} />);
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "当前模式：协作" }), {
@@ -126,8 +126,10 @@ describe("AgentComposer", () => {
       ctrlKey: false,
     });
 
-    expect(screen.getByRole("menuitem", { name: /工作流/ })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /流程/ })).not.toBeInTheDocument();
+    const menuItems = screen.getAllByRole("menuitem");
+    expect(menuItems).toHaveLength(2);
+    expect(screen.getByRole("menuitem", { name: /协作/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /YOLO/ })).toBeInTheDocument();
   });
 
   it("默认显示协作模式并支持切换到 YOLO 模式", () => {
@@ -154,7 +156,7 @@ describe("AgentComposer", () => {
 	    expect(screen.getByRole("button", { name: "当前模式：YOLO" })).toBeInTheDocument();
 	    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute(
 	      "placeholder",
-		      "输入全自动目标：YOLO 会按工作流循环执行、验证和回写，直到目标完成",
+		      "输入全自动目标：YOLO 会循环执行、验证和回写，直到目标完成",
 	    );
 	  });
 
