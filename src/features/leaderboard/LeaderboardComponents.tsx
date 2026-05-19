@@ -25,16 +25,16 @@ export function formatWordCount(wordCount: number) {
 
 export function RankSkeletonGrid() {
   return (
-    <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+    <div className="editor-block-grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
       {Array.from({ length: 10 }, (_, index) => (
         <article key={index} className="editor-block-tile">
           <Skeleton className="absolute left-0 top-0 z-10 h-5 w-6 rounded-none rounded-br-md" />
-          <div className="flex h-full flex-col gap-3 p-4">
-            <div className="flex min-h-0 flex-1 gap-3">
-              <Skeleton className="h-28 w-[76px] shrink-0 rounded-md" />
+          <div className="flex h-full flex-col gap-2.5 p-3 sm:gap-3 sm:p-4">
+            <div className="flex min-h-0 flex-1 gap-2 sm:gap-3">
+              <Skeleton className="h-24 w-[64px] shrink-0 rounded-md sm:h-28 sm:w-[76px]" />
               <div className="min-w-0 flex-1 space-y-2">
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-5 w-4/5" />
+                <Skeleton className="h-4 w-full sm:h-5" />
+                <Skeleton className="h-4 w-4/5 sm:h-5" />
                 <Skeleton className="h-3 w-3/5" />
               </div>
             </div>
@@ -183,23 +183,23 @@ export function LeaderboardBookCard({
         type="button"
         aria-label={`查看 ${book.bookName} 详情`}
         onClick={() => onSelect(book)}
-        className="flex h-full w-full cursor-pointer flex-col gap-3 overflow-hidden rounded-none p-4 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
+        className="flex h-full w-full cursor-pointer flex-col gap-2.5 overflow-hidden rounded-none p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset sm:gap-3 sm:p-4"
       >
-        <div className="flex min-h-0 flex-1 gap-3">
-          <BookCover book={book} className="h-28 w-[76px]" />
+        <div className="flex min-h-0 flex-1 gap-2 sm:gap-3">
+          <BookCover book={book} className="h-24 w-[64px] sm:h-28 sm:w-[76px]" />
           <div className="min-w-0 flex-1">
-            <h2 className="break-words text-[16px] font-semibold leading-[1.2] tracking-[-0.03em] text-foreground">
+            <h2 className="line-clamp-3 break-words text-[14px] font-semibold leading-[1.2] tracking-[-0.03em] text-foreground sm:text-[16px]">
               {book.bookName}
             </h2>
-            <p className="mt-1.5 break-words text-xs leading-5 text-muted-foreground">{book.author || "作者未知"}</p>
+            <p className="mt-1 break-words text-[11px] leading-[18px] text-muted-foreground sm:mt-1.5 sm:text-xs sm:leading-5">{book.author || "作者未知"}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1.5">{formatCount(book.readCount)}在读</Badge>
-          <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1.5">{book.status}</Badge>
-          <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1.5">{formatWordCount(book.wordCount)}</Badge>
+          <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1 text-[10px] sm:px-1.5 sm:text-xs">{formatCount(book.readCount)}在读</Badge>
+          <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1 text-[10px] sm:px-1.5 sm:text-xs">{book.status}</Badge>
+          <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1 text-[10px] sm:px-1.5 sm:text-xs">{formatWordCount(book.wordCount)}</Badge>
           {book.category ? (
-            <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1.5">{book.category}</Badge>
+            <Badge variant="outline" className="min-w-0 justify-center truncate rounded-md px-1 text-[10px] sm:px-1.5 sm:text-xs">{book.category}</Badge>
           ) : null}
         </div>
       </button>

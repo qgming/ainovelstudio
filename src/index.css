@@ -162,6 +162,19 @@ textarea {
   background: transparent;
 }
 
+@media (max-width: 767px) {
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
 ::selection {
   background: var(--selection);
 }
@@ -264,7 +277,7 @@ textarea {
   }
 
   .editor-block-grid {
-    @apply grid content-start gap-3 overflow-visible bg-transparent p-4 sm:gap-4 sm:p-5;
+    @apply grid content-start gap-2 overflow-visible bg-transparent p-3 sm:gap-4 sm:p-5;
   }
 
   .editor-block-tile {
@@ -272,7 +285,7 @@ textarea {
   }
 
   .editor-block-content {
-    @apply flex h-full flex-col gap-3 rounded-xl px-4 py-4;
+    @apply flex h-full flex-col gap-2.5 rounded-xl px-3 py-3 sm:gap-3 sm:px-4 sm:py-4;
   }
 
   .editor-empty-state-title {

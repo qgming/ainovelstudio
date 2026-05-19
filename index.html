@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>神笔写作</title>
     <style>
       html,
@@ -39,6 +40,13 @@
         width: 96px;
         height: 96px;
         object-fit: contain;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #191a1b;
+          color: #9aa4b2;
+        }
       }
     </style>
   </head>

@@ -1,6 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useThemeStore } from "./useThemeStore";
 
+const { mockIsMobileRuntime, mockTauriWindow } = vi.hoisted(() => ({
+  mockIsMobileRuntime: vi.fn(() => false),
+  mockTauriWindow: {
+    onThemeChanged: vi.fn().mockResolvedValue(() => {}),
+    setTheme: vi.fn().mockResolvedValue(undefined),
+    theme: vi.fn().mockResolvedValue(null),
+  },
+}));
+
+vi.mock("@shared/platform", () => ({
+  isMobileRuntime: mockIsMobileRuntime,
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  isTauri: () => true,
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => mockTauriWindow,
+}));
+
 type MatchMediaMock = {
   setMatches: (next: boolean) => void;
 };
@@ -45,6 +66,14 @@ describe("useThemeStore", () => {
     document.documentElement.className = "";
     document.documentElement.style.colorScheme = "light";
     window.localStorage.clear();
+    mockIsMobileRuntime.mockReset();
+    mockIsMobileRuntime.mockReturnValue(false);
+    mockTauriWindow.onThemeChanged.mockReset();
+    mockTauriWindow.onThemeChanged.mockResolvedValue(() => {});
+    mockTauriWindow.setTheme.mockReset();
+    mockTauriWindow.setTheme.mockResolvedValue(undefined);
+    mockTauriWindow.theme.mockReset();
+    mockTauriWindow.theme.mockResolvedValue(null);
     useThemeStore.setState({
       initialized: false,
       theme: "light",
@@ -66,6 +95,42 @@ describe("useThemeStore", () => {
     await vi.waitFor(() => {
       expect(useThemeStore.getState().theme).toBe("dark");
       expect(document.documentElement).toHaveClass("dark");
+    });
+  });
+
+  it("Android 跟随系统时优先使用 WebView 的 prefers-color-scheme", async () => {
+    mockIsMobileRuntime.mockReturnValue(true);
+    mockTauriWindow.theme.mockResolvedValue("light");
+    installMatchMedia(true);
+
+    useThemeStore.getState().initializeTheme();
+
+    await vi.waitFor(() => {
+      expect(useThemeStore.getState().theme).toBe("dark");
+      expect(useThemeStore.getState().themePreference).toBe("system");
+      expect(document.documentElement).toHaveClass("dark");
+    });
+    expect(mockTauriWindow.theme).not.toHaveBeenCalled();
+    expect(mockTauriWindow.onThemeChanged).not.toHaveBeenCalled();
+  });
+
+  it("跟随系统模式会在页面重新可见时重读系统主题", async () => {
+    const media = installMatchMedia(false);
+
+    useThemeStore.getState().initializeTheme();
+    await vi.waitFor(() => {
+      expect(useThemeStore.getState().theme).toBe("light");
+    });
+
+    media.setMatches(true);
+    expect(useThemeStore.getState().theme).toBe("dark");
+
+    media.setMatches(false);
+    window.dispatchEvent(new Event("focus"));
+
+    await vi.waitFor(() => {
+      expect(useThemeStore.getState().theme).toBe("light");
+      expect(document.documentElement).not.toHaveClass("dark");
     });
   });
 

@@ -65,10 +65,10 @@ function FileTreeButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "group flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-left transition",
+        "group flex min-h-10 w-full items-center gap-2 rounded-xl border px-3 text-left transition",
         active
-          ? "bg-panel text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.045)] dark:shadow-none"
-          : "text-muted-foreground hover:bg-panel-subtle hover:text-foreground",
+          ? "border-border/45 bg-card text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.055)] dark:bg-panel dark:shadow-none"
+          : "border-transparent text-muted-foreground hover:border-border/30 hover:bg-panel-subtle hover:text-foreground",
       )}
     >
       <FileText className="h-4 w-4 shrink-0 opacity-75" />
@@ -87,7 +87,7 @@ function BackIconButton({ label, onBack }: { label: string; onBack: () => void }
           variant="ghost"
           size="icon-sm"
           onClick={onBack}
-          className="h-9 w-9 shrink-0 rounded-xl border-transparent bg-transparent text-muted-foreground shadow-none transition-colors duration-150 hover:bg-panel-subtle hover:text-foreground"
+          className="h-8 w-8 shrink-0 rounded-full border-transparent bg-transparent text-muted-foreground shadow-none transition-colors duration-150 hover:bg-transparent hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -103,11 +103,9 @@ function BackToSkillsButton({ onBack }: { onBack: () => void }) {
 
 function SkillSidebarTitle({ onBack, skillName }: { onBack: () => void; skillName: string }) {
   return (
-    <div className="relative flex min-h-[52px] items-center justify-center rounded-2xl border border-border/45 bg-card px-12 text-card-foreground shadow-[0_16px_42px_rgba(15,23,42,0.065)] dark:bg-panel dark:shadow-none">
-      <div className="absolute left-1.5 top-1/2 -translate-y-1/2">
-        <BackToSkillsButton onBack={onBack} />
-      </div>
-      <h1 className="min-w-0 max-w-full truncate text-center text-[18px] font-semibold leading-7 tracking-[-0.03em] text-foreground">
+    <div className="inline-flex h-10 w-fit max-w-full items-center gap-1.5 rounded-full border border-border/45 bg-card pr-3 pl-1 text-card-foreground shadow-[0_12px_30px_rgba(15,23,42,0.055)] dark:bg-panel dark:shadow-none">
+      <BackToSkillsButton onBack={onBack} />
+      <h1 className="min-w-0 truncate text-left text-[14px] leading-5 tracking-[-0.02em] text-foreground">
         {skillName}
       </h1>
     </div>
@@ -693,3 +691,8 @@ export function SkillDetailPage() {
     </>
   );
 }
+
+
+
+
+

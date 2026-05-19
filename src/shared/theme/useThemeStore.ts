@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow, type Theme as TauriTheme } from "@tauri-apps/api/window";
 import { create } from "zustand";
 import { touchClientStateUpdatedAt } from "@features/settings/data-sync/clientState";
+import { isMobileRuntime } from "@shared/platform";
 
 export const THEME_STORAGE_KEY = "ainovelstudio-theme";
 
@@ -48,6 +49,10 @@ function getBrowserSystemTheme(): ThemeMode {
 }
 
 async function getSystemTheme(): Promise<ThemeMode> {
+  if (isMobileRuntime()) {
+    return getBrowserSystemTheme();
+  }
+
   if (isTauri()) {
     try {
       const appWindow = getCurrentWindow();
@@ -87,7 +92,7 @@ function persistThemePreference(themePreference: ThemePreference) {
 }
 
 async function syncPlatformTheme(themePreference: ThemePreference, resolvedTheme: ThemeMode) {
-  if (!isTauri()) {
+  if (!isTauri() || isMobileRuntime()) {
     return;
   }
 
@@ -114,6 +119,11 @@ function attachSystemThemeListener(onSystemThemeChange: (theme: ThemeMode) => vo
 
   const mediaQuery = getMatchMedia();
   let removeMediaListener: (() => void) | null = null;
+  let removeForegroundListener: (() => void) | null = null;
+
+  const syncBrowserSystemTheme = () => {
+    onSystemThemeChange(getBrowserSystemTheme());
+  };
 
   if (mediaQuery) {
     const handleChange = (event: MediaQueryListEvent) => {
@@ -129,10 +139,27 @@ function attachSystemThemeListener(onSystemThemeChange: (theme: ThemeMode) => vo
     }
   }
 
+  if (canUseWindow()) {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncBrowserSystemTheme();
+      }
+    };
+
+    window.addEventListener("focus", syncBrowserSystemTheme);
+    window.addEventListener("pageshow", syncBrowserSystemTheme);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    removeForegroundListener = () => {
+      window.removeEventListener("focus", syncBrowserSystemTheme);
+      window.removeEventListener("pageshow", syncBrowserSystemTheme);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }
+
   let disposed = false;
   let unlistenWindowTheme: (() => void) | null = null;
 
-  if (isTauri()) {
+  if (isTauri() && !isMobileRuntime()) {
     const appWindow = getCurrentWindow();
     if (typeof appWindow.onThemeChanged === "function") {
       void appWindow.onThemeChanged(({ payload }) => {
@@ -152,6 +179,7 @@ function attachSystemThemeListener(onSystemThemeChange: (theme: ThemeMode) => vo
   cleanupSystemThemeListener = () => {
     disposed = true;
     removeMediaListener?.();
+    removeForegroundListener?.();
     unlistenWindowTheme?.();
   };
 }

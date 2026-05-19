@@ -43,16 +43,16 @@ function ToolCard({
   return (
     <article className="editor-block-tile">
       <div className="editor-block-content overflow-hidden">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">{scopeLabel}</p>
-            <h3 className="mt-2 line-clamp-2 text-lg font-medium leading-6 text-foreground">{name}</h3>
-            <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-muted-foreground">{id}</p>
+            <h3 className="mt-1.5 line-clamp-2 text-[15px] font-medium leading-5 text-foreground sm:mt-2 sm:text-lg sm:leading-6">{name}</h3>
+            <p className="mt-1.5 line-clamp-2 text-[10px] leading-4 text-muted-foreground sm:mt-2 sm:text-[11px] sm:leading-5">{id}</p>
           </div>
           {actions}
         </div>
 
-        <p className="line-clamp-4 text-xs leading-5 text-muted-foreground">{description}</p>
+        <p className="line-clamp-3 text-[11px] leading-5 text-muted-foreground sm:line-clamp-4 sm:text-xs">{description}</p>
       </div>
     </article>
   );
@@ -76,8 +76,8 @@ function ToolLibrarySection({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-        <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+      <div className="min-h-0 flex-1 overflow-y-auto px-0 py-0">
+        <div className="editor-block-grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
           {toolCards.map((toolDef) => {
             const enabled = enabledTools[toolDef.id] ?? true;
             const actions = (

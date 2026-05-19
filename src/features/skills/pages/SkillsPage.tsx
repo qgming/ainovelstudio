@@ -103,7 +103,7 @@ export function SkillsPage() {
                 正在扫描技能库…
               </div>
             ) : skills.length > 0 ? (
-              <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+              <div className="editor-block-grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {skills.map((skill) => (
                   <SkillCard
                     key={skill.id}

@@ -177,7 +177,7 @@ export function LeaderboardPage() {
             <RankSkeletonGrid />
           ) : books.length > 0 ? (
             <>
-              <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+              <div className="editor-block-grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                 {visibleBooks.map((book) => (
                   <LeaderboardBookCard
                     key={book.bookId ?? `${book.bookName}-${book.rank}`}

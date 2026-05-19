@@ -93,7 +93,7 @@ function AlertDialogFooter({
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-border/70 px-4 pb-4 pt-3 group-data-[size=sm]/alert-dialog-content:grid group-data-[size=sm]/alert-dialog-content:grid-cols-2 sm:flex-row sm:justify-end",
+        "-mx-4 -mb-4 grid auto-cols-fr grid-flow-col gap-2 border-t border-border/70 px-4 pb-4 pt-3 sm:flex sm:flex-row sm:justify-end [&>*]:min-w-0 sm:[&>*]:w-auto [&>[data-slot=button]]:min-w-0 [&>[data-slot=button]]:flex-1 sm:[&>[data-slot=button]]:flex-none",
         className
       )}
       {...props}

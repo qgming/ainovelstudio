@@ -26,15 +26,15 @@ export function SkillCard({ onOpen, onToggle, skill }: SkillCardProps) {
         onKeyDown={handleKeyDown}
         className="editor-block-content cursor-pointer overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:ring-inset"
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Skill</p>
-            <h3 className="mt-2 line-clamp-2 text-lg font-medium leading-6 text-foreground">{skill.name}</h3>
+            <h3 className="mt-1.5 line-clamp-2 text-[15px] font-medium leading-5 text-foreground sm:mt-2 sm:text-lg sm:leading-6">{skill.name}</h3>
           </div>
           <Switch checked={skill.enabled} label={`切换技能 ${skill.name}`} onChange={() => onToggle()} />
         </div>
 
-        <p className="line-clamp-4 text-xs leading-5 text-muted-foreground">{skill.description}</p>
+        <p className="line-clamp-3 text-[11px] leading-5 text-muted-foreground sm:line-clamp-4 sm:text-xs">{skill.description}</p>
 
         <div className="mt-auto flex justify-end">
           {!skill.validation.isValid ? (

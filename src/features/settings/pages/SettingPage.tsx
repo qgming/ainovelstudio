@@ -2,7 +2,6 @@ import { ChevronRight, Monitor, Moon, Palette, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "@shared/components/PageShell";
-import { SegmentedControl } from "@shared/ui/segmented-control";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,22 +32,6 @@ const themePreferenceMeta: Record<ThemePreference, { icon: typeof Monitor; label
   light: { icon: Sun, label: "浅色模式", menuLabel: "浅色模式" },
   dark: { icon: Moon, label: "深色模式", menuLabel: "深色模式" },
 };
-
-function ThemePreferenceControl({ compact = false }: { compact?: boolean }) {
-  const themePreference = useThemeStore((state) => state.themePreference);
-  const setThemePreference = useThemeStore((state) => state.setThemePreference);
-
-  return (
-    <SegmentedControl<ThemePreference>
-      ariaLabel="主题模式"
-      buttonClassName={compact ? "h-7 px-2" : "h-8 px-2.5"}
-      className={compact ? "w-auto flex-nowrap rounded-lg p-0.5" : "max-w-full flex-nowrap"}
-      onValueChange={setThemePreference}
-      options={themeOptions}
-      value={themePreference}
-    />
-  );
-}
 
 function ThemePreferenceStatus({ themePreference }: { themePreference: ThemePreference }) {
   const meta = themePreferenceMeta[themePreference];
@@ -198,10 +181,10 @@ function DesktopSettingNav({
               aria-label={title}
               onClick={() => onSelect(key)}
               className={[
-                "flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left transition",
+                "flex h-10 w-full items-center gap-3 rounded-xl border px-3 text-left transition",
                 isActive
-                  ? "bg-panel text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.045)] dark:shadow-none"
-                  : "text-muted-foreground hover:bg-panel-subtle hover:text-foreground",
+                  ? "border-border/45 bg-card text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.055)] dark:bg-panel dark:shadow-none"
+                  : "border-transparent text-muted-foreground hover:border-border/30 hover:bg-panel-subtle hover:text-foreground",
               ].join(" ")}
             >
               <Icon className="h-4.5 w-4.5 shrink-0" />
@@ -210,13 +193,6 @@ function DesktopSettingNav({
           );
         })}
       </nav>
-      <div className="shrink-0 border-t border-border px-3 py-3">
-        <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <Palette className="h-3.5 w-3.5" />
-          <span>主题</span>
-        </div>
-        <ThemePreferenceControl compact />
-      </div>
     </aside>
   );
 }
@@ -304,3 +280,4 @@ export function SettingPage() {
     </section>
   );
 }
+

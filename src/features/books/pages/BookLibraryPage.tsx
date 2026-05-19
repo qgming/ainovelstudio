@@ -244,7 +244,7 @@ export function BookLibraryPage({ updateAction }: { updateAction?: BookLibraryUp
                 正在加载书架...
               </div>
             ) : books.length > 0 ? (
-              <div className="editor-block-grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+              <div className="editor-block-grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                   {books.map((book) => {
                     const isDeleting = deleteBusyPath === book.path;
                     const isExporting = exportBusyPath === book.path;
@@ -305,12 +305,12 @@ export function BookLibraryPage({ updateAction }: { updateAction?: BookLibraryUp
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <h2 className="mt-2 line-clamp-3 text-[24px] font-semibold leading-[1.15] tracking-[-0.05em] text-foreground">
+                            <h2 className="mt-1.5 line-clamp-3 text-[20px] font-semibold leading-[1.15] tracking-[-0.05em] text-foreground sm:mt-2 sm:text-[24px]">
                               {book.name}
                             </h2>
                           </div>
 
-                          <p className="mt-auto truncate border-t border-border/70 pt-3 text-xs text-muted-foreground">
+                          <p className="mt-auto truncate border-t border-border/70 pt-2 text-[11px] text-muted-foreground sm:pt-3 sm:text-xs">
                             最近编辑 {formatBookUpdatedAt(book.updatedAt)}
                           </p>
                         </div>

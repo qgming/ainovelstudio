@@ -60,14 +60,14 @@ export function CreateSkillDialog({
             />
           </div>
         </div>
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={busy}
             onClick={onCancel}
-            className={getSurfaceActionClassName({ tone: "default" })}
+            className={getSurfaceActionClassName({ className: "min-w-0 sm:flex-none", tone: "default" })}
           >
             取消
           </Button>
@@ -76,7 +76,7 @@ export function CreateSkillDialog({
             size="sm"
             disabled={busy}
             onClick={onConfirm}
-            className={getSurfaceActionClassName({ tone: "primary" })}
+            className={getSurfaceActionClassName({ className: "min-w-0 sm:flex-none", tone: "primary" })}
           >
             {busy ? "创建中..." : "确认创建"}
           </Button>

@@ -87,3 +87,21 @@ describe("SettingPage mobile", () => {
     expect(await screen.findByTestId("setting-section-content")).toHaveTextContent("section:about");
   });
 });
+
+describe("SettingPage desktop", () => {
+  beforeEach(() => {
+    mockViewport(1280);
+    document.documentElement.className = "";
+    window.localStorage.clear();
+    useThemeStore.setState({ theme: "light", themePreference: "system", initialized: true });
+  });
+
+  it("桌面端设置页左侧不再显示额外的主题模式设置", async () => {
+    renderSettingPage("/setting");
+
+    expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AGENTS" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "主题模式" })).not.toBeInTheDocument();
+    expect(await screen.findByTestId("setting-section-content")).toHaveTextContent("section:agents");
+  });
+});
