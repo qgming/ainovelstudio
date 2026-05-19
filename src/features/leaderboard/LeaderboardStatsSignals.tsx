@@ -11,9 +11,9 @@ import { METRIC_INFO, type MetricInfo, type MetricInfoKey } from "./leaderboardM
 
 export function LineSection({ children, title }: { children: ReactNode; title: string }) {
   return (
-    <section className="min-w-0 border-b border-border">
-      <header className="border-b border-border px-4 py-3 sm:px-5">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+    <section className="min-w-0 overflow-hidden rounded-xl border border-border/45 bg-card text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none">
+      <header className="flex min-h-10 items-center border-b border-border/45 px-3 pt-3 pb-1 sm:px-4">
+        <h2 className="truncate text-[16px] font-medium tracking-[-0.03em] text-foreground">{title}</h2>
       </header>
       <div>{children}</div>
     </section>
@@ -21,12 +21,12 @@ export function LineSection({ children, title }: { children: ReactNode; title: s
 }
 
 export function SplitGrid({ children }: { children: ReactNode }) {
-  return <div className="grid lg:grid-cols-2">{children}</div>;
+  return <div className="grid gap-3 p-3 lg:grid-cols-2">{children}</div>;
 }
 
 export function SplitCell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-w-0 border-t border-border px-4 py-4 first:border-t-0 sm:px-5 lg:border-t-0 lg:border-l lg:odd:border-l-0 lg:[&:nth-child(n+3)]:border-t">
+    <div className="min-w-0 rounded-xl border border-border/45 bg-background/65 px-3 py-3 sm:px-4 sm:py-4 dark:bg-background/25">
       {children}
     </div>
   );
@@ -42,7 +42,7 @@ export function MetricLabel({ infoKey, label }: { infoKey: MetricInfoKey; label:
         type="button"
         aria-label={`${label}说明`}
         onClick={() => setOpen(true)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <HelpCircle className="h-3.5 w-3.5" />
       </button>
@@ -81,3 +81,4 @@ function MetricInfoRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+

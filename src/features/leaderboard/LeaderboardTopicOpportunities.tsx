@@ -28,7 +28,7 @@ function formatBookTitle(name: string) {
 function FocusTopicRow({ item, maxScore }: { item: TopicItem; maxScore: number }) {
   const width = `${Math.max(2, Math.min(100, (item.score / Math.max(0.001, maxScore)) * 100))}%`;
   return (
-    <div className="min-w-0 py-2 first:pt-0 last:pb-0">
+    <div className="min-w-0 rounded-lg border border-border/35 bg-card px-3 py-2.5 shadow-[0_8px_18px_rgba(15,23,42,0.035)] dark:bg-panel/80 dark:shadow-none">
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <p className="min-w-0 truncate text-sm font-semibold text-foreground">
           {item.name}
@@ -36,7 +36,7 @@ function FocusTopicRow({ item, maxScore }: { item: TopicItem; maxScore: number }
         </p>
         <span className="shrink-0 text-xs font-semibold text-foreground">{item.metric}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-panel-subtle" aria-label={`${item.name}评分 ${item.metric}`}>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-panel-subtle" aria-label={`${item.name}评分 ${item.metric}`}>
         <div className="h-full rounded-full bg-primary" style={{ width }} />
       </div>
     </div>
@@ -62,16 +62,14 @@ export function FocusTopics({ stats }: { stats: LeaderboardStats }) {
   return (
     <LineSection title="题材机会榜">
       <OpportunityBoard stats={stats} />
-      <div className="border-t border-border">
-        <SplitGrid>
-          <SplitCell><FocusTopicList infoKey="opportunityOverall" title="综合机会题材" items={scoredTopics.overall} /></SplitCell>
-          <SplitCell><FocusTopicList infoKey="newWriterOpportunity" title="新手友好题材" items={scoredTopics.newWriter} /></SplitCell>
-          <SplitCell><FocusTopicList infoKey="hotTrendOpportunity" title="短期热度题材" items={scoredTopics.hotTrend} /></SplitCell>
-          <SplitCell><FocusTopicList infoKey="stableLongFormOpportunity" title="稳健长篇题材" items={scoredTopics.stableLongForm} /></SplitCell>
-          <SplitCell><FocusTopicList infoKey="studySampleValue" title="拆书样本题材" items={scoredTopics.studySample} /></SplitCell>
-          <SplitCell><FocusTopicList infoKey="topicRisk" title="风险预警题材" items={scoredTopics.risk} /></SplitCell>
-        </SplitGrid>
-      </div>
+      <SplitGrid>
+        <SplitCell><FocusTopicList infoKey="opportunityOverall" title="综合机会题材" items={scoredTopics.overall} /></SplitCell>
+        <SplitCell><FocusTopicList infoKey="newWriterOpportunity" title="新手友好题材" items={scoredTopics.newWriter} /></SplitCell>
+        <SplitCell><FocusTopicList infoKey="hotTrendOpportunity" title="短期热度题材" items={scoredTopics.hotTrend} /></SplitCell>
+        <SplitCell><FocusTopicList infoKey="stableLongFormOpportunity" title="稳健长篇题材" items={scoredTopics.stableLongForm} /></SplitCell>
+        <SplitCell><FocusTopicList infoKey="studySampleValue" title="拆书样本题材" items={scoredTopics.studySample} /></SplitCell>
+        <SplitCell><FocusTopicList infoKey="topicRisk" title="风险预警题材" items={scoredTopics.risk} /></SplitCell>
+      </SplitGrid>
     </LineSection>
   );
 }
@@ -79,9 +77,9 @@ export function FocusTopics({ stats }: { stats: LeaderboardStats }) {
 function OpportunityBoard({ stats }: { stats: LeaderboardStats }) {
   const topics = getOpportunityRows(stats);
   return (
-    <div className="px-4 py-4 sm:px-5">
-      <div className="overflow-hidden rounded-md border border-border">
-        <div className="hidden grid-cols-[minmax(120px,1.15fr)_repeat(5,minmax(92px,0.85fr))_minmax(120px,1fr)] gap-2 border-b border-border bg-panel-subtle px-3 py-2 text-xs font-semibold text-muted-foreground lg:grid">
+    <div className="px-3 py-3 sm:px-4 sm:py-4">
+      <div className="overflow-hidden rounded-xl border border-border/45 bg-background/55 dark:bg-background/20">
+        <div className="hidden grid-cols-[minmax(120px,1.15fr)_repeat(5,minmax(92px,0.85fr))_minmax(120px,1fr)] gap-2 border-b border-border/45 bg-panel-subtle px-3 py-2 text-xs font-semibold text-muted-foreground lg:grid">
           <span>题材</span>
           <span>机会判断</span>
           <span>热度变化</span>
@@ -90,7 +88,7 @@ function OpportunityBoard({ stats }: { stats: LeaderboardStats }) {
           <span>写作空间</span>
           <span>代表作</span>
         </div>
-        <div className="divide-y divide-border">
+        <div className="space-y-2 p-2 lg:space-y-0 lg:p-0 lg:divide-y lg:divide-border/45">
           {topics.map((stat) => <OpportunityRow key={stat.name} stat={stat} />)}
         </div>
       </div>
@@ -100,7 +98,7 @@ function OpportunityBoard({ stats }: { stats: LeaderboardStats }) {
 
 function OpportunityRow({ stat }: { stat: LeaderboardCategoryStat }) {
   return (
-    <div className="grid gap-3 px-3 py-3 text-sm lg:grid-cols-[minmax(120px,1.15fr)_repeat(5,minmax(92px,0.85fr))_minmax(120px,1fr)] lg:items-center lg:gap-2">
+    <div className="grid gap-3 rounded-lg border border-border/35 bg-card px-3 py-3 text-sm shadow-[0_8px_18px_rgba(15,23,42,0.04)] dark:bg-panel/80 dark:shadow-none lg:rounded-none lg:border-0 lg:bg-transparent lg:px-3 lg:py-3 lg:shadow-none lg:grid-cols-[minmax(120px,1.15fr)_repeat(5,minmax(92px,0.85fr))_minmax(120px,1fr)] lg:items-center lg:gap-2">
       <div className="min-w-0">
         <p className="truncate font-semibold text-foreground">{stat.name}</p>
         <p className="mt-0.5 text-xs text-muted-foreground lg:hidden">代表作：{formatBookTitle(stat.topBookName)}</p>
@@ -268,3 +266,5 @@ function describeWritingSpace(stat: LeaderboardCategoryStat) {
   if (stat.longFormIndex >= 1.15) return "能写长篇";
   return "先短测";
 }
+
+

@@ -1,6 +1,7 @@
 import { ChevronRight, Monitor, Moon, Palette, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { PageBackTitle } from "@shared/components/PageBackTitle";
 import { PageShell } from "@shared/components/PageShell";
 import {
   DropdownMenu,
@@ -136,29 +137,6 @@ function MobileSettingLinkCard({
   );
 }
 
-function DetailTitle({
-  currentLabel,
-  parentLabel,
-  parentTo,
-}: {
-  currentLabel: string;
-  parentLabel: string;
-  parentTo: string;
-}) {
-  return (
-    <div className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">
-      <Link
-        to={parentTo}
-        className="text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {parentLabel}
-      </Link>
-      <span className="px-1.5 text-muted-foreground">/</span>
-      <span>{currentLabel}</span>
-    </div>
-  );
-}
-
 function DesktopSettingNav({
   activeSection,
   onSelect,
@@ -225,7 +203,7 @@ function MobileSettingDetailPage({ sectionKey }: { sectionKey: SettingSectionKey
 
   return (
     <PageShell
-      title={<DetailTitle currentLabel={currentItem.title} parentLabel="设置" parentTo="/setting" />}
+      title={<PageBackTitle backLabel="返回设置" title={currentItem.title} to="/setting" />}
       contentClassName="min-h-0 flex-1 overflow-hidden px-0 py-0"
     >
       <SettingSectionContent sectionKey={sectionKey} />

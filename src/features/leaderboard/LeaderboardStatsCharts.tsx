@@ -48,9 +48,9 @@ function getCategorySlices(stats: LeaderboardStats, valueKey: "bookShare" | "rea
 
 function CompactMetric({ detail, label, value }: { detail: string; label: string; value: string }) {
   return (
-    <div className="min-w-0 border-r border-border px-3 py-2 last:border-r-0">
+    <div className="min-w-0 rounded-xl border border-border/45 bg-card px-3 py-3 text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-lg font-semibold leading-6 text-foreground">{value}</p>
+      <p className="mt-1 truncate text-[17px] font-semibold leading-6 tracking-[-0.03em] text-foreground">{value}</p>
       <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p>
     </div>
   );
@@ -63,14 +63,12 @@ function MetricsStrip({ stats }: { stats: LeaderboardStats }) {
   const sample = pickTop(stats, "studySampleValueIndex");
   const risk = pickTop(stats, "riskScore");
   return (
-    <section className="border-b border-border bg-panel">
-      <div className="grid grid-cols-2 divide-border sm:grid-cols-5">
-        <CompactMetric label="新手友好题材" value={newbie?.name ?? "暂无"} detail={newbie ? `机会 ${formatScore(newbie.newWriterOpportunityIndex)}` : "暂无数据"} />
-        <CompactMetric label="短期热度题材" value={trend?.name ?? "暂无"} detail={trend ? `热度 ${formatScore(trend.hotTrendOpportunityIndex)}` : "暂无数据"} />
-        <CompactMetric label="稳健长篇题材" value={stable?.name ?? "暂无"} detail={stable ? `长线 ${formatScore(stable.stableLongFormOpportunityIndex)}` : "暂无数据"} />
-        <CompactMetric label="拆书样本" value={sample ? formatBookTitle(sample.topBookName) : "暂无"} detail={sample ? `${sample.name} · ${formatScore(sample.studySampleValueIndex)}` : "暂无数据"} />
-        <CompactMetric label="风险预警题材" value={risk?.name ?? "暂无"} detail={risk ? `风险 ${formatScore(risk.riskScore)}` : "暂无数据"} />
-      </div>
+    <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+      <CompactMetric label="新手友好题材" value={newbie?.name ?? "暂无"} detail={newbie ? `机会 ${formatScore(newbie.newWriterOpportunityIndex)}` : "暂无数据"} />
+      <CompactMetric label="短期热度题材" value={trend?.name ?? "暂无"} detail={trend ? `热度 ${formatScore(trend.hotTrendOpportunityIndex)}` : "暂无数据"} />
+      <CompactMetric label="稳健长篇题材" value={stable?.name ?? "暂无"} detail={stable ? `长线 ${formatScore(stable.stableLongFormOpportunityIndex)}` : "暂无数据"} />
+      <CompactMetric label="拆书样本" value={sample ? formatBookTitle(sample.topBookName) : "暂无"} detail={sample ? `${sample.name} · ${formatScore(sample.studySampleValueIndex)}` : "暂无数据"} />
+      <CompactMetric label="风险预警题材" value={risk?.name ?? "暂无"} detail={risk ? `风险 ${formatScore(risk.riskScore)}` : "暂无数据"} />
     </section>
   );
 }
@@ -80,7 +78,7 @@ function DonutChart({ ariaLabel, slices }: { ariaLabel: string; slices: ChartSli
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
   return (
-    <svg viewBox="0 0 120 120" role="img" aria-label={ariaLabel} className="h-48 w-48">
+    <svg viewBox="0 0 120 120" role="img" aria-label={ariaLabel} className="h-40 w-40 sm:h-44 sm:w-44">
       <circle cx="60" cy="60" r={radius} fill="none" stroke="var(--panel-subtle)" strokeWidth="16" />
       {slices.map((slice) => {
         const dash = slice.value * circumference;
@@ -109,8 +107,8 @@ function DonutChart({ ariaLabel, slices }: { ariaLabel: string; slices: ChartSli
 function PiePanel({ ariaLabel, slices, title }: { ariaLabel: string; slices: ChartSlice[]; title: string }) {
   return (
     <div className="min-w-0">
-      <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
-      <div className="mt-3 grid gap-3 md:grid-cols-[200px_minmax(0,1fr)]">
+      <h3 className="text-[13px] font-medium text-foreground">{title}</h3>
+      <div className="mt-3 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
         <div className="flex items-center justify-center">
           <DonutChart ariaLabel={ariaLabel} slices={slices} />
         </div>
@@ -148,3 +146,4 @@ export function LeaderboardStatsOverview({ stats }: { stats: LeaderboardStats })
     </>
   );
 }
+

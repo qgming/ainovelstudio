@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaderboardBook } from "./types";
@@ -66,7 +66,7 @@ describe("LeaderboardStatsPage", () => {
     renderStatsPage("/leaderboard/statistics?board=male-reading");
 
     expect(await screen.findByText("数据统计")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "排行榜" }));
+    fireEvent.click(screen.getByRole("link", { name: "返回排行榜" }));
     expect(await screen.findByText("排行榜路由")).toBeInTheDocument();
   });
 
@@ -111,16 +111,14 @@ describe("LeaderboardStatsPage", () => {
     expect(screen.queryByText("老作家怎么看")).not.toBeInTheDocument();
   });
 
-  it("默认统计今日番茄总榜并支持强制刷新", async () => {
+  it("默认统计今日番茄总榜但不显示刷新入口", async () => {
     mockFetchFanqieOverallLeaderboard.mockResolvedValue([createBook({ readCount: 100 })]);
 
     renderStatsPage();
-    await screen.findAllByText("新手友好题材");
-    fireEvent.click(screen.getByRole("button", { name: "刷新统计" }));
 
-    await waitFor(() => {
-      expect(mockFetchFanqieOverallLeaderboard).toHaveBeenLastCalledWith(undefined, { forceRefresh: true });
-    });
+    await screen.findAllByText("新手友好题材");
+    expect(screen.queryByRole("button", { name: "刷新统计" })).not.toBeInTheDocument();
+    expect(mockFetchFanqieOverallLeaderboard).toHaveBeenCalledWith(undefined, { forceRefresh: false });
   });
 
   it("支持移除前90部和后90部后重新统计", async () => {
@@ -167,3 +165,5 @@ describe("LeaderboardStatsPage", () => {
     expect(screen.getAllByText("前半题材").length).toBeGreaterThan(0);
   });
 });
+
+

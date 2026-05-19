@@ -1,9 +1,9 @@
-import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { PageBackTitle } from "@shared/components/PageBackTitle";
 import { PageShell } from "@shared/components/PageShell";
 import { Skeleton } from "@shared/ui/skeleton";
-import { cn } from "@shared/utils";
+import { SegmentedControl } from "@shared/ui/segmented-control";
 import {
   fetchFanqieOverallLeaderboard,
   fetchOverallLeaderboard,
@@ -32,10 +32,6 @@ const STATS_FILTER_OPTIONS: { id: StatsBookFilter; label: string }[] = [
   { id: "dropBottomHalf", label: "移除后一半" },
 ];
 
-function formatUpdatedAt(date: Date | null) {
-  if (!date) return "尚未刷新";
-  return `更新于 ${date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
-}
 
 function getReadableError(error: unknown) {
   return error instanceof Error ? error.message : "数据统计加载失败，请稍后重试。";
@@ -83,7 +79,6 @@ function useLeaderboardStatsData(selection: StatsBoardSelection) {
   const [books, setBooks] = useState<LeaderboardBook[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [status, setStatus] = useState<LoadStatus>("loading");
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const refresh = useCallback(async (forceRefresh = false) => {
     const cachedBooks = forceRefresh ? null : readCachedStatsBooks(selection);
@@ -91,7 +86,6 @@ function useLeaderboardStatsData(selection: StatsBoardSelection) {
       setBooks(cachedBooks);
       setErrorMessage(null);
       setStatus("ready");
-      setUpdatedAt(new Date());
       return;
     }
     const currentSeq = requestSeq.current + 1;
@@ -102,7 +96,6 @@ function useLeaderboardStatsData(selection: StatsBoardSelection) {
       const nextBooks = await fetchStatsBooks(selection, forceRefresh);
       if (requestSeq.current !== currentSeq) return;
       setBooks(nextBooks);
-      setUpdatedAt(new Date());
     } catch (error) {
       if (requestSeq.current !== currentSeq) return;
       setBooks([]);
@@ -116,16 +109,26 @@ function useLeaderboardStatsData(selection: StatsBoardSelection) {
     void refresh();
   }, [refresh]);
 
-  return { books, errorMessage, refresh, status, updatedAt };
+  return { books, errorMessage, status };
 }
 
 function StatsSkeleton() {
   return (
-    <div className="space-y-3 p-4 sm:p-5">
-      <Skeleton className="h-20 rounded-md" />
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Skeleton className="h-72 rounded-md" />
-        <Skeleton className="h-72 rounded-md" />
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4">
+      <div className="space-y-3">
+        <section className="overflow-hidden rounded-xl border border-border/45 bg-card p-3 shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none">
+          <Skeleton className="h-16 rounded-lg" />
+        </section>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className="h-24 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-80 rounded-xl" />
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Skeleton className="h-72 rounded-xl" />
+          <Skeleton className="h-72 rounded-xl" />
+        </div>
       </div>
     </div>
   );
@@ -151,28 +154,23 @@ function StatsFilterBar({ filter, filteredCount, onChange, totalCount }: {
   totalCount: number;
 }) {
   return (
-    <section className="border-b border-border">
-      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+    <section className="overflow-hidden rounded-xl border border-border/45 bg-card text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none">
+      <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">统计口径</p>
+          <p className="text-[15px] font-medium tracking-[-0.02em] text-foreground">统计口径</p>
           <p className="mt-0.5 text-xs text-muted-foreground">当前统计 {filteredCount} / {totalCount} 本</p>
         </div>
-        <div className="grid w-full grid-cols-2 overflow-hidden rounded-md border border-border sm:w-auto sm:grid-cols-5" role="group" aria-label="统计口径筛选">
-          {STATS_FILTER_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={filter === option.id}
-              onClick={() => onChange(option.id)}
-              className={cn(
-                "min-h-9 border-r border-b border-border px-3 text-xs font-medium text-muted-foreground transition-colors even:border-r-0 last:border-b-0 sm:border-b-0 sm:even:border-r sm:last:border-r-0",
-                filter === option.id && "bg-primary text-primary-foreground",
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          ariaLabel="统计口径筛选"
+          buttonClassName="h-8 px-2.5 text-xs"
+          className="w-full bg-panel-subtle shadow-none sm:w-auto"
+          onValueChange={onChange}
+          options={STATS_FILTER_OPTIONS.map((option) => ({
+            label: option.label,
+            value: option.id,
+          }))}
+          value={filter}
+        />
       </div>
     </section>
   );
@@ -186,32 +184,22 @@ function StatsContent({ books, filter, onFilterChange }: {
   const filteredBooks = useMemo(() => filterStatsBooks(books, filter), [books, filter]);
   const stats = useMemo(() => buildLeaderboardStats(filteredBooks), [filteredBooks]);
   return (
-    <div className="min-h-0 overflow-y-auto">
-      <StatsFilterBar filter={filter} filteredCount={filteredBooks.length} onChange={onFilterChange} totalCount={books.length} />
-      {stats.totalBooks > 0 ? <LeaderboardStatsOverview stats={stats} /> : <EmptyStats />}
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4">
+      <div className="space-y-3">
+        <StatsFilterBar filter={filter} filteredCount={filteredBooks.length} onChange={onFilterChange} totalCount={books.length} />
+        {stats.totalBooks > 0 ? <LeaderboardStatsOverview stats={stats} /> : <EmptyStats />}
+      </div>
     </div>
   );
 }
 
 function EmptyStats() {
   return (
-    <div className="editor-empty-state border-t-0">
+    <div className="editor-empty-state rounded-xl">
       <div>
         <h2 className="editor-empty-state-title text-xl">暂无统计数据</h2>
         <p className="editor-empty-state-copy">当前总榜没有可统计作品，请刷新后再试。</p>
       </div>
-    </div>
-  );
-}
-
-function StatsTitle() {
-  return (
-    <div className="truncate text-[22px] font-semibold leading-tight tracking-[-0.04em] text-foreground">
-      <Link to="/leaderboard" className="text-muted-foreground transition-colors hover:text-foreground">
-        排行榜
-      </Link>
-      <span className="px-1.5 text-muted-foreground">/</span>
-      <span>数据统计</span>
     </div>
   );
 }
@@ -221,25 +209,11 @@ export function LeaderboardStatsPage() {
   const boardId = searchParams.get("board") ?? FANQIE_OVERALL_BOARD_ID;
   const [bookFilter, setBookFilter] = useState<StatsBookFilter>("all");
   const selection = useMemo(() => getStatsBoardSelection(boardId), [boardId]);
-  const { books, errorMessage, refresh, status, updatedAt } = useLeaderboardStatsData(selection);
+  const { books, errorMessage, status } = useLeaderboardStatsData(selection);
 
   return (
     <PageShell
-      title={<StatsTitle />}
-      headerRight={
-        <div className="hidden text-xs text-muted-foreground sm:block">
-          {selection.boardName} · {formatUpdatedAt(updatedAt)}
-        </div>
-      }
-      actions={[
-        {
-          busy: status === "loading",
-          busyLabel: "刷新中...",
-          icon: RefreshCw,
-          label: "刷新统计",
-          onClick: () => void refresh(true),
-        },
-      ]}
+      title={<PageBackTitle backLabel="返回排行榜" title="数据统计" to="/leaderboard" />}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
         {errorMessage ? (
@@ -252,3 +226,4 @@ export function LeaderboardStatsPage() {
     </PageShell>
   );
 }
+

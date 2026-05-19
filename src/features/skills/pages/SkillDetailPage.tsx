@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { CreateReferenceDialog } from "@features/skills/components/CreateReferenceDialog";
 import { useIsMobile } from "@shared/hooks/useMobile";
+import { PageBackTitle } from "@shared/components/PageBackTitle";
 import { PageShell } from "@shared/components/PageShell";
 import { Button } from "@shared/ui/button";
 import {
@@ -77,38 +78,13 @@ function FileTreeButton({
   );
 }
 
-function BackIconButton({ label, onBack }: { label: string; onBack: () => void }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          aria-label={label}
-          variant="ghost"
-          size="icon-sm"
-          onClick={onBack}
-          className="h-8 w-8 shrink-0 rounded-full border-transparent bg-transparent text-muted-foreground shadow-none transition-colors duration-150 hover:bg-transparent hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function BackToSkillsButton({ onBack }: { onBack: () => void }) {
-  return <BackIconButton label="返回技能库" onBack={onBack} />;
-}
-
 function SkillSidebarTitle({ onBack, skillName }: { onBack: () => void; skillName: string }) {
   return (
-    <div className="inline-flex h-10 w-fit max-w-full items-center gap-1.5 rounded-full border border-border/45 bg-card pr-3 pl-1 text-card-foreground shadow-[0_12px_30px_rgba(15,23,42,0.055)] dark:bg-panel dark:shadow-none">
-      <BackToSkillsButton onBack={onBack} />
-      <h1 className="min-w-0 truncate text-left text-[14px] leading-5 tracking-[-0.02em] text-foreground">
-        {skillName}
-      </h1>
-    </div>
+    <PageBackTitle
+      backLabel="返回技能库"
+      onBack={onBack}
+      title={skillName}
+    />
   );
 }
 
@@ -135,7 +111,7 @@ function DesktopSkillSidebar({
 }) {
   return (
     <aside className="flex h-full w-[284px] shrink-0 flex-col overflow-hidden bg-app">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2 sm:px-5">
         <SkillSidebarTitle onBack={onBack} skillName={skill.name} />
         <nav className="mt-2 space-y-1" aria-label="技能文件导航">
           <FileTreeButton active={selectedPath === "SKILL.md"} label="SKILL.md" onClick={() => onSelectPath("SKILL.md")} />
@@ -223,11 +199,11 @@ function MobileSkillDirectoryPage({
 }) {
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
-      <div className="shrink-0 px-4 pt-3 pb-2">
+      <div className="flex min-h-9 shrink-0 items-center bg-app px-4">
         <SkillSidebarTitle onBack={onBack} skillName={skill.name} />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
         <nav className="space-y-1" aria-label="技能文件导航">
           <FileTreeButton active={selectedPath === "SKILL.md"} label="SKILL.md" onClick={() => onSelectPath("SKILL.md")} />
 
@@ -318,7 +294,18 @@ function SkillFileEditorCard({
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border/45 bg-card text-card-foreground shadow-[0_16px_42px_rgba(15,23,42,0.065)] dark:bg-panel dark:shadow-none">
       <header className="flex min-h-10 shrink-0 items-center justify-between gap-3 px-3 pt-3 pb-1">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          {showBackButton ? <BackIconButton label="返回目录" onBack={onBack ?? (() => undefined)} /> : null}
+          {showBackButton ? (
+            <Button
+              type="button"
+              aria-label="返回目录"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onBack ?? (() => undefined)}
+              className="h-8 w-8 shrink-0 rounded-full border-transparent bg-transparent text-muted-foreground shadow-none transition-colors duration-150 hover:bg-transparent hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          ) : null}
           <h2 className="min-w-0 truncate text-[18px] font-semibold leading-6 tracking-[-0.04em] text-foreground">
             {selectedPath}
           </h2>
@@ -691,8 +678,5 @@ export function SkillDetailPage() {
     </>
   );
 }
-
-
-
 
 
