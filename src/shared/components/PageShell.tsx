@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { BusyButton } from "@shared/ui/busy-button";
+import {
+  getSurfaceActionClassName,
+  getSurfaceActionVariant,
+  type SurfaceActionTone,
+} from "@shared/ui/action-button";
 import { useIsMobile } from "@shared/hooks/useMobile";
 import { cn } from "@shared/utils";
 
@@ -12,7 +17,7 @@ type PageAction = {
   label: string;
   onClick?: () => void;
   text?: string;
-  tone?: "default" | "dark" | "primary";
+  tone?: SurfaceActionTone;
 };
 
 type PageShellProps = {
@@ -21,12 +26,6 @@ type PageShellProps = {
   contentClassName?: string;
   headerRight?: ReactNode;
   title?: ReactNode;
-};
-
-const actionVariants: Record<NonNullable<PageAction["tone"]>, "outline" | "secondary" | "default"> = {
-  default: "outline",
-  dark: "secondary",
-  primary: "default",
 };
 
 export function PageShell({
@@ -62,14 +61,12 @@ export function PageShell({
                 icon={icon}
                 onClick={onClick}
                 size={isMobile ? "icon-sm" : "sm"}
-                variant={actionVariants[tone]}
-                className={cn(
-                  "editor-page-action shadow-[0_8px_18px_rgba(15,23,42,0.045)] hover:shadow-[0_10px_22px_rgba(15,23,42,0.07)] dark:shadow-none dark:hover:shadow-none",
-                  isMobile ? "h-9 w-9 rounded-xl px-0" : "h-9 rounded-xl gap-1.5 px-3.5 text-[13px]",
-                  tone === "default" && "border-border/55 bg-panel text-foreground hover:border-border/75 hover:bg-panel-subtle dark:bg-panel dark:hover:bg-panel-subtle",
-                  tone === "dark" && "border-border/55 bg-secondary text-foreground hover:border-border/75 hover:bg-accent",
-                  tone === "primary" && "border-primary/25 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_oklab,var(--color-primary)_14%,transparent)] hover:border-primary/28 hover:bg-primary/92 hover:shadow-[0_10px_22px_color-mix(in_oklab,var(--color-primary)_18%,transparent)] dark:shadow-none dark:hover:shadow-none",
-                )}
+                variant={getSurfaceActionVariant(tone)}
+                className={getSurfaceActionClassName({
+                  className: "editor-page-action",
+                  iconOnly: isMobile,
+                  tone,
+                })}
               >
                 {isMobile ? null : <span>{text ?? label}</span>}
               </BusyButton>

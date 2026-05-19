@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Check, Download, LoaderCircle } from "lucide-react";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import { fetchProviderModels } from "@features/agent/lib/modelCatalog";
+import { getSurfaceActionClassName } from "@shared/ui/action-button";
 import { Button } from "@shared/ui/button";
 import {
   Dialog,
@@ -136,10 +137,20 @@ export function ModelCatalogButton({ className, config, onSelectModel, onError }
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+              className={getSurfaceActionClassName({ tone: "default" })}
+            >
               取消
             </Button>
-            <Button type="button" disabled={!selectedModel || isApplying} onClick={() => void handleUseModel()}>
+            <Button
+              type="button"
+              disabled={!selectedModel || isApplying}
+              onClick={() => void handleUseModel()}
+              className={getSurfaceActionClassName({ tone: "primary" })}
+            >
               {isApplying ? "保存中..." : "使用模型"}
             </Button>
           </DialogFooter>

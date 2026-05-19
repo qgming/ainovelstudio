@@ -2,8 +2,14 @@ import type { ReactNode } from "react";
 import { Button } from "@shared/ui/button";
 import { cn } from "@shared/utils";
 import { useIsMobile } from "@shared/hooks/useMobile";
+import {
+  getSurfaceActionClassName,
+  getSurfaceActionVariant,
+  resolveSurfaceActionTone,
+  type SurfaceActionTone,
+} from "@shared/ui/action-button";
 
-type SettingsActionTone = "default" | "primary" | "destructive";
+type SettingsActionTone = Extract<SurfaceActionTone, "default" | "primary" | "destructive">;
 
 type SettingsSectionHeaderProps = {
   actions?: ReactNode;
@@ -41,16 +47,12 @@ export function SettingsSectionHeader({
 }
 
 function resolveActionTone(tone?: SettingsActionTone, variant?: React.ComponentProps<typeof Button>["variant"]) {
-  if (tone) return tone;
-  if (variant === "default") return "primary";
-  if (variant === "destructive") return "destructive";
-  return "default";
+  const resolved = resolveSurfaceActionTone(tone, variant);
+  return resolved === "dark" ? "default" : resolved;
 }
 
 function getActionVariant(tone: SettingsActionTone): React.ComponentProps<typeof Button>["variant"] {
-  if (tone === "primary") return "default";
-  if (tone === "destructive") return "destructive";
-  return "outline";
+  return getSurfaceActionVariant(tone);
 }
 
 function getSettingsActionClassName({
@@ -62,14 +64,11 @@ function getSettingsActionClassName({
   iconOnly?: boolean;
   tone?: SettingsActionTone;
 }) {
-  return cn(
-    "settings-action-button shadow-[0_8px_18px_rgba(15,23,42,0.045)] transition-all duration-150 hover:-translate-y-px hover:shadow-[0_10px_22px_rgba(15,23,42,0.07)] dark:shadow-none dark:hover:shadow-none",
-    iconOnly ? "h-9 w-9 rounded-xl px-0" : "h-9 rounded-xl gap-1.5 px-3.5 text-[13px]",
-    tone === "default" && "border-border/55 bg-panel text-foreground hover:border-border/75 hover:bg-panel-subtle dark:bg-panel dark:hover:bg-panel-subtle",
-    tone === "primary" && "border-primary/25 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_oklab,var(--color-primary)_14%,transparent)] hover:border-primary/28 hover:bg-primary/92 hover:shadow-[0_10px_22px_color-mix(in_oklab,var(--color-primary)_18%,transparent)] dark:shadow-none dark:hover:shadow-none",
-    tone === "destructive" && "border-destructive/25 bg-destructive/10 text-destructive hover:border-destructive/35 hover:bg-destructive/14 hover:shadow-[0_12px_24px_rgba(185,28,28,0.12)]",
+  return getSurfaceActionClassName({
     className,
-  );
+    iconOnly,
+    tone,
+  });
 }
 
 type SettingsActionButtonProps = React.ComponentProps<typeof Button> & {

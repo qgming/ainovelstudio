@@ -24,9 +24,11 @@ function getLevelClass(level: HeatmapDay["level"]) {
 
 export function UsageHeatmap({
   formatMetric,
+  rowCount = 10,
   weeks,
 }: {
   formatMetric: (value: number) => string;
+  rowCount?: number;
   weeks: HeatmapDay[][];
 }) {
   const columnCount = Math.max(weeks.length, 1);
@@ -39,7 +41,11 @@ export function UsageHeatmap({
           style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
         >
           {weeks.map((week, weekIndex) => (
-            <div key={`week-${weekIndex}`} className="grid grid-rows-10 gap-[4px]">
+            <div
+              key={`week-${weekIndex}`}
+              className="grid gap-[4px]"
+              style={{ gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))` }}
+            >
               {week.map((day, dayIndex) => (
                 <div
                   key={day.dateKey}

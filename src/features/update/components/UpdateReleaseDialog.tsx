@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { normalizeVersionLabel } from "@features/update/lib/version";
 import type { UpdateSummary } from "@features/update/types";
+import { getSurfaceActionClassName } from "@shared/ui/action-button";
 import { Button } from "@shared/ui/button";
 import {
   Dialog,
@@ -90,10 +91,19 @@ export function UpdateReleaseDialog({
           </div>
         </div>
         <DialogFooter className="mx-0 mb-0 shrink-0 px-5 py-4">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className={getSurfaceActionClassName({ tone: "default" })}
+          >
             稍后再说
           </Button>
-          <Button type="button" onClick={onDownload}>
+          <Button
+            type="button"
+            onClick={onDownload}
+            className={getSurfaceActionClassName({ tone: "primary" })}
+          >
             下载更新
           </Button>
         </DialogFooter>

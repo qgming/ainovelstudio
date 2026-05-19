@@ -12,6 +12,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
     minimize: vi.fn(),
     onCloseRequested: vi.fn().mockResolvedValue(() => {}),
     onResized: vi.fn().mockResolvedValue(() => {}),
+    onThemeChanged: vi.fn().mockResolvedValue(() => {}),
+    setTheme: vi.fn().mockResolvedValue(undefined),
+    theme: vi.fn().mockResolvedValue(null),
     unmaximize: vi.fn(),
   },
 }));
@@ -75,7 +78,6 @@ vi.mock("@features/update/stores/useUpdateStore", () => ({
 }));
 
 import App from "./App";
-import { BUILTIN_TOOLS } from "@features/agent/lib/toolDefs";
 import { useChatRunStore as useAgentStore } from "@features/agent/stores/useChatRunStore";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
@@ -139,7 +141,7 @@ describe("App shell", () => {
     setViewportWidth(1280);
     window.localStorage.clear();
     document.documentElement.className = "";
-    useThemeStore.setState({ theme: "light", initialized: false });
+    useThemeStore.setState({ theme: "light", themePreference: "system", initialized: false });
     useBookWorkspaceStore.getState().resetState();
     useAgentStore.getState().reset();
     mockInvoke.mockReset();
@@ -166,6 +168,12 @@ describe("App shell", () => {
     mockWindow.onCloseRequested.mockResolvedValue(() => {});
     mockWindow.onResized.mockReset();
     mockWindow.onResized.mockResolvedValue(() => {});
+    mockWindow.onThemeChanged.mockReset();
+    mockWindow.onThemeChanged.mockResolvedValue(() => {});
+    mockWindow.setTheme.mockReset();
+    mockWindow.setTheme.mockResolvedValue(undefined);
+    mockWindow.theme.mockReset();
+    mockWindow.theme.mockResolvedValue(null);
     mockWindow.unmaximize.mockReset();
     mockOpenUrl.mockReset();
     updateStoreState.autoUpdateEnabled = true;
@@ -552,7 +560,7 @@ describe("App shell", () => {
     });
   });
 
-  it("点击顶部栏主题按钮会切换深色模式且不会离开当前页面", async () => {
+  it("点击顶部栏主题按钮会在三种主题模式之间循环且不会离开当前页面", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("link", { name: "技能" }));
@@ -561,9 +569,19 @@ describe("App shell", () => {
       expect(document.documentElement).toHaveClass("dark");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "主题切换" }));
+    const themeButton = screen.getByRole("button", { name: "主题切换" });
+
+    fireEvent.click(themeButton);
 
     expect(document.documentElement).not.toHaveClass("dark");
+
+    fireEvent.click(themeButton);
+
+    expect(document.documentElement).toHaveClass("dark");
+
+    fireEvent.click(themeButton);
+
+    expect(document.documentElement).toHaveClass("dark");
     expect(await screen.findByRole("button", { name: "刷新技能库" })).toBeInTheDocument();
   });
 
@@ -580,9 +598,7 @@ describe("App shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "工具库" }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(new RegExp(`已启用 ${BUILTIN_TOOLS.length}`)),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("switch", { name: "禁用 读取工作区文件" })).toBeInTheDocument();
     });
 
     expect(screen.getByText("读取工作区文件")).toBeInTheDocument();
@@ -707,7 +723,6 @@ describe("App shell", () => {
 
     expect(await screen.findByRole("heading", { name: "神笔写作" })).toBeInTheDocument();
     expect(screen.getByAltText("神笔写作 Logo")).toBeInTheDocument();
-    expect(screen.getByText("版本")).toBeInTheDocument();
     expect(screen.getByText("0.2.9")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "检查更新" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "自动更新" })).toBeInTheDocument();

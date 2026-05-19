@@ -47,20 +47,21 @@ describe("SettingPage mobile", () => {
     mockViewport(390);
     document.documentElement.className = "";
     window.localStorage.clear();
-    useThemeStore.setState({ theme: "light", initialized: true });
+    useThemeStore.setState({ theme: "light", themePreference: "system", initialized: true });
   });
 
   it("移动端设置首页只展示设置选项列表", () => {
     renderSettingPage("/setting");
 
     expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "切换到深色模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "主题模式：跟随系统" })).toBeInTheDocument();
+    expect(screen.getByText("跟随系统")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入AGENTS" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入用量统计" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入数据管理" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入工具库" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "进入开发调试" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "进入开发调试" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入关于我们" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "默认 AGENTS 编辑器" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "打开官网" })).not.toBeInTheDocument();
@@ -69,10 +70,12 @@ describe("SettingPage mobile", () => {
   it("移动端设置首页可直接切换主题", async () => {
     renderSettingPage("/setting");
 
-    fireEvent.click(screen.getByRole("button", { name: "切换到深色模式" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "主题模式：跟随系统" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: /深色模式/ }));
 
     expect(document.documentElement).toHaveClass("dark");
-    expect(screen.getByRole("button", { name: "切换到浅色模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "主题模式：深色模式" })).toBeInTheDocument();
+    expect(screen.getByText("深色模式")).toBeInTheDocument();
   });
 
   it("移动端进入详情页后显示路径式标题和对应设置内容", async () => {

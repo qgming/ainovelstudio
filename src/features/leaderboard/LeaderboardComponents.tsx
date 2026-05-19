@@ -1,6 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowDown, ArrowUp, ExternalLink, Minus, Trophy } from "lucide-react";
 import { Badge } from "@shared/ui/badge";
+import { getSurfaceActionClassName } from "@shared/ui/action-button";
 import { Button } from "@shared/ui/button";
 import {
   Dialog,
@@ -261,6 +262,7 @@ export function LeaderboardBookDialog({
               <Button
                 type="button"
                 disabled={!canOpen}
+                className={getSurfaceActionClassName({ tone: "primary" })}
                 onClick={() => {
                   if (book.detailUrl) void openUrl(book.detailUrl);
                 }}

@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { Button } from "@shared/ui/button";
+import { getSurfaceActionClassName } from "@shared/ui/action-button";
 import { Input } from "@shared/ui/input";
 import { Label } from "@shared/ui/label";
 import { Textarea } from "@shared/ui/textarea";
@@ -59,13 +60,14 @@ export function CreateSkillDialog({
             />
           </div>
         </div>
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={busy}
             onClick={onCancel}
+            className={getSurfaceActionClassName({ tone: "default" })}
           >
             取消
           </Button>
@@ -74,6 +76,7 @@ export function CreateSkillDialog({
             size="sm"
             disabled={busy}
             onClick={onConfirm}
+            className={getSurfaceActionClassName({ tone: "primary" })}
           >
             {busy ? "创建中..." : "确认创建"}
           </Button>

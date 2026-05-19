@@ -5,6 +5,7 @@ import type { UsageLogEntry } from "@features/settings/usage/types";
 import { UsageHeatmap } from "./UsageHeatmap";
 import { SettingsHeaderResponsiveButton } from "./SettingsSectionHeader";
 import { UsageLogTable } from "./UsageLogTable";
+import { useIsMobile } from "@shared/hooks/useMobile";
 
 type TimeRangeKey = "7d" | "30d" | "90d" | "all";
 type HeatmapDay = {
@@ -19,6 +20,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const HEATMAP_COLUMN_COUNT = 42;
 const HEATMAP_ROW_COUNT = 10;
 const HEATMAP_DAY_COUNT = HEATMAP_COLUMN_COUNT * HEATMAP_ROW_COUNT;
+const MOBILE_HEATMAP_COLUMN_COUNT = 10;
+const MOBILE_HEATMAP_ROW_COUNT = 6;
+const MOBILE_HEATMAP_DAY_COUNT = MOBILE_HEATMAP_COLUMN_COUNT * MOBILE_HEATMAP_ROW_COUNT;
 const numberFormatter = new Intl.NumberFormat("zh-CN");
 const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
@@ -153,7 +157,7 @@ export function resolveHeatmapLevel(requestCount: number, maxCount: number): Hea
   return Math.min(4, Math.max(1, Math.ceil((requestCount / maxCount) * 4))) as HeatmapDay["level"];
 }
 
-export function buildHeatmapDays(stats: UsageDailyStat[]) {
+export function buildHeatmapDays(stats: UsageDailyStat[], dayCount = HEATMAP_DAY_COUNT) {
   const byDay = new Map<string, { requestCount: number; tokenTotal: number }>();
   for (const stat of stats) {
     byDay.set(stat.dateKey, {
@@ -165,10 +169,10 @@ export function buildHeatmapDays(stats: UsageDailyStat[]) {
   const maxCount = Math.max(...Array.from(byDay.values(), (entry) => entry.requestCount), 0);
   const today = new Date();
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const start = new Date(end.getTime() - (HEATMAP_DAY_COUNT - 1) * DAY_MS);
+  const start = new Date(end.getTime() - (dayCount - 1) * DAY_MS);
   const days: HeatmapDay[] = [];
 
-  for (let index = 0; index < HEATMAP_DAY_COUNT; index += 1) {
+  for (let index = 0; index < dayCount; index += 1) {
     const current = new Date(start.getTime() + index * DAY_MS);
     const dateKey = toLocalDateKey(current);
     const dayEntry = byDay.get(dateKey) ?? { requestCount: 0, tokenTotal: 0 };
@@ -182,6 +186,26 @@ export function buildHeatmapDays(stats: UsageDailyStat[]) {
   }
 
   return days;
+}
+
+export function buildHeatmapColumns(
+  stats: UsageDailyStat[],
+  {
+    dayCount = HEATMAP_DAY_COUNT,
+    rowCount = HEATMAP_ROW_COUNT,
+  }: {
+    dayCount?: number;
+    rowCount?: number;
+  } = {},
+) {
+  const days = buildHeatmapDays(stats, dayCount);
+  const columns: HeatmapDay[][] = [];
+
+  for (let index = 0; index < days.length; index += rowCount) {
+    columns.push(days.slice(index, index + rowCount));
+  }
+
+  return columns;
 }
 
 function MetricCard({
@@ -252,6 +276,7 @@ function UsagePanelSection({
 }
 
 export function UsageAnalyticsSection() {
+  const isMobile = useIsMobile();
   const [logs, setLogs] = useState<UsageLogEntry[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -319,13 +344,11 @@ export function UsageAnalyticsSection() {
   const filteredSummary = useMemo(() => buildUsageSummaryFromLogs(filteredLogs), [filteredLogs]);
 
   const heatmapWeeks = useMemo(() => {
-    const days = buildHeatmapDays(buildDailyStatsFromLogs(filteredLogs));
-    const weeks: HeatmapDay[][] = [];
-    for (let index = 0; index < days.length; index += HEATMAP_ROW_COUNT) {
-      weeks.push(days.slice(index, index + HEATMAP_ROW_COUNT));
-    }
-    return weeks;
-  }, [filteredLogs]);
+    return buildHeatmapColumns(buildDailyStatsFromLogs(filteredLogs), {
+      dayCount: isMobile ? MOBILE_HEATMAP_DAY_COUNT : HEATMAP_DAY_COUNT,
+      rowCount: isMobile ? MOBILE_HEATMAP_ROW_COUNT : HEATMAP_ROW_COUNT,
+    });
+  }, [filteredLogs, isMobile]);
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
@@ -389,7 +412,11 @@ export function UsageAnalyticsSection() {
           </UsagePanelSection>
 
           <UsagePanelSection title="热力图" icon={<CalendarDays className="h-4 w-4" />}>
-            <UsageHeatmap formatMetric={formatMetric} weeks={heatmapWeeks} />
+            <UsageHeatmap
+              formatMetric={formatMetric}
+              rowCount={isMobile ? MOBILE_HEATMAP_ROW_COUNT : HEATMAP_ROW_COUNT}
+              weeks={heatmapWeeks}
+            />
           </UsagePanelSection>
 
           <UsagePanelSection title="用量日志" icon={<History className="h-4 w-4" />}>

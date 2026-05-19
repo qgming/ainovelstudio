@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { Button } from "@shared/ui/button";
+import { getSurfaceActionClassName } from "@shared/ui/action-button";
 import { Input } from "@shared/ui/input";
 import { Label } from "@shared/ui/label";
 import { DialogShell } from "@shared/components/dialogs/DialogShell";
@@ -46,13 +47,14 @@ export function PromptDialog({
             className="h-10"
           />
         </div>
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={busy}
             onClick={onCancel}
+            className={getSurfaceActionClassName({ tone: "default" })}
           >
             取消
           </Button>
@@ -61,6 +63,7 @@ export function PromptDialog({
             size="sm"
             disabled={busy}
             onClick={onConfirm}
+            className={getSurfaceActionClassName({ tone: "primary" })}
           >
             {busy ? "处理中..." : confirmLabel}
           </Button>

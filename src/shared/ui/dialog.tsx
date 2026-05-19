@@ -5,6 +5,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@shared/utils"
 import { Button } from "@shared/ui/button"
+import { getSurfaceActionClassName } from "@shared/ui/action-button"
 import { XIcon } from "lucide-react"
 
 function Dialog({
@@ -107,7 +108,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-lg border-t bg-panel-subtle p-4 sm:flex-row sm:justify-end",
+        "-mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-border/70 px-4 pb-4 pt-3 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
@@ -115,7 +116,12 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button
+            variant="outline"
+            className={getSurfaceActionClassName({ tone: "default" })}
+          >
+            Close
+          </Button>
         </DialogPrimitive.Close>
       )}
     </div>

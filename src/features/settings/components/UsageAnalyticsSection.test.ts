@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildHeatmapDays, formatSemanticTokenCount, resolveHeatmapLevel, toLocalDateKey } from "./UsageAnalyticsSection";
+import { buildHeatmapColumns, buildHeatmapDays, formatSemanticTokenCount, resolveHeatmapLevel, toLocalDateKey } from "./UsageAnalyticsSection";
 
 type UsageDailyStat = Parameters<typeof buildHeatmapDays>[0][number];
 
@@ -44,6 +44,29 @@ describe("UsageAnalyticsSection helpers", () => {
       requestCount: 1,
       tokenTotal: 15,
     });
+  });
+
+  it("支持按 60 天生成移动端热力图数据", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 12, 12, 0, 0));
+
+    const days = buildHeatmapDays([], 60);
+
+    expect(days).toHaveLength(60);
+    expect(days[days.length - 1]?.dateKey).toBe("2026-04-12");
+  });
+
+  it("移动端热力图按 6 行 10 列分组 60 天数据", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 12, 12, 0, 0));
+
+    const columns = buildHeatmapColumns([], {
+      dayCount: 60,
+      rowCount: 6,
+    });
+
+    expect(columns).toHaveLength(10);
+    expect(columns.every((column) => column.length === 6)).toBe(true);
   });
 
   it("按亿、千万、百万语义化展示 token 数", () => {

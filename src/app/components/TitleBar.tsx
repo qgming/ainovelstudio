@@ -1,11 +1,11 @@
-import { Copy, FileText, Minus, Moon, Settings, Sparkles, Square, Sun, Trophy, X, type LucideIcon } from "lucide-react";
+import { Copy, FileText, Minus, Monitor, Moon, Settings, Sparkles, Square, Sun, Trophy, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NavLink, useMatch, useResolvedPath } from "react-router-dom";
 import appIcon from "@/assets/icon.png";
 import { cn } from "@shared/utils";
-import { useThemeStore } from "@shared/theme/useThemeStore";
+import { useThemeStore, type ThemePreference } from "@shared/theme/useThemeStore";
 
 type TitleNavItem = {
   end?: boolean;
@@ -23,7 +23,8 @@ const titleNavItems: TitleNavItem[] = [
 export function TitleBar() {
   const appWindow = getCurrentWindow();
   const theme = useThemeStore((state) => state.theme);
-  const toggleTheme = useThemeStore((state) => state.toggleTheme);
+  const themePreference = useThemeStore((state) => state.themePreference);
+  const setThemePreference = useThemeStore((state) => state.setThemePreference);
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -87,13 +88,11 @@ export function TitleBar() {
       <div data-tauri-drag-region className="min-w-0 flex-1 self-stretch" />
 
       <div className="flex h-full shrink-0 items-center gap-1.5 pr-0.5">
-        <TitleIconButton ariaLabel="主题切换" onClick={toggleTheme}>
-          {theme === "dark" ? (
-            <Sun className="h-4 w-4" strokeWidth={2.1} />
-          ) : (
-            <Moon className="h-4 w-4" strokeWidth={2.1} />
-          )}
-        </TitleIconButton>
+        <ThemeModeMenu
+          resolvedTheme={theme}
+          themePreference={themePreference}
+          onThemePreferenceChange={setThemePreference}
+        />
         <TitleUtilityLink to="/setting" label="设置" Icon={Settings} />
         <WindowButton ariaLabel="最小化窗口" onClick={() => void appWindow.minimize()}>
           <Minus className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -117,6 +116,58 @@ export function TitleBar() {
         </WindowButton>
       </div>
     </header>
+  );
+}
+
+const themePreferenceLabels: Record<ThemePreference, string> = {
+  system: "跟随系统",
+  light: "浅色模式",
+  dark: "深色模式",
+};
+
+const nextThemePreferenceMap: Record<ThemePreference, ThemePreference> = {
+  system: "light",
+  light: "dark",
+  dark: "system",
+};
+
+function ThemePreferenceIcon({
+  resolvedTheme,
+  themePreference,
+}: {
+  resolvedTheme: "light" | "dark";
+  themePreference: ThemePreference;
+}) {
+  if (themePreference === "system") {
+    return <Monitor className="h-4 w-4" strokeWidth={2.1} />;
+  }
+
+  return resolvedTheme === "dark" ? (
+    <Moon className="h-4 w-4" strokeWidth={2.1} />
+  ) : (
+    <Sun className="h-4 w-4" strokeWidth={2.1} />
+  );
+}
+
+function ThemeModeMenu({
+  onThemePreferenceChange,
+  resolvedTheme,
+  themePreference,
+}: {
+  onThemePreferenceChange: (themePreference: ThemePreference) => void;
+  resolvedTheme: "light" | "dark";
+  themePreference: ThemePreference;
+}) {
+  const nextThemePreference = nextThemePreferenceMap[themePreference];
+
+  return (
+    <TitleIconButton
+      ariaLabel="主题切换"
+      title={`当前：${themePreferenceLabels[themePreference]}；点击切换到${themePreferenceLabels[nextThemePreference]}`}
+      onClick={() => onThemePreferenceChange(nextThemePreference)}
+    >
+      <ThemePreferenceIcon resolvedTheme={resolvedTheme} themePreference={themePreference} />
+    </TitleIconButton>
   );
 }
 
@@ -165,20 +216,23 @@ function TitleUtilityLink({ to, label, Icon }: Omit<TitleNavItem, "end">) {
   );
 }
 
-type TitleIconButtonProps = {
+type TitleIconButtonProps = React.ComponentProps<"button"> & {
   ariaLabel: string;
   children: ReactNode;
-  onClick: () => void;
+  title?: string;
 };
 
-function TitleIconButton({ ariaLabel, children, onClick }: TitleIconButtonProps) {
+function TitleIconButton({ ariaLabel, children, className, title, ...props }: TitleIconButtonProps) {
   return (
     <button
       type="button"
       aria-label={ariaLabel}
-      title={ariaLabel}
-      onClick={onClick}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border/45 hover:bg-card hover:text-foreground dark:hover:bg-panel"
+      title={title ?? ariaLabel}
+      className={cn(
+        "inline-flex h-8 w-8 items-center justify-center rounded-xl border border-transparent bg-transparent text-muted-foreground transition-colors hover:border-border/45 hover:bg-card hover:text-foreground dark:hover:bg-panel",
+        className,
+      )}
+      {...props}
     >
       {children}
     </button>
