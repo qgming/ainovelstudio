@@ -360,7 +360,7 @@ export function AgentComposer({
   };
 
   return (
-    <div className="bg-app">
+    <div className="bg-card text-card-foreground dark:bg-panel">
       {showPlan ? (
         <div className={cn("border-t border-border bg-panel-subtle px-3", isPlanExpanded ? "py-2" : "py-1")}>
           <div className={cn("flex items-center justify-between gap-3", isPlanExpanded ? "min-h-8" : "min-h-7")}>
@@ -545,7 +545,7 @@ export function AgentComposer({
                 );
               })}
             </div>
-            <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-t border-border bg-app px-3">
+            <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-t border-border bg-card px-3 dark:bg-panel">
               <div className="min-w-0 truncate text-xs text-muted-foreground">
                 {askRequest.selectionMode === "single"
                   ? "请选择一项后确认"

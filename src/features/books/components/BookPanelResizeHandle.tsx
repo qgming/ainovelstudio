@@ -1,13 +1,17 @@
+import { cn } from "@shared/utils";
+
 type BookPanelResizeHandleProps = {
   active?: boolean;
   ariaLabel: string;
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  side?: "left" | "right";
 };
 
 export function BookPanelResizeHandle({
   active = false,
   ariaLabel,
   onPointerDown,
+  side = "right",
 }: BookPanelResizeHandleProps) {
   return (
     <div
@@ -15,15 +19,19 @@ export function BookPanelResizeHandle({
       aria-label={ariaLabel}
       aria-orientation="vertical"
       onPointerDown={onPointerDown}
-      className="group relative flex w-1 shrink-0 cursor-col-resize touch-none items-stretch justify-center bg-transparent"
+      className={cn(
+        "group absolute inset-y-0 z-10 w-4 cursor-col-resize touch-none",
+        side === "right" ? "right-0" : "left-0",
+      )}
     >
       <div
-        className={[
-          "absolute inset-y-0 left-1/2 -translate-x-1/2 transition-all duration-150",
+        className={cn(
+          "absolute top-1/2 h-[72px] -translate-y-1/2 rounded-full transition-all duration-150",
+          side === "right" ? "right-0" : "left-0",
           active
-            ? "w-[3px] bg-[#0b84e7] dark:bg-[#7cc4ff]"
-            : "w-px bg-[#d7dde5] dark:bg-[#2a3038] group-hover:w-[3px] group-hover:bg-[#0b84e7] dark:group-hover:bg-[#7cc4ff]",
-        ].join(" ")}
+            ? "w-1 bg-primary"
+            : "w-0.5 bg-transparent group-hover:bg-primary/80",
+        )}
       />
     </div>
   );

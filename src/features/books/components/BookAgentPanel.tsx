@@ -1,4 +1,4 @@
-import { ChevronRight, Gauge, History, MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
+import { Gauge, History, MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
 import { forwardRef, useEffect } from "react";
 import { Button } from "@shared/ui/button";
 import {
@@ -26,6 +26,8 @@ import { getEnabledSkills, useSkillsStore } from "@features/skills/stores/useSki
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
 
 type BookAgentPanelProps = {
+  resizeHandle?: React.ReactNode;
+  variant?: "card" | "flush";
   width?: number | string;
 };
 
@@ -66,7 +68,6 @@ ToolbarButton.displayName = "ToolbarButton";
 function AgentHeaderButton({ modeLabel }: { modeLabel: string }) {
   return (
     <div className="flex min-w-0 items-center gap-1 px-1">
-      <ChevronRight className="h-4 w-4 shrink-0 text-primary" />
       <PanelTitle>Agent</PanelTitle>
       <span
         aria-label="当前 Agent 模式"
@@ -90,7 +91,7 @@ function buildYoloStatusLine(goal: string, control: YoloControlData | null) {
   return `YOLO：${status} · ${goal}`;
 }
 
-export function BookAgentPanel({ width }: BookAgentPanelProps) {
+export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookAgentPanelProps) {
   const rootNode = useBookWorkspaceStore((state) => state.rootNode);
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
   const activeModeId = useChatRunStore((state) => state.activeModeId);
@@ -175,9 +176,14 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
   return (
     <aside
       style={width ? { width } : undefined}
-      className="flex h-full shrink-0 flex-col overflow-hidden bg-app"
+      className={cn(
+        "flex h-full shrink-0 flex-col overflow-hidden",
+        variant === "card"
+          ? "relative box-border rounded-xl border border-border/45 bg-card text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none"
+          : "bg-app",
+      )}
     >
-      <PanelHeader className="bg-transparent px-2">
+      <PanelHeader className="border-b-0 bg-transparent px-2">
         <AgentHeaderButton modeLabel={activeModeLabel} />
         <PanelToolbar className="gap-0.5">
           {/* 会话上下文：使用 DropdownMenu 承载块状内容（非菜单项） */}
@@ -310,6 +316,7 @@ export function BookAgentPanel({ width }: BookAgentPanelProps) {
         runStatus={displayRunStatus}
         selection={manualContextSelection}
       />
+      {resizeHandle}
     </aside>
   );
 }

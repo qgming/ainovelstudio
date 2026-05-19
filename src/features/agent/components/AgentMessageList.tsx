@@ -141,7 +141,7 @@ export function AgentMessageList({ messages, runStatus }: AgentMessageListProps)
   };
 
   return (
-    <div ref={scrollRef} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-app px-3 py-3">
+    <div ref={scrollRef} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-card px-3 py-3 text-card-foreground dark:bg-panel">
       <div className="space-y-4">
         {skippedMessageCount > 0 ? (
           <div className="mx-auto max-w-[94%] rounded-md border border-border bg-panel-subtle px-3 py-2 text-center text-xs leading-5 text-muted-foreground">

@@ -1,5 +1,4 @@
 import {
-  ChevronRight,
   FilePlus2,
   FolderOpen,
   FolderPlus,
@@ -7,6 +6,7 @@ import {
 } from "lucide-react";
 import { Button } from "@shared/ui/button";
 import { PanelBody, PanelHeader, PanelToolbar } from "@shared/ui/panel";
+import { cn } from "@shared/utils";
 import { BookTreeItem } from "./BookTreeItem";
 import type { TreeNode } from "@features/books/types";
 
@@ -25,7 +25,9 @@ type BookTreePanelProps = {
   onRename: (node: TreeNode) => void;
   onSelectFile: (path: string) => void;
   onToggleDirectory: (path: string) => void;
+  resizeHandle?: React.ReactNode;
   rootNode: TreeNode;
+  variant?: "card" | "flush";
   width?: number | string;
 };
 
@@ -87,10 +89,9 @@ function WorkspaceButton({
       onClick={onClick}
       variant="ghost"
       size="sm"
-      className="h-7 min-w-0 justify-start gap-1 px-1 text-foreground"
+      className="h-8 min-w-0 justify-start px-1 text-foreground"
     >
-      <ChevronRight className="h-4 w-4 shrink-0 text-primary" />
-      <span className="truncate text-[13px] font-medium leading-none tracking-[0.01em]">
+      <span className="truncate text-[13px] font-medium leading-5 tracking-[0.01em]">
         {name}
       </span>
     </Button>
@@ -112,15 +113,22 @@ export function BookTreePanel({
   onRename,
   onSelectFile,
   onToggleDirectory,
+  resizeHandle,
   rootNode,
+  variant = "flush",
   width,
 }: BookTreePanelProps) {
   return (
     <aside
       style={width ? { width } : undefined}
-      className="flex h-full shrink-0 flex-col overflow-hidden bg-app"
+      className={cn(
+        "flex h-full shrink-0 flex-col overflow-hidden",
+        variant === "card"
+          ? "relative box-border rounded-xl border border-border/45 bg-card text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none"
+          : "bg-app",
+      )}
     >
-      <PanelHeader className="bg-transparent px-0">
+      <PanelHeader className="border-b-0 bg-transparent px-2">
         <WorkspaceButton
           busy={busy}
           name={rootNode.name}
@@ -182,6 +190,7 @@ export function BookTreePanel({
           ))}
         </div>
       </PanelBody>
+      {resizeHandle}
     </aside>
   );
 }
