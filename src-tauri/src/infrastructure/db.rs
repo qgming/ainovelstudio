@@ -293,6 +293,27 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
 
             CREATE INDEX IF NOT EXISTS idx_ai_call_logs_created_at
             ON ai_call_logs(CAST(created_at AS INTEGER) DESC);
+
+            CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
+                date TEXT PRIMARY KEY,
+                version TEXT NOT NULL,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS leaderboard_snapshot_entries (
+                snapshot_date TEXT NOT NULL,
+                version TEXT NOT NULL,
+                gender INTEGER NOT NULL,
+                rank_type INTEGER NOT NULL,
+                category_id INTEGER NOT NULL,
+                books_json TEXT NOT NULL,
+                updated_at INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (snapshot_date, version, gender, rank_type, category_id),
+                FOREIGN KEY(snapshot_date) REFERENCES leaderboard_snapshots(date) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_leaderboard_snapshot_entries_lookup
+            ON leaderboard_snapshot_entries(snapshot_date, version, gender, rank_type, category_id);
             "#,
         )
         .map_err(error_to_string)?;

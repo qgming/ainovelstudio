@@ -80,6 +80,7 @@ vi.mock("./providerApi", () => ({
 }));
 
 import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./tools";
+import { __resetLeaderboardCacheForTests } from "@features/leaderboard/leaderboardApi";
 import { createInteractionToolBuilders } from "./ai-sdk-tools/interactionBuilders";
 import { createReadToolBuilders } from "./ai-sdk-tools/readBuilders";
 import { runAiSdkTool } from "./ai-sdk-tools/output";
@@ -1418,6 +1419,7 @@ describe("createWorkspaceToolset", () => {
 describe("createGlobalToolset", () => {
   beforeEach(() => {
     mockForwardProviderRequestViaTauri.mockReset();
+    __resetLeaderboardCacheForTests();
     searxngSearchService.setInstances([
       "https://search-a.example",
       "https://search-b.example",
@@ -1744,7 +1746,7 @@ describe("createGlobalToolset", () => {
     });
   });
 
-  it("leaderboard 可按分类和排名范围读取榜单作品", async () => {
+  it("leaderboard 可按分类和排名范围读取榜单作品且不含简介", async () => {
     mockForwardProviderRequestViaTauri.mockResolvedValue({
       ok: true,
       status: 200,
@@ -1794,13 +1796,13 @@ describe("createGlobalToolset", () => {
     }));
     expect(result).toMatchObject({
       ok: true,
-      summary: "已读取男频阅读榜 · 都市高武，第 2 名，共 1 本。",
+      summary: "已读取男频阅读榜 · 都市高武，第 2 名，共 1 本；列表不含简介。",
       data: {
         board: "男频阅读榜",
         category: "都市高武",
+        includesAbstract: false,
         books: [
           {
-            abstract: "第二名简介",
             author: "作者乙",
             bookName: "第二名作品",
             rank: 2,
@@ -1812,9 +1814,10 @@ describe("createGlobalToolset", () => {
         ],
       },
     });
+    expect((result.data as { books: Array<Record<string, unknown>> }).books[0]).not.toHaveProperty("abstract");
   });
 
-  it("leaderboard 默认读取 30 本分类榜单作品", async () => {
+  it("leaderboard 默认读取单题材可解析到的全部榜单作品且不含简介", async () => {
     mockForwardProviderRequestViaTauri.mockResolvedValue({
       ok: true,
       status: 200,
@@ -1840,9 +1843,12 @@ describe("createGlobalToolset", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      summary: "已读取男频阅读榜 · 都市高武，第 1-30 名，共 30 本。",
+      summary: "已读取男频阅读榜 · 都市高武，全部排名，共 30 本；列表不含简介。",
+      data: { includesAbstract: false },
     });
-    expect((result.data as { books: unknown[] }).books).toHaveLength(30);
+    const books = (result.data as { books: Array<Record<string, unknown>> }).books;
+    expect(books).toHaveLength(30);
+    expect(books[0]).not.toHaveProperty("abstract");
   });
 
   it("leaderboard 支持读取总榜前 120 名", async () => {
@@ -1875,12 +1881,12 @@ describe("createGlobalToolset", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      summary: "已读取男频阅读榜 · 总榜，第 1-120 名，共 120 本。",
+      summary: "已读取男频阅读榜 · 总榜，第 1-120 名，共 120 本；列表不含简介。",
     });
     expect((result.data as { books: unknown[] }).books).toHaveLength(120);
   });
 
-  it("leaderboard 默认读取今日番茄总榜前 180 名", async () => {
+  it("leaderboard 默认读取四主榜中的男频阅读榜总榜", async () => {
     mockForwardProviderRequestViaTauri.mockImplementation(({ url }: { url: string }) => {
       const params = new URL(url).searchParams;
       const categoryId = Number(params.get("category_id"));
@@ -1909,9 +1915,129 @@ describe("createGlobalToolset", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      summary: "已读取今日番茄总榜，第 1-180 名，共 180 本。",
+      data: {
+        board: "男频阅读榜",
+        boardId: "male-reading",
+        category: "总榜",
+        includesAbstract: false,
+      },
     });
-    expect((result.data as { books: unknown[] }).books).toHaveLength(180);
+    expect(result.summary).toContain("已读取男频阅读榜 · 总榜，全部排名");
+    expect((result.data as { books: unknown[] }).books).toHaveLength(570);
+  });
+
+  it("leaderboard details 可单独读取作品简介", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: createFanqieRankApiJson([
+        {
+          abstract: "第一本简介",
+          author: "作者甲",
+          bookId: "book-1",
+          bookName: "第一本作品",
+          creationStatus: "1",
+          currentPos: 1,
+          read_count: "12.5万",
+          wordNumber: "300000",
+        },
+        {
+          abstract: "第二本简介",
+          author: "作者乙",
+          bookId: "book-2",
+          bookName: "第二本作品",
+          creationStatus: "0",
+          currentPos: 2,
+          read_count: "9,876",
+          wordNumber: "450000",
+        },
+      ]),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.leaderboard.execute({
+      action: "details",
+      board: "male-reading",
+      categoryName: "都市高武",
+      bookIds: ["book-2"],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      summary: "已读取男频阅读榜 · 都市高武的作品简介，共 1 本。",
+      data: {
+        action: "details",
+        includesAbstract: true,
+        books: [
+          {
+            abstract: "第二本简介",
+            bookId: "book-2",
+            bookName: "第二本作品",
+          },
+        ],
+      },
+    });
+  });
+
+  it("leaderboard stats 可读取榜单统计数据", async () => {
+    mockForwardProviderRequestViaTauri.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {},
+      body: createFanqieRankApiJson([
+        {
+          author: "作者甲",
+          bookId: "book-1",
+          bookName: "都市作品一",
+          creationStatus: "1",
+          currentPos: 1,
+          rankPosDiff: 2,
+          read_count: "12000",
+          wordNumber: "300000",
+        },
+        {
+          author: "作者乙",
+          bookId: "book-2",
+          bookName: "都市作品二",
+          creationStatus: "0",
+          currentPos: 2,
+          read_count: "8000",
+          wordNumber: "400000",
+        },
+        {
+          author: "作者丙",
+          bookId: "book-3",
+          bookName: "都市作品三",
+          creationStatus: "1",
+          currentPos: 3,
+          read_count: "6000",
+          wordNumber: "500000",
+        },
+      ]),
+    });
+    const toolset = createGlobalToolset();
+
+    const result = await toolset.leaderboard.execute({
+      action: "stats",
+      board: "male-reading",
+      categoryName: "都市高武",
+      statsLimit: 5,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      summary: "已读取男频阅读榜 · 都市高武的统计数据，样本 3 本。",
+      data: {
+        action: "stats",
+        sampleCount: 3,
+        overview: {
+          totalBooks: 3,
+          totalReadCount: 26000,
+        },
+      },
+    });
+    expect((result.data as { categories: Array<Record<string, unknown>> }).categories.length).toBeGreaterThan(0);
   });
 
   it("leaderboard AI schema 支持具体排名查询参数", () => {
@@ -1926,12 +2052,14 @@ describe("createGlobalToolset", () => {
     });
 
     const parsed = (tool as { inputSchema: { parse: (input: unknown) => unknown } }).inputSchema.parse({
+      action: "details",
       board: "female-new",
       categoryName: "快穿",
       rank: 3,
     });
 
     expect(parsed).toMatchObject({
+      action: "details",
       board: "female-new",
       categoryName: "快穿",
       rank: 3,

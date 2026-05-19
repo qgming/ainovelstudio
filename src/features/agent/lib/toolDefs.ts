@@ -55,7 +55,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "leaderboard",
     name: "小说排行榜",
     description:
-      "读取小说排行榜；支持男频/女频、阅读榜/新书榜、分类/总榜、具体排名或排名范围，返回书名、简介、在读数、排行变化等结构化信息。",
+      "读取小说排行榜；支持四个主榜、题材榜单、作品简介单独读取和数据统计。书单默认不含简介，简介需按作品单独读取。",
   },
   {
     id: "workspace_read",

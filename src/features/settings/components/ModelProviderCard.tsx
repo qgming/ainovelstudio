@@ -48,6 +48,7 @@ import {
 } from "@shared/ui/dropdown-menu";
 import { Input } from "@shared/ui/input";
 import { Label } from "@shared/ui/label";
+import { SegmentedControl } from "@shared/ui/segmented-control";
 import { Switch } from "@shared/ui/switch";
 import { MODEL_PROVIDER_RECOMMENDATIONS } from "./modelProviderRecommendations";
 import { SettingsHeaderResponsiveButton } from "./SettingsSectionHeader";
@@ -533,33 +534,18 @@ export function ModelProviderCard({
                     思考强度
                   </p>
                 </div>
-                <div
-                  role="group"
-                  aria-label="思考强度"
-                  className="grid grid-cols-3 gap-1 rounded-[8px] border border-border bg-background p-1 sm:flex"
-                >
-                  {REASONING_EFFORT_OPTIONS.map((option) => {
-                    const selected = option === reasoningEffort;
-
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        disabled={isSaving}
-                        aria-pressed={selected}
-                        onClick={() => handleReasoningEffortChange(option)}
-                        className={cn(
-                          "h-7 min-w-12 rounded-[6px] px-2 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-60",
-                          selected
-                            ? "bg-foreground text-background"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                        )}
-                      >
-                        {REASONING_EFFORT_LABELS[option]}
-                      </button>
-                    );
-                  })}
-                </div>
+                <SegmentedControl
+                  ariaLabel="思考强度"
+                  className="md:w-auto md:justify-end"
+                  disabled={isSaving}
+                  isBusy={isSaving}
+                  onValueChange={handleReasoningEffortChange}
+                  options={REASONING_EFFORT_OPTIONS.map((option) => ({
+                    label: REASONING_EFFORT_LABELS[option],
+                    value: option,
+                  }))}
+                  value={reasoningEffort}
+                />
               </div>
             </div>
           </div>

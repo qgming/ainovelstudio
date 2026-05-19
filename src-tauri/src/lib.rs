@@ -78,6 +78,8 @@ pub fn run() {
             domains::usage::commands::read_usage_logs,
             domains::debug::commands::read_ai_call_logs,
             domains::debug::commands::clear_ai_call_logs,
+            domains::leaderboard::read_leaderboard_snapshot,
+            domains::leaderboard::write_leaderboard_snapshot,
             domains::book_workspace::commands::pick_book_directory,
             domains::book_workspace::commands::open_book_folder,
             domains::book_workspace::commands::sync_book_folder_to_workspace,

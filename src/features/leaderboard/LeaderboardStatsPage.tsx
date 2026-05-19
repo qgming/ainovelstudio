@@ -232,7 +232,13 @@ export function LeaderboardStatsPage() {
         </div>
       }
       actions={[
-        { icon: RefreshCw, label: status === "loading" ? "刷新中..." : "刷新统计", onClick: () => void refresh(true) },
+        {
+          busy: status === "loading",
+          busyLabel: "刷新中...",
+          icon: RefreshCw,
+          label: "刷新统计",
+          onClick: () => void refresh(true),
+        },
       ]}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-app">

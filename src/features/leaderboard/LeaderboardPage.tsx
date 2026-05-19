@@ -10,9 +10,8 @@ import {
   RankSkeletonGrid,
 } from "./LeaderboardComponents";
 import {
+  ensureDailyLeaderboardSnapshot,
   fetchFanqieOverallLeaderboard,
-  fetchLeaderboard,
-  fetchOverallLeaderboard,
   readCachedFanqieOverallLeaderboard,
   readCachedLeaderboard,
   readCachedLeaderboardBookDetail,
@@ -94,17 +93,9 @@ export function LeaderboardPage() {
     setErrorMessage(null);
 
     try {
-      const request = {
-        categoryId: selectedCategoryId,
-        forceRefresh: forceRefresh || undefined,
-        gender: selectedBoard.gender,
-        type: selectedBoard.type,
-      };
-      const nextBooks = isFanqieOverall
-        ? await fetchFanqieOverallLeaderboard(undefined, { forceRefresh })
-        : selectedCategoryId === OVERALL_CATEGORY_ID
-        ? await fetchOverallLeaderboard(request)
-        : await fetchLeaderboard(request);
+      await ensureDailyLeaderboardSnapshot({ forceRefresh });
+      const nextBooks = readLocalBooks()
+        ?? (isFanqieOverall ? await fetchFanqieOverallLeaderboard() : []);
       if (requestSeq.current !== currentSeq) return;
       applyBooks(nextBooks);
       setUpdatedAt(new Date());
@@ -115,7 +106,7 @@ export function LeaderboardPage() {
     } finally {
       if (requestSeq.current === currentSeq) setStatus("ready");
     }
-  }, [applyBooks, isFanqieOverall, readLocalBooks, selectedBoard.gender, selectedBoard.type, selectedCategoryId]);
+  }, [applyBooks, isFanqieOverall, readLocalBooks]);
 
   const handleSelectBook = useCallback((book: LeaderboardBook) => {
     setSelectedBook(readCachedLeaderboardBookDetail(book) ?? book);
@@ -152,7 +143,13 @@ export function LeaderboardPage() {
         ...(canOpenStats
           ? [{ icon: BarChart3, label: "数据统计", onClick: () => navigate(`/leaderboard/statistics?board=${boardId}`) }]
           : []),
-        { icon: RefreshCw, label: status === "loading" ? "刷新中..." : "刷新榜单", onClick: () => void refresh(true) },
+        {
+          busy: status === "loading",
+          busyLabel: "刷新中...",
+          icon: RefreshCw,
+          label: "刷新榜单",
+          onClick: () => void refresh(true),
+        },
       ]}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-app">

@@ -1,3 +1,4 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { forwardProviderRequestViaTauri } from "@features/agent/lib/providerApi";
 import { decodeText } from "./fanqieDecoder";
 import {
@@ -12,7 +13,6 @@ const FANQIE_APP_ID = "1967";
 const DEFAULT_LIMIT = 30;
 const RANK_LIST_TYPE = "3";
 const CACHE_VERSION = "v3";
-const CACHE_PREFIX = "ainovelstudio:fanqie-leaderboard";
 const FANQIE_CATEGORY_CONCURRENCY = 2;
 const FANQIE_REQUEST_SPACING_MS = 250;
 const FANQIE_MAX_RETRIES = 2;
@@ -39,15 +39,33 @@ type RankApiResponse = {
   message?: string;
 };
 
-type CachePayload = {
+type LeaderboardSnapshotEntry = {
   books: LeaderboardBook[];
+  categoryId: number;
+  gender: 0 | 1;
+  type: 1 | 2;
+};
+
+type SnapshotPayload = {
   date: string;
+  entries: LeaderboardSnapshotEntry[];
   version: string;
+};
+
+type LeaderboardSnapshot = {
+  entries: LeaderboardSnapshotEntry[];
+  fanqieOverall: LeaderboardBook[];
 };
 
 type FanqieForwardRequest = Parameters<typeof forwardProviderRequestViaTauri>[0];
 
 let nextFanqieRequestAt = 0;
+const inFlightRankRequests = new Map<string, Promise<LeaderboardBook[]>>();
+const inFlightMergedRequests = new Map<string, Promise<LeaderboardBook[]>>();
+const memoryRankBooks = new Map<string, LeaderboardBook[]>();
+let inFlightSnapshotRequest: Promise<LeaderboardSnapshot> | null = null;
+let memorySnapshotDate: string | null = null;
+let memorySnapshot: LeaderboardSnapshot | null = null;
 
 class FanqieHttpError extends Error {
   constructor(public readonly status: number) {
@@ -95,76 +113,70 @@ function getTodayKey() {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-function getCacheKey(request: LeaderboardRequest) {
-  return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:${request.gender}:${request.type}:${request.categoryId}`;
+function getRankCacheKey(request: Pick<LeaderboardRequest, "categoryId" | "gender" | "type">) {
+  return `${getTodayKey()}:${request.gender}:${request.type}:${request.categoryId}`;
 }
 
-function getTodayCachePrefix() {
-  return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:`;
+function getRankRequestKey(request: LeaderboardRequest) {
+  return `${getRankCacheKey(request)}:${request.limit ?? DEFAULT_LIMIT}:${request.forceRefresh ? "force" : "auto"}`;
 }
 
-function getMergedCacheKey(name: string) {
-  return `${CACHE_PREFIX}:${CACHE_VERSION}:${getTodayKey()}:merged:${name}`;
+function getOverallMergedCacheKey(gender: 0 | 1, type: 1 | 2) {
+  return `${getTodayKey()}:overall:${gender}:${type}`;
 }
 
-function getCacheStorage(): Storage | null {
+function getFanqieOverallCacheKey() {
+  return `${getTodayKey()}:fanqie-overall`;
+}
+
+function getCachedMemorySnapshot(): LeaderboardSnapshot | null {
+  return memorySnapshotDate === getTodayKey() ? memorySnapshot : null;
+}
+
+function readMemoryRankBooks(request: LeaderboardRequest): LeaderboardBook[] | null {
+  if (request.forceRefresh) return null;
+  const books = memoryRankBooks.get(getRankCacheKey(request));
+  if (!books) return null;
+  const requestedLimit = request.limit ?? DEFAULT_LIMIT;
+  return books.length >= requestedLimit ? books : null;
+}
+
+function writeMemoryRankBooks(request: Pick<LeaderboardRequest, "categoryId" | "gender" | "type">, books: LeaderboardBook[]) {
+  memoryRankBooks.set(getRankCacheKey(request), books);
+}
+
+function indexMemorySnapshot(snapshot: LeaderboardSnapshot) {
+  memoryRankBooks.clear();
+  for (const entry of snapshot.entries) {
+    writeMemoryRankBooks(entry, entry.books);
+  }
+}
+
+function isSnapshotPayload(value: unknown): value is SnapshotPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Partial<SnapshotPayload>;
+  return payload.version === CACHE_VERSION
+    && payload.date === getTodayKey()
+    && Array.isArray(payload.entries);
+}
+
+async function readSqliteSnapshot(): Promise<LeaderboardSnapshotEntry[] | null> {
+  if (!isTauri()) return null;
   try {
-    return globalThis.localStorage ?? null;
+    const payload = await invoke<SnapshotPayload | null>("read_leaderboard_snapshot", {
+      date: getTodayKey(),
+      version: CACHE_VERSION,
+    });
+    return isSnapshotPayload(payload) ? payload.entries : null;
   } catch {
     return null;
   }
 }
 
-function readCachedBooks(request: LeaderboardRequest): LeaderboardBook[] | null {
-  const storage = getCacheStorage();
-  if (!storage || request.forceRefresh) return null;
-  const raw = storage.getItem(getCacheKey(request));
-  if (!raw) return null;
-  try {
-    const payload = JSON.parse(raw) as CachePayload;
-    if (payload.version !== CACHE_VERSION || payload.date !== getTodayKey()) return null;
-    if (!Array.isArray(payload.books)) return null;
-    const requestedLimit = request.limit ?? DEFAULT_LIMIT;
-    return payload.books.length >= requestedLimit ? payload.books : null;
-  } catch {
-    return null;
-  }
-}
-
-function readCachedBookList(cacheKey: string, forceRefresh?: boolean): LeaderboardBook[] | null {
-  const storage = getCacheStorage();
-  if (!storage || forceRefresh) return null;
-  const raw = storage.getItem(cacheKey);
-  if (!raw) return null;
-  try {
-    const payload = JSON.parse(raw) as CachePayload;
-    if (payload.version !== CACHE_VERSION || payload.date !== getTodayKey()) return null;
-    return Array.isArray(payload.books) ? payload.books : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedBooks(request: LeaderboardRequest, books: LeaderboardBook[]) {
-  const storage = getCacheStorage();
-  if (!storage) return;
-  const payload: CachePayload = { books, date: getTodayKey(), version: CACHE_VERSION };
-  try {
-    storage.setItem(getCacheKey(request), JSON.stringify(payload));
-  } catch {
-    // Cache storage is best-effort; fetching should still succeed if quota is full.
-  }
-}
-
-function writeCachedBookList(cacheKey: string, books: LeaderboardBook[]) {
-  const storage = getCacheStorage();
-  if (!storage) return;
-  const payload: CachePayload = { books, date: getTodayKey(), version: CACHE_VERSION };
-  try {
-    storage.setItem(cacheKey, JSON.stringify(payload));
-  } catch {
-    // Cache storage is best-effort; fetching should still succeed if quota is full.
-  }
+async function writeSqliteSnapshot(entries: LeaderboardSnapshotEntry[]) {
+  if (!isTauri()) return;
+  const snapshot: SnapshotPayload = { date: getTodayKey(), entries, version: CACHE_VERSION };
+  await invoke<void>("write_leaderboard_snapshot", { snapshot });
 }
 
 function sliceCachedBooks(books: LeaderboardBook[] | null, limit?: number) {
@@ -172,23 +184,43 @@ function sliceCachedBooks(books: LeaderboardBook[] | null, limit?: number) {
   return typeof limit === "number" ? books.slice(0, limit) : books;
 }
 
+function readSnapshotLeaderboard(request: LeaderboardRequest): LeaderboardBook[] | null {
+  const snapshot = getCachedMemorySnapshot();
+  if (!snapshot) return null;
+  const entries = snapshot.entries.filter((entry) => {
+    return entry.gender === request.gender
+      && entry.type === request.type
+      && (request.categoryId === OVERALL_CATEGORY_ID || entry.categoryId === request.categoryId);
+  });
+  if (entries.length === 0) return null;
+  const books = request.categoryId === OVERALL_CATEGORY_ID
+    ? rankMergedBooks(entries.flatMap((entry) => entry.books))
+    : entries.flatMap((entry) => entry.books);
+  return sliceCachedBooks(books, request.limit);
+}
+
 export function readCachedLeaderboard(request: LeaderboardRequest): LeaderboardBook[] | null {
   if (request.categoryId === OVERALL_CATEGORY_ID) {
     return readCachedOverallLeaderboard(request);
   }
+  const snapshotBooks = readSnapshotLeaderboard(request);
+  if (snapshotBooks) return snapshotBooks;
   const limit = request.limit ?? DEFAULT_LIMIT;
   const fetchLimit = Math.max(limit, DEFAULT_LIMIT);
-  const books = readCachedBooks({ ...request, limit: fetchLimit });
+  const books = readMemoryRankBooks({ ...request, limit: fetchLimit });
   return sliceCachedBooks(books, limit);
 }
 
 export function readCachedOverallLeaderboard(request: LeaderboardRequest): LeaderboardBook[] | null {
-  const cacheKey = getMergedCacheKey(`overall:${request.gender}:${request.type}`);
-  return sliceCachedBooks(readCachedBookList(cacheKey, request.forceRefresh), request.limit);
+  const snapshotBooks = readSnapshotLeaderboard(request);
+  if (snapshotBooks) return snapshotBooks;
+  return null;
 }
 
 export function readCachedFanqieOverallLeaderboard(limit?: number): LeaderboardBook[] | null {
-  return sliceCachedBooks(readCachedBookList(getMergedCacheKey("fanqie-overall")), limit);
+  const snapshot = getCachedMemorySnapshot();
+  if (snapshot) return sliceCachedBooks(snapshot.fanqieOverall, limit);
+  return null;
 }
 
 function matchesCachedBook(source: LeaderboardBook, target: Partial<LeaderboardBook>) {
@@ -198,17 +230,9 @@ function matchesCachedBook(source: LeaderboardBook, target: Partial<LeaderboardB
 }
 
 export function readCachedLeaderboardBookDetail(book: LeaderboardBook): LeaderboardBook | null {
-  const storage = getCacheStorage();
-  if (!storage) return null;
-  const prefix = getTodayCachePrefix();
-  for (let index = 0; index < storage.length; index += 1) {
-    const key = storage.key(index);
-    if (!key?.startsWith(prefix)) continue;
-    const books = readCachedBookList(key);
-    const matched = books?.find((cachedBook) => matchesCachedBook(cachedBook, book));
-    if (matched) return matched;
-  }
-  return null;
+  const snapshotBooks = getCachedMemorySnapshot()?.entries.flatMap((entry) => entry.books) ?? [];
+  const rankBooks = Array.from(memoryRankBooks.values()).flat();
+  return [...snapshotBooks, ...rankBooks].find((cachedBook) => matchesCachedBook(cachedBook, book)) ?? null;
 }
 
 function isTestMode() {
@@ -322,6 +346,7 @@ function normalizeBook(book: FanqieRankBook, index: number, category?: SubCatego
     bookId,
     bookName: decodeText(book.bookName ?? "未命名作品"),
     category: category?.name ?? decodeText(book.category ?? ""),
+    categoryId: category?.id,
     categoryRank: book.currentPos ?? index + 1,
     detailUrl: bookId ? `${FANQIE_BASE_URL}/page/${bookId}` : undefined,
     rank: book.currentPos ?? index + 1,
@@ -370,14 +395,26 @@ export function parseLeaderboardBooks(html: string, category?: SubCategory): Lea
 }
 
 async function fetchRankBooks(request: LeaderboardRequest, category?: SubCategory) {
-  const cachedBooks = readCachedBooks(request);
+  const cachedBooks = readMemoryRankBooks(request);
   if (cachedBooks) return cachedBooks;
+  const inFlightKey = getRankRequestKey(request);
+  const inFlightRequest = inFlightRankRequests.get(inFlightKey);
+  if (inFlightRequest) return inFlightRequest;
+
+  const requestPromise = fetchFreshRankBooks(request, category).finally(() => {
+    inFlightRankRequests.delete(inFlightKey);
+  });
+  inFlightRankRequests.set(inFlightKey, requestPromise);
+  return requestPromise;
+}
+
+async function fetchFreshRankBooks(request: LeaderboardRequest, category?: SubCategory) {
   let apiError: unknown;
   try {
     const sourceBooks = await fetchRankApiBooks(request);
     if (sourceBooks.length > 0) {
       const books = sourceBooks.map((book, index) => normalizeBook(book, index, category));
-      writeCachedBooks(request, books);
+      writeMemoryRankBooks(request, books);
       return books;
     }
   } catch (error) {
@@ -389,7 +426,7 @@ async function fetchRankBooks(request: LeaderboardRequest, category?: SubCategor
     const html = await fetchRankHtml(request);
     const books = parseLeaderboardBooks(html, category);
     if (books.length > 0) {
-      writeCachedBooks(request, books);
+      writeMemoryRankBooks(request, books);
       return books;
     }
   } catch {
@@ -403,8 +440,15 @@ export async function fetchLeaderboard(request: LeaderboardRequest): Promise<Lea
     return fetchOverallLeaderboard(request);
   }
   const limit = request.limit ?? DEFAULT_LIMIT;
+  const cachedBooks = readCachedLeaderboard(request);
+  if (cachedBooks) return cachedBooks;
+  if (isTauri()) {
+    await ensureDailyLeaderboardSnapshot({ forceRefresh: request.forceRefresh });
+    const snapshotBooks = readCachedLeaderboard(request);
+    if (snapshotBooks) return snapshotBooks;
+  }
   const fetchLimit = Math.max(limit, DEFAULT_LIMIT);
-  const books = (await fetchRankBooks({ ...request, limit: fetchLimit }, getRequestCategory(request))).slice(0, limit);
+  const books = (await fetchRankBooks({ ...request, limit: fetchLimit }, getOverallCategories(request.gender).find((category) => category.id === request.categoryId))).slice(0, limit);
   if (books.length === 0) throw new Error("番茄排行榜解析为空。");
   return books;
 }
@@ -413,29 +457,39 @@ function getOverallCategories(gender: 0 | 1) {
   return gender === 1 ? MALE_CATEGORIES_BASE : FEMALE_CATEGORIES_BASE;
 }
 
-function getRequestCategory(request: LeaderboardRequest) {
-  return getOverallCategories(request.gender).find((category) => category.id === request.categoryId);
+function getAllLeaderboardPlans(forceRefresh?: boolean): CategoryFetchPlan[] {
+  return [
+    { categories: MALE_CATEGORIES_BASE, forceRefresh, gender: 1, type: 2 },
+    { categories: MALE_CATEGORIES_BASE, forceRefresh, gender: 1, type: 1 },
+    { categories: FEMALE_CATEGORIES_BASE, forceRefresh, gender: 0, type: 2 },
+    { categories: FEMALE_CATEGORIES_BASE, forceRefresh, gender: 0, type: 1 },
+  ];
 }
 
 function getDedupKey(book: LeaderboardBook) {
   return book.bookId || book.detailUrl || `${book.bookName}-${book.author}`;
 }
 
-async function fetchCategoryPlanBooks(plan: CategoryFetchPlan) {
-  const categoryBooks = await mapWithConcurrency(
+async function fetchCategoryPlanEntries(plan: CategoryFetchPlan) {
+  return mapWithConcurrency(
     plan.categories,
     FANQIE_CATEGORY_CONCURRENCY,
     async (category) => {
-      return fetchRankBooks({
+      const request = {
         categoryId: category.id,
         forceRefresh: plan.forceRefresh,
         gender: plan.gender,
         limit: DEFAULT_LIMIT,
         type: plan.type,
-      }, category);
+      };
+      return {
+        books: await fetchRankBooks(request, category),
+        categoryId: category.id,
+        gender: plan.gender,
+        type: plan.type,
+      };
     },
   );
-  return categoryBooks.flat();
 }
 
 async function mapWithConcurrency<T, R>(
@@ -473,18 +527,90 @@ function rankMergedBooks(books: LeaderboardBook[], limit?: number) {
   return visibleBooks.map((book, index) => ({ ...book, rank: index + 1 }));
 }
 
-export async function fetchOverallLeaderboard(request: LeaderboardRequest): Promise<LeaderboardBook[]> {
-  const cacheKey = getMergedCacheKey(`overall:${request.gender}:${request.type}`);
-  const cachedBooks = readCachedBookList(cacheKey, request.forceRefresh);
-  if (cachedBooks) return typeof request.limit === "number" ? cachedBooks.slice(0, request.limit) : cachedBooks;
-  const books = await fetchCategoryPlanBooks({
-    categories: getOverallCategories(request.gender),
-    forceRefresh: request.forceRefresh,
-    gender: request.gender,
-    type: request.type,
+function buildLeaderboardSnapshot(entries: LeaderboardSnapshotEntry[]) {
+  return {
+    entries,
+    fanqieOverall: rankMergedBooks(entries.flatMap((entry) => entry.books)),
+  };
+}
+
+function hasSnapshotBooks(entries: LeaderboardSnapshotEntry[]) {
+  return entries.some((entry) => entry.books.length > 0);
+}
+
+function setMemorySnapshot(snapshot: LeaderboardSnapshot) {
+  memorySnapshotDate = getTodayKey();
+  memorySnapshot = snapshot;
+  indexMemorySnapshot(snapshot);
+  return snapshot;
+}
+
+async function persistLeaderboardSnapshot(entries: LeaderboardSnapshotEntry[]) {
+  await writeSqliteSnapshot(entries);
+}
+
+function writeLeaderboardSnapshot(entries: LeaderboardSnapshotEntry[]) {
+  return setMemorySnapshot(buildLeaderboardSnapshot(entries));
+}
+
+async function fetchLeaderboardSnapshot(forceRefresh = false): Promise<LeaderboardSnapshot> {
+  const memorySnapshot = getCachedMemorySnapshot();
+  if (memorySnapshot && !forceRefresh) return memorySnapshot;
+
+  const sqliteEntries = await readSqliteSnapshot();
+  if (sqliteEntries && sqliteEntries.length > 0 && !forceRefresh) {
+    return writeLeaderboardSnapshot(sqliteEntries);
+  }
+
+  if (inFlightSnapshotRequest && !forceRefresh) return inFlightSnapshotRequest;
+
+  const requestPromise = (async () => {
+    const entries: LeaderboardSnapshotEntry[] = [];
+    for (const plan of getAllLeaderboardPlans(forceRefresh || undefined)) {
+      entries.push(...await fetchCategoryPlanEntries(plan));
+    }
+    if (!hasSnapshotBooks(entries)) {
+      if (sqliteEntries && sqliteEntries.length > 0) {
+        return writeLeaderboardSnapshot(sqliteEntries);
+      }
+      throw new Error("番茄排行榜全量刷新没有解析到作品，已保留本地数据。");
+    }
+    const snapshot = writeLeaderboardSnapshot(entries);
+    persistLeaderboardSnapshot(entries).catch((error: unknown) => {
+      console.warn("番茄排行榜 SQLite 快照保存失败", error);
+    });
+    return snapshot;
+  })().finally(() => {
+    if (inFlightSnapshotRequest === requestPromise) inFlightSnapshotRequest = null;
   });
-  const rankedBooks = rankMergedBooks(books);
-  writeCachedBookList(cacheKey, rankedBooks);
+
+  if (!forceRefresh) inFlightSnapshotRequest = requestPromise;
+  return requestPromise;
+}
+
+export async function ensureDailyLeaderboardSnapshot(options: { forceRefresh?: boolean } = {}) {
+  await fetchLeaderboardSnapshot(Boolean(options.forceRefresh));
+}
+
+export async function fetchOverallLeaderboard(request: LeaderboardRequest): Promise<LeaderboardBook[]> {
+  const cacheKey = getOverallMergedCacheKey(request.gender, request.type);
+  const cachedBooks = readCachedOverallLeaderboard(request);
+  if (cachedBooks) return typeof request.limit === "number" ? cachedBooks.slice(0, request.limit) : cachedBooks;
+  const inFlightKey = `${cacheKey}:${request.forceRefresh ? "force" : "auto"}`;
+  const inFlightRequest = inFlightMergedRequests.get(inFlightKey);
+  if (inFlightRequest) {
+    const books = await inFlightRequest;
+    return typeof request.limit === "number" ? books.slice(0, request.limit) : books;
+  }
+
+  const requestPromise = ensureDailyLeaderboardSnapshot({
+    forceRefresh: request.forceRefresh,
+  }).then(() => readCachedOverallLeaderboard(request) ?? []).finally(() => {
+    inFlightMergedRequests.delete(inFlightKey);
+  });
+  inFlightMergedRequests.set(inFlightKey, requestPromise);
+  const rankedBooks = await requestPromise;
+  if (rankedBooks.length === 0) throw new Error("当前总榜没有缓存数据，请先刷新全部榜单。");
   return typeof request.limit === "number" ? rankedBooks.slice(0, request.limit) : rankedBooks;
 }
 
@@ -492,20 +618,34 @@ export async function fetchFanqieOverallLeaderboard(
   limit?: number,
   options: { forceRefresh?: boolean } = {},
 ): Promise<LeaderboardBook[]> {
-  const cacheKey = getMergedCacheKey("fanqie-overall");
-  const cachedBooks = readCachedBookList(cacheKey, options.forceRefresh);
+  const cacheKey = getFanqieOverallCacheKey();
+  const cachedBooks = options.forceRefresh ? null : readCachedFanqieOverallLeaderboard(limit);
   if (cachedBooks) return typeof limit === "number" ? cachedBooks.slice(0, limit) : cachedBooks;
-  const plans: CategoryFetchPlan[] = [
-    { categories: MALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 1, type: 2 },
-    { categories: MALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 1, type: 1 },
-    { categories: FEMALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 0, type: 2 },
-    { categories: FEMALE_CATEGORIES_BASE, forceRefresh: options.forceRefresh, gender: 0, type: 1 },
-  ];
-  const planBooks: LeaderboardBook[][] = [];
-  for (const plan of plans) {
-    planBooks.push(await fetchCategoryPlanBooks(plan));
+  const inFlightKey = `${cacheKey}:${options.forceRefresh ? "force" : "auto"}`;
+  const inFlightRequest = inFlightMergedRequests.get(inFlightKey);
+  if (inFlightRequest) {
+    const books = await inFlightRequest;
+    return typeof limit === "number" ? books.slice(0, limit) : books;
   }
-  const rankedBooks = rankMergedBooks(planBooks.flat());
-  writeCachedBookList(cacheKey, rankedBooks);
+
+  const requestPromise = ensureDailyLeaderboardSnapshot({
+    forceRefresh: options.forceRefresh,
+  }).then(() => readCachedFanqieOverallLeaderboard() ?? []).finally(() => {
+    inFlightMergedRequests.delete(inFlightKey);
+  });
+  inFlightMergedRequests.set(inFlightKey, requestPromise);
+  const rankedBooks = await requestPromise;
+  if (rankedBooks.length === 0) throw new Error("当前番茄总榜没有缓存数据，请先刷新全部榜单。");
   return typeof limit === "number" ? rankedBooks.slice(0, limit) : rankedBooks;
+}
+
+export function __resetLeaderboardCacheForTests() {
+  if (!isTestMode()) return;
+  nextFanqieRequestAt = 0;
+  inFlightRankRequests.clear();
+  inFlightMergedRequests.clear();
+  memoryRankBooks.clear();
+  inFlightSnapshotRequest = null;
+  memorySnapshotDate = null;
+  memorySnapshot = null;
 }

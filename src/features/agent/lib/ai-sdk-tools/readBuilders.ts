@@ -4,10 +4,14 @@ import type { ToolBuilder, ToolRunner } from "./types";
 import type { AgentToolPromptSpec } from "./toolPromptSpecs";
 
 const fanqieLeaderboardInputSchema = z.object({
+  action: z
+    .enum(["books", "details", "stats"])
+    .default("books")
+    .describe("查询动作。books=读取书单且不含简介；details=按 bookId/书名/排名单独读取简介；stats=读取数据统计指标。"),
   board: z
-    .enum(["fanqie-overall", "male-reading", "male-new", "female-reading", "female-new"])
+    .enum(["male-reading", "male-new", "female-reading", "female-new"])
     .optional()
-    .describe("主榜 ID。优先直接传 board：fanqie-overall=今日番茄总榜，male-reading=男频阅读榜，male-new=男频新书榜，female-reading=女频阅读榜，female-new=女频新书榜。"),
+    .describe("四个主榜之一：male-reading=男频阅读榜，male-new=男频新书榜，female-reading=女频阅读榜，female-new=女频新书榜。不要传 fanqie-overall。"),
   gender: z
     .union([z.literal(0), z.literal(1)])
     .optional()
@@ -20,23 +24,43 @@ const fanqieLeaderboardInputSchema = z.object({
     .number()
     .int()
     .optional()
-    .describe("分类 ID；-1 表示总榜。已知 categoryId 时优先用它，高于 categoryName。"),
+    .describe("分类 ID；-1 表示该主榜总榜。已知 categoryId 时优先用它，高于 categoryName。"),
   categoryName: z
     .string()
     .optional()
-    .describe("分类名称，如 都市高武、快穿、总榜。未传默认总榜；不确定分类 ID 时用名称。"),
+    .describe("分类名称，如 都市高武、快穿、总榜。未传默认该主榜总榜；不确定分类 ID 时用名称。"),
+  bookId: z
+    .string()
+    .optional()
+    .describe("details 动作用：单本作品 ID 或详情 URL。"),
+  bookIds: z
+    .array(z.string())
+    .optional()
+    .describe("details 动作用：多本作品 ID 或详情 URL。"),
+  bookName: z
+    .string()
+    .optional()
+    .describe("details 动作用：单本作品名。"),
+  bookNames: z
+    .array(z.string())
+    .optional()
+    .describe("details 动作用：多本作品名。"),
+  ranks: z
+    .array(z.number().int().positive())
+    .optional()
+    .describe("details 动作用：按排名读取多本作品简介。"),
   rank: z
     .number()
     .int()
     .positive()
     .optional()
-    .describe("查询单个具体排名，如第 3 名。传 rank 时忽略 rankFrom/rankTo/limit。"),
+    .describe("查询单个具体排名，如第 3 名。books 返回该排名条目；details 返回该排名简介。"),
   rankFrom: z
     .number()
     .int()
     .positive()
     .optional()
-    .describe("排名范围起点，默认 1。和 rankTo 或 limit 配合使用。"),
+    .describe("排名范围起点。不传 rank/rankFrom/rankTo/limit 时 books/stats 默认读取所选榜单或题材的全部可用作品。"),
   rankTo: z
     .number()
     .int()
@@ -47,15 +71,21 @@ const fanqieLeaderboardInputSchema = z.object({
     .number()
     .int()
     .positive()
-    .max(180)
+    .max(5000)
     .optional()
-    .describe("最多返回多少本，默认 30，最大 180。只要前 N 名时传 limit。"),
+    .describe("限制返回排名数量，最大 5000。不传时 books/stats 读取全部可用作品；单题材通常是该题材榜单可解析到的作品。"),
+  statsLimit: z
+    .number()
+    .int()
+    .positive()
+    .max(30)
+    .optional()
+    .describe("stats 动作返回多少个题材统计项，默认 10，最大 30。"),
   forceRefresh: z
     .boolean()
     .optional()
     .describe("是否绕过今日缓存强制刷新。默认 false；除非用户要求最新实时数据或怀疑缓存过期。"),
 });
-
 const webSearchInputSchema = z.object({
   domains: z
     .array(z.string())
@@ -241,7 +271,7 @@ const canonQueryInputSchema = z.object({
 export const READ_TOOL_SPECS = {
   leaderboard: {
     description:
-      "读取番茄小说排行榜，支持男频/女频、阅读榜/新书榜、分类或总榜，并可按具体排名或排名范围返回书名、作者、简介、在读数、字数、状态、排行变化和详情链接。",
+      "读取番茄小说四个主榜之一的书单、作品简介或统计数据。books 动作返回书名、作者、在读数、字数、状态、排行变化和详情链接但不含简介；details 动作按 bookId/书名/排名单独读取简介；stats 动作返回数据统计指标。",
     inputSchema: fanqieLeaderboardInputSchema,
   },
   web_search: {

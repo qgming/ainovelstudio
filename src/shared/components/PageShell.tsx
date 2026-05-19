@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Button } from "@shared/ui/button";
+import { BusyButton } from "@shared/ui/busy-button";
 import { useIsMobile } from "@shared/hooks/useMobile";
 import { cn } from "@shared/utils";
 
 type PageAction = {
+  busy?: boolean;
+  busyLabel?: string;
   disabled?: boolean;
   icon: LucideIcon;
   label: string;
@@ -49,12 +51,15 @@ export function PageShell({
           {title ? <div className="min-w-0 flex-1">{title}</div> : null}
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {headerRight}
-            {actions.map(({ disabled = false, icon: Icon, label, onClick, text, tone = "default" }) => (
-              <Button
+            {actions.map(({ busy = false, busyLabel, disabled = false, icon, label, onClick, text, tone = "default" }) => (
+              <BusyButton
                 key={label}
                 aria-label={label}
+                busy={busy}
+                busyLabel={isMobile ? null : busyLabel}
                 title={label}
                 disabled={disabled}
+                icon={icon}
                 onClick={onClick}
                 size={isMobile ? "icon-sm" : "sm"}
                 variant={actionVariants[tone]}
@@ -66,9 +71,8 @@ export function PageShell({
                   tone === "primary" && "border-primary/25 bg-primary text-primary-foreground shadow-[0_8px_18px_color-mix(in_oklab,var(--color-primary)_14%,transparent)] hover:border-primary/28 hover:bg-primary/92 hover:shadow-[0_10px_22px_color-mix(in_oklab,var(--color-primary)_18%,transparent)] dark:shadow-none dark:hover:shadow-none",
                 )}
               >
-                <Icon className="h-4 w-4" strokeWidth={2.1} />
                 {isMobile ? null : <span>{text ?? label}</span>}
-              </Button>
+              </BusyButton>
             ))}
           </div>
         </header>

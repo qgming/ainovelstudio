@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  __resetLeaderboardCacheForTests,
   fetchFanqieOverallLeaderboard,
   fetchLeaderboard,
   fetchOverallLeaderboard,
@@ -11,6 +12,16 @@ import {
 
 const { mockForward } = vi.hoisted(() => ({
   mockForward: vi.fn(),
+}));
+
+const { mockInvoke, mockIsTauri } = vi.hoisted(() => ({
+  mockInvoke: vi.fn(),
+  mockIsTauri: vi.fn(() => false),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: mockInvoke,
+  isTauri: mockIsTauri,
 }));
 
 vi.mock("@features/agent/lib/providerApi", () => ({
@@ -42,7 +53,9 @@ function createBook(patch: Record<string, unknown>) {
 describe("leaderboardApi", () => {
   beforeEach(() => {
     mockForward.mockReset();
-    localStorage.clear();
+    mockInvoke.mockReset();
+    mockIsTauri.mockReturnValue(false);
+    __resetLeaderboardCacheForTests();
   });
 
   it("解析在读数量格式", () => {
@@ -300,6 +313,33 @@ describe("leaderboardApi", () => {
     expect(mockForward.mock.calls.length).toBeGreaterThan(secondRequestCount);
   });
 
+  it("并发自动读取今日番茄总榜时共用同一次聚合请求", async () => {
+    mockForward.mockImplementation(({ url }: { url: string }) => {
+      const params = new URL(url).searchParams;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        body: createRankApiJson([
+          createBook({
+            bookId: `inflight-${params.get("gender")}-${params.get("rankMold")}-${params.get("category_id")}`,
+            bookName: "进行中缓存作品",
+            read_count: "88",
+          }),
+        ]),
+      });
+    });
+
+    const [allBooks, limitedBooks] = await Promise.all([
+      fetchFanqieOverallLeaderboard(),
+      fetchFanqieOverallLeaderboard(10),
+    ]);
+    const requestedUrls = mockForward.mock.calls.map(([request]) => request.url);
+
+    expect(allBooks.length).toBeGreaterThan(10);
+    expect(limitedBooks).toEqual(allBooks.slice(0, 10));
+    expect(new Set(requestedUrls).size).toBe(requestedUrls.length);
+  });
+
   it("可以同步读取今日番茄总榜本地缓存", async () => {
     mockForward.mockImplementation(({ url }: { url: string }) => {
       const params = new URL(url).searchParams;
@@ -347,5 +387,51 @@ describe("leaderboardApi", () => {
       status: "连载中",
       wordCount: 0,
     })).toMatchObject({ abstract: "本地详情简介", bookId: "detail-book-1" });
+  });
+
+  it("Tauri 环境下会把全量榜单快照写入 SQLite 并复用数据库缓存", async () => {
+    mockIsTauri.mockReturnValue(true);
+    mockInvoke
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(undefined);
+    mockForward.mockImplementation(({ url }: { url: string }) => {
+      const params = new URL(url).searchParams;
+      const categoryId = Number(params.get("category_id"));
+      const gender = params.get("gender");
+      const type = params.get("rankMold");
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        body: createRankApiJson([
+          createBook({
+            bookId: `sqlite-${gender}-${type}-${categoryId}`,
+            bookName: `SQLite作品${gender}-${type}-${categoryId}`,
+            read_count: "123",
+          }),
+        ]),
+      });
+    });
+
+    const firstBooks = await fetchFanqieOverallLeaderboard();
+    expect(firstBooks.length).toBeGreaterThan(0);
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "read_leaderboard_snapshot", {
+      date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      version: "v3",
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "write_leaderboard_snapshot", {
+      snapshot: expect.objectContaining({
+        date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        entries: expect.any(Array),
+        version: "v3",
+      }),
+    });
+
+    mockForward.mockReset();
+    mockInvoke.mockReset();
+    const secondBooks = await fetchFanqieOverallLeaderboard();
+
+    expect(secondBooks).toEqual(firstBooks);
+    expect(mockForward).not.toHaveBeenCalled();
+    expect(mockInvoke).not.toHaveBeenCalled();
   });
 });

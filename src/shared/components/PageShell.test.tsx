@@ -64,4 +64,28 @@ describe("PageShell", () => {
     expect(screen.getByRole("button", { name: "刷新书架" })).not.toHaveTextContent("刷新书架");
     expect(screen.getByRole("button", { name: "新建书籍" })).not.toHaveTextContent("新建书籍");
   });
+
+  it("顶部操作按钮支持 busy 加载态", () => {
+    render(
+      <PageShell
+        title={<div>排行榜</div>}
+        actions={[
+          {
+            busy: true,
+            busyLabel: "刷新中...",
+            icon: RefreshCw,
+            label: "刷新榜单",
+            onClick: vi.fn(),
+          },
+        ]}
+      >
+        <div>content</div>
+      </PageShell>,
+    );
+
+    const button = screen.getByRole("button", { name: "刷新榜单" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveTextContent("刷新中...");
+  });
 });

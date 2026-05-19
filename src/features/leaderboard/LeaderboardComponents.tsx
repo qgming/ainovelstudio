@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@shared/ui/dialog";
+import { SegmentedControl } from "@shared/ui/segmented-control";
 import { Skeleton } from "@shared/ui/skeleton";
 import { cn } from "@shared/utils";
 import { formatCount } from "./leaderboardApi";
@@ -124,24 +125,17 @@ export function LeaderboardBoardSelector({
   onChange: (nextBoardId: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
-      {LEADERBOARD_BOARD_OPTIONS.map((board) => {
-        const selected = board.id === boardId;
-        return (
-          <Button
-            key={board.id}
-            type="button"
-            aria-pressed={selected}
-            size="sm"
-            variant={selected ? "default" : "outline"}
-            onClick={() => onChange(board.id)}
-            className="min-w-0 px-2 text-xs sm:text-[0.8rem]"
-          >
-            <span className="truncate">{board.name}</span>
-          </Button>
-        );
-      })}
-    </div>
+    <SegmentedControl
+      ariaLabel="排行榜榜单"
+      buttonClassName="px-2.5 text-xs sm:text-[0.8rem]"
+      className="md:flex-nowrap"
+      onValueChange={onChange}
+      options={LEADERBOARD_BOARD_OPTIONS.map((board) => ({
+        label: board.name,
+        value: board.id,
+      }))}
+      value={boardId}
+    />
   );
 }
 
@@ -155,25 +149,17 @@ export function LeaderboardCategorySelector({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="border-t border-border pt-2">
-      <div className="flex flex-wrap gap-1.5">
-        {selectedBoard.subCategories.map((category) => {
-          const selected = categoryId === String(category.id);
-          return (
-            <Button
-              key={category.id}
-              type="button"
-              aria-pressed={selected}
-              size="xs"
-              variant={selected ? "default" : "outline"}
-              onClick={() => onChange(String(category.id))}
-              className="px-2.5"
-            >
-              {category.name}
-            </Button>
-          );
-        })}
-      </div>
+    <div className="border-t border-border/45 pt-2">
+      <SegmentedControl
+        ariaLabel="排行榜分类"
+        buttonClassName="h-7 px-2.5"
+        onValueChange={onChange}
+        options={selectedBoard.subCategories.map((category) => ({
+          label: category.name,
+          value: String(category.id),
+        }))}
+        value={categoryId}
+      />
     </div>
   );
 }
