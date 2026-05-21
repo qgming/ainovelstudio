@@ -1,34 +1,20 @@
 import {
   createWorkspaceDirectory,
   deleteWorkspaceEntry,
-  readWorkspaceTextFile,
   moveWorkspaceEntry,
   readWorkspaceTree,
   renameWorkspaceEntry,
   searchWorkspaceContent,
 } from "@features/books/api/bookWorkspaceApi";
-import type { WorkspaceSearchMatch } from "@features/books/types";
+import type { WorkspaceSearchIntent } from "@features/books/types";
 import type { AgentTool } from "../runtime";
-import {
-  addSearchContextWindow,
-  buildSearchQueries,
-  dedupeSearchMatches,
-  filterSearchMatch,
-  normalizeSearchMatchMode,
-  limitSearchMatchesPerFile,
-  normalizeSearchSortBy,
-  sortSearchMatches,
-} from "./workspaceSearchHelpers";
 import {
   findTreeNode,
   formatBrowseListSummary,
   formatSearchSummary,
   listTreeChildren,
-  matchesExtensionFilter,
-  matchesPathScope,
   normalizeBrowseMode,
   normalizePathAction,
-  normalizeSearchScope,
   pruneTree,
   summarizeTreeNode,
 } from "./workspaceHelpers";
@@ -44,15 +30,26 @@ import {
 
 type BrowseChild = ReturnType<typeof listTreeChildren>[number];
 
-function asNonNegativeInt(value: unknown, fallback: number) {
-  const parsed =
-    typeof value === "number" && Number.isFinite(value)
-      ? Math.trunc(value)
-      : Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback;
+function normalizeSearchIntent(value: unknown): WorkspaceSearchIntent {
+  return value === "fact" ||
+    value === "character" ||
+    value === "plot" ||
+    value === "chapter" ||
+    value === "path" ||
+    value === "status" ||
+    value === "conflict"
+    ? value
+    : "auto";
+}
+
+function normalizeSearchScopeInput(rootPath: string, value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeRelativePath(rootPath, String(item ?? "")))
+      .filter(Boolean);
   }
-  return parsed;
+  const single = normalizeRelativePath(rootPath, String(value ?? ""));
+  return single ? [single] : [];
 }
 
 function normalizeBrowseKind(value: unknown) {
@@ -86,29 +83,6 @@ function matchesBrowseExtensions(
 
   const normalizedPath = child.path.toLowerCase();
   return extensions.some((extension) => normalizedPath.endsWith(extension));
-}
-
-async function buildSearchContextMap(
-  rootPath: string,
-  matches: WorkspaceSearchMatch[],
-  context: ReturnType<typeof getAbortContext>,
-) {
-  const contentPaths = Array.from(
-    new Set(
-      matches
-        .filter((match) => match.matchType === "content" && match.lineNumber)
-        .map((match) => match.path),
-    ),
-  );
-
-  const files = await Promise.all(
-    contentPaths.map(async (path) => [
-      path,
-      await readWorkspaceTextFile(rootPath, path, context),
-    ] as const),
-  );
-
-  return new Map(files);
 }
 
 export function createWorkspaceStructureTools({
@@ -182,105 +156,28 @@ export function createWorkspaceStructureTools({
       },
     },
     workspace_search: {
-      description: "搜索工作区内容",
+      description: "检索工作区事实源和正文证据",
       execute: async (input, context) => {
         const abortContext = getAbortContext(context);
         const query = ensureString(input.query, "workspace_search.query");
-        const limit = asPositiveInt(input.limit, 50);
-        const beforeLines = asNonNegativeInt(input.beforeLines, 0);
-        const afterLines = asNonNegativeInt(input.afterLines, 0);
-        const caseSensitive = Boolean(input.caseSensitive);
-        const matchMode = normalizeSearchMatchMode(input.matchMode);
-        const wholeWord = Boolean(input.wholeWord);
-        const maxPerFile = asNonNegativeInt(input.maxPerFile, 0);
-        const pathFilter = normalizeRelativePath(
-          rootPath,
-          String(input.path ?? ""),
+        const limit = Math.min(asPositiveInt(input.limit, 8), 30);
+        const tokenBudget = Math.min(
+          Math.max(asPositiveInt(input.tokenBudget, 4000), 800),
+          12000,
         );
-        const scope = normalizeSearchScope(input.scope);
-        const sortBy = normalizeSearchSortBy(input.sortBy);
-        const extensions = Array.isArray(input.extensions)
-          ? input.extensions
-              .map((extension) => String(extension).trim().toLowerCase())
-              .filter((extension) => extension)
-              .map((extension) =>
-                extension.startsWith(".") ? extension : `.${extension}`,
-              )
-          : [];
-        const needsExtraResults = Boolean(
-          afterLines > 0 ||
-            beforeLines > 0 ||
-            caseSensitive ||
-            matchMode !== "phrase" ||
-            maxPerFile > 0 ||
-            pathFilter ||
-            scope !== "all" ||
-            sortBy === "relevance" ||
-            wholeWord ||
-            extensions.length > 0,
-        );
-        const rawLimit = Math.min(needsExtraResults ? limit * 6 : limit, 200);
-        const rawQueries = buildSearchQueries(query, matchMode);
-        const rawMatches = await Promise.all(
-          rawQueries.map((rawQuery) =>
-            searchWorkspaceContent(
-              rootPath,
-              rawQuery,
-              rawLimit,
-              abortContext,
-            ),
-          ),
-        );
-        const matches = dedupeSearchMatches(rawMatches.flat());
-        const filtered = matches
-          .filter((match) => {
-            if (scope === "content" && match.matchType !== "content") {
-              return false;
-            }
-            if (scope === "names" && match.matchType === "content") {
-              return false;
-            }
-            if (
-              !matchesPathScope(
-                pathFilter,
-                normalizeRelativePath(rootPath, match.path),
-              )
-            ) {
-              return false;
-            }
-            return matchesExtensionFilter(
-              extensions,
-              match.path,
-              match.matchType,
-            );
-          })
-          .flatMap((match) => {
-            const filteredMatch = filterSearchMatch(match, {
-              caseSensitive,
-              matchMode,
-              query,
-              wholeWord,
-            });
-            return filteredMatch ? [filteredMatch] : [];
-          });
-        const sorted = sortSearchMatches(filtered, sortBy);
-        const limited = maxPerFile > 0
-          ? limitSearchMatchesPerFile(sorted, maxPerFile)
-          : sorted;
-        const trimmed = limited.slice(0, limit);
-        const fileContents =
-          beforeLines > 0 || afterLines > 0
-            ? await buildSearchContextMap(rootPath, trimmed, abortContext)
-            : null;
-        const enriched = trimmed.map((match) => {
-          const contents = fileContents?.get(match.path);
-          if (!contents) {
-            return match;
-          }
-          return addSearchContextWindow(match, contents, beforeLines, afterLines);
+        const intent = normalizeSearchIntent(input.intent);
+        const scope = normalizeSearchScopeInput(rootPath, input.scope ?? input.path);
+        const result = await searchWorkspaceContent(rootPath, query, {
+          abortSignal: abortContext?.abortSignal,
+          includeAdjacent: input.includeAdjacent !== false,
+          intent,
+          limit,
+          requestId: abortContext?.requestId,
+          scope,
+          tokenBudget,
         });
 
-        return ok(formatSearchSummary(query, enriched), enriched);
+        return ok(formatSearchSummary(result), result);
       },
     },
     workspace_path: {

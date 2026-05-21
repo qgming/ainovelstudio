@@ -229,13 +229,13 @@ describe("prompt context", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
-      enabledToolIds: ["workspace_read", "workspace_write", "project_memory_search"],
+      enabledToolIds: ["workspace_read", "workspace_write", "workspace_search"],
       mode: "chapter-write",
     });
 
     expect(system).toContain("# 模式：chapter-write");
     expect(system).toContain("章节生产");
-    expect(system).toContain("project_memory_search");
+    expect(system).toContain("workspace_search");
     expect(system).toContain(".project/status/*.json");
     expect(system).not.toContain(".project/runs/chapter-NNN.json");
     expect(system).toContain("chapter-plan -> draft");

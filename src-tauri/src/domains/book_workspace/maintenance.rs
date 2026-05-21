@@ -3,6 +3,7 @@
 use crate::domains::book_workspace::data::{
     ensure_directory_chain, insert_entry, load_book_by_root_path, load_entry_record, touch_book,
 };
+use crate::domains::book_workspace::search::rebuild_book_search_index;
 use crate::domains::book_workspace::templates::build_book_template;
 use crate::infrastructure::workspace_paths::{
     file_extension, now_timestamp, parent_relative_path, CommandResult,
@@ -79,6 +80,7 @@ pub(crate) fn ensure_book_workspace_template_db(
 
     if !created_paths.is_empty() {
         touch_book(transaction, &book.id, timestamp)?;
+        rebuild_book_search_index(transaction, &book.id)?;
     }
 
     Ok(created_paths)

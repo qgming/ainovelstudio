@@ -13,7 +13,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "autopilot",
     modelPresetId: null,
     name: "YOLO 全自动目标",
-    tools: [YOLO_CONTROL_TOOL_ID, "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
+    tools: [YOLO_CONTROL_TOOL_ID, "update_plan", "workspace_browse", "workspace_read", "workspace_search", "web_search", "web_read", "leaderboard", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats"],
     writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
   },
   {
@@ -41,7 +41,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "volume-plan",
     modelPresetId: null,
     name: "卷纲规划",
-    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "project_memory_search"],
+    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete"],
     writeScopes: ["大纲/", "设定/", ".project/status/"],
   },
   {
@@ -56,7 +56,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "chapter-write",
     modelPresetId: null,
     name: "章节生产",
-    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats", "project_memory_search"],
+    tools: ["ask_user", "update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "workspace_path", "workspace_delete", "text_stats"],
     writeScopes: ["正文/", "大纲/", ".project/status/"],
   },
   {
@@ -70,7 +70,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "continuity-review",
     modelPresetId: null,
     name: "连续性审校",
-    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json", "project_memory_search"],
+    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "workspace_json"],
     writeScopes: [".project/status/", "设定/", "大纲/"],
   },
   {
@@ -84,7 +84,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "style-polish",
     modelPresetId: null,
     name: "文风润色",
-    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "text_stats", "project_memory_search"],
+    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "skill_read", "workspace_edit", "workspace_write", "text_stats"],
     writeScopes: ["正文/", ".project/README.md", ".project/status/"],
   },
   {
@@ -98,7 +98,7 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
     mode: "state-maintain",
     modelPresetId: null,
     name: "状态维护",
-    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "workspace_json", "workspace_edit", "workspace_write", "workspace_path", "workspace_delete", "project_memory_search"],
+    tools: ["update_plan", "workspace_browse", "workspace_read", "workspace_search", "workspace_json", "workspace_edit", "workspace_write", "workspace_path", "workspace_delete"],
     writeScopes: [".project/status/"],
   },
 ];

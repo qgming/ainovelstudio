@@ -305,97 +305,66 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("workspace_search 会返回过滤后的结构化命中结果", async () => {
+  it("workspace_search 返回面向 Agent 的上下文检索包", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
-    mockSearchWorkspaceContent.mockResolvedValue([
-      {
-        matchType: "directory_name",
-        path: "设定/人物档案",
-      },
-      {
-        matchType: "content",
-        path: "章节/第一卷/第1章.md",
-        lineNumber: 12,
-        lineText: "主角在雪夜第一次听见钟声。",
-      },
-    ]);
-
-    const result = await toolset.workspace_search.execute({
-      limit: 5,
-      path: "章节",
+    const searchResult = {
+      intent: "chapter",
       query: "钟声",
-      scope: "content",
-    });
-
-    expect(result).toEqual({
-      ok: true,
-      summary: [
-        "共找到 1 条与“钟声”相关的结果：",
-        "- [内容] 章节/第一卷/第1章.md:12 主角在雪夜第一次听见钟声。",
-      ].join("\n"),
-      data: [
+      results: [
         {
-          lineNumber: 12,
-          lineText: "主角在雪夜第一次听见钟声。",
-          matchEnd: 12,
-          matchStart: 10,
-          matchType: "content",
+          adjacentAvailable: true,
+          endLine: 18,
+          id: "chunk-1",
+          matchedTerms: ["钟声"],
           path: "章节/第一卷/第1章.md",
-          score: expect.any(Number),
+          preview: "主角在雪夜第一次听见钟声。\n钟声来自旧塔。",
+          reason: "上下文命中：钟声；intent=chapter；source=chapter",
+          score: 12.5,
+          sectionTitle: "雪夜旧塔",
+          sourceKind: "chapter",
+          startLine: 12,
         },
       ],
-    });
-  });
+      strategy: "sqlite_fts5_ngram_chunks",
+      suggestedReads: [
+        {
+          endLine: 18,
+          path: "章节/第一卷/第1章.md",
+          reason: "高置信 chapter 证据，编辑前建议精读。",
+          startLine: 12,
+        },
+      ],
+      tokenBudget: 4000,
+      truncated: false,
+    };
+    mockSearchWorkspaceContent.mockResolvedValue(searchResult);
 
-  it("project_memory_search 只返回轻量项目事实源范围内的线索", async () => {
-    const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
-    mockSearchWorkspaceContent.mockResolvedValue([
-      {
-        matchType: "content",
-        path: "设定/人物.md",
-        lineNumber: 3,
-        lineText: "沈砚：黑钟持有者。",
-      },
-      {
-        matchType: "content",
-        path: "正文/第001章_章名.md",
-        lineNumber: 8,
-        lineText: "沈砚看见黑钟。",
-      },
-    ]);
-
-    const result = await toolset.project_memory_search.execute({
-      kind: "canon",
-      query: "沈砚",
+    const result = await toolset.workspace_search.execute({
+      intent: "chapter",
+      limit: 5,
+      query: "钟声",
+      scope: ["章节"],
     });
 
+    expect(mockSearchWorkspaceContent).toHaveBeenCalledWith(
+      rootPath,
+      "钟声",
+      expect.objectContaining({
+        includeAdjacent: true,
+        intent: "chapter",
+        limit: 5,
+        scope: ["章节"],
+        tokenBudget: 4000,
+      }),
+    );
     expect(result).toEqual({
       ok: true,
       summary: [
-        "找到 2 条与“沈砚”相关的项目线索：",
-        "- 设定/人物.md:3 沈砚：黑钟持有者。",
-        "- 正文/第001章_章名.md:8 沈砚看见黑钟。",
+        "找到 1 段与“钟声”相关的工作区上下文：",
+        "- 章节/第一卷/第1章.md:12-18 [chapter · 雪夜旧塔] 上下文命中：钟声；intent=chapter；source=chapter",
       ].join("\n"),
-      data: {
-        kind: "canon",
-        matches: [
-          {
-            lineNumber: 3,
-            lineText: "沈砚：黑钟持有者。",
-            path: "设定/人物.md",
-            type: "content",
-          },
-          {
-            lineNumber: 8,
-            lineText: "沈砚看见黑钟。",
-            path: "正文/第001章_章名.md",
-            type: "content",
-          },
-        ],
-        query: "沈砚",
-      },
+      data: searchResult,
     });
   });
 
@@ -423,147 +392,80 @@ describe("createWorkspaceToolset", () => {
     });
   });
 
-  it("workspace_search 支持大小写、整词、上下文和每文件限额", async () => {
+  it("workspace_search 支持上下文预算和截断提示", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
-    mockSearchWorkspaceContent.mockResolvedValue([
-      {
-        matchType: "content",
-        path: "章节/第一卷/第1章.md",
-        lineNumber: 2,
-        lineText: "hero HERO hero",
-      },
-      {
-        matchType: "content",
-        path: "章节/第一卷/第1章.md",
-        lineNumber: 4,
-        lineText: "hero again",
-      },
-      {
-        matchType: "content",
-        path: "章节/第一卷/第2章.md",
-        lineNumber: 3,
-        lineText: "heroic ending",
-      },
-    ]);
-    mockReadWorkspaceTextFile.mockResolvedValue(
-      "第一行\nhero HERO hero\n第三行\nhero again\n尾声",
-    );
-
-    const result = await toolset.workspace_search.execute({
-      afterLines: 1,
-      beforeLines: 1,
-      caseSensitive: true,
-      maxPerFile: 1,
+    mockSearchWorkspaceContent.mockResolvedValue({
+      intent: "fact",
       query: "hero",
-      scope: "content",
-      wholeWord: true,
+      results: [
+        {
+          adjacentAvailable: true,
+          endLine: 5,
+          id: "chunk-hero",
+          matchedTerms: ["hero"],
+          path: "设定/人物.md",
+          preview: "hero HERO hero",
+          reason: "上下文命中：hero；intent=fact；source=character",
+          score: 16,
+          sourceKind: "character",
+          startLine: 2,
+        },
+      ],
+      strategy: "sqlite_fts5_ngram_chunks",
+      suggestedReads: [],
+      tokenBudget: 1200,
+      truncated: true,
     });
 
-    expect(mockReadWorkspaceTextFile).toHaveBeenCalledTimes(1);
-    expect(mockReadWorkspaceTextFile).toHaveBeenCalledWith(
+    const result = await toolset.workspace_search.execute({
+      intent: "fact",
+      query: "hero",
+      tokenBudget: 1200,
+    });
+
+    expect(mockReadWorkspaceTextFile).not.toHaveBeenCalled();
+    expect(mockSearchWorkspaceContent).toHaveBeenCalledWith(
       rootPath,
-      "章节/第一卷/第1章.md",
-      undefined,
+      "hero",
+      expect.objectContaining({
+        intent: "fact",
+        tokenBudget: 1200,
+      }),
     );
     expect(result).toEqual({
       ok: true,
       summary: [
-        "共找到 1 条与“hero”相关的结果：",
-        "- [内容] 章节/第一卷/第1章.md:2 hero HERO hero (上下文 1-3)",
+        "找到 1 段与“hero”相关的工作区上下文，结果已按上下文预算截断：",
+        "- 设定/人物.md:2-5 [character] 上下文命中：hero；intent=fact；source=character",
       ].join("\n"),
-      data: [
-        {
-          contextEndLine: 3,
-          contextStartLine: 1,
-          contextText: [
-            "[章节/第一卷/第1章.md | lines 1-3]",
-            "1 | 第一行",
-            "2 | hero HERO hero",
-            "3 | 第三行",
-          ].join("\n"),
-          lineNumber: 2,
-          lineText: "hero HERO hero",
-          matchEnd: 4,
-          matchStart: 0,
-          matchType: "content",
-          path: "章节/第一卷/第1章.md",
-          score: expect.any(Number),
-        },
-      ],
+      data: expect.objectContaining({ truncated: true }),
     });
   });
 
-  it("workspace_search 支持 all_terms 模式的多词匹配", async () => {
+  it("workspace_search 空结果会返回清晰摘要", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ rootPath });
-    mockSearchWorkspaceContent
-      .mockResolvedValueOnce([
-        {
-          matchType: "content",
-          path: "章节/第一卷/第1章.md",
-          lineNumber: 8,
-          lineText: "hero 与 bell 同时出现",
-        },
-        {
-          matchType: "content",
-          path: "章节/第一卷/第1章.md",
-          lineNumber: 10,
-          lineText: "只有 hero",
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          matchType: "content",
-          path: "章节/第一卷/第1章.md",
-          lineNumber: 8,
-          lineText: "hero 与 bell 同时出现",
-        },
-        {
-          matchType: "content",
-          path: "章节/第一卷/第2章.md",
-          lineNumber: 2,
-          lineText: "只有 bell",
-        },
-      ]);
+    const searchResult = {
+      intent: "auto",
+      query: "hero bell",
+      results: [],
+      strategy: "sqlite_fts5_ngram_chunks",
+      suggestedReads: [],
+      tokenBudget: 4000,
+      truncated: false,
+    };
+    mockSearchWorkspaceContent.mockResolvedValue(searchResult);
 
     const result = await toolset.workspace_search.execute({
-      matchMode: "all_terms",
       query: "hero bell",
-      scope: "content",
     });
 
-    expect(mockSearchWorkspaceContent).toHaveBeenNthCalledWith(
-      1,
-      rootPath,
-      "hero",
-      expect.any(Number),
-      undefined,
-    );
-    expect(mockSearchWorkspaceContent).toHaveBeenNthCalledWith(
-      2,
-      rootPath,
-      "bell",
-      expect.any(Number),
-      undefined,
-    );
+    expect(mockSearchWorkspaceContent).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       ok: true,
-      summary: [
-        "共找到 1 条与“hero bell”相关的结果：",
-        "- [内容] 章节/第一卷/第1章.md:8 hero 与 bell 同时出现",
-      ].join("\n"),
-      data: [
-        {
-          lineNumber: 8,
-          lineText: "hero 与 bell 同时出现",
-          matchEnd: 4,
-          matchStart: 0,
-          matchType: "content",
-          path: "章节/第一卷/第1章.md",
-          score: expect.any(Number),
-        },
-      ],
+      summary: "未找到可用于“hero bell”的工作区上下文。",
+      data: searchResult,
     });
   });
 

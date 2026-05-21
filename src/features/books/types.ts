@@ -8,19 +8,45 @@ export type TreeNode = {
   path: string;
 };
 
-export type WorkspaceSearchMatchType = "directory_name" | "file_name" | "content";
+export type WorkspaceSearchIntent =
+  | "auto"
+  | "chapter"
+  | "character"
+  | "conflict"
+  | "fact"
+  | "path"
+  | "plot"
+  | "status";
 
-export type WorkspaceSearchMatch = {
-  contextEndLine?: number;
-  contextStartLine?: number;
-  contextText?: string;
-  lineNumber?: number;
-  lineText?: string;
-  matchEnd?: number;
-  matchStart?: number;
-  matchType: WorkspaceSearchMatchType;
+export type WorkspaceContextHit = {
+  adjacentAvailable: boolean;
+  endLine: number;
+  id: string;
+  matchedTerms: string[];
   path: string;
-  score?: number;
+  preview: string;
+  reason: string;
+  score: number;
+  sectionTitle?: string;
+  sourceKind: string;
+  startLine: number;
+};
+
+export type WorkspaceReadSuggestion = {
+  endLine: number;
+  path: string;
+  reason: string;
+  startLine: number;
+};
+
+export type WorkspaceSearchResult = {
+  intent: WorkspaceSearchIntent | string;
+  query: string;
+  results: WorkspaceContextHit[];
+  strategy: string;
+  suggestedReads: WorkspaceReadSuggestion[];
+  tokenBudget: number;
+  truncated: boolean;
 };
 
 export type WorkspaceLineResult = {

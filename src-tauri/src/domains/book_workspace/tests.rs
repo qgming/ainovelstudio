@@ -1,3 +1,4 @@
+use crate::app::ToolCancellationRegistry;
 use crate::domains::book_workspace::archive::{export_book_zip_db, import_book_zip_db};
 use crate::domains::book_workspace::data::{run_book_migrations, BookRecord};
 use crate::domains::book_workspace::maintenance::ensure_book_workspace_template_db;
@@ -5,6 +6,7 @@ use crate::domains::book_workspace::ops::{
     delete_workspace_entry_db, move_workspace_entry_db, read_text_file_db,
     rename_workspace_entry_db, write_text_file_db,
 };
+use crate::domains::book_workspace::search::search_workspace_content_db;
 use crate::domains::book_workspace::templates::create_book_workspace_db;
 use crate::domains::book_workspace::tree::read_workspace_tree_db;
 use rusqlite::Connection;
@@ -234,6 +236,46 @@ fn workspace_operations_use_sqlite_storage() {
     let contents = read_text_file_db(&connection, &book.root_path, "books/星河回声/正文/序章.md")
         .expect("moved file should be readable");
     assert_eq!(contents, "第一行\n第二行");
+}
+
+#[test]
+fn workspace_search_returns_agent_context_chunks() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "黑钟纪事");
+    let transaction = connection.transaction().expect("transaction should open");
+    write_text_file_db(
+        &transaction,
+        &book.root_path,
+        "books/黑钟纪事/设定/人物.md",
+        "# 沈砚\n沈砚是黑钟持有者。\n他在雪夜第一次听见钟声。",
+    )
+    .expect("file should be written");
+    transaction.commit().expect("transaction should commit");
+
+    let registry = ToolCancellationRegistry::default();
+    let result = search_workspace_content_db(
+        &connection,
+        &book.root_path,
+        "沈砚 黑钟",
+        Some(5),
+        Some("character"),
+        Some(vec!["设定".into()]),
+        Some(2_000),
+        Some(true),
+        &registry,
+        None,
+    )
+    .expect("search should return context");
+
+    assert_eq!(result.query, "沈砚 黑钟");
+    assert_eq!(result.intent, "character");
+    assert!(!result.results.is_empty());
+    let hit = &result.results[0];
+    assert_eq!(hit.path, "设定/人物.md");
+    assert_eq!(hit.source_kind, "character");
+    assert!(hit.preview.contains("沈砚是黑钟持有者"));
+    assert!(hit.matched_terms.iter().any(|term| term == "沈砚"));
+    assert!(!result.suggested_reads.is_empty());
 }
 
 #[test]

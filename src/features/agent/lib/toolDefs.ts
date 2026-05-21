@@ -37,7 +37,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "workspace_search",
     name: "搜索工作区",
     description:
-      "搜索文件夹名、文件名和正文内容；适合定位关键词、章节、设定或数据字段。",
+      "检索工作区事实源和正文证据，返回适合 AI 推理的上下文片段；适合了解角色、设定、章节、伏笔、当前状态或数据字段。",
   },
   {
     id: "web_search",
@@ -68,12 +68,6 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     name: "文本统计",
     description:
       "统计文本文件字符/中文/英文/段落等指标。支持单文件 path、多文件 paths、目录递归 dir 三种模式；批量返回每文件统计 + 总和 + 中位字符数。",
-  },
-  {
-    id: "project_memory_search",
-    name: "项目记忆查询",
-    description:
-      "按人物、地点、伏笔、能力边界或章节线索查询 .project/status、设定、大纲、正文等项目事实源。",
   },
   {
     id: "workspace_edit",

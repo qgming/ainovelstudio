@@ -21,7 +21,7 @@ const jsonInputSchema = z.object({
       "text_append",
     ])
     .default("get")
-    .describe("JSON 动作。get 读指针值；overview 看结构；search 搜 key/value；create 新建文件；set 覆盖指针值；merge 合并对象；append 追加数组；text_append 追加字符串；delete 删除节点；ensure_template 补默认结构；history_append 追加带时间历史；batch/patch 多步一次写回。"),
+    .describe("JSON 动作。get 读指针值；overview 看结构骨架；search 搜 key/value；create 新建文件；set 覆盖指针值；merge 合并对象；append 追加数组；text_append 追加字符串；delete 删除节点；ensure_template 补默认结构；history_append 追加带时间历史；batch/patch 多步一次写回。维护 .project/status 时优先 batch / patch / ensure_template，不要整文件重写。"),
   patch: z
     .array(
       z.object({
@@ -224,7 +224,7 @@ const skillManageInputSchema = z.object({
 export const DATA_TOOL_SPECS = {
   workspace_json: {
     description:
-      "读写 JSON 文件的首选工具。读取先 overview/search/get；修改字段用 set/merge/append/text_append/delete；多字段更新用 batch；标准 JSON Patch 用 patch；新建 JSON 用 create。不要用 write 修改 JSON 字段。",
+      "读写 JSON 文件的首选工具。读取先 overview/search/get；修改字段用 set/merge/append/text_append/delete；多字段更新优先 batch；需要显式 test/add/remove/replace/copy/move 时用 patch；补状态模板用 ensure_template；追加事件流用 history_append。不要用 write 直接改 JSON 字段或整文件覆写状态真值层。",
     inputSchema: jsonInputSchema,
   },
   workspace_path: {

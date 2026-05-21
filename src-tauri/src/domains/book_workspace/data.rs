@@ -28,17 +28,6 @@ pub struct BookWorkspaceSummary {
     pub(crate) updated_at: u64,
 }
 
-#[derive(Serialize)]
-pub struct WorkspaceSearchMatch {
-    #[serde(rename = "lineNumber", skip_serializing_if = "Option::is_none")]
-    pub(crate) line_number: Option<usize>,
-    #[serde(rename = "lineText", skip_serializing_if = "Option::is_none")]
-    pub(crate) line_text: Option<String>,
-    #[serde(rename = "matchType")]
-    pub(crate) match_type: String,
-    pub(crate) path: String,
-}
-
 #[derive(Debug, Serialize)]
 pub struct WorkspaceLineResult {
     #[serde(rename = "lineNumber")]
@@ -97,6 +86,52 @@ pub(crate) fn run_book_migrations(connection: &Connection) -> CommandResult<()> 
 
             CREATE INDEX IF NOT EXISTS idx_book_workspace_entries_parent
             ON book_workspace_entries(book_id, parent_path);
+
+            CREATE TABLE IF NOT EXISTS workspace_search_chunks (
+                id TEXT PRIMARY KEY,
+                book_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                source_kind TEXT NOT NULL,
+                section_title TEXT,
+                start_line INTEGER NOT NULL,
+                end_line INTEGER NOT NULL,
+                char_start INTEGER NOT NULL,
+                char_end INTEGER NOT NULL,
+                token_estimate INTEGER NOT NULL,
+                content_hash TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY(book_id) REFERENCES book_workspaces(id) ON DELETE CASCADE
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_search_chunks_entry
+            ON workspace_search_chunks(book_id, path, chunk_index);
+
+            CREATE INDEX IF NOT EXISTS idx_workspace_search_chunks_path
+            ON workspace_search_chunks(book_id, path, start_line);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS workspace_search_chunks_fts
+            USING fts5(
+                chunk_id UNINDEXED,
+                book_id UNINDEXED,
+                path,
+                source_kind,
+                section_title,
+                content,
+                search_text,
+                tokenize = 'unicode61 remove_diacritics 2'
+            );
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS workspace_search_paths_fts
+            USING fts5(
+                book_id UNINDEXED,
+                path,
+                name,
+                source_kind,
+                title_text,
+                search_text,
+                tokenize = 'unicode61 remove_diacritics 2'
+            );
             "#,
         )
         .map_err(error_to_string)?;

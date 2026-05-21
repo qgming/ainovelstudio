@@ -1,6 +1,7 @@
 use crate::domains::book_workspace::data::{
     insert_entry, load_book_by_root_path, load_entry_records, touch_book,
 };
+use crate::domains::book_workspace::search::rebuild_book_search_index;
 use crate::infrastructure::workspace_paths::{
     error_to_string, file_extension, now_timestamp, validate_relative_segments, CommandResult,
 };
@@ -207,7 +208,8 @@ fn replace_book_entries(
             }
         }
     }
-    touch_book(transaction, book_id, timestamp)
+    touch_book(transaction, book_id, timestamp)?;
+    rebuild_book_search_index(transaction, book_id)
 }
 
 pub(crate) fn export_book_to_mirror(

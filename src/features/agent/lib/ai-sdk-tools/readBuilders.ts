@@ -253,20 +253,6 @@ const wordCountInputSchema = z.object({
     ),
 });
 
-const canonQueryInputSchema = z.object({
-  kind: z
-    .enum(["canon", "status", "setting", "outline", "chapter"])
-    .default("canon")
-    .describe("查询范围类型。canon=项目事实源；status=状态；setting=设定；outline=大纲；chapter=正文线索。默认 canon。"),
-  limit: z
-    .number()
-    .int()
-    .positive()
-    .max(30)
-    .optional()
-    .describe("最多返回多少条线索，默认 12。"),
-  query: z.string().min(1).describe("要查询的人物、地点、伏笔、能力边界、章节事件或关键词；用具体名词短语。"),
-});
 
 export const READ_TOOL_SPECS = {
   leaderboard: {
@@ -294,11 +280,6 @@ export const READ_TOOL_SPECS = {
       "统计文本文件字符数、中文字符数、段落数等。支持单文件（path）、多文件（paths 数组）或目录递归（dir + 可选 extensions）批量统计。批量返回每文件统计 + 总和 + 中位字符数。",
     inputSchema: wordCountInputSchema,
   },
-  project_memory_search: {
-    description:
-      "查询项目事实源。用于核对人物、地点、伏笔、能力边界、状态、大纲或正文线索，减少凭印象续写。",
-    inputSchema: canonQueryInputSchema,
-  },
 } satisfies Record<string, AgentToolPromptSpec>;
 
 export function createReadToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
@@ -308,6 +289,5 @@ export function createReadToolBuilders(runTool: ToolRunner): Record<string, Tool
     web_read: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.web_read),
     workspace_read: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.workspace_read),
     text_stats: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.text_stats),
-    project_memory_search: createAiSdkToolBuilder(runTool, READ_TOOL_SPECS.project_memory_search),
   };
 }

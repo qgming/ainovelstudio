@@ -4,6 +4,7 @@ use crate::domains::book_workspace::data::{
     ensure_directory_chain, insert_entry, load_book_by_id, load_book_by_root_path,
     load_entry_record, load_entry_records, touch_book, BookRecord, BOOK_ROOT_PREFIX,
 };
+use crate::domains::book_workspace::search::rebuild_book_search_index;
 use crate::domains::book_workspace::templates::create_book_workspace_db;
 use crate::infrastructure::workspace_paths::{
     error_to_string, file_extension, normalize_relative_path, now_timestamp, parent_relative_path,
@@ -254,6 +255,7 @@ pub(crate) fn import_book_zip_db(
     }
 
     touch_book(transaction, &book.id, timestamp)?;
+    rebuild_book_search_index(transaction, &book.id)?;
     load_book_by_id(transaction, &book.id)
 }
 

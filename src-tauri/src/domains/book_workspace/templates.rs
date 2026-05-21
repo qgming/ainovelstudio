@@ -3,6 +3,7 @@
 use crate::domains::book_workspace::data::{
     build_book_root_path, ensure_directory_chain, insert_entry, BookRecord,
 };
+use crate::domains::book_workspace::search::rebuild_book_search_index;
 use crate::infrastructure::workspace_paths::{
     error_to_string, file_extension, now_timestamp, parent_relative_path, validate_name,
     CommandResult,
@@ -38,9 +39,10 @@ pub(crate) fn create_project_agents_template(book_name: &str) -> String {
 
 - 首次进入或初始化时只做轻量扫描：确认主要目录、README、status 和最近章节。
 - 不要一开始完整展开全部文件夹或逐个读取所有文件。
-- 续写、改写、审校、维护状态前，按任务相关性读取最小必要文件。
+- 续写、改写、审校、维护状态前，先用 `workspace_search` 按人物、地点、伏笔、章节事件或状态字段召回候选上下文。
 - 已由系统或用户上下文注入的文件视为已读，不重复读取。
-- 引用具体人物、地点、能力、伏笔、章节或状态时，先用 `workspace_search` 或 `project_memory_search` 补证据。
+- `workspace_search` 返回的是证据片段；真正编辑前，对最高置信路径再用 `workspace_read` 精读。
+- 不要为了找一个人物或伏笔而完整展开全部目录或逐个读取所有文件。
 
 ## 目录约定
 
@@ -567,5 +569,6 @@ pub(crate) fn create_book_workspace_db(
         )?;
     }
 
+    rebuild_book_search_index(transaction, &book.id)?;
     Ok(book)
 }

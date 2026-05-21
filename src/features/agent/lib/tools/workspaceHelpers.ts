@@ -1,12 +1,10 @@
-import type { TreeNode, WorkspaceSearchMatch } from "@features/books/types";
+import type { TreeNode, WorkspaceSearchResult } from "@features/books/types";
 import {
   ensureString,
-  normalizeToolPath,
   toDisplayPath,
 } from "./shared";
 
 export type BrowseMode = "list" | "stat" | "tree";
-export type SearchScope = "all" | "content" | "names";
 export type ReadMode =
   | "anchor_range"
   | "full"
@@ -47,29 +45,18 @@ export function renderLineWindow(path: string, startLine: number, lines: string[
 }
 
 export function formatSearchSummary(
-  query: string,
-  matches: WorkspaceSearchMatch[],
+  result: WorkspaceSearchResult,
 ) {
-  if (matches.length === 0) {
-    return `未找到与“${query}”相关的结果。`;
+  if (result.results.length === 0) {
+    return `未找到可用于“${result.query}”的工作区上下文。`;
   }
 
+  const truncation = result.truncated ? "，结果已按上下文预算截断" : "";
   return [
-    `共找到 ${matches.length} 条与“${query}”相关的结果：`,
-    ...matches.map((match) => {
-      if (match.matchType === "content") {
-        const contextLabel =
-          match.contextStartLine &&
-          match.contextEndLine &&
-          (match.contextStartLine !== match.lineNumber ||
-            match.contextEndLine !== match.lineNumber)
-            ? ` (上下文 ${match.contextStartLine}-${match.contextEndLine})`
-            : "";
-        return `- [内容] ${match.path}:${match.lineNumber} ${match.lineText ?? ""}${contextLabel}`.trimEnd();
-      }
-
-      const label = match.matchType === "directory_name" ? "文件夹" : "文件名";
-      return `- [${label}] ${match.path}`;
+    `找到 ${result.results.length} 段与“${result.query}”相关的工作区上下文${truncation}：`,
+    ...result.results.map((hit) => {
+      const title = hit.sectionTitle ? ` · ${hit.sectionTitle}` : "";
+      return `- ${hit.path}:${hit.startLine}-${hit.endLine} [${hit.sourceKind}${title}] ${hit.reason}`;
     }),
   ].join("\n");
 }
@@ -141,10 +128,6 @@ export function listTreeChildren(rootPath: string, node: TreeNode) {
   }));
 }
 
-export function normalizeSearchScope(value: unknown): SearchScope {
-  return value === "content" || value === "names" ? value : "all";
-}
-
 export function normalizeBrowseMode(value: unknown): BrowseMode {
   return value === "stat" || value === "tree" ? value : "list";
 }
@@ -189,22 +172,6 @@ export function matchesPathScope(pathFilter: string, candidatePath: string) {
   return (
     candidatePath === pathFilter || candidatePath.startsWith(`${pathFilter}/`)
   );
-}
-
-export function matchesExtensionFilter(
-  extensions: string[],
-  candidatePath: string,
-  matchType: WorkspaceSearchMatch["matchType"],
-) {
-  if (extensions.length === 0) {
-    return true;
-  }
-  if (matchType === "directory_name") {
-    return false;
-  }
-
-  const normalizedPath = normalizeToolPath(candidatePath).toLowerCase();
-  return extensions.some((extension) => normalizedPath.endsWith(extension));
 }
 
 function countExactMatches(source: string, target: string) {

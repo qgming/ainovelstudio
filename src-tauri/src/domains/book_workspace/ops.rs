@@ -5,6 +5,7 @@ use crate::domains::book_workspace::data::{
     insert_entry, load_book_by_root_path, load_entry_record, load_subtree_records,
     resolve_relative_path, touch_book, WorkspaceLineResult,
 };
+use crate::domains::book_workspace::search::{rebuild_book_search_index, reindex_workspace_entry};
 use crate::infrastructure::workspace_paths::{
     bytes_to_text, check_adjacent_context, detect_line_ending, error_to_string, file_extension,
     join_relative_path, line_text_or_empty, now_timestamp, parent_relative_path, split_text_lines,
@@ -136,6 +137,7 @@ pub(crate) fn write_text_file_db(
         }
     }
 
+    reindex_workspace_entry(transaction, &book.id, &relative_path)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(())
 }
@@ -196,6 +198,7 @@ pub(crate) fn replace_text_file_line_db(
             ],
         )
         .map_err(error_to_string)?;
+    reindex_workspace_entry(transaction, &book.id, &relative_path)?;
     touch_book(transaction, &book.id, timestamp)?;
 
     Ok(WorkspaceLineResult {
@@ -230,6 +233,7 @@ pub(crate) fn create_workspace_directory_db(
         &[],
         timestamp,
     )?;
+    reindex_workspace_entry(transaction, &book.id, &next_path)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(display_path(&book.root_path, &next_path))
 }
@@ -259,6 +263,7 @@ pub(crate) fn create_workspace_text_file_db(
         &[],
         timestamp,
     )?;
+    reindex_workspace_entry(transaction, &book.id, &next_path)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(display_path(&book.root_path, &next_path))
 }
@@ -326,6 +331,7 @@ pub(crate) fn rename_workspace_entry_db(
             )
             .map_err(error_to_string)?;
     }
+    rebuild_book_search_index(transaction, &book.id)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(display_path(&book.root_path, &target_path))
 }
@@ -379,6 +385,7 @@ pub(crate) fn move_workspace_entry_db(
             )
             .map_err(error_to_string)?;
     }
+    rebuild_book_search_index(transaction, &book.id)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(display_path(&book.root_path, &target_path))
 }
@@ -406,6 +413,7 @@ pub(crate) fn delete_workspace_entry_db(
             params![book.id, relative_path],
         )
         .map_err(error_to_string)?;
+    rebuild_book_search_index(transaction, &book.id)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(())
 }

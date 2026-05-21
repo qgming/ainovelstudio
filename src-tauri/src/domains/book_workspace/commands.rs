@@ -4,7 +4,7 @@ use crate::app::ToolCancellationRegistry;
 use crate::domains::book_workspace::archive::{export_book_zip_db, import_book_zip_db};
 use crate::domains::book_workspace::data::{
     build_summary, list_books, load_book_by_id, load_book_by_root_path, BookWorkspaceSummary,
-    TreeNode, WorkspaceLineResult, WorkspaceSearchMatch,
+    TreeNode, WorkspaceLineResult,
 };
 use crate::domains::book_workspace::maintenance::ensure_book_workspace_template_db;
 #[cfg(desktop)]
@@ -16,8 +16,11 @@ use crate::domains::book_workspace::ops::{
     move_workspace_entry_db, read_text_file_db, read_text_file_line_db, rename_workspace_entry_db,
     replace_text_file_line_db, write_text_file_db,
 };
+use crate::domains::book_workspace::search::{
+    delete_book_search_index, search_workspace_content_db, WorkspaceSearchResult,
+};
 use crate::domains::book_workspace::templates::create_book_workspace_db;
-use crate::domains::book_workspace::tree::{read_workspace_tree_db, search_workspace_content_db};
+use crate::domains::book_workspace::tree::read_workspace_tree_db;
 use crate::infrastructure::db::open_database;
 use crate::infrastructure::workspace_paths::{
     check_cancellation, error_to_string, with_cancellable_request, CommandResult,
@@ -270,6 +273,7 @@ pub async fn export_book_zip(app: AppHandle, rootPath: String) -> CommandResult<
 pub fn delete_book_workspace(app: AppHandle, rootPath: String) -> CommandResult<()> {
     with_transaction(&app, |transaction| {
         let book = load_book_by_root_path(transaction, &rootPath)?;
+        delete_book_search_index(transaction, &book.id)?;
         transaction
             .execute(
                 "DELETE FROM book_workspaces WHERE id = ?1",
@@ -347,9 +351,13 @@ pub fn search_workspace_content(
     rootPath: String,
     query: String,
     limit: Option<usize>,
+    intent: Option<String>,
+    scope: Option<Vec<String>>,
+    tokenBudget: Option<usize>,
+    includeAdjacent: Option<bool>,
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
-) -> CommandResult<Vec<WorkspaceSearchMatch>> {
+) -> CommandResult<WorkspaceSearchResult> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         let connection = open_database(&app)?;
         search_workspace_content_db(
@@ -357,6 +365,10 @@ pub fn search_workspace_content(
             &rootPath,
             &query,
             limit,
+            intent.as_deref(),
+            scope,
+            tokenBudget,
+            includeAdjacent,
             &registry,
             requestId.as_deref(),
         )

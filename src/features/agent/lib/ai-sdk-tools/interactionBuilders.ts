@@ -121,67 +121,39 @@ const browseInputSchema = z.object({
 });
 
 const searchInputSchema = z.object({
-  afterLines: z
-    .number()
-    .int()
-    .nonnegative()
-    .max(20)
-    .optional()
-    .describe("仅正文命中生效。返回命中行之后的上下文行数；需要看语境时传 2-5。"),
-  beforeLines: z
-    .number()
-    .int()
-    .nonnegative()
-    .max(20)
-    .optional()
-    .describe("仅正文命中生效。返回命中行之前的上下文行数；需要看语境时传 2-5。"),
-  caseSensitive: z
+  includeAdjacent: z
     .boolean()
-    .optional()
-    .describe("为 true 时启用大小写敏感匹配。中文通常不填；英文变量名可传 true。"),
-  extensions: z
-    .array(z.string())
-    .optional()
-    .describe("可选的扩展名过滤，如 ['md', '.json']；搜索正文稿常用 ['md','txt']。"),
+    .default(true)
+    .describe("是否允许检索器优先返回可继续向前后扩展阅读的上下文片段。默认 true。"),
+  intent: z
+    .enum(["auto", "fact", "character", "plot", "chapter", "path", "status", "conflict"])
+    .default("auto")
+    .describe("检索意图。找人物设定用 character/fact，找当前状态用 status，找章节正文用 chapter，找路径用 path；不确定时 auto。"),
   limit: z
     .number()
     .int()
     .positive()
-    .max(200)
+    .max(30)
     .optional()
-    .describe("最多返回多少条结果，默认 50。先小范围定位可传 20-50。"),
-  matchMode: z
-    .enum(["phrase", "all_terms", "any_term"])
-    .default("phrase")
-    .describe("phrase 按完整短语匹配，适合人名/标题；all_terms 要求所有词都命中；any_term 放宽召回。"),
-  maxPerFile: z
-    .number()
-    .int()
-    .positive()
-    .max(20)
-    .optional()
-    .describe("每个文件最多保留多少条结果，避免单个大文件刷屏。"),
+    .describe("最多返回多少段上下文，默认 8。Agent 检索通常 5-12 足够。"),
   path: z
     .string()
     .optional()
-    .describe("可选，相对工作区路径，只在该路径下过滤结果；不要传绝对路径。"),
+    .describe("兼容单路径 scope；限定在某个相对目录或文件下检索。新调用优先使用 scope。"),
   query: z
     .string()
-    .describe("搜索关键词。建议传短语、章节名、角色名、字段名；不要传很长问题。"),
-  sortBy: z
-    .enum(["path", "relevance"])
-    .default("relevance")
-    .describe("结果排序方式。relevance 更偏重命中质量；path 方便按文件顺序扫。"),
+    .describe("检索关键词或短问题。优先传角色名、地点、伏笔、章节名、字段名或 2-6 个关键词；不要传整段正文。"),
   scope: z
-    .enum(["all", "content", "names"])
-    .default("all")
-    .describe(
-      "all 搜目录名+文件名+正文；content 只搜正文；names 只搜目录名和文件名。找路径用 names，找内容用 content。",
-    ),
-  wholeWord: z
-    .boolean()
+    .array(z.string())
     .optional()
-    .describe("为 true 时优先匹配整词边界，适合英文名词或标识符。"),
+    .describe("可选的相对路径范围列表，如 ['.project/status', '设定', '大纲']。找事实源时优先限定 ['.project/status','设定','大纲','正文']；不要传绝对路径。"),
+  tokenBudget: z
+    .number()
+    .int()
+    .positive()
+    .max(12000)
+    .optional()
+    .describe("本次检索结果可用的上下文预算，默认 4000。复杂问题可传 6000-10000。"),
 });
 
 export const INTERACTION_TOOL_SPECS = {
@@ -207,7 +179,7 @@ export const INTERACTION_TOOL_SPECS = {
   },
   workspace_search: {
     description:
-      "搜索工作区目录名、文件名和正文内容。找路径、角色名、章节、字段、锚点时使用；找到准确路径后用 read 精读。",
+      "检索工作区事实源和正文证据，返回可直接用于推理的上下文片段。未知路径、缺人物/设定/伏笔/章节/状态证据、需要定位 JSON 字段或编辑锚点时优先使用；编辑前继续用 read 精读最高置信路径。",
     inputSchema: searchInputSchema,
   },
 } satisfies Record<string, AgentToolPromptSpec>;

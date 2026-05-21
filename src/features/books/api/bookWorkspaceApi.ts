@@ -3,7 +3,8 @@ import type {
   BookWorkspaceSummary,
   TreeNode,
   WorkspaceLineResult,
-  WorkspaceSearchMatch,
+  WorkspaceSearchIntent,
+  WorkspaceSearchResult,
   WorkspaceSnapshot,
 } from "../types";
 import {
@@ -204,8 +205,28 @@ export function writeWorkspaceTextFile(rootPath: string, path: string, contents:
   return invokeWithCancellation<void>("write_text_file", { rootPath, path, contents }, options);
 }
 
-export function searchWorkspaceContent(rootPath: string, query: string, limit?: number, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<WorkspaceSearchMatch[]>("search_workspace_content", { limit, query, rootPath }, options);
+export type SearchWorkspaceContentOptions = InvokeCancellationOptions & {
+  includeAdjacent?: boolean;
+  intent?: WorkspaceSearchIntent | string;
+  limit?: number;
+  scope?: string[];
+  tokenBudget?: number;
+};
+
+export function searchWorkspaceContent(
+  rootPath: string,
+  query: string,
+  options?: SearchWorkspaceContentOptions,
+) {
+  return invokeWithCancellation<WorkspaceSearchResult>("search_workspace_content", {
+    includeAdjacent: options?.includeAdjacent,
+    intent: options?.intent,
+    limit: options?.limit,
+    query,
+    rootPath,
+    scope: options?.scope,
+    tokenBudget: options?.tokenBudget,
+  }, options);
 }
 
 export function readWorkspaceTextLine(rootPath: string, path: string, lineNumber: number, options?: InvokeCancellationOptions) {
