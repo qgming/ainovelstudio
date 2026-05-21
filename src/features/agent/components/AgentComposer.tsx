@@ -2,12 +2,11 @@ import {
   AtSign,
   Check,
   ChevronDown,
+  ChevronRight,
   Circle,
   Clock3,
   ListChecks,
   LucideIcon,
-  Maximize2,
-  Minimize2,
   SendHorizontal,
   Sparkles,
   Square,
@@ -362,87 +361,95 @@ export function AgentComposer({
   return (
     <div className="bg-card text-card-foreground dark:bg-panel">
       {showPlan ? (
-        <div className={cn("border-t border-border bg-panel-subtle px-3", isPlanExpanded ? "py-2" : "py-1")}>
-          <div className={cn("flex items-center justify-between gap-3", isPlanExpanded ? "min-h-8" : "min-h-7")}>
-            <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium text-muted-foreground">
-              <ListChecks aria-hidden="true" className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 truncate">
-                共 {planningState.items.length} 个任务，已经完成 {completedCount}{" "}
-                个
-              </span>
+        <div className="bg-card px-3 pt-2 dark:bg-panel">
+          <section
+            aria-label="待办计划"
+            className={cn(
+              "rounded-t-[8px] border border-b-0 border-border bg-card px-2.5 dark:bg-panel",
+              isPlanExpanded ? "py-1.5" : "py-1",
+            )}
+          >
+            <div className={cn("flex items-center justify-between gap-2", isPlanExpanded ? "min-h-7" : "min-h-6")}>
+              <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium text-muted-foreground">
+                <ListChecks aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 truncate">
+                  共 {planningState.items.length} 个任务，已经完成 {completedCount}{" "}
+                  个
+                </span>
+              </div>
+              <Button
+                type="button"
+                aria-expanded={isPlanExpanded}
+                aria-label={isPlanExpanded ? "收起待办计划" : "展开待办计划"}
+                title={
+                  isPlanExpanded
+                    ? "收起待办计划 — 收起 agent 当前拆分出的执行步骤"
+                    : "展开待办计划 — 查看 agent 当前拆分出的执行步骤"
+                }
+                onClick={() => setIsPlanExpanded((current) => !current)}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+              >
+                {isPlanExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
             </div>
-            <Button
-              type="button"
-              aria-expanded={isPlanExpanded}
-              aria-label={isPlanExpanded ? "收起待办计划" : "展开待办计划"}
-              title={
-                isPlanExpanded
-                  ? "收起待办计划 — 收起 agent 当前拆分出的执行步骤"
-                  : "展开待办计划 — 查看 agent 当前拆分出的执行步骤"
-              }
-              onClick={() => setIsPlanExpanded((current) => !current)}
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground"
-            >
-              {isPlanExpanded ? (
-                <Minimize2 className="h-4 w-4" />
-              ) : (
-                <Maximize2 className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          {isPlanExpanded ? (
-            <div className="max-h-[168px] overflow-y-auto pt-2 pr-1">
-              <div className="pt-2">
-                <div className="space-y-3">
-                  {planningState.items.map((item, index) => (
-                    <div
-                      key={`${index}-${item.content}-${item.status}`}
-                      className="flex items-start gap-3"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center ${
-                          item.status === "completed"
-                            ? "text-foreground"
-                            : item.status === "in_progress"
-                              ? "text-muted-foreground"
-                              : "text-muted-foreground/70"
-                        }`}
+            {isPlanExpanded ? (
+              <div className="max-h-[148px] overflow-y-auto pt-1 pr-1">
+                <div className="pt-1">
+                  <div className="space-y-1.5">
+                    {planningState.items.map((item, index) => (
+                      <div
+                        key={`${index}-${item.content}-${item.status}`}
+                        className="flex items-start gap-2.5"
                       >
-                        {getPlanIcon(item)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div
-                          className={`break-words text-sm font-medium leading-6 ${
+                        <span
+                          aria-hidden="true"
+                          className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center ${
                             item.status === "completed"
-                              ? "text-muted-foreground line-through decoration-muted-foreground/50"
-                              : "text-foreground"
+                              ? "text-foreground"
+                              : item.status === "in_progress"
+                                ? "text-muted-foreground"
+                                : "text-muted-foreground/70"
                           }`}
                         >
-                          {index + 1}. {item.content}
-                        </div>
-                        {item.status === "in_progress" && item.activeForm ? (
-                          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                            {item.activeForm}
+                          {getPlanIcon(item)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className={`break-words text-sm font-medium leading-6 ${
+                              item.status === "completed"
+                                ? "text-muted-foreground line-through decoration-muted-foreground/50"
+                                : "text-foreground"
+                            }`}
+                          >
+                            {index + 1}. {item.content}
                           </div>
-                        ) : null}
+                          {item.status === "in_progress" && item.activeForm ? (
+                            <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                              {item.activeForm}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-                {hasStalePlan ? (
-                  <div className="mt-3 rounded-md border border-border bg-panel px-3 py-2 text-xs leading-5 text-muted-foreground">
-                    <span className="font-medium">
-                      {planningState.roundsSinceUpdate} 轮未更新
-                    </span>
-                    ，连续几轮没有刷新计划，建议让 agent 同步一下最新进展。
+                    ))}
                   </div>
-                ) : null}
+                  {hasStalePlan ? (
+                    <div className="mt-2 rounded-md border border-border bg-panel-subtle px-2.5 py-1.5 text-xs leading-5 text-muted-foreground">
+                      <span className="font-medium">
+                        {planningState.roundsSinceUpdate} 轮未更新
+                      </span>
+                      ，连续几轮没有刷新计划，建议让 agent 同步一下最新进展。
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </section>
         </div>
       ) : null}
 
@@ -473,7 +480,7 @@ export function AgentComposer({
         </div>
       ) : null}
 
-      <div className="overflow-hidden border-t border-border">
+      <div className="overflow-hidden rounded-t-[8px] border-x border-t border-border bg-card dark:bg-panel">
         {isAskMode && askRequest ? (
           <div className="flex h-[340px] flex-col">
             <div className="shrink-0 space-y-1 border-b border-border px-3 py-3">
@@ -740,8 +747,8 @@ export function AgentComposer({
 	                >
 	                  <SendHorizontal className="h-3.5 w-3.5" />
 	                </Button>
-	              )}
-	            </div>
+              )}
+            </div>
           </>
         )}
       </div>

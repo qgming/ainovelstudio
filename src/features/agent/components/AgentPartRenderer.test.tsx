@@ -163,8 +163,13 @@ describe("AgentPartRenderer", () => {
 
     expect(screen.getByText("任务进度")).toBeInTheDocument();
     expect(screen.queryByText("1. 定位问题")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /任务进度/ }).innerHTML).not.toContain("lucide-chevron");
 
     fireEvent.click(screen.getByRole("button", { name: /任务进度/ }));
+
+    const expandedButton = screen.getByRole("button", { name: /任务进度/ });
+    expect(expandedButton.querySelectorAll("svg")).toHaveLength(1);
+    expect(expandedButton.innerHTML).not.toContain("lucide-chevron");
 
     expect(screen.getByText("1. 定位问题")).toBeInTheDocument();
     expect(screen.getByText("2. 修复 UI")).toBeInTheDocument();
@@ -172,6 +177,27 @@ describe("AgentPartRenderer", () => {
 
     fireEvent.click(screen.getAllByRole("button")[1]);
     expect(screen.queryByText("1. 定位问题")).not.toBeInTheDocument();
+  });
+
+  it("展开后的折叠卡片使用更淡的背景", () => {
+    render(
+      <AgentPartRenderer
+        part={{
+          type: "tool-call",
+          toolName: "read_file",
+          toolCallId: "call-render-bg",
+          status: "completed",
+          inputSummary: "{}",
+          outputSummary: "已读取章节",
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /read_file/ }));
+
+    const card = screen.getByRole("button", { name: /read_file/ }).closest("section");
+    expect(card?.className).toContain("bg-panel-subtle/70");
+    expect(card?.className).not.toContain("bg-message-card");
   });
 
   it("YOLO 检查卡片可展开并点击内容收起", () => {

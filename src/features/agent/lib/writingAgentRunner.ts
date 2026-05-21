@@ -68,20 +68,16 @@ function buildHistorySummaryFn(
 function buildPromptPieces(prompt: string, context: WritingRuntimeContext) {
   const planningIntervention = getPlanningIntervention(context.planningState, prompt);
   const runtimeControl = buildRuntimeControlBlock({
-    activeFilePath: context.activeFilePath,
     planningIntervention,
     planningState: context.planningState,
     workspaceRootPath: context.workspaceRootPath,
-    prompt,
   });
   const materialContext = buildUserTurnContent({
-    activeFilePath: context.activeFilePath,
     manualContext: context.manualContext,
     planningIntervention,
     planningState: context.planningState,
     projectContext: context.projectContext,
     workspaceRootPath: context.workspaceRootPath,
-    prompt,
   });
   return { materialContext, runtimeControl };
 }

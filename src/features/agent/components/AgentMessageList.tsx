@@ -38,10 +38,10 @@ const MessageBubble = memo(function MessageBubble({ message, renderMarkdown }: M
             return (
               <div
                 key={`${message.id}-${index}`}
-                className={`rounded-md text-sm ${
+                className={`text-sm ${
                   isUser
                     ? "bg-message-card px-3 py-2 text-foreground"
-                    : "bg-message-card px-3.5 py-2.5 text-foreground"
+                    : "px-1 py-0 text-black dark:text-white"
                 }`}
               >
                 <AgentPartRenderer part={part} renderMarkdown={renderMarkdown} />

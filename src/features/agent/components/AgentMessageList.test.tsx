@@ -580,6 +580,60 @@ describe("AgentMessageList", () => {
     expect(screen.getByText("read_file")).toBeInTheDocument();
   });
 
+  it("折叠的工具消息是一行灰色文字且没有卡片背景", () => {
+    render(
+      <AgentMessageList
+        runStatus="completed"
+        messages={[
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [
+              {
+                type: "tool-call",
+                toolName: "read_file",
+                toolCallId: "tool-1",
+                status: "completed",
+                inputSummary: '{"path":"章节/第一章.md"}',
+                outputSummary: "已读取章节",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const collapsed = screen.getByRole("button", { name: /read_file/ }).closest("section");
+    expect(collapsed).not.toBeNull();
+    expect(collapsed?.className).toContain("text-muted-foreground");
+    expect(collapsed?.className).not.toContain("bg-message-card");
+    expect(collapsed?.className).not.toContain("border");
+    expect(screen.getByRole("button", { name: /read_file/ }).querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("assistant 正式文本使用无卡片背景的正文样式", () => {
+    render(
+      <AgentMessageList
+        runStatus="completed"
+        messages={[
+          {
+            id: "assistant-1",
+            role: "assistant",
+            author: "主代理",
+            parts: [{ type: "text", text: "这是正式回复。" }],
+          },
+        ]}
+      />,
+    );
+
+    const text = screen.getByText("这是正式回复。");
+    const messageShell = text.parentElement?.parentElement;
+    expect(messageShell).not.toBeNull();
+    expect(messageShell?.className).toContain("text-black");
+    expect(messageShell?.className).not.toContain("bg-message-card");
+  });
+
   it("运行中的最后一条 assistant 文本使用轻量纯文本渲染", () => {
     render(
       <AgentMessageList

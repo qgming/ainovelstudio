@@ -12,6 +12,7 @@ import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceSt
 
 const rootPath = "C:/books/北境余烬";
 const bookId = "book-1";
+const projectReadmePath = `${rootPath}/.project/README.md`;
 const chapterPath = `${rootPath}/正文/第一卷/第001章_待命名.md`;
 const otherRootPath = "C:/books/星河回声";
 const otherBookId = "book-2";
@@ -22,6 +23,19 @@ const initialTree = {
   name: "北境余烬",
   path: rootPath,
   children: [
+    {
+      kind: "directory",
+      name: ".project",
+      path: `${rootPath}/.project`,
+      children: [
+        {
+          kind: "file",
+          name: "README.md",
+          path: projectReadmePath,
+          extension: ".md",
+        },
+      ],
+    },
     {
       kind: "directory",
       name: "正文",
@@ -168,6 +182,34 @@ describe("useBookWorkspaceStore", () => {
 
     expect(mockInvoke.mock.calls[0]).toEqual(["ensure_book_workspace_template", { rootPath }]);
     expect(useBookWorkspaceStore.getState().rootBookId).toBe(bookId);
+  });
+
+  it("没有有效选中文件时默认打开项目 README", async () => {
+    window.localStorage.setItem(
+      "ainovelstudio-book-workspace",
+      JSON.stringify({ rootPath, selectedFilePath: null }),
+    );
+
+    mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
+      switch (command) {
+        case "ensure_book_workspace_template":
+          return [];
+        case "get_book_workspace_summary":
+          return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
+        case "read_workspace_tree":
+          return initialTree;
+        case "read_text_file":
+          expect(payload?.path).toBe(projectReadmePath);
+          return "# 北境余烬 项目 README";
+        default:
+          return undefined;
+      }
+    });
+
+    await useBookWorkspaceStore.getState().initializeWorkspace();
+
+    expect(useBookWorkspaceStore.getState().activeFilePath).toBe(projectReadmePath);
+    expect(useBookWorkspaceStore.getState().draftContent).toBe("# 北境余烬 项目 README");
   });
 
   it("按 bookId 打开书籍时会保留该书的身份，不会再回退到 path summary", async () => {

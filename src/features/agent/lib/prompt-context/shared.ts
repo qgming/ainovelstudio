@@ -3,12 +3,6 @@ export type PromptSection = {
   title: string;
 };
 
-export type TaskProfile = {
-  caution: string;
-  label: string;
-  outputHint: string;
-};
-
 export const MANUAL_CONTEXT_FILE_CHAR_LIMIT = 6_000;
 export const MANUAL_CONTEXT_TOTAL_CHAR_LIMIT = 12_000;
 

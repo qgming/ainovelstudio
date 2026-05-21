@@ -22,7 +22,7 @@ use crate::infrastructure::db::open_database;
 use crate::infrastructure::workspace_paths::{
     check_cancellation, error_to_string, with_cancellable_request, CommandResult,
 };
-use rusqlite::{params, Transaction};
+use rusqlite::{params, Transaction, TransactionBehavior};
 use std::path::Path;
 use tauri::{AppHandle, State};
 #[cfg(desktop)]
@@ -33,7 +33,9 @@ where
     F: FnOnce(&Transaction<'_>) -> CommandResult<T>,
 {
     let mut connection = open_database(app)?;
-    let transaction = connection.transaction().map_err(error_to_string)?;
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(error_to_string)?;
     let result = operation(&transaction)?;
     transaction.commit().map_err(error_to_string)?;
     Ok(result)

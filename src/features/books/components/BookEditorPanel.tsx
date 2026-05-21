@@ -53,6 +53,72 @@ export function BookEditorPanel({
 
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-app">
+      <header className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-hidden rounded-[8px] border border-border/45 bg-card px-3 py-1.5 text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="editor-panel-title min-w-0 text-[13px]">
+            {activeFileName}
+          </h2>
+          <span
+            aria-label="当前内容字数"
+            className="editor-status-chip shrink-0 bg-background/45"
+            title={`当前内容字数：${novelWordCountLabel}`}
+          >
+            {novelWordCountLabel}
+          </span>
+        </div>
+        <div className="editor-toolbar shrink-0">
+          {isDirty ? (
+            <span className="editor-status-chip" data-tone="warning">未保存</span>
+          ) : null}
+          {supportsMarkdownPreview ? (
+            <Button
+              type="button"
+              aria-label={isMarkdownPreview ? "切换到文本编辑" : "切换到 Markdown 预览"}
+              title={
+                isMarkdownPreview
+                  ? "切换到文本编辑 — 返回原始文本编辑模式"
+                  : "切换到 Markdown 预览 — 查看当前文件的渲染效果"
+              }
+              aria-pressed={isMarkdownPreview}
+              disabled={busy}
+              onClick={() => setIsMarkdownPreview((current) => !current)}
+              variant={isMarkdownPreview ? "secondary" : "ghost"}
+              size="icon-sm"
+              className="text-muted-foreground"
+            >
+              {isMarkdownPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            aria-label="复制当前内容"
+            title="复制当前内容 — 将当前文件内容复制到剪贴板"
+            disabled={busy}
+            onClick={() => void copyContent()}
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            aria-label={busy ? "保存中" : "保存当前文件"}
+            title={
+              busy
+                ? "保存中 — 正在将修改写入书籍工作区"
+                : "保存当前文件 — 将修改写入书籍工作区"
+            }
+            disabled={busy}
+            onClick={onSave}
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
       <div className="min-h-0 flex-1 overflow-hidden">
         {isMarkdownPreview ? (
           <div className="h-full overflow-y-auto bg-app px-6 py-5">
@@ -145,72 +211,6 @@ export function BookEditorPanel({
           />
         )}
       </div>
-      <header className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-hidden rounded-xl border border-border/45 bg-card px-3 py-1.5 text-card-foreground shadow-[0_10px_28px_rgba(15,23,42,0.045)] dark:bg-panel dark:shadow-none">
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="editor-panel-title min-w-0 text-[13px]">
-            {activeFileName}
-          </h2>
-          <span
-            aria-label="当前内容字数"
-            className="editor-status-chip shrink-0 bg-background/45"
-            title={`当前内容字数：${novelWordCountLabel}`}
-          >
-            {novelWordCountLabel}
-          </span>
-        </div>
-        <div className="editor-toolbar shrink-0">
-          {isDirty ? (
-            <span className="editor-status-chip" data-tone="warning">未保存</span>
-          ) : null}
-          {supportsMarkdownPreview ? (
-            <Button
-              type="button"
-              aria-label={isMarkdownPreview ? "切换到文本编辑" : "切换到 Markdown 预览"}
-              title={
-                isMarkdownPreview
-                  ? "切换到文本编辑 — 返回原始文本编辑模式"
-                  : "切换到 Markdown 预览 — 查看当前文件的渲染效果"
-              }
-              aria-pressed={isMarkdownPreview}
-              disabled={busy}
-              onClick={() => setIsMarkdownPreview((current) => !current)}
-              variant={isMarkdownPreview ? "secondary" : "ghost"}
-              size="icon-sm"
-              className="text-muted-foreground"
-            >
-              {isMarkdownPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            aria-label="复制当前内容"
-            title="复制当前内容 — 将当前文件内容复制到剪贴板"
-            disabled={busy}
-            onClick={() => void copyContent()}
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground"
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            aria-label={busy ? "保存中" : "保存当前文件"}
-            title={
-              busy
-                ? "保存中 — 正在将修改写入书籍工作区"
-                : "保存当前文件 — 将修改写入书籍工作区"
-            }
-            disabled={busy}
-            onClick={onSave}
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground"
-          >
-            <Save className="h-4 w-4" />
-          </Button>
-        </div>
-      </header>
     </section>
   );
 }

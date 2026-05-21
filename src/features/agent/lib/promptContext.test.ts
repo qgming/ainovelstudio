@@ -65,24 +65,25 @@ describe("prompt context", () => {
 
   it("runtime control 使用纯 Markdown 标题且不暴露内部 section key", () => {
     const runtime = buildRuntimeControlBlock({
-      activeFilePath: "章节/第一章.md",
-      prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
     expect(runtime).toContain("## 程序可信元数据");
     expect(runtime).toContain("## 执行控制");
+    expect(runtime).not.toContain("当前激活文件");
+    expect(runtime).not.toContain("当前文件类型");
+    expect(runtime).not.toContain("本轮任务类型");
+    expect(runtime).not.toContain("预期输出");
+    expect(runtime).not.toContain("当前提醒");
     expect(runtime).not.toMatch(/^## s\d+[a-z]?\s/gmu);
   });
 
   it("user material prompt 使用纯 Markdown 标题且不暴露内部 section key", () => {
     const prompt = buildUserTurnContent({
-      activeFilePath: "章节/第一章.md",
       manualContext: {
         files: [{ name: "人物.md", path: "设定/人物.md" }],
         skills: [],
       },
-      prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
@@ -129,12 +130,10 @@ describe("prompt context", () => {
 
   it("手动指定文件只注入路径，不注入正文", () => {
     const prompt = buildUserTurnContent({
-      activeFilePath: "设定/人物.md",
       manualContext: {
         files: [{ name: "人物.md", path: "设定/人物.md" }],
         skills: [],
       },
-      prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
@@ -148,8 +147,6 @@ describe("prompt context", () => {
     vi.setSystemTime(new Date("2026-04-18T09:30:00+08:00"));
 
     const runtime = buildRuntimeControlBlock({
-      activeFilePath: "章节/第一章.md",
-      prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 
@@ -179,9 +176,7 @@ describe("prompt context", () => {
     };
 
     const prompt = buildUserTurnContent({
-      activeFilePath: "章节/第一章.md",
       projectContext,
-      prompt: "继续写这一章",
       workspaceRootPath: "C:/books/北境余烬",
     });
 

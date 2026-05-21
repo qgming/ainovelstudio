@@ -37,6 +37,13 @@ describe("AgentComposer", () => {
     expect(screen.getByText("2. Implement todo tool")).toBeInTheDocument();
     expect(screen.getByText("3 轮未更新")).toBeInTheDocument();
     expect(screen.getByText(/连续几轮没有刷新计划/)).toBeInTheDocument();
+
+    const planPanel = screen.getByLabelText("待办计划");
+    expect(planPanel.className).toContain("rounded-t-[8px]");
+    expect(planPanel.className).toContain("border-b-0");
+    expect(planPanel.className).toContain("bg-card");
+    expect(planPanel.parentElement?.className).toContain("px-3");
+    expect(planPanel.parentElement?.className).not.toContain("pb-1");
   });
 
   it("支持展开和收起待办计划", () => {
@@ -51,10 +58,15 @@ describe("AgentComposer", () => {
     );
 
     const toggle = screen.getByRole("button", { name: "收起待办计划" });
+    expect(toggle.innerHTML).toContain("lucide-chevron-down");
+    expect(toggle.innerHTML).not.toContain("lucide-minimize-2");
     fireEvent.click(toggle);
 
     expect(screen.queryByText("1. Inspect the runtime")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "展开待办计划" })).toBeInTheDocument();
+    const collapsedToggle = screen.getByRole("button", { name: "展开待办计划" });
+    expect(collapsedToggle).toBeInTheDocument();
+    expect(collapsedToggle.innerHTML).toContain("lucide-chevron-right");
+    expect(collapsedToggle.innerHTML).not.toContain("lucide-maximize-2");
   });
 
   it("没有任务时不显示待办计划", () => {
@@ -101,8 +113,12 @@ describe("AgentComposer", () => {
   it("输入区默认显示为两行高度", () => {
     render(<AgentComposer {...buildComposerProps()} />);
 
-    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute("rows", "2");
-    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute("placeholder", "输入想法、问题或要处理的任务");
+    const textarea = screen.getByLabelText("Agent 输入框");
+    expect(textarea).toHaveAttribute("rows", "2");
+    expect(textarea).toHaveAttribute("placeholder", "输入想法、问题或要处理的任务");
+    expect(textarea.parentElement?.className).toContain("rounded-t-[8px]");
+    expect(textarea.parentElement?.className).toContain("border-x");
+    expect(textarea.parentElement?.className).toContain("border-t");
   });
 
   it("输入区超过最大高度后在内部滚动", () => {

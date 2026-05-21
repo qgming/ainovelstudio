@@ -1,5 +1,5 @@
 import { useState, memo } from "react";
-import { ChevronDown, ChevronRight, Brain, Wrench, Check, LoaderCircle, Circle, Zap } from "lucide-react";
+import { Brain, Wrench, Check, LoaderCircle, Circle, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
@@ -187,18 +187,16 @@ function AccordionCard({
   summary: string;
 }) {
   const [open, setOpen] = useState(false);
-  const Chevron = open ? ChevronDown : ChevronRight;
 
   return (
-    <section className="rounded-[8px] border border-border bg-message-card">
+    <section className={open ? "rounded-[8px] border border-border bg-panel-subtle/70" : "text-muted-foreground"}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className={`flex w-full items-center gap-2 text-left ${open ? "px-3 py-2" : "px-1 py-0.5"}`}
       >
-        <Chevron className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="text-[12px] font-medium text-foreground">{label}</span>
+        <span className={`text-[12px] font-medium ${open ? "text-foreground" : "text-muted-foreground"}`}>{label}</span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
           {summary}
         </span>

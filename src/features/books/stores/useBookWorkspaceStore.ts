@@ -187,6 +187,48 @@ async function readWorkspaceSummaryById(bookId: string): Promise<BookWorkspaceSu
   return summary;
 }
 
+const DEFAULT_OPEN_FILE_RELATIVE_PATHS = [".project/README.md", "README.md"] as const;
+
+function getRelativeTreePath(rootPath: string, nodePath: string) {
+  if (nodePath === rootPath) {
+    return "";
+  }
+
+  const rootPrefix = `${rootPath}/`;
+  return nodePath.startsWith(rootPrefix) ? nodePath.slice(rootPrefix.length) : nodePath;
+}
+
+function findFileByRelativePath(rootNode: TreeNode, rootPath: string, relativePath: string): TreeNode | null {
+  const normalizedTarget = relativePath.toLowerCase();
+  const stack = [...(rootNode.children ?? [])];
+
+  while (stack.length > 0) {
+    const node = stack.shift();
+    if (!node) {
+      continue;
+    }
+
+    if (node.kind === "file" && getRelativeTreePath(rootPath, node.path).toLowerCase() === normalizedTarget) {
+      return node;
+    }
+
+    stack.push(...(node.children ?? []));
+  }
+
+  return null;
+}
+
+function findDefaultOpenFilePath(rootNode: TreeNode, rootPath: string) {
+  for (const relativePath of DEFAULT_OPEN_FILE_RELATIVE_PATHS) {
+    const node = findFileByRelativePath(rootNode, rootPath, relativePath);
+    if (node && isTextEditableFile(node.path)) {
+      return node.path;
+    }
+  }
+
+  return null;
+}
+
 export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
   let workspaceLoadRequestId = 0;
 
@@ -212,8 +254,11 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     if (!isCurrent()) {
       return false;
     }
+    const selectedNode = selectedFilePath ? findNodeByPath(rootNode, selectedFilePath) : null;
     const nextSelectedFilePath =
-      selectedFilePath && findNodeByPath(rootNode, selectedFilePath) ? selectedFilePath : null;
+      selectedNode?.kind === "file" && isTextEditableFile(selectedNode.path)
+        ? selectedNode.path
+        : findDefaultOpenFilePath(rootNode, rootPath);
     const expandedPaths = buildExpandedPaths(rootNode, nextSelectedFilePath);
 
     if (nextSelectedFilePath && isTextEditableFile(nextSelectedFilePath)) {

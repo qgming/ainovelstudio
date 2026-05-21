@@ -80,6 +80,30 @@ describe("BookEditorPanel", () => {
     expect(wordCount).toHaveClass("editor-status-chip");
   });
 
+  it("文件名和字数工具栏位于编辑区顶部", () => {
+    render(
+      <BookEditorPanel
+        activeFileName="第001章_待命名.md"
+        busy={false}
+        content="这是章节内容"
+        isDirty={false}
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { name: "第001章_待命名.md" });
+    const toolbar = heading.closest("header");
+    const editor = screen.getByRole("textbox", { name: "文件编辑器" });
+
+    expect(toolbar).not.toBeNull();
+    if (!toolbar) {
+      throw new Error("toolbar should exist");
+    }
+    expect(toolbar.className).toContain("rounded-[8px]");
+    expect(toolbar.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("markdown 文件支持在编辑与预览之间切换", () => {
     render(
       <BookEditorPanel
