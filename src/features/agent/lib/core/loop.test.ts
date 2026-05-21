@@ -99,7 +99,7 @@ describe("agentLoop", () => {
     });
   });
 
-  it("纯文本行动预告不会被自动续跑", async () => {
+  it("未启用协议修复时纯文本行动预告不会被自动续跑", async () => {
     const messageSnapshots: ModelMessage[][] = [];
     const streamFn = vi.fn((input: { messages: ModelMessage[] }) => {
       messageSnapshots.push([...input.messages]);
@@ -118,6 +118,145 @@ describe("agentLoop", () => {
 
     expect(streamFn).toHaveBeenCalledTimes(1);
     expect(messageSnapshots).toHaveLength(1);
+    expect(parts.map((part) => part.type)).toEqual(["text-delta"]);
+  });
+
+  it("写入任务只输出行动预告时会后台追加协议修复并续跑", async () => {
+    const messageSnapshots: ModelMessage[][] = [];
+    const streamFn = vi.fn((input: { messages: ModelMessage[] }) => {
+      messageSnapshots.push([...input.messages]);
+      if (messageSnapshots.length === 1) {
+        return streamResult([
+          { type: "text-delta", id: "text-1", text: "好，第10章以赵黑风率人到达山门外为结尾。现在开始写第11章。" },
+        ], "stop", [{ role: "assistant", content: "好，第10章以赵黑风率人到达山门外为结尾。现在开始写第11章。" }]);
+      }
+      if (messageSnapshots.length === 2) {
+        return streamResult([
+          { type: "tool-call", toolName: "workspace_write", toolCallId: "call-write-11", input: { path: "正文/第011章.md", content: "正文" } },
+          { type: "tool-result", toolName: "workspace_write", toolCallId: "call-write-11", output: "已追加写入 正文/第011章.md" },
+        ], "tool-calls", [{ role: "assistant", content: "工具已调用" }]);
+      }
+      return streamResult([{ type: "text-delta", id: "text-2", text: "已写入第11章。" }]);
+    });
+
+    const parts: AgentPart[] = [];
+    for await (const part of agentLoop(
+      { messages: [{ role: "user", content: "继续写第11章" }], system: "test", tools: { workspace_write: {} } as never },
+      {
+        providerConfig: { apiKey: "k", baseURL: "u", model: "m" },
+        streamFn: streamFn as never,
+        writeProtocolRepair: {
+          enabledToolIds: ["workspace_write"],
+          userPrompt: "继续写第11章",
+        },
+      },
+    )) {
+      parts.push(part);
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(3);
+    expect(messageSnapshots[1]?.at(-1)).toMatchObject({ role: "user" });
+    expect(String(messageSnapshots[1]?.at(-1)?.content)).toContain("协议修复");
+    expect(String(messageSnapshots[1]?.at(-1)?.content)).toContain("必须至少产生一次相关工具调用");
+    expect(parts.map((part) => part.type)).toEqual(["text-delta", "tool-call", "tool-result", "text-delta"]);
+  });
+
+  it("上一章已写入后的继续写下一章预告也会触发后台协议修复", async () => {
+    const messageSnapshots: ModelMessage[][] = [];
+    const streamFn = vi.fn((input: { messages: ModelMessage[] }) => {
+      messageSnapshots.push([...input.messages]);
+      if (messageSnapshots.length === 1) {
+        return streamResult([
+          { type: "tool-call", toolName: "workspace_write", toolCallId: "call-write-11", input: { path: "正文/第011章.md", content: "正文" } },
+          { type: "tool-result", toolName: "workspace_write", toolCallId: "call-write-11", output: "已追加写入 正文/第011章.md" },
+        ], "tool-calls", [{ role: "assistant", content: "工具已调用" }]);
+      }
+      if (messageSnapshots.length === 2) {
+        return streamResult([
+          { type: "text-delta", id: "text-1", text: "第011章写完，2357中文字。继续写第012章。" },
+        ], "stop", [{ role: "assistant", content: "第011章写完，2357中文字。继续写第012章。" }]);
+      }
+      if (messageSnapshots.length === 3) {
+        return streamResult([
+          { type: "tool-call", toolName: "workspace_write", toolCallId: "call-write-12", input: { path: "正文/第012章.md", content: "正文" } },
+          { type: "tool-result", toolName: "workspace_write", toolCallId: "call-write-12", output: "已追加写入 正文/第012章.md" },
+        ], "tool-calls", [{ role: "assistant", content: "工具已调用" }]);
+      }
+      return streamResult([{ type: "text-delta", id: "text-2", text: "已开始写入第012章。" }]);
+    });
+
+    const parts: AgentPart[] = [];
+    for await (const part of agentLoop(
+      { messages: [{ role: "user", content: "继续连续写章节" }], system: "test", tools: { workspace_write: {} } as never },
+      {
+        providerConfig: { apiKey: "k", baseURL: "u", model: "m" },
+        streamFn: streamFn as never,
+        writeProtocolRepair: {
+          enabledToolIds: ["workspace_write"],
+          userPrompt: "继续连续写章节",
+        },
+      },
+    )) {
+      parts.push(part);
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(4);
+    expect(String(messageSnapshots[2]?.at(-1)?.content)).toContain("协议修复");
+    expect(parts.map((part) => part.type)).toEqual([
+      "tool-call",
+      "tool-result",
+      "text-delta",
+      "tool-call",
+      "tool-result",
+      "text-delta",
+    ]);
+  });
+
+  it("诊断写入失败原因时不会触发后台写入协议修复", async () => {
+    const streamFn = vi.fn(() => streamResult([
+      { type: "text-delta", id: "text-1", text: "原因是上一轮没有产生结构化工具调用。" },
+    ], "stop", [{ role: "assistant", content: "原因是上一轮没有产生结构化工具调用。" }]));
+
+    const parts: AgentPart[] = [];
+    for await (const part of agentLoop(
+      { messages: [{ role: "user", content: "是什么原因导致没有调用 write 工具？" }], system: "test", tools: { workspace_write: {} } as never },
+      {
+        providerConfig: { apiKey: "k", baseURL: "u", model: "m" },
+        streamFn: streamFn as never,
+        writeProtocolRepair: {
+          enabledToolIds: ["workspace_write"],
+          userPrompt: "是什么原因导致没有调用 write 工具？",
+        },
+      },
+    )) {
+      parts.push(part);
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(1);
+    expect(parts.map((part) => part.type)).toEqual(["text-delta"]);
+  });
+
+  it("要求先给提示词确认时不会触发后台写入协议修复", async () => {
+    const streamFn = vi.fn(() => streamResult([
+      { type: "text-delta", id: "text-1", text: "可以，先给你一个后台续跑提示词模板。" },
+    ], "stop", [{ role: "assistant", content: "可以，先给你一个后台续跑提示词模板。" }]));
+
+    const parts: AgentPart[] = [];
+    for await (const part of agentLoop(
+      { messages: [{ role: "user", content: "可以后台触发一次AI，先给我这个提示词我来确定" }], system: "test", tools: { workspace_write: {} } as never },
+      {
+        providerConfig: { apiKey: "k", baseURL: "u", model: "m" },
+        streamFn: streamFn as never,
+        writeProtocolRepair: {
+          enabledToolIds: ["workspace_write"],
+          userPrompt: "可以后台触发一次AI，先给我这个提示词我来确定",
+        },
+      },
+    )) {
+      parts.push(part);
+    }
+
+    expect(streamFn).toHaveBeenCalledTimes(1);
     expect(parts.map((part) => part.type)).toEqual(["text-delta"]);
   });
 

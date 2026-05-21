@@ -15,6 +15,10 @@ import {
   type RetryState,
 } from "./retry";
 import { mapStreamPart, updateStepState, type StepStreamState } from "./streamParts";
+import {
+  getWriteProtocolRepairPrompt,
+  type WriteProtocolRepairConfig,
+} from "./writeProtocolRepair";
 
 const DEFAULT_MAX_AGENT_STEPS = 1000;
 
@@ -34,6 +38,7 @@ export type AgentLoopConfig = {
   streamFn?: typeof streamAgentText;
   takeFollowUpMessages?: () => string[];
   takeSteeringMessages?: () => string[];
+  writeProtocolRepair?: WriteProtocolRepairConfig;
 };
 
 type AgentStepParams = {
@@ -252,6 +257,7 @@ export async function* agentLoop(
   const messages = [...context.messages];
   const maxSteps = normalizeMaxSteps(config.maxSteps);
   const retryState = createRetryState();
+  let writeProtocolRepairCount = 0;
   let totalSteps = 0;
   let stepsSinceUserMessage = 0;
 
@@ -286,6 +292,20 @@ export async function* agentLoop(
     const lateSteering = config.takeSteeringMessages?.() ?? [];
     if (lateSteering.length > 0) {
       appendUserMessages(messages, lateSteering);
+      stepsSinceUserMessage = 0;
+      continue;
+    }
+
+    const repairPrompt = getWriteProtocolRepairPrompt({
+      config: config.writeProtocolRepair,
+      finishReason,
+      parts: eventMessage.parts,
+      repairCount: writeProtocolRepairCount,
+      tools: context.tools,
+    });
+    if (repairPrompt) {
+      writeProtocolRepairCount += 1;
+      appendUserMessages(messages, [repairPrompt]);
       stepsSinceUserMessage = 0;
       continue;
     }

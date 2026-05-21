@@ -160,6 +160,10 @@ export async function* runWritingAgent({
           streamFn: toolContext.streamFn ?? streamAgentText,
           takeFollowUpMessages,
           takeSteeringMessages,
+          writeProtocolRepair: {
+            enabledToolIds: toolContext.enabledToolIds,
+            userPrompt: prompt,
+          },
         },
       )) {
         throwIfAborted(abortSignal);
