@@ -126,10 +126,8 @@ pub(crate) fn create_project_readme_template(book_name: &str) -> String {
 
 ## 状态维护约定
 
-- 写新章节后更新 `.project/status/latest-plot.json`。
-- 人物关系、立场、能力或伤病变化后更新 `.project/status/character-state.json`。
-- 新伏笔、规则、时间线或连续性风险更新 `.project/status/continuity-index.json`。
-- 当前阶段、当前目标、活跃文件变化后更新 `.project/status/system-state.json`。
+- 当前阶段、当前章节、活跃文件、阻塞项变化后更新 `.project/status/project-state.json`。
+- 剧情推进、人物变化、伏笔与连续性变化后更新 `.project/status/story-state.json`。
 "#,
         book_name,
     )
@@ -140,124 +138,18 @@ pub(crate) fn create_project_status_template(book_name: &str) -> String {
         r#"{
   "bookName": "{BOOK_NAME}",
   "projectStage": "构思中",
-  "workspaceVersion": 4,
-  "primaryLanguage": "zh-CN",
-  "targetWordCount": null,
-  "currentWordCount": 0,
-  "storyProfile": {
-    "platform": "待补充",
-    "genre": "待补充",
-    "targetAudience": "待补充",
-    "readerPromise": "待补充",
-    "openingPromise": "待补充",
-    "coreSellingPoint": "待补充",
-    "premise": "待补充",
-    "plotSynopsis": "待补充",
-    "mainConflict": "待补充",
-    "upgradePath": "待补充",
-    "endingDirection": "待补充"
-  },
-  "writingStyle": {
-    "narrativePerspective": "待补充",
-    "languageStyle": "待补充",
-    "emotionalTone": "待补充",
-    "pacingPreference": "待补充",
-    "dialoguePreference": "待补充",
-    "chapterWordCountMin": 2500,
-    "chapterWordCountMax": 3500,
-    "taboos": [],
-    "antiPatterns": [
-      "空泛抒情",
-      "上帝视角剧透",
-      "只讲设定不落行动",
-      "连续大段说明"
-    ]
-  },
-  "directories": {
-    "setting": "设定",
-    "outline": "大纲",
-    "draft": "正文",
-    "projectMeta": ".project",
-    "projectStatus": ".project/status"
-  },
-  "defaultFiles": {
-    "guide": ".project/AGENTS.md",
-    "projectReadme": ".project/README.md",
-    "contextManifest": ".project/context-manifest.json",
-    "projectState": ".project/status/project-state.json",
-    "systemState": ".project/status/system-state.json",
-    "latestPlot": ".project/status/latest-plot.json",
-    "characterState": ".project/status/character-state.json",
-    "continuityIndex": ".project/status/continuity-index.json"
-  },
-  "recommendedFiles": {
-    "projectReadme": ".project/README.md",
-    "projectPositioning": "设定/作品定位.md",
-    "protagonist": "设定/主角.md",
-    "worldbuilding": "设定/世界观.md",
-    "outline": "大纲/大纲.md",
-    "chapterPlan": "大纲/细纲_第001章.md",
-    "firstChapter": "正文/第001章_章名.md"
-  },
-  "namingRules": {
-    "chapterDraft": "正文/第001章_章名.md",
-    "chapterOutline": "大纲/细纲_第001章.md"
-  },
-  "aiInstructions": [
-    "初始化或首次进入时只做轻量目录扫描，不完整展开全部文件。",
-    "任务明显匹配已启用 skill 时，先读取对应 SKILL.md。",
-    "涉及具体人物、地点、能力、伏笔或章节时，先读取相关事实源再判断。",
-    "改已有文件优先局部修改；整文件覆盖只在新建或全量重写时使用。",
-    "正文、卷纲、细纲由主代理串行完成；研究、检查、批量维护可以委派。",
-    "推进剧情后同步更新 latest-plot.json，必要时更新 continuity-index.json。",
-    "角色状态变化后同步更新 character-state.json。",
-    "当前章节、活跃文件或阶段变化后同步更新 system-state.json。"
-  ],
-  "collaboration": {
-    "defaultMode": "主动推进",
-    "askWhen": [
-      "题材、视角、主线或风格存在多个高影响方向",
-      "资料冲突且无法从正文或 status 判断优先级",
-      "操作涉及删除、大幅覆盖或批量重命名"
-    ],
-    "reportStyle": "简短说明结果、文件、验证和风险"
-  },
-  "status": {
-    "currentFocus": "待明确题材、剧情梗概、主角目标、写作风格与大纲",
-    "currentObjective": "完成作品 brief 和开篇方向",
-    "blockers": [
-      "题材未定",
-      "读者承诺未定",
-      "主角目标未定"
-    ],
-    "nextAction": "先补齐 .project/README.md，再建立大纲和第001章细纲",
-    "currentArc": null,
-    "lastUpdated": null
-  }
-}
-"#,
-        book_name,
-    )
-}
-
-pub(crate) fn create_system_state_template(book_name: &str) -> String {
-    render_book_template(
-        r#"{
-  "bookName": "{BOOK_NAME}",
   "currentPhase": "构思中",
-  "currentTask": "待补充",
   "currentObjective": "完成作品 brief 和开篇方向",
   "currentVolume": null,
-  "currentOutlineFile": null,
   "currentChapterFile": null,
   "lastCompletedChapter": null,
-  "lastPlannedChapter": null,
   "activeFiles": [],
-  "activeQuestions": [],
-  "blockers": [],
-  "pendingReviews": [],
-  "recentDecisions": [],
-  "lastSyncAt": null,
+  "blockers": [
+    "题材未定",
+    "读者承诺未定",
+    "主角目标未定"
+  ],
+  "nextAction": "先补齐 .project/README.md，再建立大纲和第001章细纲",
   "updatedAt": null
 }
 "#,
@@ -265,56 +157,31 @@ pub(crate) fn create_system_state_template(book_name: &str) -> String {
     )
 }
 
-pub(crate) fn create_latest_plot_template(book_name: &str) -> String {
+pub(crate) fn create_story_state_template(book_name: &str) -> String {
     render_book_template(
         r#"{
   "bookName": "{BOOK_NAME}",
-  "currentArc": null,
-  "currentVolume": null,
-  "currentChapter": null,
-  "currentScene": null,
-  "latestUpdate": null,
-  "establishedFacts": [],
-  "recentChapters": [],
-  "timelineUpdates": [],
-  "activeConflicts": [],
-  "openThreads": [],
-  "sceneQueue": [],
-  "unresolvedQuestions": [],
-  "nextExpectedPush": null,
-  "updatedAt": null
-}
-"#,
-        book_name,
-    )
-}
-
-pub(crate) fn create_character_state_template(book_name: &str) -> String {
-    render_book_template(
-        r#"{
-  "bookName": "{BOOK_NAME}",
+  "plot": {
+    "currentArc": null,
+    "currentVolume": null,
+    "currentChapter": null,
+    "currentScene": null,
+    "recentChapters": [],
+    "activeConflicts": [],
+    "openThreads": [],
+    "sceneQueue": [],
+    "unresolvedQuestions": [],
+    "nextExpectedPush": null
+  },
   "characters": {},
-  "relationshipMap": [],
-  "arcNotes": [],
-  "updates": [],
-  "updatedAt": null
-}
-"#,
-        book_name,
-    )
-}
-
-pub(crate) fn create_continuity_index_template(book_name: &str) -> String {
-    render_book_template(
-        r#"{
-  "bookName": "{BOOK_NAME}",
-  "canonFacts": [],
-  "timelineAnchors": [],
-  "openThreads": [],
-  "foreshadowing": [],
-  "resolvedThreads": [],
-  "continuityRisks": [],
-  "refs": [],
+  "relationships": [],
+  "continuity": {
+    "canonFacts": [],
+    "timelineAnchors": [],
+    "foreshadowing": [],
+    "resolvedThreads": [],
+    "risks": []
+  },
   "updatedAt": null
 }
 "#,
@@ -326,107 +193,30 @@ pub(crate) fn create_context_manifest_template(book_name: &str) -> String {
     render_book_template(
         r#"{
   "bookName": "{BOOK_NAME}",
-  "version": 2,
+  "version": 3,
   "policies": [
     {
       "taskType": "book",
       "alwaysInclude": [
         ".project/AGENTS.md",
         ".project/README.md",
-        ".project/status/project-state.json",
-        ".project/status/system-state.json"
-      ],
-      "includeIfActive": [],
-      "summaryFirst": [],
-      "fullReadTriggers": [
-        "立项",
-        "题材",
-        "平台",
-        "卖点"
-      ],
-      "charBudget": 18000,
-      "priority": 10
-    },
-    {
-      "taskType": "ideation",
-      "alwaysInclude": [
-        ".project/AGENTS.md",
-        ".project/README.md",
         ".project/status/project-state.json"
       ],
       "includeIfActive": [],
-      "summaryFirst": [],
-      "fullReadTriggers": [
-        "立项",
-        "题材",
-        "卖点",
-        "主角",
-        "开篇"
-      ],
-      "charBudget": 18000,
-      "priority": 25
+      "priority": 10
     },
     {
       "taskType": "chapter-write",
       "alwaysInclude": [
         ".project/AGENTS.md",
         ".project/README.md",
-        ".project/status/system-state.json",
-        ".project/status/latest-plot.json",
-        ".project/status/character-state.json",
-        ".project/status/continuity-index.json"
+        ".project/status/project-state.json",
+        ".project/status/story-state.json"
       ],
       "includeIfActive": [
         "大纲/大纲.md"
       ],
-      "summaryFirst": [],
-      "fullReadTriggers": [
-        "续写",
-        "正文",
-        "下一章",
-        "连续性"
-      ],
-      "charBudget": 26000,
       "priority": 30
-    },
-    {
-      "taskType": "revision",
-      "alwaysInclude": [
-        ".project/AGENTS.md",
-        ".project/README.md",
-        ".project/status/latest-plot.json",
-        ".project/status/character-state.json",
-        ".project/status/continuity-index.json"
-      ],
-      "includeIfActive": [],
-      "summaryFirst": [],
-      "fullReadTriggers": [
-        "改写",
-        "润色",
-        "去 AI 味",
-        "节奏",
-        "爽点"
-      ],
-      "charBudget": 26000,
-      "priority": 28
-    },
-    {
-      "taskType": "continuity-review",
-      "alwaysInclude": [
-        ".project/status/latest-plot.json",
-        ".project/status/character-state.json",
-        ".project/status/continuity-index.json"
-      ],
-      "includeIfActive": [],
-      "summaryFirst": [],
-      "fullReadTriggers": [
-        "审校",
-        "连续性",
-        "伏笔",
-        "战力"
-      ],
-      "charBudget": 22000,
-      "priority": 20
     }
   ]
 }
@@ -458,20 +248,8 @@ pub(crate) fn build_book_template(
                 create_project_status_template(book_name),
             ),
             (
-                ".project/status/system-state.json",
-                create_system_state_template(book_name),
-            ),
-            (
-                ".project/status/latest-plot.json",
-                create_latest_plot_template(book_name),
-            ),
-            (
-                ".project/status/character-state.json",
-                create_character_state_template(book_name),
-            ),
-            (
-                ".project/status/continuity-index.json",
-                create_continuity_index_template(book_name),
+                ".project/status/story-state.json",
+                create_story_state_template(book_name),
             ),
         ],
     )

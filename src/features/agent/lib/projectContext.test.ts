@@ -136,7 +136,7 @@ describe("project context", () => {
 	      source: "项目默认上下文",
 	      files: [
 	        {
-	          description: "项目级状态，通常记录整本书的当前阶段、整体目标、运行状态和重要约束。",
+	          description: "项目级状态真值层，通常记录当前阶段、当前章节、活跃文件、阻塞项和下一步动作。",
 	          name: "project-state.json",
 	          path: ".project/status/project-state.json",
 	        },

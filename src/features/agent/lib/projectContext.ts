@@ -5,13 +5,16 @@ export const DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH = ".project/context-manifest.
 export const DEFAULT_PROJECT_README_PATH = ".project/README.md";
 export const DEFAULT_PROJECT_STATUS_PATH = ".project/status";
 const MANIFEST_FILE_LIMIT = 12;
-const STATUS_FILE_LIMIT = 6;
+const STATUS_FILE_LIMIT = 4;
+// 优先级靠前的新双文件结构,后面 4 个为向后兼容旧 5 文件命名。
 const STATUS_FILE_PRIORITIES = [
+  "project-state.json",
+  "story-state.json",
+  // legacy filenames (旧版工作区兼容)
   "latest-plot.json",
   "character-state.json",
   "system-state.json",
   "continuity-index.json",
-  "project-state.json",
   "factory-index.json",
 ] as const;
 
@@ -80,11 +83,16 @@ function getStatusFilePriority(path: string) {
 function getJsonContextDescription(path: string) {
   const name = getBaseName(path);
   const descriptions: Record<string, string> = {
+    // 新双文件结构
+    "project-state.json":
+      "项目级状态真值层，通常记录当前阶段、当前章节、活跃文件、阻塞项和下一步动作。",
+    "story-state.json":
+      "剧情/人物/连续性合并状态，通常记录当前剧情位置、最近章节、人物状态、关系网、伏笔与连续性风险。",
+    // legacy 兼容
     "character-state.json": "人物状态真值层，通常记录角色当前位置、关系、动机、伤势、能力、秘密与阶段性变化。",
     "continuity-index.json": "连续性索引，通常记录伏笔、承接点、未解决事项、时间线和容易前后矛盾的事实。",
     "factory-index.json": "生产索引，通常记录章节生产、资料生成、批量任务或工厂化流程的入口信息。",
     "latest-plot.json": "最新剧情状态，通常记录当前章节、主线目标、近期事件、下一步推进方向和关键冲突。",
-    "project-state.json": "项目级状态，通常记录整本书的当前阶段、整体目标、运行状态和重要约束。",
     "system-state.json": "系统/世界状态，通常记录世界观规则、组织局势、能力体系、资源变化和外部环境。",
   };
 
