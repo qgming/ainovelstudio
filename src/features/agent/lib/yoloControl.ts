@@ -12,7 +12,10 @@ export type YoloControlData = {
   evidence: string[];
   goal: string;
   kind: typeof YOLO_CONTROL_KIND;
+  /** 阻断性问题:goal / reason / blocked.requiredUserAction 缺失。 */
   missing: string[];
+  /** 软性提醒:complete 缺 evidence/verification/stateUpdated 等。不阻断流程。 */
+  warnings: string[];
   nextAction?: string;
   reason: string;
   remaining: string[];
@@ -53,30 +56,35 @@ function normalizeAction(value: unknown): YoloControlAction {
   return "continue";
 }
 
-function validateYoloControl(data: Omit<YoloControlData, "accepted" | "createdAt" | "kind" | "missing">) {
-  const missing: string[] = [];
+function validateYoloControl(data: Omit<YoloControlData, "accepted" | "createdAt" | "kind" | "missing" | "warnings">) {
+  const missing: string[] = [];   // 阻断:导致 accepted = false
+  const warnings: string[] = [];  // 软提示:不阻断,前端可展示但仍接受
 
+  // 任何 action 都必填的最小硬约束
   if (!data.goal.trim()) missing.push("goal 不能为空。");
   if (!data.reason.trim()) missing.push("reason 不能为空。");
 
+  // complete 的字段校验降级为软警告
+  // 原因:LLM 经常漏填 evidence/verification/stateUpdated,被反复 reject 浪费整轮
   if (data.action === "complete") {
-    if (data.evidence.length === 0) missing.push("complete.evidence 至少需要 1 条完成证据。");
-    if (data.verification.length === 0) missing.push("complete.verification 至少需要 1 条验证结果。");
-    if (!data.stateUpdated) missing.push("complete.stateUpdated 必须为 true。");
-    if (data.remaining.length > 0) missing.push("complete.remaining 必须为空。");
+    if (data.evidence.length === 0) warnings.push("complete 缺少完成证据 evidence。");
+    if (data.verification.length === 0) warnings.push("complete 缺少验证结果 verification。");
+    if (!data.stateUpdated) warnings.push("complete 未声明 stateUpdated=true。");
+    if (data.remaining.length > 0) warnings.push("complete 时 remaining 应为空。");
   }
 
+  // continue 的辅助字段降级为软警告
   if (data.action === "continue") {
-    if (data.remaining.length === 0) missing.push("continue.remaining 至少需要 1 条剩余任务。");
-    if (!data.nextAction?.trim()) missing.push("continue.nextAction 不能为空。");
+    if (data.remaining.length === 0) warnings.push("continue 缺少 remaining。");
+    if (!data.nextAction?.trim()) warnings.push("continue 缺少 nextAction。");
   }
 
+  // blocked 的 requiredUserAction 保持硬约束(否则用户不知道要做什么)
   if (data.action === "blocked") {
-    if (!data.reason.trim()) missing.push("blocked.reason 不能为空。");
     if (!data.requiredUserAction?.trim()) missing.push("blocked.requiredUserAction 不能为空。");
   }
 
-  return missing;
+  return { missing, warnings };
 }
 
 export function createYoloControlData(input: Record<string, unknown>): YoloControlData {
@@ -92,7 +100,7 @@ export function createYoloControlData(input: Record<string, unknown>): YoloContr
     stateUpdated: normalizeBoolean(input.stateUpdated),
     verification: normalizeStringArray(input.verification),
   };
-  const missing = validateYoloControl(data);
+  const { missing, warnings } = validateYoloControl(data);
 
   return {
     ...data,
@@ -100,14 +108,16 @@ export function createYoloControlData(input: Record<string, unknown>): YoloContr
     createdAt: new Date().toISOString(),
     kind: YOLO_CONTROL_KIND,
     missing,
+    warnings,
   };
 }
 
 export function summarizeYoloControl(data: YoloControlData) {
   if (!data.accepted) return `YOLO 检查未通过：${data.missing.join("；")}`;
-  if (data.action === "complete") return `YOLO 目标完成：${data.reason}`;
-  if (data.action === "blocked") return `YOLO 已阻塞：${data.reason}`;
-  return `YOLO 继续执行：${data.nextAction ?? data.reason}`;
+  const suffix = data.warnings.length > 0 ? `（提示：${data.warnings.join("；")}）` : "";
+  if (data.action === "complete") return `YOLO 目标完成：${data.reason}${suffix}`;
+  if (data.action === "blocked") return `YOLO 已阻塞：${data.reason}${suffix}`;
+  return `YOLO 继续执行：${data.nextAction ?? data.reason}${suffix}`;
 }
 
 export function isYoloControlData(value: unknown): value is YoloControlData {
@@ -118,11 +128,17 @@ export function isYoloControlData(value: unknown): value is YoloControlData {
     && typeof value.createdAt === "string";
 }
 
+/** 兼容旧版本(无 warnings 字段)持久化数据,返回时补齐空数组。 */
+function ensureWarnings(value: YoloControlData): YoloControlData {
+  if (Array.isArray((value as { warnings?: unknown }).warnings)) return value;
+  return { ...value, warnings: [] };
+}
+
 export function extractYoloControlData(output: unknown): YoloControlData | null {
-  if (isYoloControlData(output)) return output;
+  if (isYoloControlData(output)) return ensureWarnings(output);
   if (!isRecord(output)) return null;
   const envelope = output as ToolResultEnvelope;
-  return isYoloControlData(envelope.data) ? envelope.data : null;
+  return isYoloControlData(envelope.data) ? ensureWarnings(envelope.data) : null;
 }
 
 export function isYoloControlCompletionPart(part: AgentPart) {

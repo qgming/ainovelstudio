@@ -5,7 +5,8 @@ import {
   isYoloControlCompletionPart,
 } from "@features/agent/lib/yoloControl";
 
-const MAX_AUTOPILOT_ITERATIONS = 8;
+// 不设置硬性轮数上限:autopilot 持续运行直到目标完成或被用户/工具显式 blocked。
+// 用户随时可以手动停止;运行成本由模型方计费控制,而非这里截断。
 
 export const COACH_PROMPT =
   "请继续执行刚才未完成的任务，从当前断点往下做即可。不要额外改变任务目标或创作要求。";
@@ -80,7 +81,6 @@ function shouldContinueAutopilot(params: {
   ) {
     return false;
   }
-  if (params.iteration >= MAX_AUTOPILOT_ITERATIONS) return false;
   if (isAutopilotGoalCompleted(params.latestMessages)) return false;
   const latestControl = getLatestAssistantYoloControl(params.latestMessages);
   if (latestControl?.accepted && latestControl.action === "blocked") return false;
