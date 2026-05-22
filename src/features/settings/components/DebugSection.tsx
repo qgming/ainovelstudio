@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bug, Clipboard, Database, RefreshCw, Trash2 } from "lucide-react";
+import { Bug, ChevronDown, ChevronRight, Clipboard, Database, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { clearAiCallLogs, readAiCallLogs } from "@features/settings/debug/api";
 import type { AiCallLogEntry } from "@features/settings/debug/types";
@@ -226,6 +226,177 @@ function StatusBadge({ log }: { log: AiCallLogEntry }) {
     >
       {log.status || "ERR"}
     </span>
+  );
+}
+
+// 错误信息中由 Rust 端附加的诊断段落格式（参见 provider_proxy.rs::format_decode_error_diagnostic）：
+//   原始错误信息
+//
+//   [diagnostic: last N of M buffered bytes]
+//   [utf-8 lossy]:
+//   ...
+//   [hex]:
+//   ...
+type DiagnosticSections = {
+  summary: string;
+  diagnosticHeader: string | null;
+  utf8Lossy: string | null;
+  hex: string | null;
+};
+
+function parseErrorDiagnostic(error: string): DiagnosticSections {
+  if (!error) {
+    return { summary: "", diagnosticHeader: null, utf8Lossy: null, hex: null };
+  }
+  const diagnosticIndex = error.indexOf("[diagnostic:");
+  if (diagnosticIndex < 0) {
+    return { summary: error.trim(), diagnosticHeader: null, utf8Lossy: null, hex: null };
+  }
+  const summary = error.slice(0, diagnosticIndex).trim();
+  const utf8Start = error.indexOf("[utf-8 lossy]:", diagnosticIndex);
+  const hexStart = error.indexOf("[hex]:", diagnosticIndex);
+  let diagnosticHeader: string | null = null;
+  let utf8Lossy: string | null = null;
+  let hex: string | null = null;
+
+  if (utf8Start >= 0) {
+    diagnosticHeader = error.slice(diagnosticIndex, utf8Start).trim();
+    const utf8BodyEnd = hexStart >= 0 ? hexStart : error.length;
+    utf8Lossy = error.slice(utf8Start + "[utf-8 lossy]:".length, utf8BodyEnd).trim();
+  } else {
+    diagnosticHeader = error.slice(diagnosticIndex).trim();
+  }
+  if (hexStart >= 0) {
+    hex = error.slice(hexStart + "[hex]:".length).trim();
+  }
+  return { summary, diagnosticHeader, utf8Lossy, hex };
+}
+
+type DiagnosticView = "utf8" | "hex";
+
+function copyToClipboard(text: string, label: string) {
+  void navigator.clipboard.writeText(text).then(
+    () => toast("已复制", { description: `${label}已写入剪贴板。` }),
+    () => toast("复制失败", { description: "当前环境无法写入剪贴板。" }),
+  );
+}
+
+function LogErrorPanel({ error }: { error: string }) {
+  const sections = useMemo(() => parseErrorDiagnostic(error), [error]);
+  const hasDiagnostic = sections.utf8Lossy != null || sections.hex != null;
+  const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<DiagnosticView>(() => sections.utf8Lossy ? "utf8" : "hex");
+
+  useEffect(() => {
+    setView(sections.utf8Lossy ? "utf8" : "hex");
+  }, [sections.utf8Lossy, sections.hex]);
+
+  if (!error) return null;
+
+  if (!hasDiagnostic) {
+    // 没有结构化诊断 — 直接展示完整错误（保持兼容旧日志）
+    return (
+      <div className="mt-2 flex items-start gap-2">
+        <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-destructive">
+          {sections.summary}
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="复制错误信息"
+          onClick={() => copyToClipboard(error, "错误信息")}
+          className="shrink-0 rounded-xl"
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  const activeBody = view === "utf8" ? sections.utf8Lossy ?? "" : sections.hex ?? "";
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-destructive">
+          {sections.summary}
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="复制错误信息"
+          onClick={() => copyToClipboard(error, "错误信息")}
+          className="shrink-0 rounded-xl"
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+        className="inline-flex w-fit items-center gap-1 rounded-[6px] px-1 py-0.5 text-xs font-medium text-muted-foreground transition hover:bg-accent/35 hover:text-foreground"
+      >
+        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        <span>{expanded ? "收起诊断详情" : "查看诊断详情"}</span>
+      </button>
+
+      {expanded ? (
+        <div className="overflow-hidden rounded-[8px] border border-border/45 bg-background dark:bg-background">
+          <div className="flex min-h-10 items-center justify-between gap-3 border-b border-border/45 px-2 py-1">
+            <div className="inline-flex items-center rounded-[8px] border border-border/45 bg-panel p-0.5">
+              {([
+                { key: "utf8" as const, label: "UTF-8 解码", disabled: sections.utf8Lossy == null },
+                { key: "hex" as const, label: "16 进制", disabled: sections.hex == null },
+              ]).map((item) => {
+                const isActive = view === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    aria-pressed={isActive}
+                    disabled={item.disabled}
+                    className={[
+                      "h-7 rounded-[7px] px-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
+                      isActive
+                        ? "bg-background text-foreground shadow-[0_6px_14px_rgba(15,23,42,0.045)] dark:bg-panel-subtle dark:shadow-none"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ].join(" ")}
+                    onClick={() => setView(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="复制当前视图"
+              onClick={() => copyToClipboard(activeBody, view === "utf8" ? "UTF-8 诊断" : "16 进制诊断")}
+              disabled={!activeBody}
+              className="rounded-xl"
+            >
+              <Clipboard className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          {sections.diagnosticHeader ? (
+            <p className="border-b border-border/45 px-3 py-2 text-[11px] text-muted-foreground">
+              {sections.diagnosticHeader}
+            </p>
+          ) : null}
+          <div className="max-h-72 overflow-auto px-3 py-2">
+            <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-foreground">
+              {activeBody}
+            </pre>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -505,9 +676,7 @@ export function DebugSection() {
                       </span>
                       <span className="text-xs text-muted-foreground">{formatLogTime(selectedLog.createdAt)}</span>
                     </div>
-                    {selectedLog.error ? (
-                      <p className="mt-2 text-sm text-destructive">{selectedLog.error}</p>
-                    ) : null}
+                    {selectedLog.error ? <LogErrorPanel error={selectedLog.error} /> : null}
                   </div>
                   <PayloadPanel
                     activeView={payloadView}

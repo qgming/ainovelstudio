@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import { ALL_TOOL_DEFS } from "./toolDefs";
+import { parsePseudoJson } from "./pseudoJsonParse";
 
 export type ProviderHttpResponse = {
   ok: boolean;
@@ -157,6 +158,14 @@ function tryParseToolArguments(value: string) {
   try {
     return JSON.parse(value) as unknown;
   } catch {
+    // 标准 JSON 失败时回退到伪 JSON 解析（兼容上游中转返回的非标准格式）
+    const pseudo = parsePseudoJson(value);
+    if (pseudo !== null) {
+      console.warn(
+        "[providerApi] tool arguments were non-standard JSON; pseudo-JSON fallback was used to recover",
+      );
+      return pseudo;
+    }
     return null;
   }
 }
@@ -268,12 +277,18 @@ function encodeSsePayload(payloads: unknown[]) {
   return encoder.encode(text);
 }
 
-function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
+type ChatCompletionConversion = { data: Uint8Array; viaPseudoJson: boolean };
+
+function convertChatCompletionJsonToSse(body: string): ChatCompletionConversion | null {
   let parsed: unknown;
+  let viaPseudoJson = false;
   try {
     parsed = JSON.parse(body);
   } catch {
-    return null;
+    // 标准 JSON 失败时回退到伪 JSON 解析（兼容上游中转返回的非标准格式）
+    parsed = parsePseudoJson(body);
+    if (parsed === null) return null;
+    viaPseudoJson = true;
   }
 
   if (!isRecord(parsed) || parsed.object !== "chat.completion" || !Array.isArray(parsed.choices)) {
@@ -348,7 +363,14 @@ function convertChatCompletionJsonToSse(body: string): Uint8Array | null {
     }));
   });
 
-  return payloads.length > 0 ? encodeSsePayload(payloads) : null;
+  if (payloads.length === 0) return null;
+  return { data: encodeSsePayload(payloads), viaPseudoJson };
+}
+
+function convertChatCompletionSseToSse(body: string): ChatCompletionConversion | null {
+  const payloads = extractSseDataPayloads(body);
+  if (payloads.length !== 1) return null;
+  return convertChatCompletionJsonToSse(payloads[0]);
 }
 
 function extractSseDataPayloads(body: string) {
@@ -373,12 +395,6 @@ function extractSseDataPayloads(body: string) {
   return payloads.filter((payload) => payload.trim() && payload.trim() !== "[DONE]");
 }
 
-function convertChatCompletionSseToSse(body: string): Uint8Array | null {
-  const payloads = extractSseDataPayloads(body);
-  if (payloads.length !== 1) return null;
-  return convertChatCompletionJsonToSse(payloads[0]);
-}
-
 function sseLooksLikeChatCompletionJson(body: string) {
   if (!body.replace(/\r\n/g, "\n").includes("\n\n")) return "pending" as const;
   const payloads = extractSseDataPayloads(body);
@@ -388,7 +404,9 @@ function sseLooksLikeChatCompletionJson(body: string) {
     const parsed = JSON.parse(payloads[0]) as unknown;
     return isRecord(parsed) && parsed.object === "chat.completion";
   } catch {
-    return false;
+    // 标准 JSON 失败时再用伪 JSON 嗅探，对应上游返回非标准 JSON 的情况
+    const pseudo = parsePseudoJson(payloads[0]);
+    return isRecord(pseudo) && pseudo.object === "chat.completion";
   }
 }
 
@@ -490,10 +508,17 @@ export async function streamProviderRequestViaTauri(
         "content-type": "text/event-stream; charset=utf-8",
         "x-ainovelstudio-stream-fallback": "chat-completion-json",
       };
+      if (converted.viaPseudoJson) {
+        // 兜底链路命中伪 JSON 解析：在响应头和控制台都留下信号，便于运营/质量监控
+        headers["x-ainovelstudio-pseudo-json-fallback"] = "1";
+        console.warn(
+          "[providerApi] upstream returned non-standard JSON; pseudo-JSON fallback was used to recover tool_calls",
+        );
+      }
       delete headers["content-length"];
       hasResolved = true;
       resolve(createBufferedResponse({
-        body: converted,
+        body: converted.data,
         headers,
         status: bufferedResponseMeta.status,
       }));

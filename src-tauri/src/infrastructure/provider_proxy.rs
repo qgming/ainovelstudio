@@ -383,7 +383,14 @@ async fn stream_provider_request_inner(
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         registry.check(Some(request_id))?;
-        let chunk = chunk.map_err(|error| error.to_string())?;
+        let chunk = match chunk {
+            Ok(value) => value,
+            Err(error) => {
+                // 流读取/解码失败时附加最近 1KB 字节诊断（hex + lossy）
+                let diagnostic = format_decode_error_diagnostic(&error, &response_body_log);
+                return Err(diagnostic);
+            }
+        };
         response_body_bytes += chunk.len();
         if response_body_log.len() < STREAM_RESPONSE_LOG_LIMIT_BYTES {
             let remaining = STREAM_RESPONSE_LOG_LIMIT_BYTES - response_body_log.len();
@@ -433,4 +440,80 @@ fn format_stream_response_log(bytes: &[u8], total_bytes: usize) -> String {
         ));
     }
     body
+}
+
+// 当上游流读取/解码失败时，把已经累计的最后 1KB 字节做 hex + utf-8 lossy 诊断附在错误信息后面。
+// 这样用户复现时能直接把日志贴出来定位真实字节内容（是否伪 JSON / 是否含乱码 / 是否被截断）。
+//
+// **跨语言契约**：以下 3 个 token 由前端 DebugSection.tsx::parseErrorDiagnostic 解析。
+// 若需修改任意 token 字面值，必须同步修改前端解析逻辑（搜索 "[diagnostic:" / "[utf-8 lossy]:" / "[hex]:"）。
+const DIAGNOSTIC_HEADER_PREFIX: &str = "[diagnostic:";
+const UTF8_LOSSY_MARKER: &str = "[utf-8 lossy]:";
+const HEX_MARKER: &str = "[hex]:";
+
+fn format_decode_error_diagnostic(error: &reqwest::Error, buffered: &[u8]) -> String {
+    format_decode_diagnostic_with_message(&error.to_string(), buffered)
+}
+
+// 与 format_decode_error_diagnostic 的区别：只接收已转字符串的错误消息，便于单测。
+fn format_decode_diagnostic_with_message(error_message: &str, buffered: &[u8]) -> String {
+    const TAIL_BYTES: usize = 1024;
+    let start = buffered.len().saturating_sub(TAIL_BYTES);
+    let tail = &buffered[start..];
+    let lossy = String::from_utf8_lossy(tail);
+    let hex: String = tail
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "{}\n\n{} last {} of {} buffered bytes]\n{}\n{}\n{}\n{}",
+        error_message,
+        DIAGNOSTIC_HEADER_PREFIX,
+        tail.len(),
+        buffered.len(),
+        UTF8_LOSSY_MARKER,
+        lossy,
+        HEX_MARKER,
+        hex,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diagnostic_with_empty_buffer_includes_zero_lengths() {
+        let out = format_decode_diagnostic_with_message("boom", &[]);
+        assert!(out.starts_with("boom\n\n"));
+        assert!(out.contains("[diagnostic: last 0 of 0 buffered bytes]"));
+        assert!(out.contains("[utf-8 lossy]:"));
+        assert!(out.contains("[hex]:"));
+    }
+
+    #[test]
+    fn diagnostic_with_small_buffer_emits_all_bytes() {
+        let buffered = b"hello";
+        let out = format_decode_diagnostic_with_message("boom", buffered);
+        assert!(out.contains("[diagnostic: last 5 of 5 buffered bytes]"));
+        assert!(out.contains("hello"));
+        // hex: 68 65 6c 6c 6f
+        assert!(out.contains("68 65 6c 6c 6f"));
+    }
+
+    #[test]
+    fn diagnostic_with_large_buffer_truncates_to_tail_bytes() {
+        // 2 KB 缓冲，仅最后 1 KB 出现在诊断中
+        let buffered: Vec<u8> = (0..2048).map(|i| (i % 256) as u8).collect();
+        let out = format_decode_diagnostic_with_message("boom", &buffered);
+        assert!(out.contains("[diagnostic: last 1024 of 2048 buffered bytes]"));
+        // hex 部分应只包含 1024 字节 = 1024 个十六进制对 + 1023 个分隔空格
+        let hex_section = out
+            .split("[hex]:\n")
+            .nth(1)
+            .expect("hex 段应存在");
+        let hex_pairs: Vec<&str> = hex_section.split_whitespace().collect();
+        assert_eq!(hex_pairs.len(), 1024);
+    }
 }

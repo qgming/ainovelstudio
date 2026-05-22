@@ -164,6 +164,8 @@ describe("streamProviderRequestViaTauri", () => {
     const text = await readResponseText(response);
     expect(response.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
     expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    // 标准 JSON 路径不应触发伪 JSON 兜底标记
+    expect(response.headers.get("x-ainovelstudio-pseudo-json-fallback")).toBeNull();
     expect(text).toContain("\"object\":\"chat.completion.chunk\"");
     expect(text).toContain("\"reasoning_content\":\"后台有响应，但不是 SSE。\"");
     expect(text).toContain("data: [DONE]");
@@ -831,5 +833,159 @@ describe("streamProviderRequestViaTauri", () => {
     await expect(promise).rejects.toThrow("Provider request aborted.");
     await Promise.resolve();
     expect(mockInvoke).not.toHaveBeenCalledWith("stream_provider_request", expect.anything());
+  });
+
+  it("上游返回伪 JSON（缺逗号、[0:..] 索引数组、键值分行）时也能转成可执行的 tool_calls SSE", async () => {
+    // 模拟用户实际遇到的中转 / 上游返回的非标准 JSON
+    const pseudoJson = `{
+"id":"resp_test_pseudo"
+"choices"
+:
+[
+0
+:
+{
+"index":0
+"message"
+:
+{
+"role":"assistant"
+"tool_calls"
+:
+[
+0
+:
+{
+"id":"call_pseudo_read"
+"type":"function"
+"function"
+:
+{
+"name":"workspace_read"
+"arguments":"{"path":"正文/第015章.md","mode":"head","limit":20}"
+}
+"index":0
+}
+]
+"reasoning_content":"先读取章节。"
+}
+"finish_reason":"tool_calls"
+}
+]
+"object":"chat.completion"
+"created":1779368909
+"model":"gpt-5.5"
+}`;
+
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderStream({
+        type: "chunk",
+        requestId,
+        chunk: Array.from(new TextEncoder().encode(pseudoJson)),
+      });
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    // 伪 JSON 兜底命中时应额外打上可观测性标记
+    expect(response.headers.get("x-ainovelstudio-pseudo-json-fallback")).toBe("1");
+    expect(text).toContain("\"tool_calls\"");
+    expect(text).toContain("\"id\":\"call_pseudo_read\"");
+    expect(text).toContain("\"name\":\"workspace_read\"");
+    expect(text).toContain("\"finish_reason\":\"tool_calls\"");
+    // 工具参数应能被还原（内部嵌套字符串未转义引号也要识别）
+    expect(text).toContain("\\\"path\\\":\\\"正文/第015章.md\\\"");
+  });
+
+  it("上游伪 JSON 在 chunk 边界中途也能在流结束后整体还原", async () => {
+    // 模拟分块到达
+    const pseudoJson = `{
+"id":"x"
+"choices":[0:{"index":0,"message":{"role":"assistant","tool_calls":[0:{"id":"c1","type":"function","function":{"name":"workspace_read","arguments":"{"path":"a.md"}"}}]}}]
+"object":"chat.completion"
+"created":1
+"model":"m"
+}`;
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderTextChunks(requestId, pseudoJson, 32);
+      emitProviderStream({ type: "end", requestId });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    expect(text).toContain("\"name\":\"workspace_read\"");
+    expect(text).toContain("\"id\":\"c1\"");
+  });
+
+  it("上游伪 JSON 在收到 decode error 后也能从缓冲数据中抢救", async () => {
+    const pseudoJson = `{
+"id":"x"
+"choices":[0:{"index":0,"message":{"role":"assistant","tool_calls":[0:{"id":"c2","type":"function","function":{"name":"workspace_write","arguments":"{"path":"a.md","content":"hi"}"}}]}}]
+"object":"chat.completion"
+"created":1
+"model":"m"
+}`;
+    mockInvoke.mockImplementation(async (_command: string, payload: { request: { requestId: string } }) => {
+      const requestId = payload.request.requestId;
+      emitProviderStream({
+        type: "start",
+        requestId,
+        ok: true,
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+      emitProviderTextChunks(requestId, pseudoJson);
+      // 模拟传输中途 reqwest decode 失败
+      emitProviderStream({ type: "error", requestId, message: "error decoding response body" });
+    });
+
+    const response = await streamProviderRequestViaTauri({
+      baseUrl: "https://example.com/v1",
+      method: "POST",
+      mode: "provider",
+      headers: {},
+      body: JSON.stringify({ model: "test", messages: [], stream: true }),
+      url: "https://example.com/v1/chat/completions",
+    });
+
+    const text = await readResponseText(response);
+    expect(response.headers.get("x-ainovelstudio-stream-fallback")).toBe("chat-completion-json");
+    expect(text).toContain("\"name\":\"workspace_write\"");
+    expect(text).toContain("\"id\":\"c2\"");
   });
 });
