@@ -21,10 +21,12 @@ function readFrontmatterString(skill: ResolvedSkill, key: string) {
 
 function buildReferencePathList(skill: ResolvedSkill) {
   if (skill.references.length === 0) return null;
-  return [
-    "- 可读参考：",
-    ...skill.references.map((reference) => `  - ${reference.path}`),
-  ].join("\n");
+  if (skill.references.length === 1) {
+    return `- 可读参考:${skill.references[0].path}`;
+  }
+  // 多个 references 时只汇总数量,避免占用 system 空间;
+  // LLM 需要时调用 skill_read({action:'list'}) 获取完整列表。
+  return `- 可读参考:共 ${skill.references.length} 个,使用 skill_read({action:'list'}) 查看完整列表。`;
 }
 
 function buildToolBlock(toolId: string) {

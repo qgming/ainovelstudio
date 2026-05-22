@@ -31,18 +31,15 @@ describe("prompt context", () => {
     vi.useRealTimers();
   });
 
-  it("system prompt 前置主代理人设，并注入 Agent OS Kernel 与任务循环", () => {
+  it("system prompt 前置主代理人设，AGENTS.md 内已包含工作循环描述", () => {
     const system = buildSystemPrompt({
-      defaultAgentMarkdown: "# 主代理",
+      defaultAgentMarkdown: "# 主代理\n\nInspect → Plan → Act → Verify → Report",
       enabledSkills: [createSkill()],
       enabledToolIds: [],
     });
 
     expect(system).toContain("## 主代理人设");
-    expect(system).toContain("## Agent OS 内核");
-    expect(system.indexOf("## 主代理人设")).toBeLessThan(
-      system.indexOf("## Agent OS 内核"),
-    );
+    expect(system).not.toContain("## Agent OS 内核");
     expect(system).toContain("Inspect");
     expect(system).toContain("Plan");
     expect(system).toContain("Verify");
@@ -111,8 +108,7 @@ describe("prompt context", () => {
     expect(system).toContain("SKILL.md");
     expect(system).toContain("### 技能：代码审查");
     expect(system).toContain("用于审查代码改动的检查清单");
-    expect(system).toContain("- 可读参考：");
-    expect(system).toContain("  - references/checklist.md");
+    expect(system).toContain("- 可读参考:references/checklist.md");
     expect(system).not.toContain("这里是很长的完整 skill 正文");
     expect(system).not.toContain("TOOLS.md");
     expect(system).not.toContain("MEMORY.md");

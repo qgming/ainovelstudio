@@ -26,23 +26,6 @@ type BuildSystemPromptInput<M extends AgentMode = AgentMode> = {
   includeSkillCatalog?: boolean;
 };
 
-// Agent OS 内核：常驻 system 的硬契约。短而硬，不放方法论。
-const AGENT_OS_KERNEL = [
-  "你和作者共享同一个图书工作区。工作区文件、工具结果和当前轮注入内容是事实源；记忆和对话历史只能作为线索。",
-  "",
-  "**执行循环**",
-  "1. Inspect：先看当前轮上下文和已有工具摘要；资料不足或需要最新事实时，再读取最小必要文件。",
-  "2. Plan：三步以上任务用 update_plan 写短计划；简单任务直接推进。",
-  "3. Act：用当前启用工具完成最小必要动作。用户要求创建、修改、保存、同步或更新且信息足够时，本轮必须写回。",
-  "4. Verify：写回或关键判断后，用读取、统计或工具结果做最小核对。",
-  "5. Report：只汇报结果、改动文件、验证情况、风险或下一步。",
-  "",
-  "**边界**",
-  "- 不重复读取已完整注入或刚成功读取的同一路径，除非用户要求刷新或存在冲突风险。",
-  "- 工作区路径使用相对路径；高风险覆盖、删除、移动或重命名先确认范围和可回滚性。",
-  "- 工具 schema 是调用依据；技能目录只用于发现，完整规则必须读取 SKILL.md。",
-].join("\n");
-
 export function buildSystemPrompt<M extends AgentMode = AgentMode>({
   defaultAgentMarkdown,
   enabledSkills,
@@ -68,16 +51,14 @@ export function buildSystemPrompt<M extends AgentMode = AgentMode>({
 
   const envBody = "你正在神笔写作的图书项目编辑模式运行。你可以多轮协作，按当前启用资源调用工具、读取技能并直接完成任务。";
 
+  // 主代理人设(AGENTS.md)已包含完整的工作循环、文件读取边界、工具与写入规则,
+  // 因此不再单独注入 Agent OS 内核以避免重复。
   return joinSections([
     "# 主代理系统上下文",
     renderPromptSections([
       {
         title: "主代理人设",
         body: normalizedDefaultAgent,
-      },
-      {
-        title: "Agent OS 内核",
-        body: AGENT_OS_KERNEL,
       },
       {
         title: "运行环境",

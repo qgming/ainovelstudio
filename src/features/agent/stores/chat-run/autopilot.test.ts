@@ -23,15 +23,24 @@ function assistantWithParts(parts: AgentPart[]): AgentMessage {
 }
 
 describe("YOLO autopilot", () => {
-  it("自动续跑提示要求读取资料并执行任务循环", () => {
+  it("自动续跑精简提示包含 yolo_control 三种 action", () => {
     const prompt = buildAutopilotContinuePrompt("完成第一章", 2);
 
     expect(prompt).toContain("YOLO 自动检查");
-    expect(prompt).toContain("读取相关资料");
-    expect(prompt).toContain("Inspect -> Skill Load -> Plan -> Act -> Verify -> State Maintain -> Report");
-    expect(prompt).toContain("SKILL.md");
+    expect(prompt).toContain("完成第一章");
+    expect(prompt).toContain("第 2 轮");
     expect(prompt).toContain("yolo_control");
     expect(prompt).toContain('action="complete"');
+    expect(prompt).toContain('action="continue"');
+    expect(prompt).toContain('action="blocked"');
+  });
+
+  it("协议修复模式标记不同 header", () => {
+    const repairPrompt = buildAutopilotContinuePrompt("完成第一章", 3, true);
+
+    expect(repairPrompt).toContain("YOLO 协议修复");
+    expect(repairPrompt).toContain("不要继续执行新任务");
+    expect(repairPrompt).toContain("yolo_control");
   });
 
   it("只有 yolo_control complete 工具结果会判定目标完成", () => {

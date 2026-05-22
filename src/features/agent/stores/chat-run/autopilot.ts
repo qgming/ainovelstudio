@@ -10,33 +10,29 @@ const MAX_AUTOPILOT_ITERATIONS = 8;
 export const COACH_PROMPT =
   "请继续执行刚才未完成的任务，从当前断点往下做即可。不要额外改变任务目标或创作要求。";
 
-export function buildAutopilotContinuePrompt(goal: string, iteration: number) {
-  return [
-    "YOLO 自动检查：请根据当前对话、计划和工作区状态检查总目标是否已经完成。",
-    `YOLO 总目标：${goal}`,
-    `当前全自动轮次：${iteration}`,
-    "",
-    "每轮必须先看项目默认上下文并读取相关资料；缺人物、伏笔、状态、章节或设定证据时，优先用 workspace_search 召回上下文包，再用 workspace_read 精读必要文件。",
-    "每轮必须执行：Inspect -> Skill Load -> Plan -> Act -> Verify -> State Maintain -> Report。",
-    "Skill Load 阶段：任务明显匹配已启用 skill 时，必须用 skill_read 工具读取对应 SKILL.md，再按需读取 references。",
-    "每轮最后必须进入 YOLO 结果检查节，并调用 `yolo_control`；不要用普通回复代替工具调用。",
-    '如果目标已经完成，必须核对成果、验证结果和状态回写，然后调用 `yolo_control`，参数为 action="complete"，evidence/verification 写明证据，stateUpdated=true。',
-    '如果目标还没有完成，调用 `yolo_control`，参数为 action="continue"，remaining 写剩余任务，nextAction 写下一轮动作。',
-    '如果遇到外部授权、高风险操作或缺关键输入，调用 `yolo_control`，参数为 action="blocked"，requiredUserAction 写明用户要做什么。',
-  ].join("\n");
-}
+// continue 与 repair 合并为单一精简 prompt。
+// 系统提示词中已包含完整的 YOLO 契约、Inspect → Plan → Act → Verify → Report 循环、
+// SKILL.md 读取要求等,这里只保留差异化信号:本轮目标 + 是否进入协议修复。
+export function buildAutopilotContinuePrompt(
+  goal: string,
+  iteration: number,
+  needsRepair = false,
+) {
+  const header = needsRepair
+    ? "[YOLO 协议修复] 上一轮未调用 `yolo_control`,本轮只做结果检查,不要继续执行新任务。"
+    : "[YOLO 自动检查] 本轮按 YOLO 契约继续推进,完成后调用 `yolo_control` 给出本轮裁定。";
 
-export function buildAutopilotProtocolRepairPrompt(goal: string, iteration: number) {
   return [
-    "YOLO 协议检查：上一轮没有调用 `yolo_control`，因此应用无法判断是否继续或结束。",
-    `YOLO 总目标：${goal}`,
-    `当前全自动轮次：${iteration}`,
+    header,
+    `YOLO 总目标:${goal}`,
+    `当前全自动轮次:第 ${iteration} 轮`,
     "",
-    "现在只做结果检查，不要继续执行新任务。",
-    "请根据当前对话、计划、工具结果和工作区状态，必须调用 `yolo_control`：",
-    '- 已完成：action="complete"，并提供 evidence、verification、stateUpdated=true。',
-    '- 未完成：action="continue"，并提供 remaining、nextAction。',
-    '- 阻塞：action="blocked"，并提供 reason、requiredUserAction。',
+    "请根据当前对话、计划、工具结果和工作区状态,在本轮结束前必须调用 `yolo_control`:",
+    '- 已完成:action="complete",evidence/verification 写明证据,stateUpdated=true。',
+    '- 未完成:action="continue",remaining 写剩余任务,nextAction 写下一轮动作。',
+    '- 阻塞:action="blocked",requiredUserAction 写明用户要做什么。',
+    "",
+    "需要读取相关资料、调用 Inspect → Plan → Act → Verify → Report 循环、按需读取 SKILL.md,均按系统提示词中的契约执行。",
   ].join("\n");
 }
 
@@ -58,13 +54,12 @@ export async function continueAutopilotRun(params: {
 }) {
   if (!shouldContinueAutopilot(params)) return;
   const nextIteration = params.iteration + 1;
-  const prompt = needsProtocolRepair(params.latestMessages)
-    ? buildAutopilotProtocolRepairPrompt(params.autopilotGoal as string, nextIteration)
-    : buildAutopilotContinuePrompt(params.autopilotGoal as string, nextIteration);
-  await params.runNext(
-    prompt,
+  const prompt = buildAutopilotContinuePrompt(
+    params.autopilotGoal as string,
     nextIteration,
+    needsProtocolRepair(params.latestMessages),
   );
+  await params.runNext(prompt, nextIteration);
 }
 
 function shouldContinueAutopilot(params: {
