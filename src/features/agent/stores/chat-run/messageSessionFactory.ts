@@ -4,7 +4,6 @@ import { loadProjectContext } from "@features/agent/lib/projectContext";
 import { createWritingAgentSession } from "@features/agent/lib/session";
 import { derivePlanningState } from "@features/agent/lib/planning";
 import { buildBookWorkspaceTools } from "@features/agent/lib/toolsets/factory";
-import { applyAgentCardToolPolicy } from "@features/agent/lib/agentCards";
 import type { AgentMode, ModeContextMap } from "@features/agent/lib/modeRules";
 import { YOLO_CONTROL_TOOL_ID } from "@features/agent/lib/yoloControl";
 import type { AgentMessage, AgentUsage } from "@features/agent/lib/types";
@@ -126,8 +125,8 @@ function getEnabledToolIds(mode: AgentMode) {
       if (id !== YOLO_CONTROL_TOOL_ID) return true;
       return id === requiredControlToolId;
     });
-  const toolIds = requiredControlToolId && !enabledToolIds.includes(requiredControlToolId)
-    ? [requiredControlToolId, ...enabledToolIds]
-    : enabledToolIds;
-  return applyAgentCardToolPolicy(mode, toolIds);
+  if (requiredControlToolId && !enabledToolIds.includes(requiredControlToolId)) {
+    return [requiredControlToolId, ...enabledToolIds];
+  }
+  return enabledToolIds;
 }

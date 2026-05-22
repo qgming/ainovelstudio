@@ -132,11 +132,8 @@ function normalizeManifestPolicy(value: unknown): ContextManifestPolicy | null {
   if (!taskType) return null;
   return {
     alwaysInclude: normalizePathList(candidate.alwaysInclude),
-    charBudget: typeof candidate.charBudget === "number" ? candidate.charBudget : 0,
-    fullReadTriggers: normalizePathList(candidate.fullReadTriggers),
     includeIfActive: normalizePathList(candidate.includeIfActive),
     priority: typeof candidate.priority === "number" ? candidate.priority : 0,
-    summaryFirst: normalizePathList(candidate.summaryFirst),
     taskType,
   };
 }
@@ -180,7 +177,6 @@ function collectManifestPaths(
   const paths = new Set<string>();
   policies.forEach((policy) => {
     policy.alwaysInclude.forEach((path) => paths.add(path));
-    policy.summaryFirst.forEach((path) => paths.add(path));
     if (activeFilePath) policy.includeIfActive.forEach((path) => paths.add(path));
   });
   return Array.from(paths).slice(0, MANIFEST_FILE_LIMIT);

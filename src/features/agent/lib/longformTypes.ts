@@ -1,17 +1,12 @@
-export type LongformAgentMode =
-  | "book-design"
-  | "volume-plan"
-  | "chapter-write"
-  | "continuity-review"
-  | "style-polish"
-  | "state-maintain";
+// 长篇章节级状态类型集合：保留 chapter harness 与正典 delta，
+// 移除已废弃的 LongformAgentMode 枚举（原来的 6 张长篇卡片不再使用）。
 
 export type AgentCard = {
   banTools: string[];
   body: string;
   contextPolicyId: string;
   id: string;
-  mode: LongformAgentMode | "book" | "autopilot";
+  mode: "book" | "autopilot";
   modelPresetId: string | null;
   name: string;
   tools: string[];
@@ -20,11 +15,8 @@ export type AgentCard = {
 
 export type ContextManifestPolicy = {
   alwaysInclude: string[];
-  charBudget: number;
-  fullReadTriggers: string[];
   includeIfActive: string[];
   priority: number;
-  summaryFirst: string[];
   taskType: string;
 };
 

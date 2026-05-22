@@ -224,20 +224,4 @@ describe("prompt context", () => {
     expect(system).toContain("yolo_control");
     expect(system).toContain('action="complete"');
   });
-
-  it("长篇章节模式渲染 AgentCard 契约", () => {
-    const system = buildSystemPrompt({
-      defaultAgentMarkdown: "# 主代理",
-      enabledSkills: [],
-      enabledToolIds: ["workspace_read", "workspace_write", "workspace_search"],
-      mode: "chapter-write",
-    });
-
-    expect(system).toContain("# 模式：chapter-write");
-    expect(system).toContain("章节生产");
-    expect(system).toContain("workspace_search");
-    expect(system).toContain(".project/status/*.json");
-    expect(system).not.toContain(".project/runs/chapter-NNN.json");
-    expect(system).toContain("chapter-plan -> draft");
-  });
 });

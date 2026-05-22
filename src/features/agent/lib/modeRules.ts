@@ -8,10 +8,7 @@
  * - 短而硬：每条规则要么是"必须 / 禁止"，要么是"分支判断"；不写方法论。
  */
 
-import { resolveAgentCard } from "./agentCards";
-import type { LongformAgentMode } from "./longformTypes";
-
-export type AgentMode = "book" | "autopilot" | LongformAgentMode;
+export type AgentMode = "book" | "autopilot";
 
 export type BookModeContext = Record<string, never>;
 export type AutopilotModeContext = {
@@ -21,12 +18,6 @@ export type AutopilotModeContext = {
 export type ModeContextMap = {
   autopilot: AutopilotModeContext;
   book: BookModeContext;
-  "book-design": BookModeContext;
-  "chapter-write": BookModeContext;
-  "continuity-review": BookModeContext;
-  "state-maintain": BookModeContext;
-  "style-polish": BookModeContext;
-  "volume-plan": BookModeContext;
 };
 
 const BOOK_MODE_RULES = [
@@ -57,49 +48,16 @@ function buildAutopilotModeRules(context: AutopilotModeContext) {
     "# 模式：YOLO（全自动目标执行）",
     "",
     "**当前目标**",
-    `- 目标：${goal}`,
-    `- 当前全自动轮次：第 ${iteration} 轮`,
+    `- 目标:${goal}`,
+    `- 当前全自动轮次:第 ${iteration} 轮`,
     "",
-    "**执行契约**",
-    "- 把当前目标视为跨多轮全自动任务，按任务循环推进到验收完成。",
-    "- 每轮先看项目默认上下文；缺人物、伏笔、状态、章节或设定证据时，优先用 workspace_search 召回上下文包，再用 workspace_read 精读必要文件。",
-    "- 每轮必须执行：Inspect -> Skill Load -> Plan -> Act -> Verify -> State Maintain -> Report。",
-    "- Skill Load 阶段：任务明显匹配已启用 skill 时，必须用 skill_read 工具读取对应 SKILL.md，再按需读取 references。",
-    "- 目标未满足验收时，直接推进下一步；普通过程选择自行决策，不用 ask。",
-    "- 遇到外部授权或高风险破坏性操作时，报告阻塞项和所需授权。",
-    "- 涉及创作、规划、设定、审校的成果必须写回工作区文件；章节任务默认只维护 `.project/status/`，需要专题记录时再创建补充文件。",
-    "- 每一轮结束必须进入“YOLO 结果检查节”，并调用 `yolo_control`；禁止只用自然语言宣布完成或继续。",
-    '- 只有成果、验证、状态回写全部完成时，调用 `yolo_control`，参数为 action="complete"，evidence/verification 写明验收证据，stateUpdated=true。',
-    '- 未完成时调用 `yolo_control`，参数为 action="continue"，remaining 写剩余任务，nextAction 写下一轮动作。',
-    '- 遇到外部授权、高风险操作或缺关键输入时调用 `yolo_control`，参数为 action="blocked"，requiredUserAction 写明用户要做什么。',
+    "**YOLO 专属契约**",
+    "- 普通过程决策自行判断，不用 ask；遇到外部授权或高风险破坏性操作再调 blocked。",
+    "- 每轮最后必须调用 `yolo_control`，不能用纯文本宣布完成或继续。",
+    '- complete:目标已验收 + 状态已回写时使用，action="complete"，evidence/verification 写明证据，stateUpdated=true。',
+    '- continue:剩余任务清晰、可立即推进时使用，action="continue"，remaining 写剩余任务，nextAction 写下一轮动作。',
+    '- blocked:遇到外部授权、高风险操作或缺关键输入时使用，action="blocked"，requiredUserAction 写明用户要做什么。',
   ].join("\n");
-}
-
-function buildAgentCardModeRules(mode: LongformAgentMode) {
-  const card = resolveAgentCard(mode);
-  if (!card) return BOOK_MODE_RULES;
-  return [
-    `# 模式：${mode}（${card.name}）`,
-    "",
-    "**职责**",
-    card.body,
-    "",
-    "**工具与写入边界**",
-    `- 建议重点工具：${card.tools.join(", ") || "按默认工具集执行"}；当前模式不限制其他已启用工具。`,
-    `- 写入范围：${card.writeScopes.join(", ") || "按项目 AGENTS 执行"}`,
-    `- 上下文策略：${card.contextPolicyId}；未知路径或证据不足时优先用 workspace_search，再 read 精读。`,
-    "",
-    "**职责边界**",
-    "- 默认由主代理直接处理；需要专项检查、诊断或状态维护时，拆成计划步骤而不是额外代理。",
-    "- 正文、卷纲和细纲由主代理串行写入，保证连续性和文风一致。",
-    "",
-    "**长篇完成门禁**",
-    "- 章节生产按 chapter-plan -> draft -> continuity-review -> style-polish -> state-maintain -> final-check 推进。",
-    "- 默认只把当前章节、剧情推进、人物变化、伏笔连续性写入 `.project/status/*.json`。",
-    "- 需要章节摘要、文风专题或设定专题时再按需创建补充文件，不把这些内容当默认初始化结构。",
-  ]
-    .filter(Boolean)
-    .join("\n");
 }
 
 export function buildModeRules<M extends AgentMode>(
@@ -109,13 +67,6 @@ export function buildModeRules<M extends AgentMode>(
   switch (mode) {
     case "autopilot":
       return buildAutopilotModeRules(context as AutopilotModeContext);
-    case "book-design":
-    case "volume-plan":
-    case "chapter-write":
-    case "continuity-review":
-    case "style-polish":
-    case "state-maintain":
-      return buildAgentCardModeRules(mode);
     case "book":
       return BOOK_MODE_RULES;
     default:

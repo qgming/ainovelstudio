@@ -110,13 +110,7 @@ const COMPOSER_MAX_HEIGHT_PX = 240;
 const DEFAULT_COMPOSER_MODE_ID: AgentMode = "book";
 const MODE_INPUT_PLACEHOLDERS: Record<AgentMode, string> = {
   autopilot: "输入全自动目标：YOLO 会循环执行、验证和回写，直到目标完成",
-  "book-design": "输入立项目标、平台、题材偏好或卖点方向",
   book: "输入想法、问题或要处理的任务",
-  "chapter-write": "输入要规划、续写或生产的章节目标",
-  "continuity-review": "输入要检查的章节、人物、伏笔或时间线问题",
-  "state-maintain": "输入要抽取和回写的章节状态变化",
-  "style-polish": "输入要润色、统一文风或去 AI 味的章节",
-  "volume-plan": "输入要规划的卷、阶段冲突或升级节奏",
 };
 
 export const DEFAULT_AGENT_COMPOSER_MODES: AgentComposerMode[] = [
