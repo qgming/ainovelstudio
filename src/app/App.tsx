@@ -19,6 +19,9 @@ import { normalizeVersionLabel } from "@features/update/lib/version";
 const BookWorkspaceRoute = lazy(() =>
   import("@features/books/pages/BookWorkspaceRoute").then((module) => ({ default: module.BookWorkspaceRoute })),
 );
+const BookRelationsPage = lazy(() =>
+  import("@features/books/pages/BookRelationsPage").then((module) => ({ default: module.BookRelationsPage })),
+);
 const SettingPage = lazy(() =>
   import("@features/settings/pages/SettingPage").then((module) => ({ default: module.SettingPage })),
 );
@@ -162,6 +165,7 @@ function AppShell() {
                 <Route path="/book" element={<Navigate to="/" replace />} />
                 <Route path="/books/workspace" element={<Navigate to="/" replace />} />
                 <Route path="/books/:bookId" element={<BookWorkspaceRoute />} />
+                <Route path="/books/:bookId/relations" element={<BookRelationsPage />} />
                 <Route path="/skills" element={<SkillsPage />} />
                 <Route path="/skills/:skillId" element={<SkillDetailPage />} />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />

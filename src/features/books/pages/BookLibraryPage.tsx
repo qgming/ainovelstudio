@@ -1,4 +1,4 @@
-import { BookOpenText, Download, Ellipsis, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { BookOpenText, Download, Ellipsis, Network, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Button } from "@shared/ui/button";
 import {
@@ -22,7 +22,7 @@ import {
   listBookWorkspaces,
 } from "@features/books/api/bookWorkspaceApi";
 import { normalizeEntryName, validateEntryName } from "@features/books/lib/paths";
-import { buildBookWorkspaceRoute } from "@features/books/lib/routes";
+import { buildBookWorkspaceRoute, buildBookRelationsRoute } from "@features/books/lib/routes";
 import type { BookWorkspaceSummary } from "@features/books/types";
 import { useNavigate } from "react-router-dom";
 
@@ -285,6 +285,12 @@ export function BookLibraryPage({ updateAction }: { updateAction?: BookLibraryUp
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                                <DropdownMenuItem
+                                  onSelect={() => navigate(buildBookRelationsRoute(book.id))}
+                                >
+                                  <Network className="h-4 w-4" />
+                                  关联图谱
+                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                   disabled={hasPendingBookAction}
                                   onSelect={() => void handleExportBook(book)}
