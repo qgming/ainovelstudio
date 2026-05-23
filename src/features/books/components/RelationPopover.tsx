@@ -57,8 +57,10 @@ export function RelationPopover({
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        // 重置默认菜单内边距,让自定义列表能贴边渲染。
-        className="w-80 p-0"
+        // 与 AgentContextOverview 的浮层保持一致:限定最大宽度并留 1.5rem 安全距离,
+        // collisionPadding 让 Radix 在挤到屏幕/容器边缘时自动避让。
+        className="w-80 max-w-[calc(100vw-1.5rem)] p-0"
+        collisionPadding={12}
         // 阻止 DropdownMenu 内置的键盘焦点行为吃掉点击事件。
         onCloseAutoFocus={(event) => event.preventDefault()}
       >

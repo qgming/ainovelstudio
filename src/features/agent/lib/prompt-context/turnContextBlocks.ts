@@ -54,11 +54,15 @@ export function buildProjectContextBlock(
     "以下资源属于工作区默认项目上下文。进入对话时系统会优先注入，用于帮助你快速了解项目。",
     ...projectContext.files.map((file) => {
       if (!file.content?.trim()) {
+        const isRelationFile = file.description?.startsWith("[关联文件 · ") ?? false;
         return [
           `### ${file.name}`,
           `- 路径：${file.path}`,
           file.description ? `- 说明：${file.description}` : null,
           "- 注入方式：仅路径提示，未注入文件正文；需要内容时请按路径调用 workspace_read 读取最小必要范围。",
+          isRelationFile
+            ? "- 来源:作者已显式建立的关联,涉及当前 active file 的剧情/设定链路,优先 read 而非 search。"
+            : null,
         ].filter(Boolean).join("\n");
       }
 
