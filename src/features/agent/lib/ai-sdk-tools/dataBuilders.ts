@@ -221,6 +221,36 @@ const skillManageInputSchema = z.object({
     .describe("管理动作通常都需要 skillId；先 list 获取准确 id。"),
 });
 
+const relationListInputSchema = z.object({
+  path: z.string().describe("要查看关联的工作区文件相对路径,不要传绝对路径。"),
+});
+
+const relationCreateInputSchema = z.object({
+  pathA: z.string().describe("第一个文件的相对路径。"),
+  pathB: z.string().describe("第二个文件的相对路径。两者不能是同一文件,且必须已存在。"),
+  relationship: z
+    .string()
+    .describe("关系标签,自定义字符串(如\"出场人物\"、\"涉及势力\"、\"引用设定\"、\"前置剧情\")。"),
+  note: z
+    .string()
+    .optional()
+    .describe("一行可选备注,例如\"本章主角\"或\"后文将揭示的伏笔\"。"),
+});
+
+const relationUpdateInputSchema = z.object({
+  relationId: z.string().describe("要更新的关联 ID,通过 workspace_relation_list 获取。"),
+  relationship: z.string().optional().describe("新的关系标签;不填则保持原标签。"),
+  note: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("新的备注;传 null 表示清空备注;不填则保持原备注。"),
+});
+
+const relationDeleteInputSchema = z.object({
+  relationId: z.string().describe("要删除的关联 ID,通过 workspace_relation_list 获取。"),
+});
+
 export const DATA_TOOL_SPECS = {
   workspace_json: {
     description:
@@ -248,6 +278,25 @@ export const DATA_TOOL_SPECS = {
       path: z.string().describe("要删除的工作区相对路径，不要传绝对路径。"),
     }),
   },
+  workspace_relation_list: {
+    description:
+      "列出某个工作区文件的全部关联(无向多对多)。返回每条关联的 id、对端路径、关系标签和备注;先用它再决定要不要 read 对端。",
+    inputSchema: relationListInputSchema,
+  },
+  workspace_relation_create: {
+    description:
+      "在两个工作区文件之间创建一条关联(无向)。同一对文件可以有多条不同 relationship 的关联;若想避免重复,先用 workspace_relation_list 查 pathA 的现有关联。",
+    inputSchema: relationCreateInputSchema,
+  },
+  workspace_relation_update: {
+    description:
+      "修改一条已有关联的关系标签或备注。relationId 通过 workspace_relation_list 获取;note 传 null 表示清空,不填则保持原值。",
+    inputSchema: relationUpdateInputSchema,
+  },
+  workspace_relation_delete: {
+    description: "删除一条关联(不影响文件本身)。relationId 通过 workspace_relation_list 获取。",
+    inputSchema: relationDeleteInputSchema,
+  },
 } satisfies Record<string, AgentToolPromptSpec>;
 
 export function createDataToolBuilders(runTool: ToolRunner): Record<string, ToolBuilder> {
@@ -257,5 +306,21 @@ export function createDataToolBuilders(runTool: ToolRunner): Record<string, Tool
     workspace_delete: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.workspace_delete),
     skill_read: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.skill_read),
     skill_manage: createAiSdkToolBuilder(runTool, DATA_TOOL_SPECS.skill_manage),
+    workspace_relation_list: createAiSdkToolBuilder(
+      runTool,
+      DATA_TOOL_SPECS.workspace_relation_list,
+    ),
+    workspace_relation_create: createAiSdkToolBuilder(
+      runTool,
+      DATA_TOOL_SPECS.workspace_relation_create,
+    ),
+    workspace_relation_update: createAiSdkToolBuilder(
+      runTool,
+      DATA_TOOL_SPECS.workspace_relation_update,
+    ),
+    workspace_relation_delete: createAiSdkToolBuilder(
+      runTool,
+      DATA_TOOL_SPECS.workspace_relation_delete,
+    ),
   };
 }

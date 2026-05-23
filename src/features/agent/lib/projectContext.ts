@@ -6,6 +6,7 @@ export const DEFAULT_PROJECT_README_PATH = ".project/README.md";
 export const DEFAULT_PROJECT_STATUS_PATH = ".project/status";
 const MANIFEST_FILE_LIMIT = 12;
 const STATUS_FILE_LIMIT = 4;
+const RELATION_FILE_LIMIT = 12;
 // 优先级靠前的新双文件结构,后面 4 个为向后兼容旧 5 文件命名。
 const STATUS_FILE_PRIORITIES = [
   "project-state.json",
@@ -35,9 +36,21 @@ type ProjectTreeNode = {
   path: string;
 };
 
+// 一条关联记录的精简形态:projectContext 只需要"对端路径 + 标签 + 备注"。
+// 不直接依赖 books 的 WorkspaceRelation 类型,保持 agent 模块的解耦。
+export type ProjectRelationRecord = {
+  otherEntryPath: string;
+  relationship: string;
+  note?: string | null;
+};
+
 type LoadProjectContextInput = {
   activeFilePath?: string | null;
   readFile: (rootPath: string, path: string) => Promise<string>;
+  readRelations?: (
+    rootPath: string,
+    entryPath: string,
+  ) => Promise<ProjectRelationRecord[]>;
   readTree?: (rootPath: string) => Promise<{
     children?: ProjectTreeNode[];
   }>;
@@ -253,9 +266,35 @@ async function loadStatusContextFiles(params: {
   );
 }
 
+// 把 active file 的关联文件追加为 path-only 描述型条目,description 形如
+// "[关联文件 · 出场人物] 本章主角",AI 看到提示后可按需 read 对端内容。
+async function loadRelationContextFiles(params: {
+  activeFilePath: string;
+  files: ProjectContextPayload["files"];
+  readRelations: NonNullable<LoadProjectContextInput["readRelations"]>;
+  workspaceRootPath: string;
+}) {
+  const relations = await params.readRelations(
+    params.workspaceRootPath,
+    params.activeFilePath,
+  );
+  relations.slice(0, RELATION_FILE_LIMIT).forEach((relation) => {
+    const label = relation.relationship?.trim() || "未标注关系";
+    const noteSuffix = relation.note && relation.note.trim()
+      ? ` ${relation.note.trim()}`
+      : "";
+    pushUniqueContextFile(params.files, {
+      description: `[关联文件 · ${label}]${noteSuffix}`,
+      name: getBaseName(relation.otherEntryPath),
+      path: relation.otherEntryPath,
+    });
+  });
+}
+
 export async function loadProjectContext({
   activeFilePath,
   readFile,
+  readRelations,
   readTree,
   taskType,
   workspaceRootPath,
@@ -304,6 +343,19 @@ export async function loadProjectContext({
       });
     } catch {
       // ignore status preload failures and keep other default context
+    }
+  }
+
+  if (activeFilePath && readRelations) {
+    try {
+      await loadRelationContextFiles({
+        activeFilePath,
+        files,
+        readRelations,
+        workspaceRootPath,
+      });
+    } catch {
+      // 关联拉取失败不阻塞主流程,保留其它默认上下文。
     }
   }
 

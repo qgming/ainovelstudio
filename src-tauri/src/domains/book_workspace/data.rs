@@ -132,6 +132,27 @@ pub(crate) fn run_book_migrations(connection: &Connection) -> CommandResult<()> 
                 search_text,
                 tokenize = 'unicode61 remove_diacritics 2'
             );
+
+            -- 文件关联表:任意两个 entry 之间的无向关系,带自定义标签和备注
+            -- 无向语义:始终保证 entry_a_path < entry_b_path(字典序),避免 (A,B) 和 (B,A) 重复
+            CREATE TABLE IF NOT EXISTS book_workspace_relations (
+                id TEXT PRIMARY KEY,
+                book_id TEXT NOT NULL,
+                entry_a_path TEXT NOT NULL,
+                entry_b_path TEXT NOT NULL,
+                relationship TEXT NOT NULL DEFAULT '',
+                note TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY(book_id) REFERENCES book_workspaces(id) ON DELETE CASCADE,
+                UNIQUE(book_id, entry_a_path, entry_b_path, relationship)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_book_workspace_relations_a
+            ON book_workspace_relations(book_id, entry_a_path);
+
+            CREATE INDEX IF NOT EXISTS idx_book_workspace_relations_b
+            ON book_workspace_relations(book_id, entry_b_path);
             "#,
         )
         .map_err(error_to_string)?;

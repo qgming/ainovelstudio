@@ -1,4 +1,5 @@
 import type { AgentTool } from "../runtime";
+import { createWorkspaceRelationTools } from "./workspaceRelationToolset";
 import { createWorkspaceWordCountTools } from "./workspaceWordCountToolset";
 import { createWorkspaceStructureTools } from "./workspaceStructureToolset";
 import { createWorkspaceTextTools } from "./workspaceTextToolset";
@@ -11,5 +12,6 @@ export function createWorkspaceToolset(
     ...createWorkspaceStructureTools(context),
     ...createWorkspaceTextTools(context),
     ...createWorkspaceWordCountTools(context),
+    ...createWorkspaceRelationTools(context),
   };
 }

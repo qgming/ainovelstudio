@@ -1,4 +1,8 @@
-import { readWorkspaceTextFile, readWorkspaceTree } from "@features/books/api/bookWorkspaceApi";
+import {
+  listEntryRelations,
+  readWorkspaceTextFile,
+  readWorkspaceTree,
+} from "@features/books/api/bookWorkspaceApi";
 import { resolveManualTurnContext } from "@features/agent/lib/manualTurnContext";
 import { loadProjectContext } from "@features/agent/lib/projectContext";
 import { createWritingAgentSession } from "@features/agent/lib/session";
@@ -46,6 +50,28 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
   const projectContext = await loadProjectContext({
     activeFilePath: workspaceState.activeFilePath,
     readFile: readWorkspaceTextFile,
+    // 把后端 RelationDto 映射成 projectContext 需要的精简形态:对端路径 + 标签 + 备注。
+    // 由于关联是无向边,根据 active file 的相对路径推断对端在 a/b 哪侧。
+    readRelations: async (rootPath, entryPath) => {
+      const relations = await listEntryRelations(rootPath, entryPath);
+      const rootPrefix = `${rootPath}/`;
+      // active file 是 display path,后端入参也是 display,内部转 relative 后返回 relative。
+      // 因此 self 的相对路径 = activeFilePath 去掉前缀。
+      const selfRelative = entryPath.startsWith(rootPrefix)
+        ? entryPath.slice(rootPrefix.length)
+        : entryPath;
+      return relations.map((relation) => {
+        const otherRelative = relation.entryAPath === selfRelative
+          ? relation.entryBPath
+          : relation.entryAPath;
+        return {
+          note: relation.note,
+          // 拼回 display path,使得 projectContext 的描述里展示完整工作区路径,AI 可直接 read。
+          otherEntryPath: otherRelative ? `${rootPrefix}${otherRelative}` : rootPath,
+          relationship: relation.relationship,
+        };
+      });
+    },
     readTree: readWorkspaceTree,
     taskType: params.activeModeId,
     workspaceRootPath: workspaceState.rootPath,

@@ -16,6 +16,10 @@ use crate::domains::book_workspace::ops::{
     move_workspace_entry_db, read_text_file_db, read_text_file_line_db, rename_workspace_entry_db,
     replace_text_file_line_db, write_text_file_db,
 };
+use crate::domains::book_workspace::relations::{
+    create_relation_by_root, delete_relation_by_root, list_book_relations_by_root,
+    list_entry_relations_by_root, update_relation_by_root, RelationDto,
+};
 use crate::domains::book_workspace::search::{
     delete_book_search_index, search_workspace_content_db, WorkspaceSearchResult,
 };
@@ -508,5 +512,93 @@ pub fn delete_workspace_entry(
         with_transaction(&app, |transaction| {
             delete_workspace_entry_db(transaction, &rootPath, &path)
         })
+    })
+}
+
+// —— 文件关联(无向多对多)相关命令 ——
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn list_entry_relations(
+    app: AppHandle,
+    rootPath: String,
+    entryPath: String,
+) -> CommandResult<Vec<RelationDto>> {
+    let connection = open_database(&app)?;
+    list_entry_relations_by_root(&connection, &rootPath, &entryPath)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn list_book_relations(
+    app: AppHandle,
+    rootPath: String,
+) -> CommandResult<Vec<RelationDto>> {
+    let connection = open_database(&app)?;
+    list_book_relations_by_root(&connection, &rootPath)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn create_entry_relation(
+    app: AppHandle,
+    rootPath: String,
+    entryAPath: String,
+    entryBPath: String,
+    relationship: String,
+    note: Option<String>,
+) -> CommandResult<RelationDto> {
+    with_transaction(&app, |transaction| {
+        create_relation_by_root(
+            transaction,
+            &rootPath,
+            &entryAPath,
+            &entryBPath,
+            &relationship,
+            note.as_deref(),
+        )
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn update_entry_relation(
+    app: AppHandle,
+    rootPath: String,
+    relationId: String,
+    relationship: Option<String>,
+    note: Option<String>,
+    clearNote: Option<bool>,
+) -> CommandResult<RelationDto> {
+    // note 的三态语义通过两个字段表达,避免 serde 对 Option<Option<T>> 反序列化的歧义:
+    //   两者皆缺省       → 不修改 note
+    //   clearNote=true   → 清空 note(忽略 note 字段)
+    //   note=Some(x)     → 改为 x
+    let note_arg: Option<Option<&str>> = if clearNote.unwrap_or(false) {
+        Some(None)
+    } else {
+        note.as_deref().map(Some)
+    };
+
+    with_transaction(&app, |transaction| {
+        update_relation_by_root(
+            transaction,
+            &rootPath,
+            &relationId,
+            relationship.as_deref(),
+            note_arg,
+        )
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn delete_entry_relation(
+    app: AppHandle,
+    rootPath: String,
+    relationId: String,
+) -> CommandResult<()> {
+    with_transaction(&app, |transaction| {
+        delete_relation_by_root(transaction, &rootPath, &relationId)
     })
 }

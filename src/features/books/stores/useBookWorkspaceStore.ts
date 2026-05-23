@@ -2,13 +2,16 @@ import { create } from "zustand";
 import {
   clearStoredWorkspaceSnapshot,
   createBookWorkspace,
+  createEntryRelation,
   createWorkspaceDirectory,
   createWorkspaceTextFile,
+  deleteEntryRelation,
   deleteWorkspaceEntry,
   ensureBookWorkspaceTemplate,
   getBookWorkspaceSummary,
   getBookWorkspaceSummaryById,
   getStoredWorkspaceSnapshot,
+  listBookRelations,
   listBookWorkspaces,
   readWorkspaceTextFile,
   readWorkspaceTree,
@@ -16,6 +19,7 @@ import {
   setStoredWorkspaceSnapshot,
   syncChangedBookFolderToWorkspace,
   syncBookFolderToWorkspace,
+  updateEntryRelation,
   writeWorkspaceTextFile,
 } from "@features/books/api/bookWorkspaceApi";
 import { getCachedBookWorkspaceSummary } from "@features/books/lib/summaryCache";
@@ -32,6 +36,7 @@ import type {
   ConfirmState,
   PromptState,
   TreeNode,
+  WorkspaceRelation,
 } from "@features/books/types";
 
 export type BookWorkspaceStore = {
@@ -76,6 +81,23 @@ export type BookWorkspaceStore = {
   submitPrompt: () => Promise<void>;
   toggleDirectory: (path: string) => void;
   updateDraft: (value: string) => void;
+  // —— 文件关联(无向多对多) ——
+  // 以 entry 的相对路径(去掉 "books/书名/" 前缀)为 key 的关联缓存。
+  // 注意:后端返回的 entryAPath/entryBPath 也是 relative path。
+  relationsByEntry: Record<string, WorkspaceRelation[]>;
+  relationCountByEntry: Record<string, number>;
+  refreshRelations: () => Promise<void>;
+  createRelation: (
+    entryAPath: string,
+    entryBPath: string,
+    relationship: string,
+    note?: string | null,
+  ) => Promise<WorkspaceRelation>;
+  updateRelation: (
+    relationId: string,
+    changes: { note?: string | null; relationship?: string },
+  ) => Promise<WorkspaceRelation>;
+  deleteRelation: (relationId: string) => Promise<void>;
 };
 
 type LoadWorkspaceOptions = {
@@ -98,6 +120,8 @@ const initialState = {
   isBookshelfOpen: false,
   isDirty: false,
   promptState: null,
+  relationCountByEntry: {} as Record<string, number>,
+  relationsByEntry: {} as Record<string, WorkspaceRelation[]>,
   rootBookId: null as string | null,
   rootBookName: null as string | null,
   rootNode: null as TreeNode | null,
@@ -279,6 +303,8 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         rootPath,
       });
       setStoredWorkspaceSnapshot(rootPath, nextSelectedFilePath);
+      // 切换/刷新工作区后,异步刷新关联缓存,失败由 refreshRelations 内部消化。
+      void get().refreshRelations();
       return true;
     }
 
@@ -296,6 +322,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     });
 
     setStoredWorkspaceSnapshot(rootPath, null);
+    void get().refreshRelations();
     return true;
   }
 
@@ -685,5 +712,74 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       });
     },
     updateDraft: (value) => set({ draftContent: value, isDirty: true }),
+    // —— 文件关联 ——
+    refreshRelations: async () => {
+      const rootPath = get().rootPath;
+      if (!rootPath) {
+        return;
+      }
+      try {
+        const rawRelations = await listBookRelations(rootPath);
+        // 后端返回 entryAPath/entryBPath 是相对路径,这里转成 display path,
+        // 让 UI 组件可以直接拿 node.path 去比对。
+        const relations: WorkspaceRelation[] = rawRelations.map((relation) => ({
+          ...relation,
+          entryAPath: relation.entryAPath ? `${rootPath}/${relation.entryAPath}` : rootPath,
+          entryBPath: relation.entryBPath ? `${rootPath}/${relation.entryBPath}` : rootPath,
+        }));
+
+        const relationsByEntry: Record<string, WorkspaceRelation[]> = {};
+        const relationCountByEntry: Record<string, number> = {};
+        for (const relation of relations) {
+          for (const entryPath of [relation.entryAPath, relation.entryBPath]) {
+            if (!relationsByEntry[entryPath]) {
+              relationsByEntry[entryPath] = [];
+            }
+            relationsByEntry[entryPath].push(relation);
+            relationCountByEntry[entryPath] = (relationCountByEntry[entryPath] ?? 0) + 1;
+          }
+        }
+        set({ relationCountByEntry, relationsByEntry });
+      } catch (error) {
+        // 拉取失败不阻塞主流程,只清空缓存避免显示陈旧数据。
+        set({
+          errorMessage: getReadableError(error),
+          relationCountByEntry: {},
+          relationsByEntry: {},
+        });
+      }
+    },
+    createRelation: async (entryAPath, entryBPath, relationship, note) => {
+      const rootPath = get().rootPath;
+      if (!rootPath) {
+        throw new Error("当前没有打开的书籍。");
+      }
+      const created = await createEntryRelation(
+        rootPath,
+        entryAPath,
+        entryBPath,
+        relationship,
+        note ?? null,
+      );
+      await get().refreshRelations();
+      return created;
+    },
+    updateRelation: async (relationId, changes) => {
+      const rootPath = get().rootPath;
+      if (!rootPath) {
+        throw new Error("当前没有打开的书籍。");
+      }
+      const updated = await updateEntryRelation(rootPath, relationId, changes);
+      await get().refreshRelations();
+      return updated;
+    },
+    deleteRelation: async (relationId) => {
+      const rootPath = get().rootPath;
+      if (!rootPath) {
+        throw new Error("当前没有打开的书籍。");
+      }
+      await deleteEntryRelation(rootPath, relationId);
+      await get().refreshRelations();
+    },
   };
 });

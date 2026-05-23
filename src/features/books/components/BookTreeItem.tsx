@@ -7,6 +7,7 @@ import {
   FolderClosed,
   FolderOpen,
   FolderPlus,
+  Link2,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -19,7 +20,8 @@ import {
 } from "@shared/ui/dropdown-menu";
 import { cn } from "@shared/utils";
 import { isTextEditableFile } from "@features/books/lib/paths";
-import type { TreeNode } from "@features/books/types";
+import { RelationPopover } from "./RelationPopover";
+import type { TreeNode, WorkspaceRelation } from "@features/books/types";
 
 type BookTreeItemProps = {
   activeFilePath: string | null;
@@ -31,31 +33,54 @@ type BookTreeItemProps = {
   onCreateFile: (parentPath: string) => void;
   onCreateFolder: (parentPath: string) => void;
   onDelete: (node: TreeNode) => void;
+  // —— 文件关联(可选,缺省时不渲染关联图标) ——
+  onAddRelation?: (entryPath: string) => void;
+  onDeleteRelation?: (relation: WorkspaceRelation) => void;
+  onEditRelation?: (relation: WorkspaceRelation) => void;
+  relationCountByPath?: Record<string, number>;
+  relationsByPath?: Record<string, WorkspaceRelation[]>;
+  rootPath?: string;
+  // —— 已有 props ——
   onRename: (node: TreeNode) => void;
   onSelectFile: (path: string) => void;
   onToggleDirectory: (path: string) => void;
 };
 
-// 文件树节点：操作菜单改用 shadcn DropdownMenu，省去原本的浮层定位逻辑。
+// 文件树节点:操作菜单改用 shadcn DropdownMenu,省去原本的浮层定位逻辑。
 export function BookTreeItem({
   activeFilePath,
   agentContextFilePaths = [],
   depth,
   expandedPaths,
   node,
+  onAddRelation,
   onAddToAgentContext,
   onCreateFile,
   onCreateFolder,
   onDelete,
+  onDeleteRelation,
+  onEditRelation,
   onRename,
   onSelectFile,
   onToggleDirectory,
+  relationCountByPath = {},
+  relationsByPath = {},
+  rootPath,
 }: BookTreeItemProps) {
   const isDirectory = node.kind === "directory";
   const isExpanded = isDirectory && expandedPaths.includes(node.path);
   const isSelected = activeFilePath === node.path;
   const isEditable = !isDirectory && isTextEditableFile(node.name);
   const isInAgentContext = agentContextFilePaths.includes(node.path);
+  const relationCount = !isDirectory ? (relationCountByPath[node.path] ?? 0) : 0;
+  const nodeRelations = !isDirectory ? (relationsByPath[node.path] ?? []) : [];
+  const relationFeatureAvailable =
+    !isDirectory
+    && isEditable
+    && Boolean(rootPath)
+    && Boolean(onAddRelation)
+    && Boolean(onEditRelation)
+    && Boolean(onDeleteRelation);
 
   return (
     <div>
@@ -116,6 +141,38 @@ export function BookTreeItem({
             {node.name}
           </span>
         </button>
+        {relationFeatureAvailable && rootPath ? (
+          <RelationPopover
+            entryPath={node.path}
+            onAddRelation={() => onAddRelation?.(node.path)}
+            onDeleteRelation={(relation) => onDeleteRelation?.(relation)}
+            onEditRelation={(relation) => onEditRelation?.(relation)}
+            onSelectEntry={(otherPath) => onSelectFile(otherPath)}
+            relations={nodeRelations}
+            rootPath={rootPath}
+          >
+            <Button
+              type="button"
+              aria-label={`${node.name} 关联文件`}
+              title={`${node.name} 的关联 — 查看引用关系`}
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                "relative shrink-0 hover:bg-panel-subtle",
+                relationCount > 0
+                  ? "text-primary opacity-100"
+                  : "text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 aria-expanded:opacity-100",
+              )}
+            >
+              <Link2 className="h-4 w-4" />
+              {relationCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-semibold leading-none text-primary-foreground">
+                  {relationCount > 99 ? "99+" : relationCount}
+                </span>
+              ) : null}
+            </Button>
+          </RelationPopover>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -179,13 +236,19 @@ export function BookTreeItem({
               depth={depth + 1}
               expandedPaths={expandedPaths}
               node={child}
+              onAddRelation={onAddRelation}
               onAddToAgentContext={onAddToAgentContext}
               onCreateFile={onCreateFile}
               onCreateFolder={onCreateFolder}
               onDelete={onDelete}
+              onDeleteRelation={onDeleteRelation}
+              onEditRelation={onEditRelation}
               onRename={onRename}
               onSelectFile={onSelectFile}
               onToggleDirectory={onToggleDirectory}
+              relationCountByPath={relationCountByPath}
+              relationsByPath={relationsByPath}
+              rootPath={rootPath}
             />
           ))}
         </div>

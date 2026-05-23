@@ -24,12 +24,13 @@ import { BookWorkspaceLoadingState } from "@features/books/components/BookWorksp
 import { BookTreePanel } from "@features/books/components/BookTreePanel";
 import { BookWorkspaceEmptyState } from "@features/books/components/BookWorkspaceEmptyState";
 import { BookshelfDialog } from "@features/books/components/BookshelfDialog";
+import { RelationEditDialog } from "@features/books/components/RelationEditDialog";
 import { ConfirmDialog } from "@shared/components/dialogs/ConfirmDialog";
 import { PromptDialog } from "@shared/components/dialogs/PromptDialog";
 import { useChatRunStore } from "@features/agent/stores/useChatRunStore";
 import { getStoredWorkspaceSnapshot, openBookFolder } from "@features/books/api/bookWorkspaceApi";
 import { getBaseName } from "@features/books/lib/paths";
-import type { TreeNode } from "@features/books/types";
+import type { TreeNode, WorkspaceRelation } from "@features/books/types";
 import { useIsMobile } from "@shared/hooks/useMobile";
 import { useBookPanelResize } from "../hooks/useBookPanelResize";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
@@ -37,6 +38,11 @@ import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceSt
 const AUTO_SAVE_DELAY_MS = 800;
 const MIRROR_SYNC_INTERVAL_MS = 1200;
 type MobileBookTab = "tree" | "editor" | "agent";
+
+// 关联编辑弹窗的本地 UI 状态:null=未打开;create=新建(锁定源文件);edit=编辑现有关联。
+type RelationDialogState =
+  | { kind: "create"; sourceEntryPath: string }
+  | { kind: "edit"; relation: WorkspaceRelation };
 
 /** 移动端顶部标题：书架 / 当前书名。 */
 function MobileWorkspaceTitle({
@@ -121,6 +127,12 @@ export function BookWorkspaceView({
   const selectWorkspaceByBookId = useBookWorkspaceStore(
     (state) => state.selectWorkspaceByBookId,
   );
+  // —— 文件关联(无向多对多) ——
+  const relationCountByEntry = useBookWorkspaceStore((state) => state.relationCountByEntry);
+  const relationsByEntry = useBookWorkspaceStore((state) => state.relationsByEntry);
+  const createRelationAction = useBookWorkspaceStore((state) => state.createRelation);
+  const updateRelationAction = useBookWorkspaceStore((state) => state.updateRelation);
+  const deleteRelationAction = useBookWorkspaceStore((state) => state.deleteRelation);
 
   // —— 拖拽调宽逻辑（封装在 hook） ——
   const {
@@ -135,6 +147,9 @@ export function BookWorkspaceView({
   const [mobileActiveTab, setMobileActiveTab] = useState<MobileBookTab>("editor");
   const [externalErrorMessage, setExternalErrorMessage] = useState<string | null>(null);
   const [mirrorSyncRootPath, setMirrorSyncRootPath] = useState<string | null>(null);
+  const [relationDialogState, setRelationDialogState] = useState<RelationDialogState | null>(null);
+  const [relationDialogBusy, setRelationDialogBusy] = useState(false);
+  const [relationDialogError, setRelationDialogError] = useState<string | null>(null);
   const routeLoadingBookIdRef = useRef<string | null>(null);
 
   // —— 派生状态 ——
@@ -240,6 +255,67 @@ export function BookWorkspaceView({
     expandRightPanel();
   }
 
+  function openCreateRelationDialog(entryPath: string) {
+    setRelationDialogError(null);
+    setRelationDialogState({ kind: "create", sourceEntryPath: entryPath });
+  }
+
+  function openEditRelationDialog(relation: WorkspaceRelation) {
+    setRelationDialogError(null);
+    setRelationDialogState({ kind: "edit", relation });
+  }
+
+  function closeRelationDialog() {
+    if (relationDialogBusy) {
+      return;
+    }
+    setRelationDialogState(null);
+    setRelationDialogError(null);
+  }
+
+  async function submitRelationDialog(payload: {
+    note: string | null;
+    relationship: string;
+    targetEntryPath: string;
+  }) {
+    if (!relationDialogState) {
+      return;
+    }
+    setRelationDialogBusy(true);
+    setRelationDialogError(null);
+    try {
+      if (relationDialogState.kind === "create") {
+        await createRelationAction(
+          relationDialogState.sourceEntryPath,
+          payload.targetEntryPath,
+          payload.relationship,
+          payload.note,
+        );
+      } else {
+        await updateRelationAction(relationDialogState.relation.id, {
+          // 备注为空字符串/null 时显式清空(后端 clearNote=true);否则正常更新。
+          note: payload.note,
+          relationship: payload.relationship,
+        });
+      }
+      setRelationDialogState(null);
+    } catch (error) {
+      setRelationDialogError(error instanceof Error ? error.message : "操作失败,请重试。");
+    } finally {
+      setRelationDialogBusy(false);
+    }
+  }
+
+  async function handleDeleteRelation(relation: WorkspaceRelation) {
+    // 关联删除走静默路径(不弹确认框,因为这是关联边,不是文件本身)。
+    // 用户误删可以重新创建,成本极低。
+    try {
+      await deleteRelationAction(relation.id);
+    } catch (error) {
+      setExternalErrorMessage(error instanceof Error ? error.message : "删除关联失败。");
+    }
+  }
+
   function renderDesktopWorkspace() {
     if (!resolvedRootNode) return null;
     return (
@@ -261,16 +337,21 @@ export function BookWorkspaceView({
               agentContextFilePaths={manualContextFilePaths}
               busy={isBusy}
               expandedPaths={expandedPaths}
+              onAddRelation={openCreateRelationDialog}
               onCreateFile={openCreateFileDialog}
               onCreateFolder={openCreateFolderDialog}
               onAddToAgentContext={addFileToAgentContext}
               onDelete={requestDelete}
+              onDeleteRelation={(relation) => void handleDeleteRelation(relation)}
+              onEditRelation={openEditRelationDialog}
               onNavigateHome={navigateHome}
               onOpenRootFolder={(rootPath) => void openRootFolder(rootPath)}
               onRefresh={() => void refreshWorkspace()}
               onRename={openRenameDialog}
               onSelectFile={(path) => void selectFile(path)}
               onToggleDirectory={toggleDirectory}
+              relationCountByPath={relationCountByEntry}
+              relationsByPath={relationsByEntry}
               resizeHandle={
                 <BookPanelResizeHandle
                   active={activeResizeHandle === "left"}
@@ -327,13 +408,18 @@ export function BookWorkspaceView({
       onCreateFile: openCreateFileDialog,
       onCreateFolder: openCreateFolderDialog,
       agentContextFilePaths: manualContextFilePaths,
+      onAddRelation: openCreateRelationDialog,
       onAddToAgentContext: addFileToAgentContext,
       onDelete: requestDelete,
+      onDeleteRelation: (relation: WorkspaceRelation) => void handleDeleteRelation(relation),
+      onEditRelation: openEditRelationDialog,
       onNavigateHome: navigateHome,
       onRefresh: () => void refreshWorkspace(),
       onRename: openRenameDialog,
       onSelectFile: (path: string) => void selectFile(path),
       onToggleDirectory: toggleDirectory,
+      relationCountByPath: relationCountByEntry,
+      relationsByPath: relationsByEntry,
       rootNode: resolvedRootNode,
       width: "100%" as const,
     };
@@ -472,6 +558,23 @@ export function BookWorkspaceView({
           }}
           onOpen={(bookId) => void selectWorkspaceByBookId(bookId)}
           onRefresh={() => void refreshWorkspaceList()}
+        />
+      ) : null}
+
+      {relationDialogState && resolvedRootNode ? (
+        <RelationEditDialog
+          busy={relationDialogBusy}
+          errorMessage={relationDialogError}
+          existingRelations={
+            relationDialogState.kind === "create"
+              ? relationsByEntry[relationDialogState.sourceEntryPath] ?? []
+              : []
+          }
+          mode={relationDialogState}
+          onCancel={closeRelationDialog}
+          onSubmit={submitRelationDialog}
+          rootNode={resolvedRootNode}
+          rootPath={resolvedRootNode.path}
         />
       ) : null}
     </section>

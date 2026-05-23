@@ -67,6 +67,17 @@ export type BookWorkspaceSummary = {
   updatedAt: number;
 };
 
+// 工作区文件之间的无向多对多关联。
+// 后端始终保证 entryAPath <= entryBPath(字典序),前端展示时需根据"自身路径"判断对端是哪一侧。
+export type WorkspaceRelation = {
+  entryAPath: string;
+  entryBPath: string;
+  id: string;
+  note: string | null;
+  relationship: string;
+  updatedAt: number;
+};
+
 export type PromptMode = "createBook" | "createFolder" | "createFile" | "rename";
 
 export type PromptState = {

@@ -3,6 +3,7 @@ import type {
   BookWorkspaceSummary,
   TreeNode,
   WorkspaceLineResult,
+  WorkspaceRelation,
   WorkspaceSearchIntent,
   WorkspaceSearchResult,
   WorkspaceSnapshot,
@@ -279,4 +280,53 @@ export function moveWorkspaceEntry(rootPath: string, path: string, targetParentP
 
 export function deleteWorkspaceEntry(rootPath: string, path: string, options?: InvokeCancellationOptions) {
   return invokeWithCancellation<void>("delete_workspace_entry", { rootPath, path }, options);
+}
+
+// —— 文件关联(无向多对多)相关 API ——
+
+export function listEntryRelations(rootPath: string, entryPath: string) {
+  return invoke<WorkspaceRelation[]>("list_entry_relations", { rootPath, entryPath });
+}
+
+export function listBookRelations(rootPath: string) {
+  return invoke<WorkspaceRelation[]>("list_book_relations", { rootPath });
+}
+
+export function createEntryRelation(
+  rootPath: string,
+  entryAPath: string,
+  entryBPath: string,
+  relationship: string,
+  note?: string | null,
+) {
+  return invoke<WorkspaceRelation>("create_entry_relation", {
+    rootPath,
+    entryAPath,
+    entryBPath,
+    relationship,
+    note: note ?? null,
+  });
+}
+
+// note 的三态语义:undefined=不修改;null=清空;字符串=改为指定值。
+// 通过 clearNote=true 表达"清空",避免 Option<Option<String>> 在 serde 上的歧义。
+export function updateEntryRelation(
+  rootPath: string,
+  relationId: string,
+  changes: { note?: string | null; relationship?: string },
+) {
+  const payload: Record<string, unknown> = { rootPath, relationId };
+  if (changes.relationship !== undefined) {
+    payload.relationship = changes.relationship;
+  }
+  if (changes.note === null) {
+    payload.clearNote = true;
+  } else if (typeof changes.note === "string") {
+    payload.note = changes.note;
+  }
+  return invoke<WorkspaceRelation>("update_entry_relation", payload);
+}
+
+export function deleteEntryRelation(rootPath: string, relationId: string) {
+  return invoke<void>("delete_entry_relation", { rootPath, relationId });
 }

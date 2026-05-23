@@ -3,8 +3,12 @@ use crate::domains::book_workspace::archive::{export_book_zip_db, import_book_zi
 use crate::domains::book_workspace::data::{run_book_migrations, BookRecord};
 use crate::domains::book_workspace::maintenance::ensure_book_workspace_template_db;
 use crate::domains::book_workspace::ops::{
-    delete_workspace_entry_db, move_workspace_entry_db, read_text_file_db,
-    rename_workspace_entry_db, write_text_file_db,
+    create_workspace_text_file_db, delete_workspace_entry_db, move_workspace_entry_db,
+    read_text_file_db, rename_workspace_entry_db, write_text_file_db,
+};
+use crate::domains::book_workspace::relations::{
+    create_relation_by_root, delete_relation_by_root, list_book_relations_by_root,
+    list_entry_relations_by_root, update_relation_by_root,
 };
 use crate::domains::book_workspace::search::search_workspace_content_db;
 use crate::domains::book_workspace::templates::create_book_workspace_db;
@@ -389,4 +393,292 @@ fn import_plain_zip_without_project_agents() {
         read_root_child_names(&connection, &book.root_path),
         vec![".project", "章节"]
     );
+}
+
+// —— 文件关联 ——
+
+fn seed_two_files(connection: &mut Connection, root_path: &str) -> (String, String) {
+    let transaction = connection.transaction().expect("transaction should open");
+    let path_a = create_workspace_text_file_db(&transaction, root_path, root_path, "细纲.md")
+        .expect("file a should be created");
+    let path_b = create_workspace_text_file_db(&transaction, root_path, root_path, "林夕.md")
+        .expect("file b should be created");
+    transaction.commit().expect("transaction should commit");
+    (path_a, path_b)
+}
+
+#[test]
+fn relations_create_list_and_delete_roundtrip() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "试炼之书");
+    let (path_a, path_b) = seed_two_files(&mut connection, &book.root_path);
+
+    // 创建关联
+    let relation = {
+        let transaction = connection.transaction().expect("transaction should open");
+        let created = create_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &path_a,
+            &path_b,
+            "出场人物",
+            Some("本章主角"),
+        )
+        .expect("relation should be created");
+        transaction.commit().expect("transaction should commit");
+        created
+    };
+
+    assert_eq!(relation.relationship, "出场人物");
+    assert_eq!(relation.note.as_deref(), Some("本章主角"));
+    // 路径应被规范化为 a<=b
+    assert!(relation.entry_a_path <= relation.entry_b_path);
+
+    // 从任一侧都能列出
+    let from_a = list_entry_relations_by_root(&connection, &book.root_path, &path_a)
+        .expect("list from a should succeed");
+    let from_b = list_entry_relations_by_root(&connection, &book.root_path, &path_b)
+        .expect("list from b should succeed");
+    assert_eq!(from_a.len(), 1);
+    assert_eq!(from_b.len(), 1);
+    assert_eq!(from_a[0].id, relation.id);
+
+    // 全量列表
+    let all = list_book_relations_by_root(&connection, &book.root_path)
+        .expect("list all should succeed");
+    assert_eq!(all.len(), 1);
+
+    // 重复创建同标签应失败
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        let duplicate = create_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &path_a,
+            &path_b,
+            "出场人物",
+            None,
+        );
+        assert!(duplicate.is_err(), "duplicate relation should be rejected");
+    }
+
+    // 不同标签可以并存
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        create_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &path_a,
+            &path_b,
+            "引用设定",
+            None,
+        )
+        .expect("second label should be allowed");
+        transaction.commit().expect("transaction should commit");
+    }
+    let after_second = list_entry_relations_by_root(&connection, &book.root_path, &path_a)
+        .expect("list should succeed");
+    assert_eq!(after_second.len(), 2);
+
+    // 删除
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        delete_relation_by_root(&transaction, &book.root_path, &relation.id)
+            .expect("delete should succeed");
+        transaction.commit().expect("transaction should commit");
+    }
+    let remaining = list_entry_relations_by_root(&connection, &book.root_path, &path_a)
+        .expect("list should succeed");
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].relationship, "引用设定");
+}
+
+#[test]
+fn relations_cannot_self_link() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "自指之书");
+    let (path_a, _) = seed_two_files(&mut connection, &book.root_path);
+
+    let transaction = connection.transaction().expect("transaction should open");
+    let result = create_relation_by_root(
+        &transaction,
+        &book.root_path,
+        &path_a,
+        &path_a,
+        "自我",
+        None,
+    );
+    assert!(result.is_err(), "self relation should be rejected");
+}
+
+#[test]
+fn relations_update_changes_label_and_note() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "改名之书");
+    let (path_a, path_b) = seed_two_files(&mut connection, &book.root_path);
+
+    let relation_id = {
+        let transaction = connection.transaction().expect("transaction should open");
+        let created = create_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &path_a,
+            &path_b,
+            "旧标签",
+            Some("旧备注"),
+        )
+        .expect("relation should be created");
+        transaction.commit().expect("transaction should commit");
+        created.id
+    };
+
+    // 改标签
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        let updated = update_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &relation_id,
+            Some("新标签"),
+            None, // 不动 note
+        )
+        .expect("update should succeed");
+        transaction.commit().expect("transaction should commit");
+        assert_eq!(updated.relationship, "新标签");
+        assert_eq!(updated.note.as_deref(), Some("旧备注"));
+    }
+
+    // 清空 note
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        let updated = update_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &relation_id,
+            None,
+            Some(None),
+        )
+        .expect("update should succeed");
+        transaction.commit().expect("transaction should commit");
+        assert_eq!(updated.note, None);
+    }
+}
+
+#[test]
+fn relations_follow_rename_of_entry() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "重命名之书");
+    let (path_a, path_b) = seed_two_files(&mut connection, &book.root_path);
+
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        create_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &path_a,
+            &path_b,
+            "出场",
+            None,
+        )
+        .expect("relation should be created");
+        transaction.commit().expect("transaction should commit");
+    }
+
+    // 重命名 path_a → "新名.md"
+    let renamed_path = {
+        let transaction = connection.transaction().expect("transaction should open");
+        let new_display = rename_workspace_entry_db(&transaction, &book.root_path, &path_a, "新名")
+            .expect("rename should succeed");
+        transaction.commit().expect("transaction should commit");
+        new_display
+    };
+
+    // 关联应自动指向新路径
+    let relations = list_entry_relations_by_root(&connection, &book.root_path, &renamed_path)
+        .expect("list should succeed");
+    assert_eq!(relations.len(), 1);
+
+    // 旧路径不再能查到
+    let old_relations = list_entry_relations_by_root(&connection, &book.root_path, &path_a)
+        .expect("list should succeed");
+    assert_eq!(old_relations.len(), 0);
+}
+
+#[test]
+fn relations_removed_when_entry_deleted() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "删除之书");
+    let (path_a, path_b) = seed_two_files(&mut connection, &book.root_path);
+
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        create_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &path_a,
+            &path_b,
+            "出场",
+            None,
+        )
+        .expect("relation should be created");
+        transaction.commit().expect("transaction should commit");
+    }
+
+    // 删除 path_a
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        delete_workspace_entry_db(&transaction, &book.root_path, &path_a)
+            .expect("delete should succeed");
+        transaction.commit().expect("transaction should commit");
+    }
+
+    // 任一侧都不应再有关联
+    let remaining = list_entry_relations_by_root(&connection, &book.root_path, &path_b)
+        .expect("list should succeed");
+    assert_eq!(remaining.len(), 0);
+}
+
+#[test]
+fn relations_follow_move_into_subdirectory() {
+    let mut connection = create_connection();
+    let book = create_book(&mut connection, "迁移之书");
+
+    // 准备 path_a / path_b,并把 path_a 移动到 "设定" 子目录
+    let (path_a, path_b) = {
+        let transaction = connection.transaction().expect("transaction should open");
+        let a = create_workspace_text_file_db(&transaction, &book.root_path, &book.root_path, "细纲.md")
+            .expect("file a created");
+        let b = create_workspace_text_file_db(&transaction, &book.root_path, &book.root_path, "林夕.md")
+            .expect("file b created");
+        transaction.commit().expect("transaction should commit");
+        (a, b)
+    };
+
+    let target_dir = format!("{}/设定", book.root_path);
+
+    {
+        let transaction = connection.transaction().expect("transaction should open");
+        create_relation_by_root(
+            &transaction,
+            &book.root_path,
+            &path_a,
+            &path_b,
+            "出场",
+            None,
+        )
+        .expect("relation should be created");
+        transaction.commit().expect("transaction should commit");
+    }
+
+    let moved_a = {
+        let transaction = connection.transaction().expect("transaction should open");
+        let moved = move_workspace_entry_db(&transaction, &book.root_path, &path_a, &target_dir)
+            .expect("move should succeed");
+        transaction.commit().expect("transaction should commit");
+        moved
+    };
+
+    let relations = list_entry_relations_by_root(&connection, &book.root_path, &moved_a)
+        .expect("list should succeed");
+    assert_eq!(relations.len(), 1);
 }

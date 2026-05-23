@@ -224,4 +224,83 @@ describe("project context", () => {
 	      context?.files.find((file) => file.path === ".project/context-manifest.json")?.description,
 	    ).toContain("上下文策略文件");
 	  });
+
+	  it("active file 存在且提供 readRelations 时,把关联文件追加为 path-only 条目", async () => {
+	    const readFile = vi.fn().mockImplementation(async (_rootPath: string, path: string) => {
+	      if (path === DEFAULT_PROJECT_AGENT_PATH) {
+	        return "# 项目规则";
+	      }
+	      if (path === DEFAULT_PROJECT_README_PATH) {
+	        return "# 项目说明";
+	      }
+	      throw new Error("missing");
+	    });
+	    const readRelations = vi.fn().mockResolvedValue([
+	      { otherEntryPath: "设定/林夕.md", relationship: "出场人物", note: "本章主角" },
+	      { otherEntryPath: "设定/苏家.md", relationship: "涉及势力", note: null },
+	      { otherEntryPath: "设定/无标签.md", relationship: "", note: null },
+	    ]);
+
+	    const context = await loadProjectContext({
+	      activeFilePath: "正文/第三章.md",
+	      readFile,
+	      readRelations,
+	      workspaceRootPath: "C:/books/北境余烬",
+	    });
+
+	    expect(readRelations).toHaveBeenCalledWith("C:/books/北境余烬", "正文/第三章.md");
+	    const relationFiles = context?.files.filter((file) =>
+	      file.description?.startsWith("[关联文件 · "),
+	    ) ?? [];
+	    expect(relationFiles).toEqual([
+	      {
+	        description: "[关联文件 · 出场人物] 本章主角",
+	        name: "林夕.md",
+	        path: "设定/林夕.md",
+	      },
+	      {
+	        description: "[关联文件 · 涉及势力]",
+	        name: "苏家.md",
+	        path: "设定/苏家.md",
+	      },
+	      {
+	        description: "[关联文件 · 未标注关系]",
+	        name: "无标签.md",
+	        path: "设定/无标签.md",
+	      },
+	    ]);
+	  });
+
+	  it("没有 activeFilePath 时不调用 readRelations", async () => {
+	    const readFile = vi.fn().mockResolvedValue("# 项目规则");
+	    const readRelations = vi.fn().mockResolvedValue([]);
+
+	    await loadProjectContext({
+	      readFile,
+	      readRelations,
+	      workspaceRootPath: "C:/books/北境余烬",
+	    });
+
+	    expect(readRelations).not.toHaveBeenCalled();
+	  });
+
+	  it("readRelations 抛错时不阻塞主流程,仍保留 AGENTS/README 等默认上下文", async () => {
+	    const readFile = vi.fn().mockImplementation(async (_rootPath: string, path: string) => {
+	      if (path === DEFAULT_PROJECT_AGENT_PATH) return "# 规则";
+	      throw new Error("missing");
+	    });
+	    const readRelations = vi.fn().mockRejectedValue(new Error("relations broken"));
+
+	    const context = await loadProjectContext({
+	      activeFilePath: "正文/第三章.md",
+	      readFile,
+	      readRelations,
+	      workspaceRootPath: "C:/books/北境余烬",
+	    });
+
+	    expect(context?.files.some((file) => file.path === DEFAULT_PROJECT_AGENT_PATH)).toBe(true);
+	    expect(
+	      context?.files.some((file) => file.description?.startsWith("[关联文件")),
+	    ).toBe(false);
+	  });
 });

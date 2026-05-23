@@ -100,6 +100,30 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "删除工作区中的文件或文件夹；高风险操作，通常只在用户明确要求时使用。",
   },
   {
+    id: "workspace_relation_list",
+    name: "列出文件关联",
+    description:
+      "列出某个工作区文件的全部关联(无向多对多),展示对端路径、关系标签和备注;用于先看再决定要不要 read 对端。",
+  },
+  {
+    id: "workspace_relation_create",
+    name: "创建文件关联",
+    description:
+      "在两个工作区文件之间创建一条关联,带关系标签(自定义字符串如\"出场人物\")和可选备注。创建前确保两个路径都已存在。",
+  },
+  {
+    id: "workspace_relation_update",
+    name: "更新文件关联",
+    description:
+      "修改一条已存在关联的关系标签或备注;关联 ID 用 workspace_relation_list 获取。",
+  },
+  {
+    id: "workspace_relation_delete",
+    name: "删除文件关联",
+    description:
+      "删除一条关联边(不影响文件本身);谨慎使用,通常只在用户明确要求时调用。",
+  },
+  {
     id: "skill_read",
     name: "读取技能",
     description:

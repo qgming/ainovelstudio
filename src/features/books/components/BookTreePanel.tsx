@@ -8,7 +8,7 @@ import { Button } from "@shared/ui/button";
 import { PanelBody, PanelHeader, PanelToolbar } from "@shared/ui/panel";
 import { cn } from "@shared/utils";
 import { BookTreeItem } from "./BookTreeItem";
-import type { TreeNode } from "@features/books/types";
+import type { TreeNode, WorkspaceRelation } from "@features/books/types";
 
 type BookTreePanelProps = {
   activeFilePath: string | null;
@@ -19,6 +19,13 @@ type BookTreePanelProps = {
   onCreateFolder: (parentPath: string) => void;
   onAddToAgentContext?: (path: string) => void;
   onDelete: (node: TreeNode) => void;
+  // —— 文件关联(可选) ——
+  onAddRelation?: (entryPath: string) => void;
+  onDeleteRelation?: (relation: WorkspaceRelation) => void;
+  onEditRelation?: (relation: WorkspaceRelation) => void;
+  relationCountByPath?: Record<string, number>;
+  relationsByPath?: Record<string, WorkspaceRelation[]>;
+  // —— 已有 ——
   onNavigateHome: () => void;
   onOpenRootFolder?: (rootPath: string) => void;
   onRefresh: () => void;
@@ -103,16 +110,21 @@ export function BookTreePanel({
   agentContextFilePaths = [],
   busy = false,
   expandedPaths,
+  onAddRelation,
   onCreateFile,
   onCreateFolder,
   onAddToAgentContext,
   onDelete,
+  onDeleteRelation,
+  onEditRelation,
   onNavigateHome,
   onOpenRootFolder,
   onRefresh,
   onRename,
   onSelectFile,
   onToggleDirectory,
+  relationCountByPath,
+  relationsByPath,
   resizeHandle,
   rootNode,
   variant = "flush",
@@ -179,13 +191,19 @@ export function BookTreePanel({
               depth={0}
               expandedPaths={expandedPaths}
               node={child}
+              onAddRelation={onAddRelation}
               onAddToAgentContext={onAddToAgentContext}
               onCreateFile={onCreateFile}
               onCreateFolder={onCreateFolder}
               onDelete={onDelete}
+              onDeleteRelation={onDeleteRelation}
+              onEditRelation={onEditRelation}
               onRename={onRename}
               onSelectFile={onSelectFile}
               onToggleDirectory={onToggleDirectory}
+              relationCountByPath={relationCountByPath}
+              relationsByPath={relationsByPath}
+              rootPath={rootNode.path}
             />
           ))}
         </div>

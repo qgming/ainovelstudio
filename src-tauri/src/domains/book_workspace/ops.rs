@@ -5,6 +5,9 @@ use crate::domains::book_workspace::data::{
     insert_entry, load_book_by_root_path, load_entry_record, load_subtree_records,
     resolve_relative_path, touch_book, WorkspaceLineResult,
 };
+use crate::domains::book_workspace::relations::{
+    delete_relations_for_subtree, rename_entry_in_relations,
+};
 use crate::domains::book_workspace::search::{rebuild_book_search_index, reindex_workspace_entry};
 use crate::infrastructure::workspace_paths::{
     bytes_to_text, check_adjacent_context, detect_line_ending, error_to_string, file_extension,
@@ -332,6 +335,7 @@ pub(crate) fn rename_workspace_entry_db(
             .map_err(error_to_string)?;
     }
     rebuild_book_search_index(transaction, &book.id)?;
+    rename_entry_in_relations(transaction, &book.id, &relative_path, &target_path)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(display_path(&book.root_path, &target_path))
 }
@@ -386,6 +390,7 @@ pub(crate) fn move_workspace_entry_db(
             .map_err(error_to_string)?;
     }
     rebuild_book_search_index(transaction, &book.id)?;
+    rename_entry_in_relations(transaction, &book.id, &relative_path, &target_path)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(display_path(&book.root_path, &target_path))
 }
@@ -414,6 +419,7 @@ pub(crate) fn delete_workspace_entry_db(
         )
         .map_err(error_to_string)?;
     rebuild_book_search_index(transaction, &book.id)?;
+    delete_relations_for_subtree(transaction, &book.id, &relative_path)?;
     touch_book(transaction, &book.id, timestamp)?;
     Ok(())
 }

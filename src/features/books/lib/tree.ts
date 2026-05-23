@@ -88,3 +88,26 @@ export function isSameOrDescendant(path: string | null, target: string): boolean
 
   return path === target || path.startsWith(`${target}/`);
 }
+
+// 展平树中所有"文件"节点为列表,用于关联编辑弹窗的目标文件选择。
+// 跳过目录;返回顺序为深度优先,与文件树呈现顺序一致。
+export function flattenTreeFiles(node: TreeNode | null): TreeNode[] {
+  if (!node) {
+    return [];
+  }
+
+  const files: TreeNode[] = [];
+  const stack: TreeNode[] = [node];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.kind === "file") {
+      files.push(current);
+    }
+    // 反向 push 子节点以保持深度优先正序遍历。
+    const children = current.children ?? [];
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]);
+    }
+  }
+  return files;
+}
