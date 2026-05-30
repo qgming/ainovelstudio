@@ -26,8 +26,6 @@ const themeOptions = [
   { value: "dark", label: "深色", ariaLabel: "使用深色模式", icon: <Moon className="h-3.5 w-3.5" /> },
 ] as const;
 
-const mobileSettingNavItems = settingNavItems.filter((item) => item.key !== "debug");
-
 const themePreferenceMeta: Record<ThemePreference, { icon: typeof Monitor; label: string; menuLabel: string }> = {
   system: { icon: Monitor, label: "跟随系统", menuLabel: "跟随系统" },
   light: { icon: Sun, label: "浅色模式", menuLabel: "浅色模式" },
@@ -184,7 +182,7 @@ function MobileSettingListPage() {
       <div className="h-full min-h-0 overflow-y-auto bg-app px-3 py-3">
         <div className="grid gap-2 pb-4">
           <MobileThemeCard />
-        {mobileSettingNavItems.map(({ icon: Icon, key, title }) => (
+        {settingNavItems.map(({ icon: Icon, key, title }) => (
           <MobileSettingLinkCard
             key={key}
             to={`/setting/${key}`}

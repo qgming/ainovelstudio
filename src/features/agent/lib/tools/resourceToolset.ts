@@ -30,7 +30,7 @@ import {
 } from "./shared";
 
 type LocalResourceToolsetContext = LocalResourceToolContext;
-const ASK_CUSTOM_OPTION_ID = "__custom__";
+export const ASK_CUSTOM_OPTION_ID = "__custom__";
 const ASK_CUSTOM_OPTION_LABEL = "用户输入";
 
 function normalizeAskSelectionMode(value: unknown): AskSelectionMode {
@@ -67,7 +67,7 @@ function normalizeAskOptions(value: unknown): AskOption[] {
   });
 }
 
-function normalizeAskRequest(input: Record<string, unknown>): AskUserRequest {
+export function normalizeAskRequest(input: Record<string, unknown>): AskUserRequest {
   const selectionMode = normalizeAskSelectionMode(input.selectionMode);
   const options = [
     ...normalizeAskOptions(input.options),
@@ -115,7 +115,7 @@ function normalizeAskRequest(input: Record<string, unknown>): AskUserRequest {
   };
 }
 
-function normalizeAskAnswer(answer: AskToolAnswer): AskToolAnswer {
+export function normalizeAskAnswer(answer: AskToolAnswer): AskToolAnswer {
   const values = answer.values.map((value): AskToolAnswerValue => ({
     ...value,
     value: value.value.trim(),
@@ -128,7 +128,7 @@ function normalizeAskAnswer(answer: AskToolAnswer): AskToolAnswer {
   };
 }
 
-function summarizeAskAnswer(answer: AskToolAnswer) {
+export function summarizeAskAnswer(answer: AskToolAnswer) {
   const items = answer.values
     .map((value) => value.value.trim())
     .filter(Boolean);

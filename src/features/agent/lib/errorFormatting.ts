@@ -1,9 +1,31 @@
-import { APICallError } from "ai";
-
 type ProviderErrorContext = {
   baseURL?: string;
   model?: string;
 };
+
+// AI SDK 的 APICallError 形态（脱离 `ai` 依赖后用结构化鸭子类型识别）。
+// pi-ai 路径抛普通 Error，但底层 OpenAI SDK / fetch 错误可能携带这些字段；
+// 任一关键字段存在即按 API 调用错误处理，读取其结构化诊断信息。
+type ApiCallErrorLike = {
+  // message 仅鸭子判定通过即认为存在，运行时可能缺失，故标记为可选。
+  message?: string;
+  statusCode?: number;
+  responseBody?: string;
+  url?: string;
+  requestBodyValues?: unknown;
+  cause?: unknown;
+};
+
+function isApiCallErrorLike(error: unknown): error is ApiCallErrorLike {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  return (
+    "statusCode" in error ||
+    "responseBody" in error ||
+    "requestBodyValues" in error
+  );
+}
 
 function compactText(value: string, maxLength = 280) {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -114,8 +136,9 @@ export function formatProviderError(
   fallbackMessage: string,
   context?: ProviderErrorContext,
 ) {
-  if (APICallError.isInstance(error)) {
-    const message = error.message.trim();
+  if (isApiCallErrorLike(error)) {
+    // isApiCallErrorLike 仅按 statusCode/responseBody/requestBodyValues 鸭子判定，message 可能缺失，需兜底。
+    const message = (error.message ?? "").trim();
     const responseDetail = extractResponseDetail(error.responseBody);
     const causeDetail = extractCauseDetail(error.cause);
     const title = buildErrorTitle(

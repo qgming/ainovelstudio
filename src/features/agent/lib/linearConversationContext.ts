@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { ModelMessage } from "./message-context/modelMessage";
 import type { ChatEntry } from "../chat/types";
 import { getLatestCompactionEntry, getMessagesAfterLatestCompaction } from "../chat/entries";
 import type { AgentMessage } from "./types";

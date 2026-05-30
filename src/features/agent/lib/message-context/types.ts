@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { ModelMessage } from "./modelMessage";
 
 export const MAX_HISTORY_TURNS = 20;
 export const MAX_DETAILED_HISTORY_MESSAGES = 6;

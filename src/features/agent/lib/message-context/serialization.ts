@@ -1,4 +1,4 @@
-import type { ModelMessage } from "ai";
+import type { ModelMessage } from "./modelMessage";
 import type { AgentMessage, AgentPart } from "../types";
 import { extractPathsFromToolPart } from "./pathExtract";
 import { compactText, truncateText } from "./text";

@@ -1,12 +1,12 @@
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
+import type { StreamFn } from "@earendil-works/pi-agent-core";
 import type { ManualTurnContextPayload } from "./manualTurnContext";
 import type { AgentMode, ModeContextMap } from "./modeRules";
 import type { PlanningState } from "./planning";
 import type { ProjectContextPayload } from "./projectContext";
 import type { AgentTool } from "./runtime";
 import type { AgentMessage, AgentUsage, AskToolAnswer, AskUserRequest } from "./types";
-import type { streamAgentText } from "./modelGateway";
 
 export type WritingRuntimeContext = {
   activeFilePath: string | null;
@@ -33,7 +33,8 @@ export type WritingRuntimeContext = {
     status: "start" | "finish";
   }) => void;
   onUsage?: (usage: AgentUsage) => void;
-  streamFn?: typeof streamAgentText;
+  // 测试注入用：pi-agent-core 的 StreamFn（替代 pi 默认的 streamSimple）。
+  streamFn?: StreamFn;
 };
 
 export function hasProviderConfig(config: AgentProviderConfig): boolean {

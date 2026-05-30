@@ -4,7 +4,7 @@ export type AgentEvent =
   | { type: "agent_start"; sessionId?: string }
   | { type: "agent_end"; error?: string; sessionId?: string }
   | { type: "turn_start"; prompt: string; turnId: string }
-  | { type: "turn_end"; finishReason?: string; turnId: string; usage?: AgentUsage | null }
+  | { type: "turn_end"; finishReason?: string; turnId: string; usage?: AgentUsage | null; errorMessage?: string }
   | { type: "message_start"; message: AgentMessage }
   | { type: "message_update"; messageId: string; part: AgentPart }
   | { type: "message_end"; message: AgentMessage }

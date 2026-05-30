@@ -61,7 +61,6 @@ describe("SettingPage mobile", () => {
     expect(screen.getByRole("link", { name: "进入模型设置" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入数据管理" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入工具库" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "进入开发调试" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入关于我们" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "默认 AGENTS 编辑器" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "打开官网" })).not.toBeInTheDocument();

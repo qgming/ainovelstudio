@@ -1,10 +1,23 @@
-import { APICallError } from "ai";
 import { describe, expect, it } from "vitest";
 import { formatProviderError } from "./errorFormatting";
 
+// 构造一个带 AI 调用错误诊断字段的 Error（取代旧 AI SDK 的 APICallError 实例）。
+// formatProviderError 用结构化鸭子类型识别这些字段，因此普通 Error + 字段即可。
+function makeApiCallError(fields: {
+  message: string;
+  cause?: unknown;
+  requestBodyValues?: unknown;
+  responseBody?: string;
+  statusCode?: number;
+  url?: string;
+}): Error {
+  const { message, ...rest } = fields;
+  return Object.assign(new Error(message), rest);
+}
+
 describe("formatProviderError", () => {
   it("展开网络类 APICallError 的请求地址、模型和底层原因", () => {
-    const error = new APICallError({
+    const error = makeApiCallError({
       cause: new Error("connect ECONNREFUSED 127.0.0.1:11434"),
       message: "Network error",
       requestBodyValues: { model: "deepseek-chat" },
@@ -24,7 +37,7 @@ describe("formatProviderError", () => {
   });
 
   it("展开 HTTP 错误的状态码与服务端返回消息", () => {
-    const error = new APICallError({
+    const error = makeApiCallError({
       message: "Bad Request",
       requestBodyValues: { model: "gpt-4.1" },
       responseBody: JSON.stringify({

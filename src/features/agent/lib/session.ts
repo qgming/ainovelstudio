@@ -5,7 +5,7 @@ import {
   type QueueMode,
   type CompactionRunner,
 } from "./core/session";
-import { runWritingAgent } from "./writingAgentRunner";
+import { runWritingAgentPi } from "./pi/writingSessionRunner";
 import type { WritingRuntimeContext } from "./writingRuntimeContext";
 
 export type CreateWritingAgentSessionOptions = WritingRuntimeContext & {
@@ -24,7 +24,7 @@ export function createWritingAgentSession(options: CreateWritingAgentSessionOpti
     followUpMode: options.followUpMode ?? "one-at-a-time",
     steeringMode: options.steeringMode ?? "one-at-a-time",
     runPrompt: ({ abortSignal, emit, prompt, takeFollowUpMessages, takeSteeringMessages }) =>
-      runWritingAgent({
+      runWritingAgentPi({
         abortSignal,
         prompt,
         takeFollowUpMessages,

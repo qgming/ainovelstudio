@@ -1,7 +1,6 @@
-import { Output } from "ai";
-import { z } from "zod";
+import { Type } from "@earendil-works/pi-ai";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { generateAgentOutput } from "./modelGateway";
+import { generateAgentObject } from "./modelGateway";
 import type { AgentMessage, AgentUsage } from "./types";
 import { extractMessageText } from "../chat/sessionRuntime";
 import type { ChatEntry, CompactionPayload } from "../chat/types";
@@ -11,8 +10,8 @@ export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128000;
 export const DEFAULT_COMPACTION_RESERVE_TOKENS = 16000;
 export const DEFAULT_KEEP_RECENT_TOKENS = 24000;
 
-const compactionOutputSchema = z.object({
-  summary: z.string().min(1).describe("可供后续创作继续使用的高密度上下文摘要。"),
+const compactionOutputSchema = Type.Object({
+  summary: Type.String({ description: "可供后续创作继续使用的高密度上下文摘要。" }),
 });
 
 export type CompactionSettings = {
@@ -102,13 +101,11 @@ export async function generateCompactionPayload(params: {
   const preparation = prepareCompaction(params.entries, params.settings);
   if (!preparation) return null;
 
-  const output = await generateAgentOutput<z.infer<typeof compactionOutputSchema>>({
+  const output = await generateAgentObject({
     abortSignal: params.abortSignal,
-    output: Output.object({
-      description: "网文创作长会话压缩摘要。",
-      name: "compaction_summary",
-      schema: compactionOutputSchema,
-    }),
+    schema: compactionOutputSchema,
+    toolName: "compaction_summary",
+    toolDescription: "网文创作长会话压缩摘要。",
     prompt: buildCompactionPrompt(preparation, params.customInstructions),
     providerConfig: params.providerConfig,
     system: "你是神笔写作的线性长会话压缩器，只输出可供后续创作继续使用的摘要。",

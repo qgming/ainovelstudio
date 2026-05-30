@@ -1,6 +1,19 @@
-import { APICallError } from "ai";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import { createTestResult, includesAnyKeyword, type ProviderConnectionTestResult } from "./providerProbeShared";
+
+// AI SDK 的 APICallError 形态（脱离 `ai` 依赖后用结构化鸭子类型识别）。
+// pi-ai 探测路径抛普通 Error，但底层 OpenAI SDK / fetch 错误可能携带这些字段。
+type ApiCallErrorLike = {
+  statusCode?: number;
+  responseBody?: string;
+};
+
+function isApiCallErrorLike(error: unknown): error is ApiCallErrorLike {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  return "statusCode" in error || "responseBody" in error;
+}
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -8,6 +21,24 @@ function getErrorMessage(error: unknown) {
   }
   if (typeof error === "string") {
     return error.trim();
+  }
+  // probe 失败对象是普通对象 { status, body, message }（非 Error 实例），也要读出其 message。
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") {
+      return message.trim();
+    }
+  }
+  return "";
+}
+
+// 读取错误对象的 body 文本（probe 失败对象用 body 字段携带原始响应/错误文本）。
+function getErrorBody(error: unknown) {
+  if (error && typeof error === "object" && "body" in error) {
+    const body = (error as { body?: unknown }).body;
+    if (typeof body === "string") {
+      return body.trim();
+    }
   }
   return "";
 }
@@ -76,9 +107,10 @@ export function classifyRequestError(
 
   const message = getErrorMessage(error);
   const normalizedMessage = message.toLowerCase();
+  const responseBody = getErrorBody(error).toLowerCase();
   const causeCode = getErrorCauseCode(error).toLowerCase();
 
-  if (APICallError.isInstance(error)) {
+  if (isApiCallErrorLike(error)) {
     const responseBody = error.responseBody?.toLowerCase() ?? "";
     const statusCode = error.statusCode;
     const diagnostics = {
@@ -128,7 +160,23 @@ export function classifyRequestError(
     });
   }
 
-  if (includesAnyKeyword(`${normalizedMessage} ${causeCode}`, ["enotfound", "econnrefused", "etimedout", "fetch failed", "networkerror"])) {
+  // 兜底分类（status 非数值、且非 ApiCallErrorLike，典型为 probe 的 { status:undefined, body, message } 对象）：
+  // 把 message + body + causeCode 一起做关键字匹配，先判模型不可用，再判网络不可达，否则归为未知。
+  const haystack = `${normalizedMessage} ${responseBody} ${causeCode}`;
+
+  if (includesAnyKeyword(haystack, ["model not found", "no such model", "unknown model"])) {
+    return createTestResult(providerConfig, {
+      ok: false,
+      status: "model_error",
+      stage: "request",
+      message: "模型不可用，请检查模型名称是否正确，或当前服务是否支持该模型。",
+      diagnostics: {
+        durationMs,
+      },
+    });
+  }
+
+  if (includesAnyKeyword(haystack, ["enotfound", "econnrefused", "etimedout", "fetch failed", "networkerror"])) {
     return createTestResult(providerConfig, {
       ok: false,
       status: "network_error",
@@ -144,7 +192,7 @@ export function classifyRequestError(
     ok: false,
     status: "unknown_error",
     stage: "request",
-    message: message || "模型连接测试失败，请稍后重试。",
+    message: message || responseBody || "模型连接测试失败，请稍后重试。",
     diagnostics: {
       durationMs,
     },

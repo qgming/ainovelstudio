@@ -1,5 +1,5 @@
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { fetchProviderModelsViaTauri } from "./providerApi";
+import { buildProviderRequestHeaders } from "./providerRequest";
 
 type ProviderModelsPayload = {
   data?: Array<{ id?: string | null }>;
@@ -51,13 +51,23 @@ export async function fetchProviderModels(providerConfig: AgentProviderConfig) {
     throw new Error("请先填写 API Key。");
   }
 
-  const response = await fetchProviderModelsViaTauri(providerConfig);
+  // 前端直接用 webview 原生 fetch 请求 /models（Tauri webview 允许跨域）。
+  // 鉴权头（Bearer + Accept + 可选 opencode beta）由前端拼。
+  const response = await fetch(`${baseURL}/models`, {
+    headers: buildProviderRequestHeaders(providerConfig),
+  });
 
   if (!response.ok) {
     throw new Error(getErrorMessage(response.status));
   }
 
-  const payload = JSON.parse(response.body);
+  // 响应体由用户配置的网关返回，可能非 JSON（如 HTML/网关错误页），需容错避免抛原始 SyntaxError。
+  let payload: unknown;
+  try {
+    payload = JSON.parse(await response.text());
+  } catch {
+    throw new Error("解析模型列表响应失败，请确认 Base URL 指向兼容 OpenAI 的服务。");
+  }
   const models = parseModelIds(payload);
 
   if (models.length === 0) {

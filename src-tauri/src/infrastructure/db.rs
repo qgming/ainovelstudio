@@ -278,22 +278,6 @@ fn run_migrations(connection: &Connection) -> CommandResult<()> {
             DROP TABLE IF EXISTS usage_summary;
             DROP TABLE IF EXISTS usage_daily_stats;
 
-            CREATE TABLE IF NOT EXISTS ai_call_logs (
-                id TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL,
-                method TEXT NOT NULL,
-                url TEXT NOT NULL,
-                model_id TEXT NOT NULL,
-                status INTEGER NOT NULL DEFAULT 0,
-                ok INTEGER NOT NULL DEFAULT 0,
-                request_json TEXT NOT NULL,
-                response_json TEXT NOT NULL,
-                error TEXT NOT NULL DEFAULT ''
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_ai_call_logs_created_at
-            ON ai_call_logs(CAST(created_at AS INTEGER) DESC);
-
             CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
                 date TEXT PRIMARY KEY,
                 version TEXT NOT NULL,

@@ -1,4 +1,3 @@
-import type { ToolSet } from "ai";
 import type { AgentPart } from "../types";
 
 const WRITE_TOOL_IDS = new Set(["workspace_write", "workspace_edit", "workspace_json"]);
@@ -14,12 +13,10 @@ export type WriteProtocolRepairInput = {
   finishReason?: string;
   parts: readonly AgentPart[];
   repairCount: number;
-  tools?: ToolSet;
 };
 
-function hasEnabledWriteTool(config?: WriteProtocolRepairConfig, tools?: ToolSet) {
-  const enabledToolIds = config?.enabledToolIds ?? Object.keys(tools ?? {});
-  return enabledToolIds.some((id) => WRITE_TOOL_IDS.has(id));
+function hasEnabledWriteTool(config?: WriteProtocolRepairConfig) {
+  return (config?.enabledToolIds ?? []).some((id) => WRITE_TOOL_IDS.has(id));
 }
 
 export function hasWriteToolCall(parts: readonly AgentPart[]) {
@@ -150,11 +147,10 @@ export function getWriteProtocolRepairPrompt({
   finishReason,
   parts,
   repairCount,
-  tools,
 }: WriteProtocolRepairInput) {
   if (!config || repairCount > 0) return null;
   if (finishReason && finishReason !== "stop") return null;
-  if (!hasEnabledWriteTool(config, tools) || hasWriteToolCall(parts)) return null;
+  if (!hasEnabledWriteTool(config) || hasWriteToolCall(parts)) return null;
 
   const userPrompt = truncateText(config.userPrompt ?? "");
   const assistantText = collectAssistantText(parts);

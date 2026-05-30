@@ -1,5 +1,6 @@
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { probeProviderConnectionViaTauri } from "../providerApi";
+import { complete, type AssistantMessage } from "@earendil-works/pi-ai";
+import { toPiModel, toPiReasoningEffort } from "../pi/models";
 import { normalizeProviderConfig } from "./providerConfig";
 import { classifyRequestError } from "./providerProbeErrors";
 import {
@@ -117,52 +118,92 @@ function validateProviderConfig(providerConfig: AgentProviderConfig): ProviderCo
   };
 }
 
-function parseProbeResult(body: string): ProbeGenerateResult {
-  const payload = JSON.parse(body) as {
-    choices?: Array<{
-      finish_reason?: string | null;
-      native_finish_reason?: string | null;
-      message?: {
-        content?: string | null;
-        tool_calls?: unknown[];
-      };
-    }>;
-  };
-  const choice = payload.choices?.[0];
+// 把 pi-ai 的 StopReason 映射成探测分析期望的 OpenAI 风格 finishReason。
+function mapStopReason(stopReason: AssistantMessage["stopReason"]) {
+  switch (stopReason) {
+    case "toolUse":
+      return "tool-calls";
+    case "length":
+      return "length";
+    case "stop":
+      return "stop";
+    default:
+      return stopReason;
+  }
+}
+
+// 把 pi-ai 的 AssistantMessage 映射成探测分析所需的 ProbeGenerateResult。
+function toProbeResult(message: AssistantMessage): ProbeGenerateResult {
   const content: ProbeContentPart[] = [];
 
-  if (typeof choice?.message?.content === "string" && choice.message.content.trim()) {
-    content.push({ type: "text", text: choice.message.content });
+  for (const block of message.content) {
+    if (block.type === "text" && block.text.trim()) {
+      content.push({ type: "text", text: block.text });
+    } else if (block.type === "toolCall") {
+      content.push({ type: "tool-call" });
+    }
   }
 
-  if (Array.isArray(choice?.message?.tool_calls) && choice.message.tool_calls.length > 0) {
-    content.push({ type: "tool-call" });
-  }
-
+  const finishReason = mapStopReason(message.stopReason);
   return {
     content,
-    finishReason: choice?.finish_reason ?? undefined,
-    rawFinishReason: choice?.native_finish_reason ?? choice?.finish_reason ?? undefined,
+    finishReason,
+    rawFinishReason: message.stopReason,
   };
+}
+
+// 从 pi-ai 的 errorMessage 文本里提取 HTTP 状态码。
+// pi-ai 不抛 HTTP 错误，其 errorMessage 源自底层 OpenAI SDK 的 APIError.message，
+// 格式恒以三位状态码开头（如 "401 ..."、"404 status code (no body)"），onResponse 在非 2xx 时不会触发，
+// 所以这里从文本兜底解析状态码，让 classifyRequestError 能据此归类 auth/model 错误。
+function extractHttpStatusFromMessage(message: string): number | undefined {
+  const match = message.trim().match(/^(\d{3})\b/u);
+  if (!match) {
+    return undefined;
+  }
+  const code = Number(match[1]);
+  return code >= 100 && code < 600 ? code : undefined;
 }
 
 async function executeProviderProbe(providerConfig: AgentProviderConfig): Promise<ProbeExecutionSuccess | ProbeExecutionFailure> {
   const startedAt = Date.now();
+  // onResponse 捕获底层 HTTP 状态码，用于把非 2xx 归类成 auth/model/unknown 错误。
+  let httpStatus: number | undefined;
 
   try {
-    const response = await probeProviderConnectionViaTauri(providerConfig);
-    if (!response.ok) {
+    const message = await complete(
+      toPiModel(providerConfig),
+      {
+        systemPrompt: "You are a connection test. Reply with the single word: ok.",
+        messages: [{ role: "user", content: "ping", timestamp: Date.now() }],
+      },
+      {
+        apiKey: providerConfig.apiKey.trim(),
+        reasoningEffort: toPiReasoningEffort(providerConfig),
+        onResponse: (response) => {
+          httpStatus = response.status;
+        },
+      },
+    );
+
+    // pi-ai 不抛 HTTP 错误，而是把失败放进 stopReason='error'/'aborted' + errorMessage。
+    if (message.stopReason === "error" || message.stopReason === "aborted") {
+      const errorMessage = message.errorMessage ?? "";
       return {
         durationMs: Date.now() - startedAt,
-        error: { body: response.body, status: response.status },
+        error: {
+          // onResponse 在非 2xx 时不触发（OpenAI SDK 先抛），httpStatus 多为 undefined，
+          // 故从 errorMessage 文本兜底提取状态码，供 classifyRequestError 归类。
+          status: httpStatus ?? extractHttpStatusFromMessage(errorMessage),
+          body: errorMessage,
+          message: errorMessage,
+        },
       };
     }
 
-    const result = parseProbeResult(response.body);
-
     return {
       durationMs: Date.now() - startedAt,
-      result,
+      result: toProbeResult(message),
     };
   } catch (error) {
     return {

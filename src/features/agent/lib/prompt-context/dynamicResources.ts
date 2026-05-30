@@ -1,18 +1,11 @@
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
-import { DATA_TOOL_SPECS } from "../ai-sdk-tools/dataBuilders";
-import { INTERACTION_TOOL_SPECS } from "../ai-sdk-tools/interactionBuilders";
-import { READ_TOOL_SPECS } from "../ai-sdk-tools/readBuilders";
-import { renderToolParameters, type AgentToolPromptSpec } from "../ai-sdk-tools/toolPromptSpecs";
-import { WRITE_TOOL_SPECS } from "../ai-sdk-tools/writeBuilders";
+import { ALL_TOOL_SPECS } from "../pi/tools/schemas";
+import { renderToolParameters } from "../pi/tools/renderToolParameters";
+import type { PiToolSpec } from "../pi/tools/types";
 import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "../toolDefs";
 import { joinSections } from "./shared";
 
-const TOOL_SPECS: Record<string, AgentToolPromptSpec> = {
-  ...INTERACTION_TOOL_SPECS,
-  ...READ_TOOL_SPECS,
-  ...WRITE_TOOL_SPECS,
-  ...DATA_TOOL_SPECS,
-};
+const TOOL_SPECS: Record<string, PiToolSpec> = ALL_TOOL_SPECS;
 
 function readFrontmatterString(skill: ResolvedSkill, key: string) {
   const value = skill.frontmatter?.[key];
@@ -36,7 +29,7 @@ function buildToolBlock(toolId: string) {
     return null;
   }
 
-  const parameterLines = renderToolParameters(spec.inputSchema);
+  const parameterLines = renderToolParameters(spec.parameters);
   return [
     `### 工具：${toolDef.name}（${toolId}）`,
     spec.description,

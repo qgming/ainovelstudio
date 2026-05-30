@@ -1,60 +1,58 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AssistantMessage, ProviderResponse, ProviderStreamOptions } from "@earendil-works/pi-ai";
 
-const { mockCreateOpenAICompatible, mockGenerateText, mockProbeProviderConnectionViaTauri, mockStreamText } = vi.hoisted(() => ({
-  mockCreateOpenAICompatible: vi.fn(),
-  mockGenerateText: vi.fn(),
-  mockProbeProviderConnectionViaTauri: vi.fn(),
-  mockStreamText: vi.fn(),
+// 只 mock pi-ai 的 complete（网络调用），其余（Type/validateToolCall）用真实实现，
+// 以便结构化输出（generateAgentObject）走真实的 TypeBox 校验路径。
+const { mockComplete } = vi.hoisted(() => ({
+  mockComplete: vi.fn(),
 }));
 
-vi.mock("ai", async () => {
-  const actual = await vi.importActual<typeof import("ai")>("ai");
+vi.mock("@earendil-works/pi-ai", async () => {
+  const actual = await vi.importActual<typeof import("@earendil-works/pi-ai")>("@earendil-works/pi-ai");
   return {
     ...actual,
-    defineTool: vi.fn(),
-    generateText: mockGenerateText,
-    isLoopFinished: vi.fn(),
-    streamText: mockStreamText,
-    tool: vi.fn(),
+    complete: mockComplete,
   };
 });
 
-vi.mock("@ai-sdk/openai-compatible", () => ({
-  createOpenAICompatible: mockCreateOpenAICompatible,
-}));
+import { generateAgentObject, generateAgentText, testAgentProviderConnection } from "./modelGateway";
+import { Type } from "@earendil-works/pi-ai";
 
-vi.mock("./providerApi", () => ({
-  probeProviderConnectionViaTauri: mockProbeProviderConnectionViaTauri,
-}));
-
-import { generateAgentText, streamAgentText, testAgentProviderConnection } from "./modelGateway";
-
-function createStreamTextResult(text = "你好") {
+// 构造一个最小可用的 AssistantMessage。
+function buildAssistantMessage(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
   return {
-    finishReason: Promise.resolve("stop"),
-    fullStream: (async function* () {
-      if (text) {
-        yield { type: "text-delta", text };
-      }
-    })(),
-    response: Promise.resolve({ messages: [], modelId: "gpt-4.1" }),
-    totalUsage: Promise.resolve({
-      inputTokens: 0,
-      outputTokens: 0,
+    role: "assistant",
+    content: [],
+    api: "openai-completions",
+    provider: "ainovelstudio-provider",
+    model: "gpt-4.1",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
       totalTokens: 0,
-      inputTokenDetails: {},
-      outputTokenDetails: {},
-    }),
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "stop",
+    timestamp: Date.now(),
+    ...overrides,
   };
+}
+
+// 模拟 complete：可注入返回的消息，并可通过 onResponse 注入 HTTP 状态码。
+function mockCompleteResolve(message: AssistantMessage, httpStatus = 200) {
+  mockComplete.mockImplementation(
+    async (_model: unknown, _context: unknown, options?: ProviderStreamOptions) => {
+      await options?.onResponse?.({ status: httpStatus, headers: {} } as ProviderResponse, _model as never);
+      return message;
+    },
+  );
 }
 
 describe("modelGateway", () => {
   beforeEach(() => {
-    mockGenerateText.mockReset();
-    mockProbeProviderConnectionViaTauri.mockReset();
-    mockStreamText.mockReset();
-    mockCreateOpenAICompatible.mockReset();
-    mockCreateOpenAICompatible.mockReturnValue((model: string) => `provider:${model}`);
+    mockComplete.mockReset();
   });
 
   it("缺少 Base URL 时返回配置错误", async () => {
@@ -88,21 +86,12 @@ describe("modelGateway", () => {
   });
 
   it("真实测试通过时返回结构化成功结果", async () => {
-    mockProbeProviderConnectionViaTauri.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: JSON.stringify({
-        choices: [
-          {
-            finish_reason: "stop",
-            native_finish_reason: "stop",
-            message: {
-              content: "你好，我已收到测试消息。",
-            },
-          },
-        ],
+    mockCompleteResolve(
+      buildAssistantMessage({
+        content: [{ type: "text", text: "你好，我已收到测试消息。" }],
+        stopReason: "stop",
       }),
-    });
+    );
 
     await expect(
       testAgentProviderConnection({
@@ -125,42 +114,6 @@ describe("modelGateway", () => {
         responseTextPreview: "你好，我已收到测试消息。",
       },
     });
-
-    expect(mockProbeProviderConnectionViaTauri).toHaveBeenCalledWith({
-      apiKey: "sk-test",
-      baseURL: "https://example.com/v1",
-      model: "gpt-4.1",
-      reasoningEffort: "auto",
-      simulateOpencodeBeta: false,
-    });
-  });
-
-  it("启用模拟 OpenCode 时注入额外请求头", async () => {
-    mockGenerateText.mockResolvedValue({ text: "你好" });
-
-    await expect(generateAgentText({
-      prompt: "你好",
-      providerConfig: {
-        apiKey: "sk-test",
-        baseURL: "https://example.com/v1",
-        model: "gpt-4.1",
-        simulateOpencodeBeta: true,
-      },
-      system: "test-system",
-    })).resolves.toBe("你好");
-
-    expect(mockCreateOpenAICompatible).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiKey: "sk-test",
-        baseURL: "https://example.com/v1",
-        headers: expect.objectContaining({
-          "x-opencode-client": "cli",
-          "x-opencode-project": "global",
-          "x-opencode-request": expect.stringMatching(/^msg_/),
-          "x-opencode-session": expect.stringMatching(/^ses_/),
-        }),
-      }),
-    );
   });
 
   it("非流式生成遇到非法 Base URL 时返回清晰配置错误", async () => {
@@ -176,109 +129,111 @@ describe("modelGateway", () => {
       }),
     ).rejects.toThrow("Base URL 格式无效，请填写完整地址。");
 
-    expect(mockCreateOpenAICompatible).not.toHaveBeenCalled();
-    expect(mockGenerateText).not.toHaveBeenCalled();
-    expect(mockStreamText).not.toHaveBeenCalled();
+    expect(mockComplete).not.toHaveBeenCalled();
   });
 
-  it("非流式生成使用 generateText", async () => {
-    mockGenerateText.mockResolvedValue({ text: "压缩摘要" });
+  it("非流式生成从 AssistantMessage 提取文本", async () => {
+    mockCompleteResolve(
+      buildAssistantMessage({ content: [{ type: "text", text: "压缩摘要" }] }),
+    );
 
-    await expect(generateAgentText({
-      prompt: "压缩上下文",
+    await expect(
+      generateAgentText({
+        prompt: "压缩上下文",
+        providerConfig: {
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+        },
+        system: "test-system",
+      }),
+    ).resolves.toBe("压缩摘要");
+
+    expect(mockComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("非流式生成失败（stopReason=error）时抛出错误", async () => {
+    mockCompleteResolve(
+      buildAssistantMessage({ stopReason: "error", errorMessage: "上游网关错误" }),
+    );
+
+    await expect(
+      generateAgentText({
+        prompt: "压缩上下文",
+        providerConfig: {
+          apiKey: "sk-test",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
+        },
+        system: "test-system",
+      }),
+    ).rejects.toThrow("上游网关错误");
+  });
+
+  it("结构化生成从强制工具调用重建对象", async () => {
+    mockCompleteResolve(
+      buildAssistantMessage({
+        content: [
+          {
+            type: "toolCall",
+            id: "call_1",
+            name: "compaction_summary",
+            arguments: { summary: "高密度摘要" },
+          },
+        ],
+        stopReason: "toolUse",
+      }),
+    );
+
+    const result = await generateAgentObject({
+      schema: Type.Object({ summary: Type.String() }),
+      toolName: "compaction_summary",
+      toolDescription: "压缩摘要工具",
+      prompt: "请压缩",
       providerConfig: {
         apiKey: "sk-test",
         baseURL: "https://example.com/v1",
         model: "gpt-4.1",
       },
       system: "test-system",
-    })).resolves.toBe("压缩摘要");
-
-    expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
-      model: "provider:gpt-4.1",
-      prompt: "压缩上下文",
-      system: "test-system",
-    }));
-    expect(mockStreamText).not.toHaveBeenCalled();
-  });
-
-  it("流式生成不再挂载工具特化修复器", () => {
-    mockStreamText.mockReturnValue({
-      finishReason: Promise.resolve("stop"),
-      fullStream: (async function* () {})(),
-      response: Promise.resolve({ messages: [], modelId: "gpt-5.4" }),
-      totalUsage: Promise.resolve({
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        inputTokenDetails: {},
-        outputTokenDetails: {},
-      }),
     });
 
-    streamAgentText({
-      messages: [{ role: "user", content: "写第001章" }],
-      providerConfig: {
-        apiKey: "sk-test",
-        baseURL: "https://example.com/v1",
-        model: "gpt-5.4",
-      },
-      system: "test-system",
-      tools: {
-        write: {
-          description: "write",
-          inputSchema: {},
-        } as never,
-      },
-    });
+    expect(result).toEqual({ summary: "高密度摘要" });
 
-    expect(mockStreamText.mock.calls[0]?.[0]?.experimental_repairToolCall).toBeUndefined();
-  });
-
-  it("显式思考强度会通过 openai-compatible providerOptions 注入", () => {
-    mockStreamText.mockReturnValue(createStreamTextResult(""));
-
-    streamAgentText({
-      messages: [{ role: "user", content: "分析剧情结构" }],
-      providerConfig: {
-        apiKey: "sk-test",
-        baseURL: "https://example.com/v1",
-        model: "gpt-5.4",
-        reasoningEffort: "high",
-      },
-      system: "test-system",
-    });
-
-    expect(mockStreamText.mock.calls[0]?.[0]?.providerOptions).toEqual({
-      ainovelstudioProvider: {
-        reasoningEffort: "high",
-      },
+    // 应强制调用目标结构化工具。
+    const options = mockComplete.mock.calls[0]?.[2] as ProviderStreamOptions | undefined;
+    expect(options?.toolChoice).toEqual({
+      type: "function",
+      function: { name: "compaction_summary" },
     });
   });
 
-  it("流式生成遇到非法 Base URL 时返回清晰配置错误", () => {
-    expect(() =>
-      streamAgentText({
-        messages: [{ role: "user", content: "写第001章" }],
+  it("结构化生成未返回工具调用时抛错", async () => {
+    mockCompleteResolve(
+      buildAssistantMessage({ content: [{ type: "text", text: "我不会调用工具" }] }),
+    );
+
+    await expect(
+      generateAgentObject({
+        schema: Type.Object({ summary: Type.String() }),
+        toolName: "compaction_summary",
+        toolDescription: "压缩摘要工具",
+        prompt: "请压缩",
         providerConfig: {
           apiKey: "sk-test",
-          baseURL: "not-a-url",
-          model: "gpt-5.4",
+          baseURL: "https://example.com/v1",
+          model: "gpt-4.1",
         },
         system: "test-system",
       }),
-    ).toThrow("Base URL 格式无效，请填写完整地址。");
-
-    expect(mockCreateOpenAICompatible).not.toHaveBeenCalled();
-    expect(mockStreamText).not.toHaveBeenCalled();
+    ).rejects.toThrow("模型未按要求返回结构化结果。");
   });
 
-  it("鉴权失败时返回 auth_error", async () => {
-    mockProbeProviderConnectionViaTauri.mockResolvedValue({
-      ok: false,
-      status: 401,
-      body: '{"error":{"message":"invalid api key"}}',
-    });
+  it("鉴权失败（HTTP 401）时返回 auth_error", async () => {
+    mockCompleteResolve(
+      buildAssistantMessage({ stopReason: "error", errorMessage: "invalid api key" }),
+      401,
+    );
 
     await expect(
       testAgentProviderConnection({
@@ -296,33 +251,11 @@ describe("modelGateway", () => {
     });
   });
 
-  it("网络异常时返回 network_error", async () => {
-    const error = new Error("fetch failed");
-    Object.assign(error, {
-      cause: { code: "ECONNREFUSED", message: "connect ECONNREFUSED" },
-    });
-    mockProbeProviderConnectionViaTauri.mockRejectedValue(error);
-
-    await expect(
-      testAgentProviderConnection({
-        apiKey: "sk-test",
-        baseURL: "https://example.com/v1",
-        model: "gpt-4.1",
-      }),
-    ).resolves.toMatchObject({
-      ok: false,
-      status: "network_error",
-      stage: "request",
-      message: "网络不可达，请检查 Base URL 是否正确且服务可访问。",
-    });
-  });
-
-  it("模型不存在时返回 model_error", async () => {
-    mockProbeProviderConnectionViaTauri.mockResolvedValue({
-      ok: false,
-      status: 404,
-      body: '{"error":{"message":"model not found"}}',
-    });
+  it("模型不存在（HTTP 404）时返回 model_error", async () => {
+    mockCompleteResolve(
+      buildAssistantMessage({ stopReason: "error", errorMessage: "model not found" }),
+      404,
+    );
 
     await expect(
       testAgentProviderConnection({
@@ -341,21 +274,12 @@ describe("modelGateway", () => {
   });
 
   it("模型只返回工具调用时返回 response_invalid", async () => {
-    mockProbeProviderConnectionViaTauri.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: JSON.stringify({
-        choices: [
-          {
-            finish_reason: "tool-calls",
-            native_finish_reason: "tool_calls",
-            message: {
-              tool_calls: [{ id: "call_1" }],
-            },
-          },
-        ],
+    mockCompleteResolve(
+      buildAssistantMessage({
+        content: [{ type: "toolCall", id: "call_1", name: "noop", arguments: {} }],
+        stopReason: "toolUse",
       }),
-    });
+    );
 
     await expect(
       testAgentProviderConnection({
@@ -371,54 +295,13 @@ describe("modelGateway", () => {
       diagnostics: {
         contentTypes: ["tool-call"],
         finishReason: "tool-calls",
-        rawFinishReason: "tool_calls",
+        rawFinishReason: "toolUse",
       },
     });
   });
 
-  it("模型响应被过滤时返回 response_invalid", async () => {
-    mockProbeProviderConnectionViaTauri.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: JSON.stringify({
-        choices: [
-          {
-            finish_reason: "content-filter",
-            native_finish_reason: "content_filter",
-            message: {},
-          },
-        ],
-      }),
-    });
-
-    await expect(
-      testAgentProviderConnection({
-        apiKey: "sk-test",
-        baseURL: "https://example.com/v1",
-        model: "gpt-4.1",
-      }),
-    ).resolves.toMatchObject({
-      ok: false,
-      status: "response_invalid",
-      stage: "response",
-      message: "模型响应被内容过滤拦截，未返回可用文本。",
-    });
-  });
-
-  it("返回非文本内容时返回 response_invalid", async () => {
-    mockProbeProviderConnectionViaTauri.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: JSON.stringify({
-        choices: [
-          {
-            finish_reason: "stop",
-            native_finish_reason: "stop",
-            message: {},
-          },
-        ],
-      }),
-    });
+  it("返回空内容（stopReason=stop 无文本）时返回 response_invalid", async () => {
+    mockCompleteResolve(buildAssistantMessage({ content: [], stopReason: "stop" }));
 
     await expect(
       testAgentProviderConnection({

@@ -12,7 +12,6 @@ import { Switch } from "@shared/ui/switch";
 import type { SettingSectionKey } from "./settingNavigation";
 import { DataManagementSection } from "./DataManagementSection";
 import { AboutSection } from "./AboutSection";
-import { DebugSection } from "./DebugSection";
 
 function isSameProviderConfig(
   left: ReturnType<typeof getDefaultAgentProviderConfig>,
@@ -105,7 +104,7 @@ function ToolLibrarySection({
   );
 }
 
-function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<SettingSectionKey, "about" | "debug"> }) {
+function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<SettingSectionKey, "about"> }) {
   const config = useAgentSettingsStore((state) => state.config);
   const defaultAgentMarkdown = useAgentSettingsStore((state) => state.defaultAgentMarkdown);
   const enabledTools = useAgentSettingsStore((state) => state.enabledTools);
@@ -260,10 +259,6 @@ function SettingStatefulSectionContent({ sectionKey }: { sectionKey: Exclude<Set
 export function SettingSectionContent({ sectionKey }: { sectionKey: SettingSectionKey }) {
   if (sectionKey === "about") {
     return <AboutSection />;
-  }
-
-  if (sectionKey === "debug") {
-    return <DebugSection />;
   }
 
   return <SettingStatefulSectionContent sectionKey={sectionKey} />;

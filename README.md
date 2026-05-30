@@ -12,7 +12,7 @@
   <a href="https://github.com/qgming/ainovelstudio/releases/latest">
     <img src="https://img.shields.io/badge/Download-最新版本-0f172a?style=for-the-badge" alt="Download latest release" />
   </a>
-  <img src="https://img.shields.io/badge/Version-0.3.0-111827?style=for-the-badge" alt="Version 0.3.0" />
+  <img src="https://img.shields.io/badge/Version-0.4.0-111827?style=for-the-badge" alt="Version 0.4.0" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
 </p>
 
@@ -50,8 +50,8 @@
 
 | 平台 | 安装包 |
 | --- | --- |
-| Windows x64 | [下载 EXE](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.3.0_windows_x64.exe) |
-| Android arm64 | [下载 APK](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.3.0_android_arm64.apk) |
+| Windows x64 | [下载 EXE](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.4.0_windows_x64.exe) |
+| Android arm64 | [下载 APK](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.4.0_android_arm64.apk) |
 
 更多版本记录见 [Releases](https://github.com/qgming/ainovelstudio/releases)。
 
