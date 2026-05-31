@@ -10,8 +10,7 @@
 
 import { AgentHarness, JsonlSessionRepo, formatSkillsForSystemPrompt } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import { getPlanningIntervention } from "../modes/planning";
-import { buildRuntimeControlBlock, buildSystemPrompt } from "../prompt-context";
+import { buildSystemPrompt } from "../prompt-context";
 import { buildPiTools } from "../pi/buildPiTools";
 import { toPiModel, toPiThinkingLevel } from "../pi/models";
 import { buildProviderRequestHeaders } from "../model-gateway/providerRequest";
@@ -27,8 +26,11 @@ export type CreateNovelHarnessOptions = {
   bookId: string;
   /** 展示用：工作区可读根串（books/<书名>），供 env cwd/路径解析与系统提示展示。 */
   displayPath: string;
-  /** 当前轮用户 prompt，用于规划干预判定（注入系统提示的运行时控制块）。 */
-  prompt: string;
+  /**
+   * 当前轮用户 prompt（保留兼容字段）。运行时控制块已移出 systemPrompt、改由
+   * context 钩子注入 messages 层，故 harness 静态装配不再使用该字段；调用方可不传。
+   */
+  prompt?: string;
   toolContext: WritingRuntimeContext;
   abortSignal?: AbortSignal;
 };
@@ -92,6 +94,11 @@ export async function createNovelHarness(options: CreateNovelHarnessOptions): Pr
         .catch(() => [])
     : [];
 
+  // 系统提示词保持「纯静态」：仅人设/环境/工具/技能/模式五段，逐字节稳定。
+  // pi 的 openai-completions provider 会按稳定前缀自动注入 prompt_cache_key 命中
+  // prefix caching；任何「每轮变化」的内容（日期/workspace/planning）都不能进这里，
+  // 否则前缀漂移、缓存全程 miss。运行时控制块改由 context 钩子注入 messages 层
+  //（见 writingAgentHarnessRunner 的 harness.on("context")）。
   const systemPrompt = [
     buildSystemPrompt({
       defaultAgentMarkdown: toolContext.defaultAgentMarkdown,
@@ -104,13 +111,6 @@ export async function createNovelHarness(options: CreateNovelHarnessOptions): Pr
     }),
     // pi spec 兼容的技能系统提示块（仅启用的技能）。
     piSkills.length ? formatSkillsForSystemPrompt(piSkills) : "",
-    // 运行时控制块（含规划干预/工作区元信息）属系统级可信元数据，放系统提示。
-    // 会话每轮创建新 harness，故 planning 状态在此已是当轮最新值。
-    buildRuntimeControlBlock({
-      planningIntervention: getPlanningIntervention(toolContext.planningState, options.prompt),
-      planningState: toolContext.planningState,
-      workspaceRootPath: toolContext.workspaceRootPath,
-    }),
   ]
     .filter((section) => section.trim())
     .join("\n\n");

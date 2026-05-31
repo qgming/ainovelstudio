@@ -1,14 +1,12 @@
-import { generateCompactionPayload } from "@features/agent/lib/prompt-context/contextCompaction";
 import type { AgentSessionEvent } from "@features/agent/lib/session";
 import type { AgentMessage } from "@features/agent/lib/types";
 import { appendChatEntry } from "@features/agent/chat/api";
-import { buildMessageEntry, getCompactionCount, nextEntrySeq } from "@features/agent/chat/entries";
+import { buildMessageEntry, nextEntrySeq } from "@features/agent/chat/entries";
 import { buildSessionPatch, createMessageId } from "@features/agent/chat/sessionRuntime";
 import type { ChatEntry, ChatSessionSummary, CompactionPayload } from "@features/agent/chat/types";
-import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import { DEFAULT_CHAT_BOOK_ID } from "./helpers";
 
-export type CompactionControllerResult = {
+export type CompactionMarkerResult = {
   entries: ChatEntry[];
   latestCompactionAt: string;
   latestCompactionTokensBefore: number;
@@ -60,19 +58,26 @@ function appendCompactionLocalEntry(
   ];
 }
 
-export async function compactChatEntries(params: {
+// 在 app entries 追加一条压缩标记并持久化（纯本地，不调 LLM）。
+// 真实压缩已由 pi harness.compact() 完成（compactBookSession / runner 自动压缩），
+// 这里仅生成 UI 可见的「已压缩」记录，summary 直接取自 pi 的压缩结果。
+export async function appendCompactionMarker(params: {
   bookId?: string | null;
+  sessionId: string;
   entries: ChatEntry[];
   messages: AgentMessage[];
-  providerConfig: AgentProviderConfig;
-  sessionId: string;
-}): Promise<CompactionControllerResult | null> {
-  const payload = await generateCompactionPayload({
-    entries: params.entries,
-    modelId: params.providerConfig.model,
-    providerConfig: params.providerConfig,
-  });
-  if (!payload) return null;
+  summary: string;
+  tokensBefore: number;
+  firstKeptMessageId?: string | null;
+  modelId?: string | null;
+}): Promise<CompactionMarkerResult> {
+  const payload: CompactionPayload = {
+    summary: params.summary,
+    tokensBefore: params.tokensBefore,
+    firstKeptMessageId: params.firstKeptMessageId ?? null,
+    modelId: params.modelId ?? null,
+    createdAt: nowEpoch(),
+  };
 
   const entries = appendCompactionLocalEntry(params.entries, payload);
   const summary = await appendChatEntry(
@@ -87,13 +92,5 @@ export async function compactChatEntries(params: {
     latestCompactionAt: payload.createdAt ?? nowEpoch(),
     latestCompactionTokensBefore: payload.tokensBefore,
     summary,
-  };
-}
-
-export function buildCompactionState(entries: ChatEntry[], result: CompactionControllerResult) {
-  return {
-    compactionCount: getCompactionCount(entries),
-    latestCompactionAt: result.latestCompactionAt,
-    latestCompactionTokensBefore: result.latestCompactionTokensBefore,
   };
 }

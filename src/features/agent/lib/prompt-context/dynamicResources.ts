@@ -1,6 +1,5 @@
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
 import { ALL_TOOL_SPECS } from "../pi/tool-bridge/schemas";
-import { renderToolParameters } from "../pi/tool-bridge/renderToolParameters";
 import type { PiToolSpec } from "../pi/tool-bridge/types";
 import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "../domain/toolDefs";
 import { joinSections } from "./shared";
@@ -22,21 +21,21 @@ function buildReferencePathList(skill: ResolvedSkill) {
   return `- 可读参考:共 ${skill.references.length} 个,使用 skill_read({action:'list'}) 查看完整列表。`;
 }
 
+// 工具的完整参数 schema 已通过 pi 原生 tools 字段传给模型，无需在系统提示里复述。
+// 这里只保留「工具名（id）+ 一句话用途」作为发现/选择索引，避免与 tools 字段重复占 token。
+function firstSentence(description: string): string {
+  const trimmed = description.trim();
+  const stop = trimmed.search(/[。.\n]/);
+  return stop > 0 ? trimmed.slice(0, stop).trim() : trimmed;
+}
+
 function buildToolBlock(toolId: string) {
   const toolDef = ALL_TOOL_DEFS.find((tool) => tool.id === toolId);
   const spec = TOOL_SPECS[toolId];
   if (!toolDef || !spec) {
     return null;
   }
-
-  const parameterLines = renderToolParameters(spec.parameters);
-  return [
-    `### 工具：${toolDef.name}（${toolId}）`,
-    spec.description,
-    parameterLines.length > 0 ? ["- 参数：", ...parameterLines].join("\n") : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return `- ${toolDef.name}（${toolId}）：${firstSentence(spec.description)}`;
 }
 
 function buildSkillBlock(skill: ResolvedSkill) {
@@ -67,7 +66,7 @@ export function buildDynamicResourceDirectory(params: {
   const toolBody =
     enabledToolBlocks.length > 0
       ? [
-          "以下是当前可用工具，说明来自真实 description 与参数 schema。",
+          "以下是当前可用工具的索引（名称 + 一句话用途）。完整参数 schema 已随原生工具定义提供，按需直接调用即可。",
           "涉及工作区时优先传相对路径，不要传绝对路径。",
           "",
           ...enabledToolBlocks,

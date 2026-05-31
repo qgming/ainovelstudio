@@ -6,7 +6,6 @@ import {
 } from "@features/agent/chat/sessionRuntime";
 import type { AgentMessage, AgentPart, AgentRunStatus, AgentUsage } from "@features/agent/lib/types";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
-import { shouldCompactUsage } from "@features/agent/lib/prompt-context/contextCompaction";
 import {
   replaceMessageEntry,
   queuePatchFromEvent,
@@ -38,7 +37,6 @@ import type {
 } from "./runtimeTypes";
 
 type MessageRunnerParams = ChatRunStoreAccess & {
-  compactSession: (reason?: "manual" | "threshold") => Promise<void>;
   ensureActiveSession: () => Promise<string>;
   request: SendMessageRequest;
   sessionSlot: ActiveWritingSessionSlot;
@@ -60,7 +58,6 @@ class MessageRunner {
   private readonly userMessage: AgentMessage;
   private latestEntries: ChatEntry[];
   private latestMessages: AgentMessage[];
-  private latestUsage: AgentUsage | null = null;
   private providerConfig = useAgentSettingsStore.getState().config;
   private readonly initialSessionId: string | null;
   private pendingStreamParts: AgentPart[] = [];
@@ -265,7 +262,6 @@ class MessageRunner {
 
   private attachUsage(usage: AgentUsage) {
     if (!this.isCurrentRun() || !this.sessionId) return;
-    this.latestUsage = usage;
     this.params.set((state) => {
       const result = buildUsagePatch(state, this.sessionId as string, usage, this.runPatchContext());
       this.latestEntries = result.context.latestEntries;
@@ -291,7 +287,6 @@ class MessageRunner {
       ...ensureSessionState(state, completedSessionId, this.latestMessages, "", "completed"),
     }));
     await this.persistor.flush("completed");
-    if (this.latestUsage && shouldCompactUsage(this.latestUsage)) await this.params.compactSession("threshold");
   }
 
   private async handleError(error: unknown) {

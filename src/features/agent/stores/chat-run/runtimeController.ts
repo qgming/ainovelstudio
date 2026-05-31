@@ -12,7 +12,8 @@ import {
   selectIsAgentRunActive,
 } from "./helpers";
 import { applyBootstrap } from "./bootstrapState";
-import { compactChatEntries, removeEntry } from "./entriesRuntime";
+import { appendCompactionMarker, removeEntry } from "./entriesRuntime";
+import { runManualCompaction } from "./messageSessionFactory";
 import { COACH_PROMPT } from "./autopilot";
 import { submitAskAnswer, rejectPendingAsk } from "./askController";
 import { runAgentMessage } from "./messageRunner";
@@ -64,7 +65,7 @@ export function createChatRuntimeController(access: ChatRunStoreAccess) {
       await steerActiveRun();
       return;
     }
-    await runAgentMessage({ ...access, compactSession, ensureActiveSession, request, sessionSlot });
+    await runAgentMessage({ ...access, ensureActiveSession, request, sessionSlot });
   }
 
   async function followUpMessage() {
@@ -82,28 +83,37 @@ export function createChatRuntimeController(access: ChatRunStoreAccess) {
   async function compactSession(reason: "manual" | "threshold" = "manual") {
     const sessionId = access.get().activeSessionId;
     if (!sessionId || selectIsAgentRunActive(access.get())) return;
-    const entries = access.get().entriesBySession[sessionId] ?? [];
     access.set({ isCompacting: true, errorMessage: null });
     try {
       const settings = await ensureAgentSettingsReady();
-      const result = await compactChatEntries({
-        bookId: access.get().currentBookId,
-        entries,
-        messages: access.get().messagesBySession[sessionId] ?? [],
-        providerConfig: settings.config,
+      // 走 pi 原生 compact()，压缩的是真实 jsonl 会话（下一轮模型读到压缩后上下文）。
+      const result = await runManualCompaction({
         sessionId,
+        providerConfig: settings.config,
+        mode: access.get().activeModeId,
       });
       if (!result) {
         access.set({ isCompacting: false });
         return;
       }
-      applyPersistedSummary(access.set, result.summary);
-      access.set((state) => ({
-        compactionCount: getCompactionCount(result.entries),
-        entriesBySession: { ...state.entriesBySession, [sessionId]: result.entries },
+      // pi 已压缩会话本身；这里仅在 app entries 追加一条压缩标记供 UI 展示。
+      const state = await appendCompactionMarker({
+        bookId: access.get().currentBookId,
+        sessionId,
+        entries: access.get().entriesBySession[sessionId] ?? [],
+        messages: access.get().messagesBySession[sessionId] ?? [],
+        summary: result.summary,
+        tokensBefore: result.tokensBefore,
+        firstKeptMessageId: result.firstKeptEntryId,
+        modelId: settings.config.model,
+      });
+      applyPersistedSummary(access.set, state.summary);
+      access.set((current) => ({
+        compactionCount: getCompactionCount(state.entries),
+        entriesBySession: { ...current.entriesBySession, [sessionId]: state.entries },
         isCompacting: false,
-        latestCompactionAt: result.latestCompactionAt,
-        latestCompactionTokensBefore: result.latestCompactionTokensBefore,
+        latestCompactionAt: state.latestCompactionAt,
+        latestCompactionTokensBefore: state.latestCompactionTokensBefore,
       }));
     } catch (error) {
       access.set({

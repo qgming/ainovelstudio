@@ -12,17 +12,19 @@
 //     · tool_call 审批 → harness.on("tool_call") 调 modeConfig.approval.decideToolCall。
 // - 事件桥接仍复用 AgentEventAdapter（pi AgentEvent → AgentPart）。
 
-import type { AgentHarnessEvent } from "@earendil-works/pi-agent-core";
+import type { AgentHarness, AgentHarnessEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import { DEFAULT_COMPACTION_SETTINGS, shouldCompact } from "@earendil-works/pi-agent-core";
 import { logPromptDebug } from "../utils/debug";
 import { createAsyncQueue } from "./partQueue";
 import type { AgentSessionEvent } from "./events";
 import { getModeConfig } from "../modes";
 import { getPlanningIntervention } from "../modes/planning";
-import { buildUserTurnContent } from "../prompt-context";
+import { buildRuntimeControlBlock, buildUserTurnContent } from "../prompt-context";
 import { AgentEventAdapter } from "../pi/eventAdapter";
-import type { AgentPart } from "../types";
+import type { AgentPart, AgentUsage } from "../types";
 import { hasProviderConfig, type WritingRuntimeContext } from "./writingRuntimeContext";
 import { createNovelHarness } from "./harnessSession";
+import { NOVEL_COMPACTION_INSTRUCTIONS } from "./compactBookSession";
 
 export type RunWritingAgentHarnessOptions = {
   abortSignal: AbortSignal;
@@ -33,7 +35,7 @@ export type RunWritingAgentHarnessOptions = {
 };
 
 // 本轮 user 内容：物料上下文（手动选择/项目默认/规划状态展示）+ 用户 prompt。
-// 运行时控制块（系统级可信元数据）已在 harnessSession 注入 systemPrompt，这里不再重复。
+// 运行时控制块（系统级可信元数据）改由 context 钩子注入 messages 层，这里不再重复。
 function buildTurnContent(prompt: string, context: WritingRuntimeContext): string {
   const planningIntervention = getPlanningIntervention(context.planningState, prompt);
   const materialContext = buildUserTurnContent({
@@ -47,6 +49,61 @@ function buildTurnContent(prompt: string, context: WritingRuntimeContext): strin
     .map((section) => section.trim())
     .filter(Boolean)
     .join("\n\n");
+}
+
+// 运行时控制块注入标记：用于在 context 钩子里识别并剔除上一轮注入的旧块，
+// 避免每次 LLM 请求都堆叠一条，导致 messages 越积越多。
+const RUNTIME_CONTEXT_MARKER = "<runtime_context>";
+
+function messageHasRuntimeContext(message: AgentMessage): boolean {
+  if (message.role !== "user") return false;
+  const { content } = message;
+  if (typeof content === "string") return content.includes(RUNTIME_CONTEXT_MARKER);
+  return content.some(
+    (part) => part.type === "text" && part.text.includes(RUNTIME_CONTEXT_MARKER),
+  );
+}
+
+// 构造一条「运行时上下文」user 消息。日期/workspace/planning 等每轮变化的可信元数据
+// 走 messages 层而非 systemPrompt，保证 system 前缀稳定、命中 pi 的 prefix caching。
+function buildRuntimeContextMessage(
+  prompt: string,
+  context: WritingRuntimeContext,
+): AgentMessage {
+  const body = buildRuntimeControlBlock({
+    planningIntervention: getPlanningIntervention(context.planningState, prompt),
+    planningState: context.planningState,
+    workspaceRootPath: context.workspaceRootPath,
+  });
+  const text = [RUNTIME_CONTEXT_MARKER, body, "</runtime_context>"].join("\n");
+  return {
+    role: "user",
+    content: [{ type: "text", text }],
+    timestamp: 0,
+  };
+}
+
+// 整轮（含所有续轮）结束、harness 回到 idle 后，按 pi 自带阈值判断是否压缩 pi 会话。
+// 关键修复：旧实现压的是 app ChatEntry（仅 UI 渲染层），模型实际读的是 pi jsonl 会话，
+// 二者不通——等于从不压缩真实上下文，长会话必然超窗。改用 pi 原生 harness.compact()，
+// 它会摘要并截断 jsonl 会话本身，下一轮模型读到的就是压缩后的上下文。
+// compact() 要求 idle，故只在 waitForIdle 之后调用；压缩失败不应让整轮失败，吞掉即可。
+async function maybeCompactSession(
+  harness: AgentHarness,
+  latestUsage: AgentUsage | null,
+  abortSignal: AbortSignal,
+): Promise<void> {
+  if (abortSignal.aborted || !latestUsage) return;
+  const contextWindow = harness.getModel().contextWindow;
+  if (!contextWindow || contextWindow <= 0) return;
+  if (!shouldCompact(latestUsage.totalTokens, contextWindow, DEFAULT_COMPACTION_SETTINGS)) {
+    return;
+  }
+  try {
+    await harness.compact(NOVEL_COMPACTION_INSTRUCTIONS);
+  } catch {
+    // 压缩失败（如摘要模型调用出错）不阻断主流程，下一轮命中阈值会再次尝试。
+  }
 }
 
 /**
@@ -87,6 +144,8 @@ export async function* runWritingAgentHarness({
   // 累积「当前 turn」内产出的 AgentPart，用于续轮判定（text/reasoning/tool-call/tool-result）。
   let currentTurnParts: AgentPart[] = [];
   let failure: Error | null = null;
+  // 最近一次 turn 的 usage，整轮结束（idle）后用于判断是否需要压缩 pi 会话。
+  let latestUsage: AgentUsage | null = null;
 
   const turnContent = buildTurnContent(prompt, toolContext);
   logPromptDebug({
@@ -116,8 +175,46 @@ export async function* runWritingAgentHarness({
     return decision.block ? { block: true, reason: decision.reason } : undefined;
   });
 
+  // context 钩子（pi transformContext）：每次 LLM 请求前注入「运行时控制块」到 messages。
+  // 这是把每轮变化的可信元数据（日期/workspace/planning）从 systemPrompt 下沉到 messages 层的关键，
+  // 既保证 system 前缀稳定命中 prefix caching，又让模型每轮都看到最新运行时状态。
+  // 注入位置：当前轮用户输入「之前」（即末尾倒数第二），让真实用户输入仍是最后一条消息，
+  // 同时运行时块落在尾部非缓存区、不影响前缀命中。
+  // 钩子不持久化返回的 messages（仅本次请求生效），故每次先剔除上一条注入再追加最新，避免堆叠。
+  const offContext = harness.on("context", (event) => {
+    const filtered = event.messages.filter((message) => !messageHasRuntimeContext(message));
+    const runtimeMessage = buildRuntimeContextMessage(prompt, toolContext);
+    // 找到最后一条 user（当前轮输入），把运行时块插在它前面；找不到则追加到尾部。
+    let lastUserIndex = -1;
+    for (let i = filtered.length - 1; i >= 0; i -= 1) {
+      if (filtered[i]?.role === "user") {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    if (lastUserIndex >= 0) {
+      filtered.splice(lastUserIndex, 0, runtimeMessage);
+    } else {
+      filtered.push(runtimeMessage);
+    }
+    return { messages: filtered };
+  });
+
   // 订阅 harness 事件流：AgentEvent 经 adapter 翻译为 parts/events，harness 自有事件按需处理。
   const unsubscribe = harness.subscribe((event: AgentHarnessEvent) => {
+    // pi 原生压缩事件桥接：harness.compact()（自动或手动触发）压缩 jsonl 会话后会 emit
+    // session_compact，adapter 不认识它，这里翻译成 app 的 compaction_end，让 UI 追加压缩标记。
+    if (event.type === "session_compact") {
+      const entry = event.compactionEntry;
+      emit({
+        type: "compaction_end",
+        aborted: false,
+        reason: "threshold",
+        summary: typeof entry?.summary === "string" ? entry.summary : undefined,
+      });
+      return;
+    }
+
     const { parts, events } = adapter.adapt(event as never);
     for (const evt of events) {
       emit(evt);
@@ -127,6 +224,7 @@ export async function* runWritingAgentHarness({
       if (evt.type === "turn_end") {
         turnCount += 1;
         if (evt.usage) {
+          latestUsage = evt.usage;
           toolContext.onUsage?.(evt.usage);
         }
         if (evt.finishReason === "error") {
@@ -178,14 +276,16 @@ export async function* runWritingAgentHarness({
     }
   });
 
-  // 启动一次 prompt，等待 harness 回到 idle 后关闭队列。
+  // 启动一次 prompt，等待 harness 回到 idle 后（必要时压缩 pi 会话）再关闭队列。
   void harness
     .prompt(turnContent)
     .then(() => harness.waitForIdle())
+    .then(() => maybeCompactSession(harness, latestUsage, abortSignal))
     .then(() => queue.close())
     .catch((error) => queue.close(error instanceof Error ? error : new Error(String(error))))
     .finally(() => {
       offToolCall();
+      offContext();
       unsubscribe();
       abortSignal.removeEventListener("abort", onAbort);
     });

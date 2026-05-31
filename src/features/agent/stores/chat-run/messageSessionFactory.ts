@@ -5,7 +5,7 @@ import {
 } from "@features/books/api/bookWorkspaceApi";
 import { resolveManualTurnContext } from "@features/agent/lib/prompt-context/manualTurnContext";
 import { loadProjectContext } from "@features/agent/lib/prompt-context/projectContext";
-import { createWritingAgentSession } from "@features/agent/lib/session";
+import { createWritingAgentSession, compactBookSession } from "@features/agent/lib/session";
 import { derivePlanningState } from "@features/agent/lib/modes/planning";
 import { buildBookWorkspaceTools } from "@features/agent/lib/builtin-tools/factory";
 import type { AgentMode, ModeContextMap } from "@features/agent/lib/modes/modeRules";
@@ -151,4 +151,39 @@ function getEnabledToolIds(mode: AgentMode) {
     .filter(([, value]) => value)
     .map(([id]) => id);
   return getModeConfig(mode).tools.filterEnabledToolIds(allEnabled);
+}
+
+// 手动压缩：复用 pi 原生 compact() 压缩持久 jsonl 会话。
+// 只需 harness 静态装配所需的最小上下文（provider/tools/skills/人设），物料类上下文
+//（projectContext/manualContext/planning）对 compact 无意义，故不构造，保持轻量。
+export async function runManualCompaction(params: {
+  sessionId: string;
+  providerConfig: AgentProviderConfig;
+  mode: AgentMode;
+}) {
+  const workspaceState = useBookWorkspaceStore.getState();
+  const bookId = workspaceState.rootBookId;
+  const displayPath = workspaceState.rootPath;
+  // 无打开工作区时无可压缩的持久会话，静默跳过（与旧实现「无结果即返回」一致）。
+  if (!bookId) return null;
+
+  const enabledSkills = getEnabledSkills(useSkillsStore.getState());
+  const defaultAgentMarkdown = await ensureMainAgentMarkdown();
+
+  return compactBookSession({
+    sessionId: params.sessionId,
+    bookId,
+    displayPath: displayPath ?? "",
+    toolContext: {
+      activeFilePath: workspaceState.activeFilePath,
+      defaultAgentMarkdown,
+      enabledSkills,
+      enabledToolIds: getEnabledToolIds(params.mode),
+      mode: params.mode,
+      providerConfig: params.providerConfig,
+      workspaceBookId: bookId,
+      workspaceRootPath: displayPath,
+      workspaceTools: buildBookWorkspaceTools({ bookId, displayPath, includeAsk: true }),
+    },
+  });
 }

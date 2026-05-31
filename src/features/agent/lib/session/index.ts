@@ -25,3 +25,5 @@ export type {
 } from "./runtime";
 export { hasProviderConfig } from "./writingRuntimeContext";
 export type { WritingRuntimeContext } from "./writingRuntimeContext";
+export { compactBookSession, NOVEL_COMPACTION_INSTRUCTIONS } from "./compactBookSession";
+export type { CompactBookSessionOptions, CompactBookSessionResult } from "./compactBookSession";
