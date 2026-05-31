@@ -22,7 +22,8 @@ description: |
 接到任务后必读：
 
 - `.project/AGENTS.md`、`.project/README.md`：风格、字数、禁写约束。
-- `.project/status/project-state.json`、`system-state.json`、`latest-plot.json`、`character-state.json`。
+- `.project/status/project-state.json`（当前阶段、当前章节、活跃文件、阻塞项、下一步）。
+- `.project/status/story-state.json`（剧情位置、最近章节、人物状态、关系网、伏笔与连续性）。
 - 上一章 / 最近 1-3 章正文（续写或返修时）。
 - 当前卷的卷级大纲、当前章节细纲（若有）。
 - 本章涉及的角色 / 势力 / 世界观设定。
@@ -37,7 +38,7 @@ description: |
 
 ### 续写阶段（已有项目）
 
-1. 读 `.project/status/system-state.json` 拿到当前章节号与活跃文件。
+1. 读 `.project/status/project-state.json` 的 `currentChapterFile`、`activeFiles` 拿到当前章节与活跃文件。
 2. 读上一章正文与当前章细纲（若无则先补）。
 3. 写 `正文/第NNN章_章名.md`：开篇 200 字内有具体场景或冲突；单章一个核心冲突 + 1-2 个推进点 + 一个主爽点；章末必留钩子。
 4. 字数符合 README / AGENTS 约定（默认汉字 2500-3500），写完用 `text_stats` 复核。
@@ -85,9 +86,9 @@ description: |
 - `大纲/大纲.md`、`大纲/细纲_第NNN章.md`
 - `正文/第NNN章_章名.md`
 - `设定/世界观/*.md`、`设定/角色/角色名.md`、`设定/势力/势力名.md`（仅在创作必须时新建）
-- `.project/status/system-state.json`：当前章节、活跃文件字段
+- `.project/status/project-state.json`：`currentChapterFile`、`activeFiles`、`currentPhase` 等进度字段。
 
-不要写：他人维护的 `character-state.json` / `latest-plot.json` / `continuity-index.json`（交给连续性维护子任务）。
+不要写：`.project/status/story-state.json` 的 `characters` / `continuity` 段（人物状态、伏笔与连续性由连续性维护流程负责，写正文时不主动重写）。
 
 ## Reference Map
 

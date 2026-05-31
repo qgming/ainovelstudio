@@ -6,12 +6,6 @@ import { createPiTool } from "./tools/builder";
 import { ALL_TOOL_SPECS } from "./tools/schemas";
 import type { PiToolInteractive, PiToolRunnerContext } from "./tools/types";
 
-// 工具 id → UI 展示用 label（取自工具规格，回退到 id）。这里用 id 作为 label 兜底，
-// 真正的中文名由 prompt 层 ALL_TOOL_DEFS 提供；pi AgentTool.label 仅用于 UI，简单用 id。
-function resolveLabel(toolId: string): string {
-  return toolId;
-}
-
 export type BuildPiToolsParams = {
   workspaceTools: Record<string, WorkspaceTool>;
   enabledToolIds: string[];
@@ -53,7 +47,8 @@ export function buildPiTools(params: BuildPiToolsParams): AgentTool<TSchema>[] {
           spec,
           workspaceTool,
           context,
-          label: resolveLabel(toolId),
+          // pi AgentTool.label 仅用于 UI，直接用 id；真正的中文名由 prompt 层 ALL_TOOL_DEFS 提供。
+          label: toolId,
         }),
       );
     }

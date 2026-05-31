@@ -216,19 +216,6 @@ pub(crate) fn create_context_manifest_template(book_name: &str) -> String {
       ],
       "includeIfActive": [],
       "priority": 10
-    },
-    {
-      "taskType": "chapter-write",
-      "alwaysInclude": [
-        ".project/AGENTS.md",
-        ".project/README.md",
-        ".project/status/project-state.json",
-        ".project/status/story-state.json"
-      ],
-      "includeIfActive": [
-        "大纲/大纲.md"
-      ],
-      "priority": 30
     }
   ]
 }

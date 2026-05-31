@@ -78,7 +78,6 @@ fn create_book_workspace_db_builds_template_tree() {
     )
     .expect("context manifest should load");
     assert!(context_manifest.contains("\"taskType\": \"book\""));
-    assert!(context_manifest.contains("\"taskType\": \"chapter-write\""));
 
     let project_status = read_text_file_db(
         &store,

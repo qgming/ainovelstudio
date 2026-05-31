@@ -4,7 +4,6 @@
 // isAutopilotGoalCompleted / buildAutopilotContinuePrompt / needsProtocolRepair），
 // 改为基于「本轮 turnParts」判定，由 runner 在 turn_end 调用并以 harness.followUp 续轮。
 
-import { buildModeRules } from "../modeRules";
 import { getYoloControlDataFromPart, YOLO_CONTROL_TOOL_ID } from "../yoloControl";
 import type { AgentPart } from "../types";
 import { filterEnabledToolIdsForMode } from "./toolFilter";
@@ -104,7 +103,6 @@ export const autopilotMode: ModeConfig<"autopilot"> = {
   },
   // 不设硬性轮数上限：持续运行直到目标完成 / 阻塞 / 用户停止。
   stepLimit: null,
-  buildRules: (context) => buildModeRules("autopilot", context ?? { goal: "未指定", iteration: 1 }),
   loop: { decideContinuation },
   approval: { decideToolCall },
 };

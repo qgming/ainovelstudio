@@ -82,20 +82,6 @@ describe("tools.filterEnabledToolIds", () => {
   });
 });
 
-describe("buildRules", () => {
-  it("book 渲染图书工作区协作规则", () => {
-    const rules = bookMode.buildRules(undefined);
-    expect(rules).toContain("模式：BOOK");
-  });
-
-  it("autopilot 渲染 YOLO 契约 + 目标 + 轮次", () => {
-    const rules = autopilotMode.buildRules({ goal: "完成第一章", iteration: 3 });
-    expect(rules).toContain("模式：YOLO");
-    expect(rules).toContain("完成第一章");
-    expect(rules).toContain("第 3 轮");
-  });
-});
-
 describe("book loop.decideContinuation", () => {
   const baseInput = {
     turnCount: 1,

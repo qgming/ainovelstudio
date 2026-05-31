@@ -1,6 +1,5 @@
 // CP-F：BOOK（图书工作区多轮协作）模式策略。
 
-import { buildModeRules } from "../modeRules";
 import { getWriteProtocolRepairPrompt } from "../core/writeProtocolRepair";
 import { YOLO_CONTROL_TOOL_ID } from "../yoloControl";
 import { filterEnabledToolIdsForMode } from "./toolFilter";
@@ -33,7 +32,6 @@ export const bookMode: ModeConfig<"book"> = {
       filterEnabledToolIdsForMode(allEnabled, null, [YOLO_CONTROL_TOOL_ID]),
   },
   stepLimit: COLLAB_STEP_LIMIT,
-  buildRules: () => buildModeRules("book", {}),
   loop: { decideContinuation },
   // book 是与作者协作的开放模式，工具全部放行，不做 tool_call 审批。
   approval: { decideToolCall: () => ({ block: false }) },

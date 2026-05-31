@@ -72,8 +72,6 @@ export type ModeConfig<M extends AgentMode = AgentMode> = {
   };
   /** 步数上限；null 表示不限。 */
   stepLimit: number | null;
-  /** 渲染本模式的系统规则文本。 */
-  buildRules(context: ModeContextMap[M] | undefined): string;
   loop: {
     /** turn_end 续轮判定（pi followUp 内循环驱动）。 */
     decideContinuation(input: ContinuationInput<M>): ContinuationDecision;

@@ -20,7 +20,7 @@ description: |
 
 - 用户主提示词（题材、平台、卖点、情绪基调、禁写约束）。
 - 当前短篇项目目录的立项 / 蓝图 / 最小设定文件（已存在时）。
-- `.project/status/factory-index.json`（若存在）：避开最近几篇已用过的题材 / 关系 / 反转 / 结局。
+- `.project/status/factory-index.json`：仅短篇集工厂场景由发布整理流程维护；单篇项目通常不存在，读不到则跳过避重即可，不要主动创建。用于避开最近几篇已用过的题材 / 关系 / 反转 / 结局。
 - 收到 revision_brief 时必读，并只针对当前项目修订。
 
 ## Procedure
