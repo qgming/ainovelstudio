@@ -1,7 +1,6 @@
 import { appendChatEntry, setChatDraft } from "@features/agent/chat/api";
 import type { ChatEntry } from "@features/agent/chat/types";
 import {
-  buildAssistantPlaceholderMessage,
   buildSessionPatch,
   mergePart,
 } from "@features/agent/chat/sessionRuntime";
@@ -32,7 +31,6 @@ import {
   createMessageRunSeed,
   type RunContext,
 } from "./messageRunSeed";
-import { appendMessageEntry } from "./entriesRuntime";
 import type {
   ActiveWritingSessionSlot,
   ChatRunStoreAccess,
@@ -68,10 +66,6 @@ class MessageRunner {
   private pendingStreamParts: AgentPart[] = [];
   private streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private sessionId: string | null;
-  // CP-F：autopilot 内循环后一次 run 可能产生多条 assistant 消息（每轮一条）。
-  // 记录当前活动 assistant 消息 id（turn 边界推进）+ 已见 assistant 起始数，供 persistor 与开新消息用。
-  private activeAssistantId: string;
-  private assistantTurnSeen = 0;
 
   constructor(private readonly params: MessageRunnerParams) {
     const seed = createMessageRunSeed(params);
@@ -79,10 +73,9 @@ class MessageRunner {
     this.messageMeta = seed.messageMeta;
     this.userMessage = seed.userMessage;
     this.assistantMessage = seed.assistantMessage;
-    this.activeAssistantId = this.assistantMessage.id;
     this.persistor = createAssistantPersistor({
       ...params,
-      getActiveAssistantMessageId: () => this.activeAssistantId,
+      getActiveAssistantMessageId: () => this.assistantMessage.id,
       currentBookId: () => this.currentBookId(),
       getMessages: () => this.latestMessages,
       getSessionId: () => this.sessionId,
@@ -178,14 +171,6 @@ class MessageRunner {
     this.params.sessionSlot.set(writingSession, writingSession.subscribe((event) => {
       const patch = queuePatchFromEvent(event);
       if (patch) this.params.set(patch);
-      // CP-F：autopilot 内循环在同一 prompt() 流内续轮，每个 turn adapter 产新 message_start。
-      // 第 2 个起的 assistant message_start 视为新一轮 → 开一条新 assistant 消息（每轮一条）。
-      if (event.type === "message_start" && event.message.role === "assistant") {
-        this.assistantTurnSeen += 1;
-        if (this.assistantTurnSeen >= 2) {
-          this.startNewAssistantMessage(event.message.id);
-        }
-      }
     }));
 
     for await (const part of writingSession.prompt(this.context.nextInput)) {
@@ -239,11 +224,40 @@ class MessageRunner {
       const messages = [...(state.messagesBySession[sessionId] ?? [])];
       const lastMessage = messages[messages.length - 1];
       if (lastMessage?.role !== "assistant") return state;
-      const mergedParts = parts.reduce((current, part) => mergePart(current, part), lastMessage.parts);
+
+      // 一次 run 只有一条 assistant 消息（seed 占位消息），该 run 全部 turn 的 text/
+      // reasoning/tool-call/tool-result 都合并进这条消息。part 自带的 messageId 是 adapter
+      // 每个 turn 生成的临时 id，与 seed 消息 id 不同，故全部经 fallback 落到唯一的最后一条
+      // assistant 消息；tool-result 靠 toolCallId（而非 messageId）与同消息内的 tool-call 配对
+      //（mergeToolResultPart），跨 turn 也能正确收口。保留 messageId 路由作为防御性逻辑，
+      // 为将来若再引入多消息渲染留扩展点。
+      const lastAssistantIndex = messages.length - 1;
+      const indexById = new Map<string, number>();
+      messages.forEach((message, index) => {
+        if (message.role === "assistant") indexById.set(message.id, index);
+      });
+
+      const touchedIndexes = new Set<number>();
+      for (const part of parts) {
+        const messageId = (part as { messageId?: string }).messageId;
+        const targetIndex =
+          messageId !== undefined && indexById.has(messageId)
+            ? (indexById.get(messageId) as number)
+            : lastAssistantIndex;
+        const target = messages[targetIndex];
+        if (target?.role !== "assistant") continue;
+        messages[targetIndex] = { ...target, parts: mergePart(target.parts, part) };
+        touchedIndexes.add(targetIndex);
+      }
+
       const lastPart = parts[parts.length - 1] as AgentPart;
-      messages[messages.length - 1] = { ...lastMessage, parts: mergedParts };
       this.latestMessages = messages;
-      this.latestEntries = replaceMessageEntry(this.latestEntries, messages[messages.length - 1]);
+      // 仅对被改动的消息回写条目，避免无谓替换。
+      let entries = this.latestEntries;
+      for (const index of touchedIndexes) {
+        entries = replaceMessageEntry(entries, messages[index]);
+      }
+      this.latestEntries = entries;
       this.persistor.schedule();
       return buildStreamPatch(state, sessionId, lastPart, this.runPatchContext());
     });
@@ -278,31 +292,6 @@ class MessageRunner {
     }));
     await this.persistor.flush("completed");
     if (this.latestUsage && shouldCompactUsage(this.latestUsage)) await this.params.compactSession("threshold");
-  }
-
-  // CP-F：autopilot 内循环在同一 prompt() 流内续轮，每个 turn 由 harness adapter 产新
-  // assistant message_start。第 2 个起的 assistant turn 视为新一轮 → 在 store 与历史里
-  // 追加一条全新的 assistant 占位消息（每轮一条），并把活动 id 切到它，
-  // 使后续 mergeParts/usage/persistor 全部落到当前轮的消息上。
-  private startNewAssistantMessage(messageId: string) {
-    if (!this.sessionId || !this.isCurrentRun()) return;
-    const sessionId = this.sessionId;
-    const placeholder: AgentMessage = {
-      ...buildAssistantPlaceholderMessage(this.messageMeta),
-      id: messageId,
-    };
-    this.activeAssistantId = messageId;
-    this.latestMessages = [...this.latestMessages, placeholder];
-    this.latestEntries = appendMessageEntry(this.latestEntries, placeholder);
-    this.params.set((state) => ({
-      entriesBySession: { ...state.entriesBySession, [sessionId]: this.latestEntries },
-      ...ensureSessionState(state, sessionId, this.latestMessages, "", "running"),
-    }));
-    void this.persistor.persistSummary(appendChatEntry(
-      this.currentBookId(),
-      sessionId,
-      { id: messageId, entryType: "message", payload: { message: placeholder } },
-    ));
   }
 
   private async handleError(error: unknown) {
@@ -343,9 +332,7 @@ class MessageRunner {
   private runPatchContext() {
     return {
       abortController: this.abortController,
-      // CP-F：usage 等补丁要落到「当前活动 assistant 消息」（autopilot 内循环每轮换一条），
-      // 而非固定的首条；故用 activeAssistantId 而非 assistantMessage.id。
-      assistantMessageId: this.activeAssistantId,
+      assistantMessageId: this.assistantMessage.id,
       autopilotGoal: this.context.autopilotGoal,
       latestEntries: this.latestEntries,
       latestMessages: this.latestMessages,

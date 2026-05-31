@@ -1,8 +1,15 @@
+import { uuidv7 } from "@earendil-works/pi-agent-core";
 import type { AgentMessage, AgentMessageMeta, AgentPart, AgentRun, AgentRunStatus } from "@features/agent/lib/types";
 import { mergeToolResultPart } from "@features/agent/lib/domain/toolParts";
 import type { ChatSessionPatch } from "./types";
 
 const DEFAULT_TITLE = "新对话";
+
+// 以 pi 的 uuidv7（时间排序 + 单调序列，同毫秒不碰撞）为基础生成可读消息 id。
+// 替代裸 Date.now()，避免同一毫秒创建两条同前缀消息时主键碰撞（chat_entries.id）。
+export function createMessageId(prefix: "user" | "assistant" | "system" | "compaction"): string {
+  return `${prefix}-${uuidv7()}`;
+}
 
 function nowEpoch() {
   return Math.floor(Date.now() / 1000).toString();
@@ -106,7 +113,7 @@ export function normalizeRecoveredMessages(messages: AgentMessage[]) {
 
 export function buildUserMessage(text: string, meta?: AgentMessageMeta): AgentMessage {
   return {
-    id: `user-${Date.now()}`,
+    id: createMessageId("user"),
     role: "user",
     author: "你",
     meta,
@@ -116,7 +123,7 @@ export function buildUserMessage(text: string, meta?: AgentMessageMeta): AgentMe
 
 export function buildAssistantPlaceholderMessage(meta?: AgentMessageMeta): AgentMessage {
   return {
-    id: `assistant-${Date.now()}`,
+    id: createMessageId("assistant"),
     role: "assistant",
     author: "主代理",
     meta,
@@ -126,7 +133,7 @@ export function buildAssistantPlaceholderMessage(meta?: AgentMessageMeta): Agent
 
 export function buildSystemMessage(text: string, meta?: AgentMessageMeta): AgentMessage {
   return {
-    id: `system-${Date.now()}`,
+    id: createMessageId("system"),
     role: "system",
     author: "系统",
     meta,

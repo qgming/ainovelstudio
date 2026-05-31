@@ -7,11 +7,13 @@ use crate::app::{handle_tray_icon_event, handle_tray_menu_event, setup_tray};
 use crate::app::{
     hide_main_window, terminate_application, update_tray_ai_status, ToolCancellationRegistry,
 };
+use crate::infrastructure::provider_stream_registry::ProviderStreamRegistry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .manage(ToolCancellationRegistry::default())
+        .manage(ProviderStreamRegistry::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
 
@@ -59,6 +61,8 @@ pub fn run() {
             domains::chat::commands::write_agent_settings,
             domains::chat::commands::clear_agent_settings,
             infrastructure::provider_proxy::forward_provider_request,
+            infrastructure::provider_stream::stream_provider_request,
+            infrastructure::provider_stream::cancel_provider_stream,
             infrastructure::update_manifest::fetch_update_manifest,
             domains::chat::default_agent_config::initialize_default_agent_config,
             domains::chat::default_agent_config::read_default_agent_config,

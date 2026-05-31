@@ -3,7 +3,7 @@ import type { AgentSessionEvent } from "@features/agent/lib/session";
 import type { AgentMessage } from "@features/agent/lib/types";
 import { appendChatEntry } from "@features/agent/chat/api";
 import { buildMessageEntry, getCompactionCount, nextEntrySeq } from "@features/agent/chat/entries";
-import { buildSessionPatch } from "@features/agent/chat/sessionRuntime";
+import { buildSessionPatch, createMessageId } from "@features/agent/chat/sessionRuntime";
 import type { ChatEntry, ChatSessionSummary, CompactionPayload } from "@features/agent/chat/types";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import { DEFAULT_CHAT_BOOK_ID } from "./helpers";
@@ -51,7 +51,7 @@ function appendCompactionLocalEntry(
   return [
     ...entries,
     {
-      id: `compaction-${Date.now()}`,
+      id: createMessageId("compaction"),
       seq: nextEntrySeq(entries),
       entryType: "compaction",
       payload: { ...payload, createdAt },

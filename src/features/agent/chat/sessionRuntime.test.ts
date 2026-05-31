@@ -1,6 +1,43 @@
-import { describe, expect, it } from "vitest";
-import { mergePart } from "./sessionRuntime";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  buildAssistantPlaceholderMessage,
+  buildSystemMessage,
+  buildUserMessage,
+  createMessageId,
+  mergePart,
+} from "./sessionRuntime";
 import type { AgentPart } from "@features/agent/lib/types";
+
+describe("createMessageId（pi uuidv7，回归 chat_entries 主键冲突）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("钉死同一毫秒，连续生成的 id 仍两两不同", () => {
+    // 旧实现用裸 Date.now()，同毫秒会生成相同 id 触发 UNIQUE 冲突。
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const ids = [
+      createMessageId("user"),
+      createMessageId("assistant"),
+      createMessageId("assistant"),
+      createMessageId("system"),
+      createMessageId("compaction"),
+    ];
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids[0]).toMatch(/^user-/);
+    expect(ids[1]).toMatch(/^assistant-/);
+  });
+
+  it("同一毫秒下 buildUser/Assistant/System 消息 id 互不碰撞", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const ids = [
+      buildUserMessage("你好").id,
+      buildAssistantPlaceholderMessage().id,
+      buildSystemMessage("系统提示").id,
+    ];
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
 
 describe("mergePart", () => {
   it("tool-result 会把结构化 output 回填到匹配的 tool-call", () => {

@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import { uuidv7 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, AssistantMessageEvent } from "@earendil-works/pi-ai";
 import { createToolResultPart } from "../domain/toolParts";
 import type { AgentSessionEvent } from "../session/events";
@@ -114,7 +115,10 @@ export class AgentEventAdapter {
 
       case "turn_start": {
         this.turnIndex += 1;
-        this.currentTurnId = `${Date.now()}-${this.turnIndex}`;
+        // id 改用 pi 的 uuidv7（同毫秒单调不碰撞），替代旧的 Date.now()-turnIndex，
+        // 避免续轮/连续 run 在同一毫秒生成相同 assistant 消息 id 触发主键冲突。
+        // 仍在 turn_start 生成一次并存下，turn_end 复用，保证同一 turn 两端 id 一致。
+        this.currentTurnId = uuidv7();
         this.currentMessageId = `assistant-${this.currentTurnId}`;
         return {
           parts: [],
@@ -123,6 +127,13 @@ export class AgentEventAdapter {
       }
 
       case "message_start":
+        // pi 的 message_start 也覆盖 toolResult（工具结果消息）/ user（续轮注入）消息，
+        // 它们的 role 不是 assistant。只有 assistant 的 message_start 才代表"助手轮开始"，
+        // 应透出给 UI 层；其余直接吞掉——否则下游会把工具结果消息误判为新的助手轮
+        //（曾导致每次工具调用都拆出第二条助手气泡 + 主键冲突）。
+        if (event.message.role !== "assistant") {
+          return EMPTY;
+        }
         return {
           parts: [],
           events: [
@@ -142,6 +153,10 @@ export class AgentEventAdapter {
         return this.adaptMessageUpdate(event.assistantMessageEvent);
 
       case "message_end":
+        // 同 message_start：非 assistant 的 message_end（toolResult / user）不透出。
+        if (event.message.role !== "assistant") {
+          return EMPTY;
+        }
         return {
           parts: [],
           events: [
@@ -202,14 +217,14 @@ export class AgentEventAdapter {
   private adaptMessageUpdate(inner: AssistantMessageEvent): AdaptResult {
     switch (inner.type) {
       case "text_delta": {
-        const part: AgentPart = { type: "text-delta", delta: inner.delta };
+        const part: AgentPart = { type: "text-delta", delta: inner.delta, messageId: this.currentMessageId };
         return {
           parts: [part],
           events: [{ type: "message_update", messageId: this.currentMessageId, part }],
         };
       }
       case "thinking_delta": {
-        const part: AgentPart = { type: "reasoning", summary: "", detail: inner.delta };
+        const part: AgentPart = { type: "reasoning", summary: "", detail: inner.delta, messageId: this.currentMessageId };
         return {
           parts: [part],
           events: [{ type: "message_update", messageId: this.currentMessageId, part }],
@@ -227,7 +242,7 @@ export class AgentEventAdapter {
       const details: AskUserToolDetails = { ...args, status: "awaiting_user" };
       // 缓存请求详情，供工具中止/抛错时合成 failed 卡片。
       this.askRequests.set(toolCallId, details);
-      const part = buildAskPartFromDetails(details, toolCallId);
+      const part = { ...buildAskPartFromDetails(details, toolCallId), messageId: this.currentMessageId };
       return {
         parts: [part],
         events: [
@@ -243,6 +258,7 @@ export class AgentEventAdapter {
       toolName,
       status: "running",
       inputSummary: stringifyInput(args),
+      messageId: this.currentMessageId,
     };
     return {
       parts: [part],
@@ -259,7 +275,7 @@ export class AgentEventAdapter {
     if (toolName === this.askToolName && details) {
       // 刷新缓存，保证 failed 兜底用的是最新请求详情。
       this.askRequests.set(toolCallId, details);
-      const part = buildAskPartFromDetails(details, toolCallId);
+      const part = { ...buildAskPartFromDetails(details, toolCallId), messageId: this.currentMessageId };
       return {
         parts: [part],
         events: [{ type: "tool_execution_update", part, toolCallId, toolName }],
@@ -273,7 +289,7 @@ export class AgentEventAdapter {
     const details = extractAskDetails(result);
     if (toolName === this.askToolName && details) {
       this.askRequests.delete(toolCallId);
-      const part = buildAskPartFromDetails(details, toolCallId);
+      const part = { ...buildAskPartFromDetails(details, toolCallId), messageId: this.currentMessageId };
       return {
         parts: [part],
         events: [{ type: "tool_execution_end", part, toolCallId, toolName }],
@@ -287,14 +303,17 @@ export class AgentEventAdapter {
       this.askRequests.delete(toolCallId);
       // 错误说明在 content 文本里（details 此时多为空对象），故直接取 content。
       const failedText = extractToolContentText(result).trim();
-      const part = buildAskPartFromDetails(
-        {
-          ...cachedAsk,
-          status: "failed",
-          errorMessage: failedText || "提问未完成。",
-        },
-        toolCallId,
-      );
+      const part = {
+        ...buildAskPartFromDetails(
+          {
+            ...cachedAsk,
+            status: "failed",
+            errorMessage: failedText || "提问未完成。",
+          },
+          toolCallId,
+        ),
+        messageId: this.currentMessageId,
+      };
       return {
         parts: [part],
         events: [{ type: "tool_execution_end", part, toolCallId, toolName }],
@@ -302,12 +321,15 @@ export class AgentEventAdapter {
     }
     this.askRequests.delete(toolCallId);
 
-    const part = createToolResultPart({
-      output: extractToolOutput(result),
-      status: isError ? "failed" : "completed",
-      toolCallId,
-      toolName,
-    });
+    const part: AgentPart = {
+      ...createToolResultPart({
+        output: extractToolOutput(result),
+        status: isError ? "failed" : "completed",
+        toolCallId,
+        toolName,
+      }),
+      messageId: this.currentMessageId,
+    };
     return {
       parts: [part],
       events: [{ type: "tool_execution_end", part, toolCallId, toolName }],

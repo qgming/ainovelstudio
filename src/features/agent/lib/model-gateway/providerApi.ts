@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
-// Provider 请求转发（绕 CORS）。LLM 模型调用已迁至 pi-ai（走 webview 原生 fetch），
-// 不再经此模块；这里仅保留工具类请求（联网搜索 / 网页抓取 / 排行榜）所需的 forward 转发。
-// 历史的 stream_provider_request / fetch_provider_models / probe_provider_connection 封装
-// 已随 pi 重构（CP2）移除——modelCatalog 改前端直接 fetch，providerProbe 改 pi complete()。
+// Provider 请求转发（绕 CORS）。本模块仅保留工具类请求（联网搜索 / 网页抓取 / 排行榜）
+// 所需的一次性 forward 转发。
+// LLM 模型调用走 pi-ai，其 webview fetch 已由 pi/rustProviderFetch.ts 注入改道至 Rust
+// 流式命令 stream_provider_request（SSE 逐字流），不经此模块。
 
 export type ForwardProviderRequest = {
   baseUrl?: string;

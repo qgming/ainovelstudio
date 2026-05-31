@@ -57,9 +57,9 @@ export type AgentUsage = {
 
 export type AgentPart =
   | { type: "placeholder"; text: string }
-  | { type: "text"; text: string }
-  | { type: "text-delta"; delta: string }
-  | { type: "reasoning"; summary: string; detail: string; collapsed?: boolean }
+  | { type: "text"; text: string; messageId?: string }
+  | { type: "text-delta"; delta: string; messageId?: string }
+  | { type: "reasoning"; summary: string; detail: string; collapsed?: boolean; messageId?: string }
   | {
       type: "tool-call";
       toolName: string;
@@ -69,6 +69,9 @@ export type AgentPart =
       outputSummary?: string;
       output?: unknown;
       validationError?: string;
+      // 该 part 所属的 assistant 消息 id（adapter 注入）。
+      // mergeParts 据此把 part 路由回正确消息，避免续轮换消息时落到错误的 last message。
+      messageId?: string;
     }
   | {
       type: "tool-result";
@@ -78,6 +81,8 @@ export type AgentPart =
       outputSummary: string;
       output?: unknown;
       validationError?: string;
+      // 该 part 所属的 assistant 消息 id（adapter 注入），用途同 tool-call。
+      messageId?: string;
     }
   | {
       type: "ask-user";
@@ -95,6 +100,8 @@ export type AgentPart =
       confirmLabel?: string;
       answer?: AskToolAnswer;
       errorMessage?: string;
+      // 该 part 所属的 assistant 消息 id（adapter 注入），用途同 tool-call。
+      messageId?: string;
     }
   ;
 

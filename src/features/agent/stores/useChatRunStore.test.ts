@@ -77,6 +77,7 @@ vi.mock("@features/agent/lib/session", () => ({
 
 import { appendChatEntry, createChatSession, initializeChatStorage } from "@features/agent/chat/api";
 import { cancelToolRequests } from "@features/books/api/bookWorkspaceApi";
+import { createWritingAgentSession } from "@features/agent/lib/session";
 import { resolveManualTurnContext, type ManualTurnContextPayload } from "@features/agent/lib/prompt-context/manualTurnContext";
 import { readAgentSettings } from "@features/settings/api/agentSettingsApi";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
@@ -357,6 +358,101 @@ describe("useChatRunStore", () => {
       iteration: 1,
     });
     expect(useAgentStore.getState().autopilotGoalsBySession["session-1"]).toBe("完成第一章审校并写回文件");
+    expect(useAgentStore.getState().run.status).toBe("completed");
+  });
+
+  it("一次含工具调用的 run 只产生一条 assistant 消息，且工具卡片收口为 completed（修复拆两条/卡 running/主键冲突）", async () => {
+    // 回归三连 bug 的盲区：真实 pi 事件流里，一次普通工具调用会产生 turn1(assistant+tool-call)
+    // → toolResult message_start → turn_end → turn2(assistant 回复) → turn_end。旧逻辑把
+    // 第 2 个 assistant message_start（及被误判的 toolResult message_start）当成新一轮，拆出
+    // 第二条气泡并用已存在 id 二次 appendChatEntry（主键冲突）。本测试在 session 边界同时驱动
+    // subscribe（同步 emit 真实事件）与 prompt（产 part），断言：① 只新增一条 assistant 消息；
+    // ② 该消息内 tool-call 收口为 completed；③ appendChatEntry 不会用重复 id 调用。
+    let listener: ((event: { type: string; message?: { role: string; id: string } }) => void) | null = null;
+    // adapter 每个 turn 用不同的临时 messageId（assistant-{turnN}）。
+    const turn1Id = "assistant-turn-1";
+    const turn2Id = "assistant-turn-2";
+
+    vi.mocked(createWritingAgentSession).mockImplementationOnce((options) => ({
+      abort: (reason?: string) => options.abortController?.abort(reason),
+      compact: vi.fn(),
+      followUp: vi.fn(),
+      // prompt 串行：先同步发 turn1 的事件 + 产 tool-call/tool-result part，
+      // 再发 toolResult/turn2 的 message_start（曾触发拆消息），最后产工具后文本。
+      prompt: async function* () {
+        listener?.({ type: "turn_start" });
+        listener?.({ type: "message_start", message: { role: "assistant", id: turn1Id } });
+        yield {
+          type: "tool-call",
+          toolName: "workspace_write",
+          toolCallId: "call-write-1",
+          status: "running",
+          inputSummary: '{"path":"a.md"}',
+          messageId: turn1Id,
+        };
+        yield {
+          type: "tool-result",
+          toolName: "workspace_write",
+          toolCallId: "call-write-1",
+          status: "completed",
+          outputSummary: '{"ok":true}',
+          output: { ok: true },
+          messageId: turn1Id,
+        };
+        // 工具结果消息（role=toolResult）的 message_start —— 旧逻辑会误判为新助手轮。
+        listener?.({ type: "message_start", message: { role: "toolResult", id: turn1Id } });
+        listener?.({ type: "turn_end" });
+        // turn2：工具后的助手回复轮，又一个 assistant message_start —— 旧逻辑在此拆第二条气泡。
+        listener?.({ type: "turn_start" });
+        listener?.({ type: "message_start", message: { role: "assistant", id: turn2Id } });
+        yield { type: "text-delta", delta: "已写入文件。", messageId: turn2Id };
+        listener?.({ type: "turn_end" });
+      },
+      steer: vi.fn(),
+      subscribe: vi.fn((cb: typeof listener) => {
+        listener = cb;
+        return () => {
+          listener = null;
+        };
+      }),
+      waitForIdle: vi.fn(),
+    }) as unknown as ReturnType<typeof createWritingAgentSession>);
+
+    useAgentStore.setState({
+      activeSessionId: "session-1",
+      input: "写入文件",
+      isHydrated: true,
+      messagesBySession: { "session-1": [] },
+      run: {
+        id: "session-1",
+        status: "idle",
+        title: "新对话",
+        messages: [],
+      },
+      status: "ready",
+    });
+
+    await useAgentStore.getState().sendMessage();
+
+    const messages = useAgentStore.getState().run.messages;
+    // user + 唯一一条 assistant（不再因工具调用拆成两条）。
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.role).toBe("user");
+    const assistant = messages[1];
+    expect(assistant?.role).toBe("assistant");
+
+    // tool-call 收口为 completed（不再永远停在 running），且无"未匹配"validationError。
+    const toolCall = assistant?.parts.find((part) => part.type === "tool-call");
+    expect(toolCall).toMatchObject({ toolName: "workspace_write", status: "completed" });
+    expect(assistant?.parts.some((part) => part.type === "tool-result" && part.validationError)).toBe(false);
+    // 工具后的文本与工具卡片在同一条消息内。
+    expect(assistant?.parts.some((part) => part.type === "text" && part.text === "已写入文件。")).toBe(true);
+
+    // appendChatEntry 不应被用重复的 entry id 调用（旧逻辑会用 turn1Id 二次 append → 主键冲突）。
+    const appendedIds = vi.mocked(appendChatEntry).mock.calls.map((call) => call[2]?.id);
+    const duplicates = appendedIds.filter((id, index) => id !== undefined && appendedIds.indexOf(id) !== index);
+    expect(duplicates).toEqual([]);
+
     expect(useAgentStore.getState().run.status).toBe("completed");
   });
 

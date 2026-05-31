@@ -281,10 +281,12 @@ describe("agent session (streaming)", () => {
     }
 
     expect(vi.mocked(streamSimple)).toHaveBeenCalledTimes(1);
-    expect(parts).toEqual([
+    // part 现额外携带 messageId（用于 mergeParts 路由），此处只校验内容序列。
+    expect(parts).toMatchObject([
       { type: "text-delta", delta: "你好" },
       { type: "text-delta", delta: "世界" },
     ]);
+    expect(parts).toHaveLength(2);
   });
 
   it("会把项目默认上下文注入当前轮消息", async () => {
