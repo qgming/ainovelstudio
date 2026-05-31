@@ -140,9 +140,6 @@ function setupInvokeMock() {
       case "list_book_workspaces":
         return [{ id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 }];
       case "get_book_workspace_summary":
-        if (payload?.rootPath === otherRootPath) {
-          return { id: otherBookId, name: "星河回声", path: otherRootPath, updatedAt: 1710000001 };
-        }
         return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
       case "get_book_workspace_summary_by_id":
         if (payload?.bookId === otherBookId) {
@@ -150,7 +147,7 @@ function setupInvokeMock() {
         }
         return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
       case "read_workspace_tree":
-        return payload?.rootPath === otherRootPath ? otherTree : tree;
+        return payload?.bookId === otherBookId ? otherTree : tree;
       case "read_text_file":
         if (payload?.path === trackerPath) {
           return '{"currentChapter":"第001章"}';
@@ -216,9 +213,9 @@ describe("BookWorkspaceView", () => {
     await waitFor(
       () => {
         expect(mockInvoke).toHaveBeenCalledWith("write_text_file", {
+          bookId,
           contents: "这是章节终稿",
           path: chapterPath,
-          rootPath,
         });
       },
       { timeout: 2000 },
@@ -242,9 +239,9 @@ describe("BookWorkspaceView", () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith("write_text_file", {
+        bookId,
         contents: '{"currentChapter":"第002章"}',
         path: trackerPath,
-        rootPath,
       });
     });
   });
@@ -350,7 +347,7 @@ describe("BookWorkspaceView", () => {
       }),
     );
 
-    expect(mockInvoke).toHaveBeenCalledWith("open_book_folder", { rootPath });
+    expect(mockInvoke).toHaveBeenCalledWith("open_book_folder", { bookId });
   });
 
   it("编辑区顶部保存按钮使用纯图标工具栏样式", async () => {
@@ -458,7 +455,7 @@ describe("BookWorkspaceView", () => {
   it("启动时会恢复上次打开的书籍和文件", async () => {
     window.localStorage.setItem(
       "ainovelstudio-book-workspace",
-      JSON.stringify({ rootPath, selectedFilePath: chapterPath }),
+      JSON.stringify({ bookId, selectedFilePath: chapterPath }),
     );
 
     renderBookWorkspaceView();

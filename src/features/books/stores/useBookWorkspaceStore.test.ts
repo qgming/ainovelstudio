@@ -99,12 +99,12 @@ describe("useBookWorkspaceStore", () => {
 
     window.localStorage.setItem(
       "ainovelstudio-book-workspace",
-      JSON.stringify({ rootPath, selectedFilePath: chapterPath }),
+      JSON.stringify({ bookId, selectedFilePath: chapterPath }),
     );
 
     mockInvoke.mockImplementation(async (command: string) => {
       switch (command) {
-        case "get_book_workspace_summary":
+        case "get_book_workspace_summary_by_id":
           return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
           return initialTree;
@@ -127,49 +127,47 @@ describe("useBookWorkspaceStore", () => {
     expect(useBookWorkspaceStore.getState().activeFilePath).toBe(chapterPath);
   });
 
-  it("镜像变化后会同步导入并刷新当前文件内容", async () => {
+  it("重新加载工作区会刷新当前文件内容", async () => {
     let readTextFileValue = "这是章节初稿";
 
     window.localStorage.setItem(
       "ainovelstudio-book-workspace",
-      JSON.stringify({ rootPath, selectedFilePath: chapterPath }),
+      JSON.stringify({ bookId, selectedFilePath: chapterPath }),
     );
 
     mockInvoke.mockImplementation(async (command: string) => {
       switch (command) {
-        case "get_book_workspace_summary":
+        case "get_book_workspace_summary_by_id":
           return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
           return initialTree;
         case "read_text_file":
           return readTextFileValue;
-        case "sync_changed_book_folder_to_workspace":
-          readTextFileValue = "这是镜像编辑后的内容";
-          return true;
         default:
           return undefined;
       }
     });
 
     await useBookWorkspaceStore.getState().initializeWorkspace();
+    readTextFileValue = "这是磁盘上被外部更新后的内容";
     const changed = await useBookWorkspaceStore.getState().syncWorkspaceFromMirrorIfChanged();
 
     expect(changed).toBe(true);
-    expect(useBookWorkspaceStore.getState().draftContent).toBe("这是镜像编辑后的内容");
+    expect(useBookWorkspaceStore.getState().draftContent).toBe("这是磁盘上被外部更新后的内容");
     expect(useBookWorkspaceStore.getState().activeFilePath).toBe(chapterPath);
   });
 
   it("打开书籍时会先补齐缺失的初始化模板", async () => {
     window.localStorage.setItem(
       "ainovelstudio-book-workspace",
-      JSON.stringify({ rootPath, selectedFilePath: null }),
+      JSON.stringify({ bookId, selectedFilePath: null }),
     );
 
     mockInvoke.mockImplementation(async (command: string) => {
       switch (command) {
         case "ensure_book_workspace_template":
           return [".project/context-manifest.json"];
-        case "get_book_workspace_summary":
+        case "get_book_workspace_summary_by_id":
           return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
           return initialTree;
@@ -180,21 +178,21 @@ describe("useBookWorkspaceStore", () => {
 
     await useBookWorkspaceStore.getState().initializeWorkspace();
 
-    expect(mockInvoke.mock.calls[0]).toEqual(["ensure_book_workspace_template", { rootPath }]);
+    expect(mockInvoke.mock.calls[0]).toEqual(["ensure_book_workspace_template", { bookId }]);
     expect(useBookWorkspaceStore.getState().rootBookId).toBe(bookId);
   });
 
   it("没有有效选中文件时默认打开项目 README", async () => {
     window.localStorage.setItem(
       "ainovelstudio-book-workspace",
-      JSON.stringify({ rootPath, selectedFilePath: null }),
+      JSON.stringify({ bookId, selectedFilePath: null }),
     );
 
     mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
       switch (command) {
         case "ensure_book_workspace_template":
           return [];
-        case "get_book_workspace_summary":
+        case "get_book_workspace_summary_by_id":
           return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
           return initialTree;
@@ -220,7 +218,7 @@ describe("useBookWorkspaceStore", () => {
         case "get_book_workspace_summary":
           return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":
-          return payload?.rootPath === otherRootPath ? otherTree : initialTree;
+          return payload?.bookId === otherBookId ? otherTree : initialTree;
         case "read_text_file":
           return "这是另一部书的正文";
         default:
@@ -254,7 +252,7 @@ describe("useBookWorkspaceStore", () => {
     mockInvoke.mockImplementation(async (command: string, payload?: Record<string, unknown>) => {
       switch (command) {
         case "read_workspace_tree":
-          return payload?.rootPath === otherRootPath ? otherTree : initialTree;
+          return payload?.bookId === otherBookId ? otherTree : initialTree;
         case "read_text_file":
           return "这是另一部书的正文";
         case "get_book_workspace_summary_by_id":

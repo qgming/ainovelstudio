@@ -1,14 +1,9 @@
-// 图书工作区：默认模板生成与新书创建逻辑。
+// 图书工作区：默认模板生成与新书创建逻辑（写入真实文件）。
 
-use crate::domains::book_workspace::data::{
-    build_book_root_path, ensure_directory_chain, insert_entry, BookRecord,
-};
+use crate::domains::book_workspace::data::{build_book_root_path, BookRecord};
+use crate::domains::book_workspace::fs_store::{BookMeta, WorkspaceStore};
 use crate::domains::book_workspace::search::rebuild_book_search_index;
-use crate::infrastructure::workspace_paths::{
-    error_to_string, file_extension, now_timestamp, parent_relative_path, validate_name,
-    CommandResult,
-};
-use rusqlite::{params, OptionalExtension, Transaction};
+use crate::infrastructure::workspace_paths::{now_timestamp, validate_name, CommandResult};
 use uuid::Uuid;
 
 fn render_book_template(template: &str, book_name: &str) -> String {
@@ -273,76 +268,38 @@ pub(crate) fn build_book_template(
 }
 
 pub(crate) fn create_book_workspace_db(
-    transaction: &Transaction<'_>,
+    store: &WorkspaceStore,
     book_name: &str,
 ) -> CommandResult<BookRecord> {
     let validated_name = validate_name(book_name)?;
-    let root_path = build_book_root_path(&validated_name);
-    let existing = transaction
-        .query_row(
-            "SELECT id FROM book_workspaces WHERE name = ?1 OR root_path = ?2",
-            params![validated_name, root_path],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(error_to_string)?;
-    if existing.is_some() {
+    if store.find_book_by_name(&validated_name)?.is_some() {
         return Err("同名书籍已存在。".into());
     }
 
     let timestamp = now_timestamp();
-    let book = BookRecord {
-        id: Uuid::new_v4().to_string(),
+    let book_id = Uuid::new_v4().to_string();
+    let meta = BookMeta {
+        id: book_id.clone(),
         name: validated_name.clone(),
-        root_path,
+        created_at: timestamp,
         updated_at: timestamp,
     };
-    transaction
-        .execute(
-            r#"
-            INSERT INTO book_workspaces (id, name, root_path, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            "#,
-            params![
-                book.id,
-                book.name,
-                book.root_path,
-                timestamp as i64,
-                timestamp as i64,
-            ],
-        )
-        .map_err(error_to_string)?;
+    store.create_book_dir(&book_id, &meta)?;
 
     let (directories, files) = build_book_template(&validated_name);
     for directory in directories {
-        insert_entry(
-            transaction,
-            &book.id,
-            directory,
-            "directory",
-            None,
-            &[],
-            timestamp,
-        )?;
+        store.create_dir(&book_id, directory)?;
     }
     for (relative_path, contents) in files {
-        ensure_directory_chain(
-            transaction,
-            &book.id,
-            &parent_relative_path(relative_path),
-            timestamp,
-        )?;
-        insert_entry(
-            transaction,
-            &book.id,
-            relative_path,
-            "file",
-            file_extension(relative_path).as_deref(),
-            contents.as_bytes(),
-            timestamp,
-        )?;
+        store.write_text(&book_id, relative_path, &contents)?;
     }
 
-    rebuild_book_search_index(transaction, &book.id)?;
-    Ok(book)
+    rebuild_book_search_index(store, &book_id)?;
+
+    Ok(BookRecord {
+        id: book_id,
+        name: validated_name.clone(),
+        root_path: build_book_root_path(&validated_name),
+        updated_at: timestamp,
+    })
 }

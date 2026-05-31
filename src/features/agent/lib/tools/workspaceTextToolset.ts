@@ -86,7 +86,7 @@ function compactJsonOperationValues<T extends { value?: unknown }>(items: T[], m
 
 export function createWorkspaceTextTools({
   onWorkspaceMutated,
-  rootPath,
+  bookId,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
     workspace_write: {
@@ -100,7 +100,7 @@ export function createWorkspaceTextTools({
         const abortContext = getAbortContext(context);
         if (action === "create") {
           const existingContent = await readWorkspaceTextFile(
-            rootPath,
+            bookId,
             path,
             abortContext,
           ).catch((error: unknown) => {
@@ -110,13 +110,13 @@ export function createWorkspaceTextTools({
           if (existingContent !== null) {
             throw new Error(`workspace_write 目标文件已存在：${path}。`);
           }
-          await writeWorkspaceTextFile(rootPath, path, "", abortContext);
+          await writeWorkspaceTextFile(bookId, path, "", abortContext);
           await onWorkspaceMutated?.();
           return ok(`已创建空白文件 ${path}`);
         }
 
         const currentContent = await readWorkspaceTextFile(
-          rootPath,
+          bookId,
           path,
           abortContext,
         );
@@ -125,7 +125,7 @@ export function createWorkspaceTextTools({
           ? content
           : `${currentContent}${content}`;
         await writeWorkspaceTextFile(
-          rootPath,
+          bookId,
           path,
           nextContent,
           abortContext,
@@ -140,7 +140,7 @@ export function createWorkspaceTextTools({
         const path = ensureString(input.path, "workspace_read.path");
         const mode = normalizeReadMode(input.mode);
         const content = await readWorkspaceTextFile(
-          rootPath,
+          bookId,
           path,
           getAbortContext(context),
         );
@@ -207,7 +207,7 @@ export function createWorkspaceTextTools({
         const expectedCount = asPositiveInt(input.expectedCount, 1);
         const replaceAll = Boolean(input.replaceAll);
         const currentContent = await readWorkspaceTextFile(
-          rootPath,
+          bookId,
           path,
           getAbortContext(context),
         );
@@ -221,7 +221,7 @@ export function createWorkspaceTextTools({
             endLine,
           );
           await writeWorkspaceTextFile(
-            rootPath,
+            bookId,
             path,
             result.nextContent,
             getAbortContext(context),
@@ -248,7 +248,7 @@ export function createWorkspaceTextTools({
             endIndex,
           );
           await writeWorkspaceTextFile(
-            rootPath,
+            bookId,
             path,
             result.nextContent,
             getAbortContext(context),
@@ -272,7 +272,7 @@ export function createWorkspaceTextTools({
             endIndex,
           );
           await writeWorkspaceTextFile(
-            rootPath,
+            bookId,
             path,
             result.nextContent,
             getAbortContext(context),
@@ -291,7 +291,7 @@ export function createWorkspaceTextTools({
           replaceAll,
         );
         await writeWorkspaceTextFile(
-          rootPath,
+          bookId,
           path,
           result.nextContent,
           getAbortContext(context),
@@ -309,7 +309,7 @@ export function createWorkspaceTextTools({
         if (action === "create") {
           if (!input.overwrite) {
             const existingContent = await readWorkspaceTextFile(
-              rootPath,
+              bookId,
               path,
               getAbortContext(context),
             ).catch((error: unknown) => {
@@ -324,7 +324,7 @@ export function createWorkspaceTextTools({
           }
           const nextJson = input.value === undefined ? {} : cloneJsonValue(input.value);
           await writeWorkspaceTextFile(
-            rootPath,
+            bookId,
             path,
             `${JSON.stringify(nextJson, null, 2)}\n`,
             getAbortContext(context),
@@ -337,7 +337,7 @@ export function createWorkspaceTextTools({
           });
         }
         const currentContents = await readWorkspaceTextFile(
-          rootPath,
+          bookId,
           path,
           getAbortContext(context),
         );
@@ -353,7 +353,7 @@ export function createWorkspaceTextTools({
             operations,
           );
           await writeWorkspaceTextFile(
-            rootPath,
+            bookId,
             path,
             serializeJsonWithStyle(nextJson, currentContents),
             getAbortContext(context),
@@ -378,7 +378,7 @@ export function createWorkspaceTextTools({
             input.patch as Parameters<typeof applyJsonPatch>[1],
           );
           await writeWorkspaceTextFile(
-            rootPath,
+            bookId,
             path,
             serializeJsonWithStyle(nextJson, currentContents),
             getAbortContext(context),
@@ -473,7 +473,7 @@ export function createWorkspaceTextTools({
         }
 
         await writeWorkspaceTextFile(
-          rootPath,
+          bookId,
           path,
           serializeJsonWithStyle(nextJson, currentContents),
           getAbortContext(context),

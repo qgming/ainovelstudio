@@ -1,12 +1,10 @@
 // 图书工作区：面向 AI Agent 的 FTS 上下文检索索引。
 
 use crate::app::ToolCancellationRegistry;
-use crate::domains::book_workspace::data::{
-    display_relative_path, load_book_by_root_path, load_entry_record, load_entry_records,
-    WorkspaceEntryRecord,
-};
+use crate::domains::book_workspace::data::{display_relative_path, load_book_by_id};
+use crate::domains::book_workspace::fs_store::{WorkspaceEntry, WorkspaceStore};
 use crate::infrastructure::workspace_paths::{
-    bytes_to_text, check_cancellation, error_to_string, split_text_lines, CommandResult,
+    check_cancellation, error_to_string, split_text_lines, CommandResult,
 };
 use rusqlite::{params, Connection};
 use serde::Serialize;
@@ -422,74 +420,58 @@ fn build_chunk(
     }
 }
 
-fn delete_chunk_fts_by_book(connection: &Connection, book_id: &str) -> CommandResult<()> {
+/// 清空整库索引（.index.db 只属于一本书，故等价于删除该书全部索引）。
+fn delete_all_chunk_fts(connection: &Connection) -> CommandResult<()> {
     connection
-        .execute(
-            "DELETE FROM workspace_search_chunks_fts WHERE book_id = ?1",
-            params![book_id],
-        )
+        .execute("DELETE FROM workspace_search_chunks_fts", [])
         .map_err(error_to_string)?;
     Ok(())
 }
 
-fn delete_path_fts_by_book(connection: &Connection, book_id: &str) -> CommandResult<()> {
+fn delete_all_path_fts(connection: &Connection) -> CommandResult<()> {
     connection
-        .execute(
-            "DELETE FROM workspace_search_paths_fts WHERE book_id = ?1",
-            params![book_id],
-        )
+        .execute("DELETE FROM workspace_search_paths_fts", [])
         .map_err(error_to_string)?;
     Ok(())
 }
 
-pub(crate) fn delete_book_search_index(
-    connection: &Connection,
-    book_id: &str,
-) -> CommandResult<()> {
-    delete_chunk_fts_by_book(connection, book_id)?;
-    delete_path_fts_by_book(connection, book_id)?;
+/// 清空整库索引：内部接收已打开的 per-book 连接。
+fn delete_all_search_index(connection: &Connection) -> CommandResult<()> {
+    delete_all_chunk_fts(connection)?;
+    delete_all_path_fts(connection)?;
     connection
-        .execute(
-            "DELETE FROM workspace_search_chunks WHERE book_id = ?1",
-            params![book_id],
-        )
+        .execute("DELETE FROM workspace_search_chunks", [])
         .map_err(error_to_string)?;
     Ok(())
 }
 
-fn delete_path_search_index(
-    connection: &Connection,
-    book_id: &str,
-    path: &str,
-) -> CommandResult<()> {
+/// 删除指定路径（含其子路径）的索引；接收 per-book 连接。
+fn delete_path_search_index(connection: &Connection, path: &str) -> CommandResult<()> {
     connection
         .execute(
             r#"
             DELETE FROM workspace_search_chunks_fts
-            WHERE book_id = ?1
-              AND (path = ?2 OR substr(path, 1, length(?2) + 1) = ?2 || '/')
+            WHERE (path = ?1 OR substr(path, 1, length(?1) + 1) = ?1 || '/')
             "#,
-            params![book_id, path],
+            params![path],
         )
         .map_err(error_to_string)?;
     connection
         .execute(
             r#"
             DELETE FROM workspace_search_paths_fts
-            WHERE book_id = ?1
-              AND (path = ?2 OR substr(path, 1, length(?2) + 1) = ?2 || '/')
+            WHERE (path = ?1 OR substr(path, 1, length(?1) + 1) = ?1 || '/')
             "#,
-            params![book_id, path],
+            params![path],
         )
         .map_err(error_to_string)?;
     connection
         .execute(
             r#"
             DELETE FROM workspace_search_chunks
-            WHERE book_id = ?1
-              AND (path = ?2 OR substr(path, 1, length(?2) + 1) = ?2 || '/')
+            WHERE (path = ?1 OR substr(path, 1, length(?1) + 1) = ?1 || '/')
             "#,
-            params![book_id, path],
+            params![path],
         )
         .map_err(error_to_string)?;
     Ok(())
@@ -497,8 +479,7 @@ fn delete_path_search_index(
 
 fn index_path_entry(
     connection: &Connection,
-    book_id: &str,
-    entry: &WorkspaceEntryRecord,
+    entry: &WorkspaceEntry,
     source_kind: &str,
 ) -> CommandResult<()> {
     let title_text = entry.name.clone();
@@ -513,37 +494,34 @@ fn index_path_entry(
         .execute(
             r#"
             INSERT INTO workspace_search_paths_fts (
-                book_id, path, name, source_kind, title_text, search_text
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                path, name, source_kind, title_text, search_text
+            ) VALUES (?1, ?2, ?3, ?4, ?5)
             "#,
-            params![
-                book_id,
-                entry.path,
-                entry.name,
-                source_kind,
-                title_text,
-                search_text
-            ],
+            params![entry.path, entry.name, source_kind, title_text, search_text],
         )
         .map_err(error_to_string)?;
     Ok(())
 }
 
+/// 索引文件分块：内容从真实文件现读（store.read_text 已解码，无需 bytes_to_text）。
 fn index_file_chunks(
     connection: &Connection,
+    store: &WorkspaceStore,
     book_id: &str,
-    entry: &WorkspaceEntryRecord,
+    entry: &WorkspaceEntry,
     source_kind: &str,
     timestamp: u64,
 ) -> CommandResult<()> {
-    let Ok(contents) = bytes_to_text(entry.content_bytes.clone()) else {
+    // 读不到（如二进制/不存在）则跳过，不阻断整体索引。
+    let Ok(contents) = store.read_text(book_id, &entry.path) else {
         return Ok(());
     };
     for (index, chunk) in split_into_chunks(&contents, source_kind, entry.extension.as_deref())
         .into_iter()
         .enumerate()
     {
-        let chunk_id = format!("{book_id}:{}:{index}", entry.path);
+        // chunk_id 仅需在本书索引库内唯一，故用 path:index 即可。
+        let chunk_id = format!("{}:{index}", entry.path);
         let section_title = chunk.section_title.unwrap_or_else(|| entry.name.clone());
         let search_text = build_search_text(&[
             &entry.path,
@@ -556,14 +534,13 @@ fn index_file_chunks(
             .execute(
                 r#"
                 INSERT INTO workspace_search_chunks (
-                    id, book_id, path, chunk_index, source_kind, section_title,
+                    id, path, chunk_index, source_kind, section_title,
                     start_line, end_line, char_start, char_end, token_estimate,
                     content_hash, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                 "#,
                 params![
                     chunk_id,
-                    book_id,
                     entry.path,
                     index as i64,
                     source_kind,
@@ -582,12 +559,11 @@ fn index_file_chunks(
             .execute(
                 r#"
                 INSERT INTO workspace_search_chunks_fts (
-                    chunk_id, book_id, path, source_kind, section_title, content, search_text
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    chunk_id, path, source_kind, section_title, content, search_text
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
                 params![
                     chunk_id,
-                    book_id,
                     entry.path,
                     source_kind,
                     section_title,
@@ -600,70 +576,121 @@ fn index_file_chunks(
     Ok(())
 }
 
+/// 索引单个条目：路径索引始终写入，文件类型再追加分块索引。
 fn index_entry(
     connection: &Connection,
+    store: &WorkspaceStore,
     book_id: &str,
-    entry: &WorkspaceEntryRecord,
+    entry: &WorkspaceEntry,
 ) -> CommandResult<()> {
     let timestamp = crate::infrastructure::workspace_paths::now_timestamp();
     let source_kind = classify_source_kind(&entry.path, &entry.kind, entry.extension.as_deref());
-    index_path_entry(connection, book_id, entry, &source_kind)?;
+    index_path_entry(connection, entry, &source_kind)?;
     if entry.kind == "file" {
-        index_file_chunks(connection, book_id, entry, &source_kind, timestamp)?;
+        index_file_chunks(connection, store, book_id, entry, &source_kind, timestamp)?;
     }
     Ok(())
 }
 
+/// 对外入口：增量重建某条路径的索引（删旧 + 现读重建）。
 pub(crate) fn reindex_workspace_entry(
-    connection: &Connection,
+    store: &WorkspaceStore,
     book_id: &str,
     path: &str,
 ) -> CommandResult<()> {
-    delete_path_search_index(connection, book_id, path)?;
-    if let Some(entry) = load_entry_record(connection, book_id, path)? {
-        index_entry(connection, book_id, &entry)?;
+    let connection = store.open_index(book_id)?;
+    delete_path_search_index(&connection, path)?;
+    if let Some(entry) = store.entry_record(book_id, path)? {
+        index_entry(&connection, store, book_id, &entry)?;
     }
     Ok(())
 }
 
+/// 对外入口：重命名/移动后子树增量重建索引。
+/// 删旧路径子树索引（含全部子项），再只读新路径子树真实文件重建——不触碰其余文件。
+pub(crate) fn reindex_subtree_after_rename(
+    store: &WorkspaceStore,
+    book_id: &str,
+    old_path: &str,
+    new_path: &str,
+) -> CommandResult<()> {
+    let connection = store.open_index(book_id)?;
+    delete_path_search_index(&connection, old_path)?;
+    // 防御：new_path 落在 old_path 子树内时（理论上不会发生），上面已连带删除，重建即可补回。
+    delete_path_search_index(&connection, new_path)?;
+    for entry in store.collect_subtree_entries(book_id, new_path)? {
+        index_entry(&connection, store, book_id, &entry)?;
+    }
+    Ok(())
+}
+
+/// 对外入口：删除后子树增量清理索引（文件已不存在，只删不重建）。
+pub(crate) fn reindex_subtree_after_delete(
+    store: &WorkspaceStore,
+    book_id: &str,
+    removed_path: &str,
+) -> CommandResult<()> {
+    let connection = store.open_index(book_id)?;
+    delete_path_search_index(&connection, removed_path)?;
+    Ok(())
+}
+
+/// 对外入口：全量重建某本书的索引（清空 + 遍历真实文件树）。
 pub(crate) fn rebuild_book_search_index(
-    connection: &Connection,
+    store: &WorkspaceStore,
     book_id: &str,
 ) -> CommandResult<()> {
-    delete_book_search_index(connection, book_id)?;
-    for entry in load_entry_records(connection, book_id)? {
-        index_entry(connection, book_id, &entry)?;
+    let connection = store.open_index(book_id)?;
+    delete_all_search_index(&connection)?;
+    for entry in store.collect_all_entries(book_id)? {
+        index_entry(&connection, store, book_id, &entry)?;
     }
     Ok(())
 }
 
-fn ensure_book_search_index(connection: &Connection, book_id: &str) -> CommandResult<()> {
-    let entry_count = connection
-        .query_row(
-            "SELECT COUNT(*) FROM book_workspace_entries WHERE book_id = ?1",
-            params![book_id],
-            |row| row.get::<_, i64>(0),
-        )
-        .map_err(error_to_string)?;
-    if entry_count == 0 {
+/// 确保索引已就绪并与真实文件树一致：
+/// 真实文件数与已索引 path 数不一致（含为空、或因某次操作中途失败导致的漂移）时全量重建。
+/// 文件系统是唯一事实源，索引随时可由它重建，故以文件数为基准对账。
+fn ensure_book_search_index(
+    connection: &Connection,
+    store: &WorkspaceStore,
+    book_id: &str,
+) -> CommandResult<()> {
+    let entries = store.collect_all_entries(book_id)?;
+    if entries.is_empty() {
+        // 真实文件树为空：若索引残留（上次删除后对账未跑）也一并清空,保持一致。
+        let indexed_count = connection
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_search_paths_fts",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(error_to_string)?;
+        if indexed_count != 0 {
+            delete_all_search_index(connection)?;
+        }
         return Ok(());
     }
     let indexed_count = connection
         .query_row(
-            "SELECT COUNT(*) FROM workspace_search_paths_fts WHERE book_id = ?1",
-            params![book_id],
+            "SELECT COUNT(*) FROM workspace_search_paths_fts",
+            [],
             |row| row.get::<_, i64>(0),
         )
         .map_err(error_to_string)?;
-    if indexed_count == 0 {
-        rebuild_book_search_index(connection, book_id)?;
+    // path 索引每条目一行,行数应等于真实文件树条目数。不一致即说明索引漂移
+    // （首建为 0,或某次 reindex/relations 在文件操作后中途失败留下陈旧/缺失项）→ 全量重建。
+    if indexed_count != entries.len() as i64 {
+        delete_all_search_index(connection)?;
+        for entry in &entries {
+            index_entry(connection, store, book_id, entry)?;
+        }
     }
     Ok(())
 }
 
 fn collect_chunk_hits(
     connection: &Connection,
-    book_id: &str,
     match_query: &str,
     limit: usize,
 ) -> CommandResult<Vec<RawHit>> {
@@ -683,14 +710,13 @@ fn collect_chunk_hits(
             FROM workspace_search_chunks_fts f
             JOIN workspace_search_chunks c ON c.id = f.chunk_id
             WHERE workspace_search_chunks_fts MATCH ?1
-              AND f.book_id = ?2
             ORDER BY rank ASC
-            LIMIT ?3
+            LIMIT ?2
             "#,
         )
         .map_err(error_to_string)?;
     let rows = statement
-        .query_map(params![match_query, book_id, limit as i64], |row| {
+        .query_map(params![match_query, limit as i64], |row| {
             let rank = row.get::<_, f64>(8)?;
             Ok(RawHit {
                 id: row.get(0)?,
@@ -712,7 +738,6 @@ fn collect_chunk_hits(
 
 fn collect_path_hits(
     connection: &Connection,
-    book_id: &str,
     match_query: &str,
     limit: usize,
 ) -> CommandResult<Vec<RawHit>> {
@@ -722,14 +747,13 @@ fn collect_path_hits(
             SELECT path, name, source_kind, bm25(workspace_search_paths_fts) AS rank
             FROM workspace_search_paths_fts
             WHERE workspace_search_paths_fts MATCH ?1
-              AND book_id = ?2
             ORDER BY rank ASC
-            LIMIT ?3
+            LIMIT ?2
             "#,
         )
         .map_err(error_to_string)?;
     let path_rows = statement
-        .query_map(params![match_query, book_id, limit as i64], |row| {
+        .query_map(params![match_query, limit as i64], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -743,7 +767,7 @@ fn collect_path_hits(
 
     let mut hits = Vec::new();
     for (path, name, source_kind, rank) in path_rows {
-        if let Some(chunk) = first_chunk_for_path(connection, book_id, &path)? {
+        if let Some(chunk) = first_chunk_for_path(connection, &path)? {
             hits.push(RawHit {
                 score: -rank + 4.0,
                 ..chunk
@@ -753,7 +777,7 @@ fn collect_path_hits(
         hits.push(RawHit {
             content: format!("路径命中：{}", display_relative_path(&path)),
             end_line: 1,
-            id: format!("path:{book_id}:{path}"),
+            id: format!("path:{path}"),
             path: display_relative_path(&path),
             score: -rank + 4.0,
             section_title: Some(name),
@@ -765,11 +789,7 @@ fn collect_path_hits(
     Ok(hits)
 }
 
-fn first_chunk_for_path(
-    connection: &Connection,
-    book_id: &str,
-    path: &str,
-) -> CommandResult<Option<RawHit>> {
+fn first_chunk_for_path(connection: &Connection, path: &str) -> CommandResult<Option<RawHit>> {
     let result = connection
         .query_row(
             r#"
@@ -784,11 +804,11 @@ fn first_chunk_for_path(
                 f.content
             FROM workspace_search_chunks c
             JOIN workspace_search_chunks_fts f ON f.chunk_id = c.id
-            WHERE c.book_id = ?1 AND c.path = ?2
+            WHERE c.path = ?1
             ORDER BY c.chunk_index ASC
             LIMIT 1
             "#,
-            params![book_id, path],
+            params![path],
             |row| {
                 Ok(RawHit {
                     id: row.get(0)?,
@@ -808,25 +828,20 @@ fn first_chunk_for_path(
     Ok(result)
 }
 
-fn has_adjacent_chunk(
-    connection: &Connection,
-    book_id: &str,
-    path: &str,
-    start_line: usize,
-) -> bool {
+fn has_adjacent_chunk(connection: &Connection, path: &str, start_line: usize) -> bool {
     connection
         .query_row(
             r#"
             SELECT EXISTS(
                 SELECT 1 FROM workspace_search_chunks
-                WHERE book_id = ?1 AND path = ?2 AND end_line < ?3
+                WHERE path = ?1 AND end_line < ?2
                 UNION ALL
                 SELECT 1 FROM workspace_search_chunks
-                WHERE book_id = ?1 AND path = ?2 AND start_line > ?3
+                WHERE path = ?1 AND start_line > ?2
                 LIMIT 1
             )
             "#,
-            params![book_id, path, start_line as i64],
+            params![path, start_line as i64],
             |row| row.get::<_, i64>(0),
         )
         .map(|value| value != 0)
@@ -894,7 +909,6 @@ fn trim_preview(content: &str) -> String {
 
 fn assemble_results(
     connection: &Connection,
-    book_id: &str,
     query: &str,
     intent: &str,
     terms: &[String],
@@ -979,7 +993,7 @@ fn assemble_results(
         );
         let reason = build_reason(&hit, query, &matched_terms, intent);
         results.push(WorkspaceContextHit {
-            adjacent_available: has_adjacent_chunk(connection, book_id, &hit.path, hit.start_line),
+            adjacent_available: has_adjacent_chunk(connection, &hit.path, hit.start_line),
             end_line: hit.end_line,
             id: hit.id,
             matched_terms,
@@ -1011,8 +1025,8 @@ fn build_suggested_reads(results: &[WorkspaceContextHit]) -> Vec<WorkspaceReadSu
 }
 
 pub(crate) fn search_workspace_content_db(
-    connection: &Connection,
-    root_path: &str,
+    store: &WorkspaceStore,
+    book_id: &str,
     query: &str,
     limit: Option<usize>,
     intent: Option<&str>,
@@ -1022,9 +1036,11 @@ pub(crate) fn search_workspace_content_db(
     registry: &ToolCancellationRegistry,
     request_id: Option<&str>,
 ) -> CommandResult<WorkspaceSearchResult> {
-    let book = load_book_by_root_path(connection, root_path)?;
+    // 由 book_id 取书,打开该书的 per-book 索引库操作。
+    let book = load_book_by_id(store, book_id)?;
     check_cancellation(registry, request_id)?;
-    ensure_book_search_index(connection, &book.id)?;
+    let connection = store.open_index(&book.id)?;
+    ensure_book_search_index(&connection, store, &book.id)?;
     check_cancellation(registry, request_id)?;
 
     let normalized_query = normalize_search_query(query)?;
@@ -1040,19 +1056,13 @@ pub(crate) fn search_workspace_content_db(
             5
         };
 
-    let mut raw_hits = collect_chunk_hits(connection, &book.id, &match_query, raw_limit)?;
+    let mut raw_hits = collect_chunk_hits(&connection, &match_query, raw_limit)?;
     check_cancellation(registry, request_id)?;
-    raw_hits.extend(collect_path_hits(
-        connection,
-        &book.id,
-        &match_query,
-        raw_limit,
-    )?);
+    raw_hits.extend(collect_path_hits(&connection, &match_query, raw_limit)?);
     check_cancellation(registry, request_id)?;
 
     let (results, truncated) = assemble_results(
-        connection,
-        &book.id,
+        &connection,
         &normalized_query,
         &normalized_intent,
         &terms,

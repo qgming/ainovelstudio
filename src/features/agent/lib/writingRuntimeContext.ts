@@ -22,6 +22,9 @@ export type WritingRuntimeContext = {
   planningState?: PlanningState | null;
   projectContext?: ProjectContextPayload | null;
   providerConfig: AgentProviderConfig;
+  // 解析用：书籍标识（UUID），透传给 env/session 适配器作为 bookWorkspaceApi 解析 key。
+  workspaceBookId?: string | null;
+  // 展示用：可读工作区根串（books/<书名>），注入系统提示/材料上下文供模型阅读。
   workspaceRootPath?: string | null;
   workspaceTools: Record<string, AgentTool>;
   onAskUser?: (event: {

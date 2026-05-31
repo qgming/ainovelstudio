@@ -56,7 +56,7 @@ export type WorkspaceLineResult = {
 };
 
 export type WorkspaceSnapshot = {
-  rootPath: string;
+  bookId: string;
   selectedFilePath: string | null;
 };
 

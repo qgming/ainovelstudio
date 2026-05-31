@@ -1,51 +1,38 @@
-// 图书工作区：Tauri 命令入口。
+// 图书工作区：Tauri 命令入口（基于真实文件存储）。
 
 use crate::app::ToolCancellationRegistry;
 use crate::domains::book_workspace::archive::{export_book_zip_db, import_book_zip_db};
 use crate::domains::book_workspace::data::{
-    build_summary, list_books, load_book_by_id, load_book_by_root_path, BookWorkspaceSummary,
-    TreeNode, WorkspaceLineResult,
+    build_summary, list_books, load_book_by_id, BookWorkspaceSummary, TreeNode, WorkspaceLineResult,
 };
+use crate::domains::book_workspace::fs_store::WorkspaceStore;
 use crate::domains::book_workspace::maintenance::ensure_book_workspace_template_db;
-#[cfg(desktop)]
-use crate::domains::book_workspace::mirror::{
-    export_book_to_mirror, import_changed_mirror_to_book, import_mirror_to_book,
-};
 use crate::domains::book_workspace::ops::{
     create_workspace_directory_db, create_workspace_text_file_db, delete_workspace_entry_db,
-    move_workspace_entry_db, read_text_file_db, read_text_file_line_db, rename_workspace_entry_db,
-    replace_text_file_line_db, write_text_file_db,
+    edit_text_file_db, move_workspace_entry_db, read_text_file_db, read_text_file_line_db,
+    rename_workspace_entry_db, replace_text_file_line_db, write_text_file_db,
 };
 use crate::domains::book_workspace::relations::{
     create_relation_by_root, delete_relation_by_root, list_book_relations_by_root,
     list_entry_relations_by_root, update_relation_by_root, RelationDto,
 };
-use crate::domains::book_workspace::search::{
-    delete_book_search_index, search_workspace_content_db, WorkspaceSearchResult,
+use crate::domains::book_workspace::search::{search_workspace_content_db, WorkspaceSearchResult};
+use crate::domains::book_workspace::session_store::{
+    session_append_db, session_create_dir_db, session_exists_db, session_list_dir_db,
+    session_read_db, session_remove_db, session_write_db, SessionEntry,
 };
 use crate::domains::book_workspace::templates::create_book_workspace_db;
 use crate::domains::book_workspace::tree::read_workspace_tree_db;
-use crate::infrastructure::db::open_database;
-use crate::infrastructure::workspace_paths::{
-    check_cancellation, error_to_string, with_cancellable_request, CommandResult,
-};
-use rusqlite::{params, Transaction, TransactionBehavior};
+use crate::infrastructure::workspace_paths::{check_cancellation, with_cancellable_request};
 use std::path::Path;
 use tauri::{AppHandle, State};
 #[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
 
-fn with_transaction<T, F>(app: &AppHandle, operation: F) -> CommandResult<T>
-where
-    F: FnOnce(&Transaction<'_>) -> CommandResult<T>,
-{
-    let mut connection = open_database(app)?;
-    let transaction = connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(error_to_string)?;
-    let result = operation(&transaction)?;
-    transaction.commit().map_err(error_to_string)?;
-    Ok(result)
+type CommandResult<T> = Result<T, String>;
+
+fn store(app: &AppHandle) -> CommandResult<WorkspaceStore> {
+    WorkspaceStore::from_app(app)
 }
 
 #[tauri::command]
@@ -91,69 +78,29 @@ pub async fn pick_book_directory(app: AppHandle) -> CommandResult<Option<String>
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn open_book_folder(app: AppHandle, rootPath: String) -> CommandResult<()> {
+pub fn open_book_folder(app: AppHandle, bookId: String) -> CommandResult<()> {
     #[cfg(desktop)]
     {
         use tauri_plugin_opener::OpenerExt;
-
-        let connection = open_database(&app)?;
-        let mirror_path = export_book_to_mirror(&app, &connection, &rootPath)?;
+        let store = store(&app)?;
+        let book = load_book_by_id(&store, &bookId)?;
+        let dir = store.book_dir(&book.id);
         app.opener()
-            .open_path(mirror_path.to_string_lossy().into_owned(), None::<&str>)
-            .map_err(error_to_string)
+            .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
+            .map_err(|error| error.to_string())
     }
 
     #[cfg(mobile)]
     {
-        let _ = app;
-        let _ = rootPath;
+        let _ = (app, bookId);
         Err("当前平台暂不支持打开系统文件资源管理器。".into())
     }
 }
 
 #[tauri::command]
-#[allow(non_snake_case)]
-pub fn sync_book_folder_to_workspace(app: AppHandle, rootPath: String) -> CommandResult<bool> {
-    #[cfg(desktop)]
-    {
-        with_transaction(&app, |transaction| {
-            import_mirror_to_book(&app, transaction, &rootPath)
-        })
-    }
-
-    #[cfg(mobile)]
-    {
-        let _ = app;
-        let _ = rootPath;
-        Ok(false)
-    }
-}
-
-#[tauri::command]
-#[allow(non_snake_case)]
-pub fn sync_changed_book_folder_to_workspace(
-    app: AppHandle,
-    rootPath: String,
-) -> CommandResult<bool> {
-    #[cfg(desktop)]
-    {
-        with_transaction(&app, |transaction| {
-            import_changed_mirror_to_book(&app, transaction, &rootPath)
-        })
-    }
-
-    #[cfg(mobile)]
-    {
-        let _ = app;
-        let _ = rootPath;
-        Ok(false)
-    }
-}
-
-#[tauri::command]
 pub fn list_book_workspaces(app: AppHandle) -> CommandResult<Vec<BookWorkspaceSummary>> {
-    let connection = open_database(&app)?;
-    Ok(list_books(&connection)?
+    let store = store(&app)?;
+    Ok(list_books(&store)?
         .into_iter()
         .map(|book| build_summary(&book))
         .collect())
@@ -163,10 +110,10 @@ pub fn list_book_workspaces(app: AppHandle) -> CommandResult<Vec<BookWorkspaceSu
 #[allow(non_snake_case)]
 pub fn get_book_workspace_summary(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
 ) -> CommandResult<BookWorkspaceSummary> {
-    let connection = open_database(&app)?;
-    load_book_by_root_path(&connection, &rootPath).map(|book| build_summary(&book))
+    let store = store(&app)?;
+    load_book_by_id(&store, &bookId).map(|book| build_summary(&book))
 }
 
 #[tauri::command]
@@ -175,8 +122,8 @@ pub fn get_book_workspace_summary_by_id(
     app: AppHandle,
     bookId: String,
 ) -> CommandResult<BookWorkspaceSummary> {
-    let connection = open_database(&app)?;
-    load_book_by_id(&connection, &bookId).map(|book| build_summary(&book))
+    let store = store(&app)?;
+    load_book_by_id(&store, &bookId).map(|book| build_summary(&book))
 }
 
 #[tauri::command]
@@ -191,12 +138,11 @@ pub fn create_book_workspace(
         .map(str::trim)
         .is_some_and(|value| !value.is_empty())
     {
-        return Err("当前版本仅支持写入 SQLite 内置书库。".into());
+        return Err("当前版本仅支持写入内置书库目录。".into());
     }
 
-    with_transaction(&app, |transaction| {
-        create_book_workspace_db(transaction, &bookName).map(|book| build_summary(&book))
-    })
+    let store = store(&app)?;
+    create_book_workspace_db(&store, &bookName).map(|book| build_summary(&book))
 }
 
 #[tauri::command]
@@ -218,26 +164,22 @@ pub fn import_book_zip(
         return Err("ZIP 压缩包为空。".into());
     }
 
-    with_transaction(&app, |transaction| {
-        import_book_zip_db(transaction, &fileName, archiveBytes).map(|book| build_summary(&book))
-    })
+    let store = store(&app)?;
+    import_book_zip_db(&store, &fileName, archiveBytes).map(|book| build_summary(&book))
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub async fn export_book_zip(app: AppHandle, rootPath: String) -> CommandResult<Option<String>> {
+pub async fn export_book_zip(app: AppHandle, bookId: String) -> CommandResult<Option<String>> {
     let archive_bytes = {
-        let connection = open_database(&app)?;
-        export_book_zip_db(&connection, &rootPath)?
+        let store = store(&app)?;
+        export_book_zip_db(&store, &bookId)?
     };
 
     #[cfg(desktop)]
     {
-        let connection = open_database(&app)?;
-        let default_file_name = format!(
-            "{}.zip",
-            load_book_by_root_path(&connection, &rootPath)?.name
-        );
+        let store = store(&app)?;
+        let default_file_name = format!("{}.zip", load_book_by_id(&store, &bookId)?.name);
         let save_path = app
             .dialog()
             .file()
@@ -260,57 +202,47 @@ pub async fn export_book_zip(app: AppHandle, rootPath: String) -> CommandResult<
             save_path.with_extension("zip")
         };
 
-        std::fs::write(&final_path, archive_bytes).map_err(error_to_string)?;
+        std::fs::write(&final_path, archive_bytes).map_err(|error| error.to_string())?;
         Ok(Some(final_path.to_string_lossy().replace('\\', "/")))
     }
 
     #[cfg(mobile)]
     {
-        let _ = app;
-        let _ = archive_bytes;
+        let _ = (app, archive_bytes);
         Err("当前平台暂不支持导出 ZIP 书籍包。".into())
     }
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn delete_book_workspace(app: AppHandle, rootPath: String) -> CommandResult<()> {
-    with_transaction(&app, |transaction| {
-        let book = load_book_by_root_path(transaction, &rootPath)?;
-        delete_book_search_index(transaction, &book.id)?;
-        transaction
-            .execute(
-                "DELETE FROM book_workspaces WHERE id = ?1",
-                params![book.id],
-            )
-            .map_err(error_to_string)?;
-        Ok(())
-    })
+pub fn delete_book_workspace(app: AppHandle, bookId: String) -> CommandResult<()> {
+    let store = store(&app)?;
+    let book = load_book_by_id(&store, &bookId)?;
+    store.delete_book(&book.id)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn ensure_book_workspace_template(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
 ) -> CommandResult<Vec<String>> {
-    with_transaction(&app, |transaction| {
-        ensure_book_workspace_template_db(transaction, &rootPath)
-    })
+    let store = store(&app)?;
+    ensure_book_workspace_template_db(&store, &bookId)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn read_workspace_tree(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<TreeNode> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        let connection = open_database(&app)?;
-        read_workspace_tree_db(&connection, &rootPath)
+        let store = store(&app)?;
+        read_workspace_tree_db(&store, &bookId)
     })
 }
 
@@ -318,15 +250,15 @@ pub fn read_workspace_tree(
 #[allow(non_snake_case)]
 pub fn read_text_file(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     path: String,
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<String> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        let connection = open_database(&app)?;
-        read_text_file_db(&connection, &rootPath, &path)
+        let store = store(&app)?;
+        read_text_file_db(&store, &bookId, &path)
     })
 }
 
@@ -334,7 +266,7 @@ pub fn read_text_file(
 #[allow(non_snake_case)]
 pub fn write_text_file(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     path: String,
     contents: String,
     requestId: Option<String>,
@@ -342,17 +274,36 @@ pub fn write_text_file(
 ) -> CommandResult<()> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        with_transaction(&app, |transaction| {
-            write_text_file_db(transaction, &rootPath, &path, &contents)
-        })
+        let store = store(&app)?;
+        write_text_file_db(&store, &bookId, &path, &contents)
     })
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
+#[allow(clippy::too_many_arguments)]
+pub fn edit_text_file(
+    app: AppHandle,
+    bookId: String,
+    path: String,
+    oldString: String,
+    newString: String,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<()> {
+    with_cancellable_request(&registry, requestId.as_deref(), || {
+        check_cancellation(&registry, requestId.as_deref())?;
+        let store = store(&app)?;
+        edit_text_file_db(&store, &bookId, &path, &oldString, &newString)
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+#[allow(clippy::too_many_arguments)]
 pub fn search_workspace_content(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     query: String,
     limit: Option<usize>,
     intent: Option<String>,
@@ -363,10 +314,10 @@ pub fn search_workspace_content(
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<WorkspaceSearchResult> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
-        let connection = open_database(&app)?;
+        let store = store(&app)?;
         search_workspace_content_db(
-            &connection,
-            &rootPath,
+            &store,
+            &bookId,
             &query,
             limit,
             intent.as_deref(),
@@ -383,7 +334,7 @@ pub fn search_workspace_content(
 #[allow(non_snake_case)]
 pub fn read_text_file_line(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     path: String,
     lineNumber: usize,
     requestId: Option<String>,
@@ -391,8 +342,8 @@ pub fn read_text_file_line(
 ) -> CommandResult<WorkspaceLineResult> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        let connection = open_database(&app)?;
-        read_text_file_line_db(&connection, &rootPath, &path, lineNumber)
+        let store = store(&app)?;
+        read_text_file_line_db(&store, &bookId, &path, lineNumber)
     })
 }
 
@@ -401,7 +352,7 @@ pub fn read_text_file_line(
 #[allow(clippy::too_many_arguments)]
 pub fn replace_text_file_line(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     path: String,
     lineNumber: usize,
     contents: String,
@@ -412,17 +363,16 @@ pub fn replace_text_file_line(
 ) -> CommandResult<WorkspaceLineResult> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        with_transaction(&app, |transaction| {
-            replace_text_file_line_db(
-                transaction,
-                &rootPath,
-                &path,
-                lineNumber,
-                &contents,
-                previousLine,
-                nextLine,
-            )
-        })
+        let store = store(&app)?;
+        replace_text_file_line_db(
+            &store,
+            &bookId,
+            &path,
+            lineNumber,
+            &contents,
+            previousLine,
+            nextLine,
+        )
     })
 }
 
@@ -430,7 +380,7 @@ pub fn replace_text_file_line(
 #[allow(non_snake_case)]
 pub fn create_workspace_directory(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     parentPath: String,
     name: String,
     requestId: Option<String>,
@@ -438,9 +388,8 @@ pub fn create_workspace_directory(
 ) -> CommandResult<String> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        with_transaction(&app, |transaction| {
-            create_workspace_directory_db(transaction, &rootPath, &parentPath, &name)
-        })
+        let store = store(&app)?;
+        create_workspace_directory_db(&store, &bookId, &parentPath, &name)
     })
 }
 
@@ -448,7 +397,7 @@ pub fn create_workspace_directory(
 #[allow(non_snake_case)]
 pub fn create_workspace_text_file(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     parentPath: String,
     name: String,
     requestId: Option<String>,
@@ -456,9 +405,8 @@ pub fn create_workspace_text_file(
 ) -> CommandResult<String> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        with_transaction(&app, |transaction| {
-            create_workspace_text_file_db(transaction, &rootPath, &parentPath, &name)
-        })
+        let store = store(&app)?;
+        create_workspace_text_file_db(&store, &bookId, &parentPath, &name)
     })
 }
 
@@ -466,7 +414,7 @@ pub fn create_workspace_text_file(
 #[allow(non_snake_case)]
 pub fn rename_workspace_entry(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     path: String,
     nextName: String,
     requestId: Option<String>,
@@ -474,9 +422,8 @@ pub fn rename_workspace_entry(
 ) -> CommandResult<String> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        with_transaction(&app, |transaction| {
-            rename_workspace_entry_db(transaction, &rootPath, &path, &nextName)
-        })
+        let store = store(&app)?;
+        rename_workspace_entry_db(&store, &bookId, &path, &nextName)
     })
 }
 
@@ -484,7 +431,7 @@ pub fn rename_workspace_entry(
 #[allow(non_snake_case)]
 pub fn move_workspace_entry(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     path: String,
     targetParentPath: String,
     requestId: Option<String>,
@@ -492,9 +439,8 @@ pub fn move_workspace_entry(
 ) -> CommandResult<String> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        with_transaction(&app, |transaction| {
-            move_workspace_entry_db(transaction, &rootPath, &path, &targetParentPath)
-        })
+        let store = store(&app)?;
+        move_workspace_entry_db(&store, &bookId, &path, &targetParentPath)
     })
 }
 
@@ -502,16 +448,15 @@ pub fn move_workspace_entry(
 #[allow(non_snake_case)]
 pub fn delete_workspace_entry(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     path: String,
     requestId: Option<String>,
     registry: State<'_, ToolCancellationRegistry>,
 ) -> CommandResult<()> {
     with_cancellable_request(&registry, requestId.as_deref(), || {
         check_cancellation(&registry, requestId.as_deref())?;
-        with_transaction(&app, |transaction| {
-            delete_workspace_entry_db(transaction, &rootPath, &path)
-        })
+        let store = store(&app)?;
+        delete_workspace_entry_db(&store, &bookId, &path)
     })
 }
 
@@ -521,84 +466,141 @@ pub fn delete_workspace_entry(
 #[allow(non_snake_case)]
 pub fn list_entry_relations(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     entryPath: String,
 ) -> CommandResult<Vec<RelationDto>> {
-    let connection = open_database(&app)?;
-    list_entry_relations_by_root(&connection, &rootPath, &entryPath)
+    let store = store(&app)?;
+    list_entry_relations_by_root(&store, &bookId, &entryPath)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn list_book_relations(
-    app: AppHandle,
-    rootPath: String,
-) -> CommandResult<Vec<RelationDto>> {
-    let connection = open_database(&app)?;
-    list_book_relations_by_root(&connection, &rootPath)
+pub fn list_book_relations(app: AppHandle, bookId: String) -> CommandResult<Vec<RelationDto>> {
+    let store = store(&app)?;
+    list_book_relations_by_root(&store, &bookId)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn create_entry_relation(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     entryAPath: String,
     entryBPath: String,
     relationship: String,
     note: Option<String>,
 ) -> CommandResult<RelationDto> {
-    with_transaction(&app, |transaction| {
-        create_relation_by_root(
-            transaction,
-            &rootPath,
-            &entryAPath,
-            &entryBPath,
-            &relationship,
-            note.as_deref(),
-        )
-    })
+    let store = store(&app)?;
+    create_relation_by_root(
+        &store,
+        &bookId,
+        &entryAPath,
+        &entryBPath,
+        &relationship,
+        note.as_deref(),
+    )
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn update_entry_relation(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     relationId: String,
     relationship: Option<String>,
     note: Option<String>,
     clearNote: Option<bool>,
 ) -> CommandResult<RelationDto> {
-    // note 的三态语义通过两个字段表达,避免 serde 对 Option<Option<T>> 反序列化的歧义:
-    //   两者皆缺省       → 不修改 note
-    //   clearNote=true   → 清空 note(忽略 note 字段)
-    //   note=Some(x)     → 改为 x
+    // note 三态：两者缺省→不改；clearNote=true→清空；note=Some(x)→改为 x。
     let note_arg: Option<Option<&str>> = if clearNote.unwrap_or(false) {
         Some(None)
     } else {
         note.as_deref().map(Some)
     };
 
-    with_transaction(&app, |transaction| {
-        update_relation_by_root(
-            transaction,
-            &rootPath,
-            &relationId,
-            relationship.as_deref(),
-            note_arg,
-        )
-    })
+    let store = store(&app)?;
+    update_relation_by_root(
+        &store,
+        &bookId,
+        &relationId,
+        relationship.as_deref(),
+        note_arg,
+    )
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn delete_entry_relation(
     app: AppHandle,
-    rootPath: String,
+    bookId: String,
     relationId: String,
 ) -> CommandResult<()> {
-    with_transaction(&app, |transaction| {
-        delete_relation_by_root(transaction, &rootPath, &relationId)
-    })
+    let store = store(&app)?;
+    delete_relation_by_root(&store, &bookId, &relationId)
+}
+
+// —— per-book 会话存储（.sessions/）：供 pi AgentHarness 的 JsonlSessionRepo 落盘 ——
+// path 均相对 .sessions/，由后端做 .. 越界校验并锁在该目录内。
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn session_fs_exists(app: AppHandle, bookId: String, path: String) -> CommandResult<bool> {
+    let store = store(&app)?;
+    session_exists_db(&store, &bookId, &path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn session_fs_read(app: AppHandle, bookId: String, path: String) -> CommandResult<String> {
+    let store = store(&app)?;
+    session_read_db(&store, &bookId, &path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn session_fs_write(
+    app: AppHandle,
+    bookId: String,
+    path: String,
+    contents: String,
+) -> CommandResult<()> {
+    let store = store(&app)?;
+    session_write_db(&store, &bookId, &path, &contents)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn session_fs_append(
+    app: AppHandle,
+    bookId: String,
+    path: String,
+    contents: String,
+) -> CommandResult<()> {
+    let store = store(&app)?;
+    session_append_db(&store, &bookId, &path, &contents)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn session_fs_create_dir(app: AppHandle, bookId: String, path: String) -> CommandResult<()> {
+    let store = store(&app)?;
+    session_create_dir_db(&store, &bookId, &path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn session_fs_remove(app: AppHandle, bookId: String, path: String) -> CommandResult<()> {
+    let store = store(&app)?;
+    session_remove_db(&store, &bookId, &path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn session_fs_list_dir(
+    app: AppHandle,
+    bookId: String,
+    path: String,
+) -> CommandResult<Vec<SessionEntry>> {
+    let store = store(&app)?;
+    session_list_dir_db(&store, &bookId, &path)
 }

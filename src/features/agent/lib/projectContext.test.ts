@@ -56,7 +56,7 @@ describe("project context", () => {
     const context = await loadProjectContext({
       readFile,
       readTree,
-      workspaceRootPath: "C:/books/北境余烬",
+      workspaceBookId: "C:/books/北境余烬",
     });
 
     expect(readFile).toHaveBeenCalledWith("C:/books/北境余烬", DEFAULT_PROJECT_AGENT_PATH);
@@ -85,7 +85,7 @@ describe("project context", () => {
 	it("缺少 .project/AGENTS.md 时返回空", async () => {
     const context = await loadProjectContext({
       readFile: vi.fn().mockRejectedValue(new Error("missing")),
-      workspaceRootPath: "C:/books/北境余烬",
+      workspaceBookId: "C:/books/北境余烬",
     });
 
     expect(context).toBeNull();
@@ -129,7 +129,7 @@ describe("project context", () => {
     const context = await loadProjectContext({
       readFile,
       readTree,
-      workspaceRootPath: "C:/books/北境余烬",
+      workspaceBookId: "C:/books/北境余烬",
     });
 
 	    expect(context).toEqual({
@@ -154,7 +154,7 @@ describe("project context", () => {
 
     const context = await loadProjectContext({
       readFile,
-      workspaceRootPath: "C:/books/北境余烬",
+      workspaceBookId: "C:/books/北境余烬",
     });
 
     expect(context).toEqual({
@@ -205,7 +205,7 @@ describe("project context", () => {
       activeFilePath: "正文/第001章_章名.md",
       readFile,
       taskType: "chapter-write",
-      workspaceRootPath: "C:/books/北境余烬",
+      workspaceBookId: "C:/books/北境余烬",
     });
 
 	    expect(context?.files.map((file) => file.path)).toEqual([
@@ -245,7 +245,7 @@ describe("project context", () => {
 	      activeFilePath: "正文/第三章.md",
 	      readFile,
 	      readRelations,
-	      workspaceRootPath: "C:/books/北境余烬",
+	      workspaceBookId: "C:/books/北境余烬",
 	    });
 
 	    expect(readRelations).toHaveBeenCalledWith("C:/books/北境余烬", "正文/第三章.md");
@@ -278,7 +278,7 @@ describe("project context", () => {
 	    await loadProjectContext({
 	      readFile,
 	      readRelations,
-	      workspaceRootPath: "C:/books/北境余烬",
+	      workspaceBookId: "C:/books/北境余烬",
 	    });
 
 	    expect(readRelations).not.toHaveBeenCalled();
@@ -295,7 +295,7 @@ describe("project context", () => {
 	      activeFilePath: "正文/第三章.md",
 	      readFile,
 	      readRelations,
-	      workspaceRootPath: "C:/books/北境余烬",
+	      workspaceBookId: "C:/books/北境余烬",
 	    });
 
 	    expect(context?.files.some((file) => file.path === DEFAULT_PROJECT_AGENT_PATH)).toBe(true);

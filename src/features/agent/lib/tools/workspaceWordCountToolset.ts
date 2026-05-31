@@ -160,7 +160,8 @@ function normalizeExtensions(input: unknown): Set<string> {
 }
 
 export function createWorkspaceWordCountTools({
-  rootPath,
+  bookId,
+  displayPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
     text_stats: {
@@ -172,7 +173,7 @@ export function createWorkspaceWordCountTools({
         // 单文件统计模式。
         if (input.path && !input.paths && !input.dir) {
           const path = ensureString(input.path, "text_stats.path");
-          const content = await readWorkspaceTextFile(rootPath, path, abortContext);
+          const content = await readWorkspaceTextFile(bookId, path, abortContext);
           const stats = computeTextCountStats(path, content);
           return ok(formatWordCountSummary(stats), stats);
         }
@@ -184,9 +185,9 @@ export function createWorkspaceWordCountTools({
             ensureString(value, `text_stats.paths[${index}]`),
           );
         } else if (input.dir != null) {
-          const dirRel = normalizeRelativePath(rootPath, String(input.dir ?? ""));
-          const tree = await readWorkspaceTree(rootPath, abortContext);
-          const node = findTreeNode(rootPath, tree, dirRel);
+          const dirRel = normalizeRelativePath(displayPath, String(input.dir ?? ""));
+          const tree = await readWorkspaceTree(bookId, abortContext);
+          const node = findTreeNode(displayPath, tree, dirRel);
           if (!node) {
             throw new Error(`未找到路径：${dirRel || "."}`);
           }
@@ -195,7 +196,7 @@ export function createWorkspaceWordCountTools({
           }
           const exts = normalizeExtensions(input.extensions);
           const filterExts = exts.size > 0 ? exts : DEFAULT_TEXT_EXTENSIONS;
-          collectTextFilePaths(rootPath, node, filterExts, targetPaths);
+          collectTextFilePaths(displayPath, node, filterExts, targetPaths);
         } else {
           throw new Error(
             "text_stats 需要传入 path、paths 或 dir 之一。",
@@ -211,7 +212,7 @@ export function createWorkspaceWordCountTools({
 
         const items: TextCountStats[] = [];
         for (const path of targetPaths) {
-          const content = await readWorkspaceTextFile(rootPath, path, abortContext);
+          const content = await readWorkspaceTextFile(bookId, path, abortContext);
           items.push(computeTextCountStats(path, content));
         }
         const totals = summarizeBatch(items);

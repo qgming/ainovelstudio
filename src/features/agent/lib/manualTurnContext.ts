@@ -22,9 +22,10 @@ type ResolveManualTurnContextInput = {
   activeFilePath: string | null;
   draftContent: string;
   enabledSkills: ResolvedSkill[];
-  readFile: (rootPath: string, path: string) => Promise<string>;
+  readFile: (bookId: string, path: string) => Promise<string>;
   selection: ManualTurnContextSelection;
-  workspaceRootPath: string | null;
+  // 解析用：书籍标识（UUID）。当前实现只汇总 selection，不实际读文件，保留以对齐调用方语义。
+  workspaceBookId: string | null;
 };
 
 function unique<T>(values: T[]) {

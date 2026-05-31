@@ -43,5 +43,12 @@ export default defineConfig(async () => ({
     environment: "jsdom",
     globals: true,
     setupFiles: "./src/test/setup.ts",
+    server: {
+      deps: {
+        // pi 包以 ESM 形式分发：需让 vitest 处理（inline）后，
+        // 测试里对 @earendil-works/pi-ai 的 vi.mock 才能拦截 harness 内部对 streamSimple 的导入。
+        inline: ["@earendil-works/pi-agent-core", "@earendil-works/pi-ai"],
+      },
+    },
   },
 }));

@@ -1,3 +1,4 @@
+use crate::domains::skills::skill_store::{SkillMeta, SkillStore};
 use crate::{
     app::ToolCancellationRegistry, infrastructure::db::open_database,
     infrastructure::embedded_resources::EMBEDDED_SKILL_FILES,
@@ -523,88 +524,58 @@ fn build_skill_manifest_from_files(
     })
 }
 
-fn serialize_json<T: Serialize>(value: &T) -> CommandResult<String> {
-    serde_json::to_string(value).map_err(error_to_string)
-}
+// CP-E：技能存储改真实文件。manifest 不再持久化，按需从文件 + .skill-meta.json 重建。
+// source_kind/is_builtin 从 meta 读取；meta 缺失（异常）时按已安装、非内置兜底。
 
 fn save_skill_record(
-    connection: &Connection,
-    manifest: &SkillManifest,
+    store: &SkillStore,
+    skill_id: &str,
     files: &SkillFiles,
+    source_kind: &str,
+    is_builtin: bool,
 ) -> CommandResult<()> {
-    connection
-        .execute(
-            r#"
-            INSERT INTO skill_packages (id, source_kind, is_builtin, manifest_json, files_json, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ON CONFLICT(id) DO UPDATE
-            SET source_kind = excluded.source_kind,
-                is_builtin = excluded.is_builtin,
-                manifest_json = excluded.manifest_json,
-                files_json = excluded.files_json,
-                updated_at = excluded.updated_at
-            "#,
-            params![
-                manifest.id,
-                manifest.source_kind,
-                if manifest.is_builtin { 1 } else { 0 },
-                serialize_json(manifest)?,
-                serialize_json(files)?,
-                current_timestamp() as i64,
-            ],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
+    store.write_files(
+        skill_id,
+        files,
+        &SkillMeta {
+            source_kind: source_kind.to_string(),
+            is_builtin,
+        },
+    )
 }
 
 fn load_skill_record(
-    connection: &Connection,
+    store: &SkillStore,
     skill_id: &str,
 ) -> CommandResult<Option<(SkillManifest, SkillFiles)>> {
-    connection
-        .query_row(
-            "SELECT manifest_json, files_json FROM skill_packages WHERE id = ?1",
-            params![skill_id],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-        )
-        .optional()
-        .map_err(error_to_string)?
-        .map(|(manifest_raw, files_raw)| {
-            let manifest =
-                serde_json::from_str::<SkillManifest>(&manifest_raw).map_err(error_to_string)?;
-            let files = serde_json::from_str::<SkillFiles>(&files_raw).map_err(error_to_string)?;
-            Ok((manifest, files))
-        })
-        .transpose()
+    if !store.exists(skill_id) {
+        return Ok(None);
+    }
+    let files = store.read_files(skill_id)?;
+    if !files.contains_key(SKILL_PRIMARY_FILE) {
+        return Ok(None);
+    }
+    let meta = store.read_meta(skill_id)?.unwrap_or(SkillMeta {
+        source_kind: SKILL_SOURCE_INSTALLED.to_string(),
+        is_builtin: false,
+    });
+    let manifest =
+        build_skill_manifest_from_files(skill_id, &files, &meta.source_kind, meta.is_builtin)?;
+    Ok(Some((manifest, files)))
 }
 
-fn load_all_skill_records(
-    connection: &Connection,
-) -> CommandResult<Vec<(SkillManifest, SkillFiles)>> {
-    let mut statement = connection
-        .prepare("SELECT manifest_json, files_json FROM skill_packages")
-        .map_err(error_to_string)?;
-    let mut rows = statement.query([]).map_err(error_to_string)?;
+fn load_all_skill_records(store: &SkillStore) -> CommandResult<Vec<(SkillManifest, SkillFiles)>> {
     let mut records = Vec::new();
-    while let Some(row) = rows.next().map_err(error_to_string)? {
-        let manifest_raw = row.get::<_, String>(0).map_err(error_to_string)?;
-        let files_raw = row.get::<_, String>(1).map_err(error_to_string)?;
-        let manifest =
-            serde_json::from_str::<SkillManifest>(&manifest_raw).map_err(error_to_string)?;
-        let files = serde_json::from_str::<SkillFiles>(&files_raw).map_err(error_to_string)?;
-        records.push((manifest, files));
+    for skill_id in store.list_ids()? {
+        if let Some(record) = load_skill_record(store, &skill_id)? {
+            records.push(record);
+        }
     }
     Ok(records)
 }
 
-fn delete_skill_record(connection: &Connection, skill_id: &str) -> CommandResult<()> {
-    connection
-        .execute(
-            "DELETE FROM skill_packages WHERE id = ?1",
-            params![skill_id],
-        )
-        .map_err(error_to_string)?;
-    Ok(())
+fn delete_skill_record(store: &SkillStore, skill_id: &str) -> CommandResult<()> {
+    store.delete(skill_id)
 }
 
 fn collect_embedded_skill_files(skill_id: &str) -> SkillFiles {
@@ -679,18 +650,9 @@ fn write_app_state_string(connection: &Connection, key: &str, value: &str) -> Co
     Ok(())
 }
 
-fn has_missing_embedded_skill_record(connection: &Connection) -> CommandResult<bool> {
+fn has_missing_embedded_skill_record(store: &SkillStore) -> CommandResult<bool> {
     for skill_id in embedded_skill_ids() {
-        let exists = connection
-            .query_row(
-                "SELECT 1 FROM skill_packages WHERE id = ?1",
-                params![skill_id],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()
-            .map_err(error_to_string)?
-            .is_some();
-        if !exists {
+        if !store.exists(&skill_id) {
             return Ok(true);
         }
     }
@@ -700,11 +662,11 @@ fn has_missing_embedded_skill_record(connection: &Connection) -> CommandResult<b
 fn sync_builtin_skills_to_database(
     app: &AppHandle,
 ) -> CommandResult<BuiltinSkillsInitializationResult> {
-    let connection = open_database(app)?;
+    let store = SkillStore::from_app(app)?;
     let mut initialized_skill_ids = Vec::new();
     let mut skipped_skill_ids = Vec::new();
     for skill_id in embedded_skill_ids() {
-        if let Some((existing, _)) = load_skill_record(&connection, &skill_id)? {
+        if let Some((existing, _)) = load_skill_record(&store, &skill_id)? {
             if existing.source_kind == SKILL_SOURCE_INSTALLED {
                 skipped_skill_ids.push(skill_id);
                 continue;
@@ -722,7 +684,7 @@ fn sync_builtin_skills_to_database(
                 format!("内置技能 {skill_id} 初始化失败：{error_details}")
             });
         }
-        save_skill_record(&connection, &manifest, &files)?;
+        save_skill_record(&store, &skill_id, &files, SKILL_SOURCE_BUILTIN, true)?;
         initialized_skill_ids.push(skill_id);
     }
 
@@ -744,13 +706,13 @@ fn sync_builtin_skills_if_needed(
     let current_signature = current_builtin_skills_sync_signature();
     let saved_version = read_app_state_string(&connection, BUILTIN_SKILLS_SYNC_VERSION_KEY)?;
     let saved_signature = read_app_state_string(&connection, BUILTIN_SKILLS_SYNC_SIGNATURE_KEY)?;
-    let has_missing_embedded_skill = has_missing_embedded_skill_record(&connection)?;
+    drop(connection);
+    let store = SkillStore::from_app(app)?;
+    let has_missing_embedded_skill = has_missing_embedded_skill_record(&store)?;
 
     let needs_sync = saved_version.as_deref() != Some(current_version.as_str())
         || saved_signature.as_deref() != Some(current_signature.as_str())
         || has_missing_embedded_skill;
-
-    drop(connection);
 
     if !needs_sync {
         return Ok(BuiltinSkillsInitializationResult {
@@ -788,8 +750,8 @@ fn scan_all_skills(
         registry.check(request_id)?;
     }
 
-    let connection = open_database(app)?;
-    let mut manifests = load_all_skill_records(&connection)?
+    let store = SkillStore::from_app(app)?;
+    let mut manifests = load_all_skill_records(&store)?
         .into_iter()
         .map(|(manifest, _)| manifest)
         .collect::<Vec<_>>();
@@ -802,8 +764,8 @@ fn read_skill_package(
     skill_id: &str,
 ) -> CommandResult<(SkillManifest, SkillFiles)> {
     ensure_builtin_skills_seeded(app)?;
-    let connection = open_database(app)?;
-    load_skill_record(&connection, skill_id)?.ok_or_else(|| "未找到对应技能。".into())
+    let store = SkillStore::from_app(app)?;
+    load_skill_record(&store, skill_id)?.ok_or_else(|| "未找到对应技能。".into())
 }
 
 fn validate_reference_name(name: &str) -> CommandResult<String> {
@@ -827,9 +789,10 @@ fn save_skill_files(
     source_kind: &str,
     is_builtin: bool,
 ) -> CommandResult<()> {
-    let manifest = build_skill_manifest_from_files(skill_id, files, source_kind, is_builtin)?;
-    let connection = open_database(app)?;
-    save_skill_record(&connection, &manifest, files)
+    // 写盘前先校验 manifest 可构建（保持与旧逻辑一致的失败前置）。
+    build_skill_manifest_from_files(skill_id, files, source_kind, is_builtin)?;
+    let store = SkillStore::from_app(app)?;
+    save_skill_record(&store, skill_id, files, source_kind, is_builtin)
 }
 
 fn create_skill_record(app: &AppHandle, name: &str, description: &str) -> CommandResult<()> {
@@ -842,8 +805,8 @@ fn create_skill_record(app: &AppHandle, name: &str, description: &str) -> Comman
         return Err("技能简介长度不能超过 1024 个字符。".into());
     }
 
-    let connection = open_database(app)?;
-    if load_skill_record(&connection, &safe_name)?.is_some() {
+    let store = SkillStore::from_app(app)?;
+    if load_skill_record(&store, &safe_name)?.is_some() {
         return Err("已存在同名技能。".into());
     }
 
@@ -861,7 +824,7 @@ fn create_skill_record(app: &AppHandle, name: &str, description: &str) -> Comman
             format!("新建技能失败：{error_details}")
         });
     }
-    save_skill_record(&connection, &manifest, &files)
+    save_skill_record(&store, &safe_name, &files, SKILL_SOURCE_INSTALLED, false)
 }
 
 fn create_reference_file(app: &AppHandle, skill_id: &str, name: &str) -> CommandResult<String> {
@@ -1134,11 +1097,11 @@ fn install_skill_archive(
         );
     }
 
-    let connection = open_database(app)?;
-    if load_skill_record(&connection, &manifest.id)?.is_some() {
+    let store = SkillStore::from_app(app)?;
+    if load_skill_record(&store, &manifest.id)?.is_some() {
         return Err("已存在同名技能，请先移除旧技能后再导入。".into());
     }
-    save_skill_record(&connection, &manifest, &files)?;
+    save_skill_record(&store, &manifest.id, &files, SKILL_SOURCE_INSTALLED, false)?;
     scan_all_skills(app, None, None)
 }
 
@@ -1237,14 +1200,14 @@ pub fn delete_installed_skill(
     app: AppHandle,
     skillId: String,
 ) -> CommandResult<Vec<SkillManifest>> {
-    let connection = open_database(&app)?;
-    let Some((manifest, _)) = load_skill_record(&connection, &skillId)? else {
+    let store = SkillStore::from_app(&app)?;
+    let Some((manifest, _)) = load_skill_record(&store, &skillId)? else {
         return Err("未找到可删除的已安装技能。".into());
     };
     if manifest.source_kind != SKILL_SOURCE_INSTALLED {
         return Err("仅支持删除已安装技能。".into());
     }
-    delete_skill_record(&connection, &skillId)?;
+    delete_skill_record(&store, &skillId)?;
     scan_all_skills(&app, None, None)
 }
 
@@ -1268,6 +1231,48 @@ pub fn import_skill_zip(
     }
 
     install_skill_archive(&app, &fileName, archiveBytes)
+}
+
+// —— skills_root 文件访问命令（供 pi loadSkills 的 ExecutionEnv 转发）——
+// path 相对 app_data_dir/skills/，后端做 .. 越界校验并锁在该目录内。
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillFsEntry {
+    name: String,
+    is_dir: bool,
+    size: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillFsInfo {
+    kind: String,
+    size: u64,
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn skill_fs_read(app: AppHandle, path: String) -> CommandResult<String> {
+    SkillStore::from_app(&app)?.root_read(&path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn skill_fs_file_info(app: AppHandle, path: String) -> CommandResult<Option<SkillFsInfo>> {
+    Ok(SkillStore::from_app(&app)?
+        .root_file_info(&path)?
+        .map(|(kind, size)| SkillFsInfo { kind, size }))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn skill_fs_list_dir(app: AppHandle, path: String) -> CommandResult<Vec<SkillFsEntry>> {
+    Ok(SkillStore::from_app(&app)?
+        .root_list_dir(&path)?
+        .into_iter()
+        .map(|(name, is_dir, size)| SkillFsEntry { name, is_dir, size })
+        .collect())
 }
 
 #[cfg(test)]

@@ -271,7 +271,7 @@ export function BookRelationsPage() {
     setErrorMessage(null);
     try {
       const nextSummary = await getBookWorkspaceSummaryById(currentBookId);
-      const rawRelations = await listBookRelations(nextSummary.path);
+      const rawRelations = await listBookRelations(nextSummary.id);
       const rootPrefix = `${nextSummary.path}/`;
       const enriched: WorkspaceRelation[] = rawRelations.map((relation) => ({
         ...relation,

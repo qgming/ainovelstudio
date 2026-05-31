@@ -27,7 +27,7 @@ type BookTreePanelProps = {
   relationsByPath?: Record<string, WorkspaceRelation[]>;
   // —— 已有 ——
   onNavigateHome: () => void;
-  onOpenRootFolder?: (rootPath: string) => void;
+  onOpenRootFolder?: () => void;
   onRefresh: () => void;
   onRename: (node: TreeNode) => void;
   onSelectFile: (path: string) => void;
@@ -160,7 +160,7 @@ export function BookTreePanel({
             <ToolbarButton
               ariaLabel="在系统文件资源管理器中打开书籍文件夹"
               busy={busy}
-              onClick={() => onOpenRootFolder(rootNode.path)}
+              onClick={onOpenRootFolder}
             >
               <FolderOpen className="h-4 w-4" />
             </ToolbarButton>

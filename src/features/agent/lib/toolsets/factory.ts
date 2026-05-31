@@ -38,22 +38,26 @@ export function createDefaultLocalResourceToolset(options?: {
 /**
  * 默认书籍工作区工具集装配：在工作区文件被工具修改后刷新视图。
  *
- * @param options.rootPath 当前会话绑定的工作区根路径；为 null/空字符串时返回空集。
- * @param options.guardRootMatch 是否仅当当前 store rootPath 与传入 rootPath 一致时才刷新。
+ * @param options.bookId 当前会话绑定的书籍标识（UUID，传给 bookWorkspaceApi 的解析 key）；为 null/空字符串时返回空集。
+ * @param options.displayPath 工作区可读根串（books/<书名>），用于工具内的路径前缀解析与渲染。
+ * @param options.guardRootMatch 是否仅当当前 store rootBookId 与传入 bookId 一致时才刷新。
  */
 export function createDefaultBookWorkspaceToolset(options: {
-  rootPath: string | null;
+  bookId: string | null;
+  displayPath: string | null;
   guardRootMatch?: boolean;
 }): AgentToolMap {
-  const { rootPath, guardRootMatch = false } = options;
-  if (!rootPath) {
+  const { bookId, displayPath, guardRootMatch = false } = options;
+  if (!bookId) {
     return {};
   }
   return createWorkspaceToolset({
-    rootPath,
+    bookId,
+    displayPath: displayPath ?? "",
     onWorkspaceMutated: async () => {
       const workspaceState = useBookWorkspaceStore.getState();
-      if (guardRootMatch && workspaceState.rootPath !== rootPath) {
+      // 守卫比较解析 key（rootBookId）而非展示串：用户切书时 bookId 才是稳定身份。
+      if (guardRootMatch && workspaceState.rootBookId !== bookId) {
         return;
       }
       await workspaceState.refreshWorkspaceAfterExternalChange();
@@ -64,17 +68,20 @@ export function createDefaultBookWorkspaceToolset(options: {
 /**
  * 写作模式（书籍工作区）默认 toolset：global + workspace + localResource。
  *
- * @param options.rootPath 当前书籍工作区根路径；为空时仅返回 global + localResource。
+ * @param options.bookId 当前书籍标识（UUID）；为空时仅返回 global + localResource。
+ * @param options.displayPath 工作区可读根串（books/<书名>），供工具路径渲染。
  */
 export function buildBookWorkspaceTools(options: {
-  rootPath: string | null;
+  bookId: string | null;
+  displayPath: string | null;
   guardRootMatch?: boolean;
   includeAsk?: boolean;
 }): AgentToolMap {
   return {
     ...createGlobalToolset(),
     ...createDefaultBookWorkspaceToolset({
-      rootPath: options.rootPath,
+      bookId: options.bookId,
+      displayPath: options.displayPath,
       guardRootMatch: options.guardRootMatch,
     }),
     ...createDefaultLocalResourceToolset({

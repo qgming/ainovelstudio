@@ -154,7 +154,7 @@ export function BookLibraryPage({ updateAction }: { updateAction?: BookLibraryUp
     try {
       setExportBusyPath(book.path);
       setErrorMessage(null);
-      const exportedPath = await exportBookZip(book.path);
+      const exportedPath = await exportBookZip(book.id);
       if (!exportedPath) {
         return;
       }
@@ -179,8 +179,8 @@ export function BookLibraryPage({ updateAction }: { updateAction?: BookLibraryUp
     try {
       setDeleteBusyPath(currentTarget.path);
       setErrorMessage(null);
-      await deleteBookWorkspace(currentTarget.path);
-      if (getStoredWorkspaceSnapshot()?.rootPath === currentTarget.path) {
+      await deleteBookWorkspace(currentTarget.id);
+      if (getStoredWorkspaceSnapshot()?.bookId === currentTarget.id) {
         clearStoredWorkspaceSnapshot();
       }
 

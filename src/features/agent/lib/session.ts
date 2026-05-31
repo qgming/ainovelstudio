@@ -5,7 +5,7 @@ import {
   type QueueMode,
   type CompactionRunner,
 } from "./core/session";
-import { runWritingAgentPi } from "./pi/writingSessionRunner";
+import { runWritingAgentHarness } from "./runtime/writingAgentHarnessRunner";
 import type { WritingRuntimeContext } from "./writingRuntimeContext";
 
 export type CreateWritingAgentSessionOptions = WritingRuntimeContext & {
@@ -14,6 +14,8 @@ export type CreateWritingAgentSessionOptions = WritingRuntimeContext & {
   conversationEntries?: ChatEntry[];
   followUpMode?: QueueMode;
   onEvent?: (event: AgentSessionEvent) => void;
+  // pi 持久会话 id（CP-C：用作 AgentHarness 的确定性会话 id，跨轮复用 jsonl 会话）。
+  sessionId: string;
   steeringMode?: QueueMode;
 };
 
@@ -23,12 +25,11 @@ export function createWritingAgentSession(options: CreateWritingAgentSessionOpti
     compact: options.compact,
     followUpMode: options.followUpMode ?? "one-at-a-time",
     steeringMode: options.steeringMode ?? "one-at-a-time",
-    runPrompt: ({ abortSignal, emit, prompt, takeFollowUpMessages, takeSteeringMessages }) =>
-      runWritingAgentPi({
+    runPrompt: ({ abortSignal, emit, prompt }) =>
+      runWritingAgentHarness({
         abortSignal,
         prompt,
-        takeFollowUpMessages,
-        takeSteeringMessages,
+        sessionId: options.sessionId,
         toolContext: options,
         emit: (event) => {
           emit(event);

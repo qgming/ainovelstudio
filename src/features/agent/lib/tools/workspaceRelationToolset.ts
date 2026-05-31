@@ -21,35 +21,37 @@ import {
 
 // 把 RelationDto(后端返回 relative path)转成对 AI 更友好的形态:
 // 对端路径用相对路径展示,与其它工作区工具保持一致(避免每条关联都带 "books/书名/" 前缀)。
-function toRelationView(rootPath: string, relation: WorkspaceRelation, selfRelative: string) {
+// displayPath 仅用于路径渲染(books/<书名>),与解析用 bookId 区分。
+function toRelationView(displayPath: string, relation: WorkspaceRelation, selfRelative: string) {
   const isSelfA = relation.entryAPath === selfRelative;
   const otherRelative = isSelfA ? relation.entryBPath : relation.entryAPath;
   return {
     id: relation.id,
     note: relation.note,
-    otherPath: toDisplayPath(rootPath, otherRelative),
+    otherPath: toDisplayPath(displayPath, otherRelative),
     relationship: relation.relationship,
   };
 }
 
 export function createWorkspaceRelationTools({
   onWorkspaceMutated,
-  rootPath,
+  bookId,
+  displayPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
     workspace_relation_list: {
       description: "列出一个文件的全部关联及其关系标签",
       execute: async (input) => {
         const path = ensureString(input.path, "path");
-        const relativePath = normalizeRelativePath(rootPath, path);
-        const relations = await listEntryRelations(rootPath, path);
-        const views = relations.map((relation) => toRelationView(rootPath, relation, relativePath));
-        const displayPath = toDisplayPath(rootPath, relativePath);
+        const relativePath = normalizeRelativePath(displayPath, path);
+        const relations = await listEntryRelations(bookId, path);
+        const views = relations.map((relation) => toRelationView(displayPath, relation, relativePath));
+        const nodeDisplayPath = toDisplayPath(displayPath, relativePath);
         return ok(
           views.length === 0
-            ? `${displayPath} 还没有任何关联。`
-            : `${displayPath} 共有 ${views.length} 条关联。`,
-          { path: displayPath, relations: views },
+            ? `${nodeDisplayPath} 还没有任何关联。`
+            : `${nodeDisplayPath} 共有 ${views.length} 条关联。`,
+          { path: nodeDisplayPath, relations: views },
         );
       },
     },
@@ -60,20 +62,20 @@ export function createWorkspaceRelationTools({
         const pathB = ensureString(input.pathB, "pathB");
         const relationship = ensureString(input.relationship, "relationship");
         const note = typeof input.note === "string" ? input.note : null;
-        const created = await createEntryRelation(rootPath, pathA, pathB, relationship, note);
+        const created = await createEntryRelation(bookId, pathA, pathB, relationship, note);
         if (onWorkspaceMutated) {
           await onWorkspaceMutated();
         }
         return ok(
-          `已创建关联:${toDisplayPath(rootPath, created.entryAPath)} ↔ ${toDisplayPath(
-            rootPath,
+          `已创建关联:${toDisplayPath(displayPath, created.entryAPath)} ↔ ${toDisplayPath(
+            displayPath,
             created.entryBPath,
           )} [${created.relationship}]`,
           {
             id: created.id,
             note: created.note,
-            pathA: toDisplayPath(rootPath, created.entryAPath),
-            pathB: toDisplayPath(rootPath, created.entryBPath),
+            pathA: toDisplayPath(displayPath, created.entryAPath),
+            pathB: toDisplayPath(displayPath, created.entryBPath),
             relationship: created.relationship,
           },
         );
@@ -96,7 +98,7 @@ export function createWorkspaceRelationTools({
         } else if (typeof input.note === "string") {
           changes.note = input.note;
         }
-        const updated = await updateEntryRelation(rootPath, relationId, changes);
+        const updated = await updateEntryRelation(bookId, relationId, changes);
         if (onWorkspaceMutated) {
           await onWorkspaceMutated();
         }
@@ -105,8 +107,8 @@ export function createWorkspaceRelationTools({
           {
             id: updated.id,
             note: updated.note,
-            pathA: toDisplayPath(rootPath, updated.entryAPath),
-            pathB: toDisplayPath(rootPath, updated.entryBPath),
+            pathA: toDisplayPath(displayPath, updated.entryAPath),
+            pathB: toDisplayPath(displayPath, updated.entryBPath),
             relationship: updated.relationship,
           },
         );
@@ -116,7 +118,7 @@ export function createWorkspaceRelationTools({
       description: "删除一条关联。这只是移除边,不会影响文件本身。",
       execute: async (input) => {
         const relationId = ensureString(input.relationId, "relationId");
-        await deleteEntryRelation(rootPath, relationId);
+        await deleteEntryRelation(bookId, relationId);
         if (onWorkspaceMutated) {
           await onWorkspaceMutated();
         }

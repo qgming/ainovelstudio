@@ -121,7 +121,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_write create 创建空白文件后会触发工作区刷新回调", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件不存在"));
 
     const result = await toolset.workspace_write.execute({
@@ -142,7 +142,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_write create 遇到非缺失读取错误时不会写入空文件", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件文本编码无法识别，请转换为 UTF-8 或 GBK 后重试。"));
 
     await expect(toolset.workspace_write.execute({
@@ -157,7 +157,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_write append 追加写入已有文件后会触发工作区刷新回调", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue("旧内容\n");
 
     const result = await toolset.workspace_write.execute({
@@ -178,7 +178,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_browse 可以列出目录内容", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTree.mockResolvedValue({
       children: [
         { kind: "directory", name: "章节", path: "C:/books/北境余烬/章节" },
@@ -228,7 +228,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_browse 支持按类型、扩展名和数量筛选子项", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTree.mockResolvedValue({
       children: [
         {
@@ -283,7 +283,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_search 返回面向 Agent 的上下文检索包", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     const searchResult = {
       intent: "chapter",
       query: "钟声",
@@ -346,7 +346,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_read 支持读取指定行段", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一行\n第二行\n第三行\n第四行",
     );
@@ -370,7 +370,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_search 支持上下文预算和截断提示", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockSearchWorkspaceContent.mockResolvedValue({
       intent: "fact",
       query: "hero",
@@ -421,7 +421,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_search 空结果会返回清晰摘要", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     const searchResult = {
       intent: "auto",
       query: "hero bell",
@@ -447,7 +447,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_read 支持按锚点读取附近行段", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一行\n铺垫句\n主角抬头看向夜空\n情绪落点\n尾声",
     );
@@ -473,7 +473,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_read 支持按 Markdown 标题读取整段内容", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       [
         "# 卷一",
@@ -507,7 +507,7 @@ describe("createWorkspaceToolset", () => {
 
   it("text_stats 会返回稳定的字数统计结果", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一段有3人。\nHello world!\n\n第二段",
     );
@@ -549,7 +549,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_edit 支持精确替换文本并刷新工作区", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue("旧段落\n目标句子\n尾声");
 
     const result = await toolset.workspace_edit.execute({
@@ -575,7 +575,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_edit 支持按行段整体替换文本", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一行\n第二行\n第三行\n第四行\n",
     );
@@ -604,7 +604,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_edit 支持按锚点范围整体替换文本", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       "第一行\n铺垫句\n主角抬头看向夜空\n情绪落点\n尾声",
     );
@@ -634,7 +634,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_edit 支持按 Markdown 标题块整体替换文本", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       [
         "# 卷一",
@@ -678,7 +678,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json 支持按指针局部更新数据", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       '{\n  "stage": "构思期",\n  "currentChapter": "第001章"\n}\n',
     );
@@ -713,7 +713,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json 支持创建 JSON 文件并格式化初始值", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件不存在"));
 
     const result = await toolset.workspace_json.execute({
@@ -749,7 +749,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json create 默认拒绝覆盖已有文件", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue('{"existing":true}');
 
     await expect(toolset.workspace_json.execute({
@@ -764,7 +764,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_json 支持读取结构概览而不返回完整 JSON", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
       characters: [{ name: "林燃", goal: "逃离北城" }],
       progress: { currentChapter: 3 },
@@ -792,7 +792,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_json overview 对采样省略的结构会标记 truncated", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     const manyKeys = Object.fromEntries(
       Array.from({ length: 50 }, (_, index) => [`key${index}`, index]),
     );
@@ -815,7 +815,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_json 支持按 key/value 搜索并返回 JSON Pointer", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
       characters: [{ name: "林燃", goal: "逃离北城" }],
       progress: { currentChapter: 3 },
@@ -847,7 +847,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_json search 命中数量上限时会标记 truncated", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
       a: "林燃",
       b: "林燃",
@@ -873,7 +873,7 @@ describe("createWorkspaceToolset", () => {
 
   it("workspace_json get 默认会截断超长返回值", async () => {
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ rootPath });
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(JSON.stringify({
       content: "长文本".repeat(200),
     }, null, 2));
@@ -902,7 +902,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json 支持批量执行多个局部操作并只写回一次", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       [
         "{",
@@ -974,7 +974,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json batch 支持模板补齐和历史追加", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       '{\n  "progress": {},\n  "recentUpdates": []\n}\n',
     );
@@ -1024,7 +1024,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json 支持按模板补齐缺失字段", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       '{\n  "progress": {\n    "currentWordCount": 1200\n  }\n}\n',
     );
@@ -1075,7 +1075,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json 支持追加历史记录并自动补时间戳", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       '{\n  "recentUpdates": []\n}\n',
     );
@@ -1127,7 +1127,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json delete 会删除指定 JSON 节点", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       '{\n  "progress": {\n    "currentChapter": 3,\n    "targetWordCount": 5000\n  }\n}\n',
     );
@@ -1167,7 +1167,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json 支持向字符串属性追加文本而不重写整个对象", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       [
         "{",
@@ -1217,7 +1217,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_json 支持通过 patch 执行标准 JSON 补丁操作", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockReadWorkspaceTextFile.mockResolvedValue(
       [
         "{",
@@ -1276,7 +1276,7 @@ describe("createWorkspaceToolset", () => {
   it("workspace_path 支持迁移文件或文件夹到指定目录", async () => {
     const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
     const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, rootPath });
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
     mockMoveWorkspaceEntry.mockResolvedValue(
       "C:/books/北境余烬/归档/第一卷/第001章.md",
     );

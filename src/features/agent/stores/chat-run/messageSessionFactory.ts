@@ -9,7 +9,7 @@ import { createWritingAgentSession } from "@features/agent/lib/session";
 import { derivePlanningState } from "@features/agent/lib/planning";
 import { buildBookWorkspaceTools } from "@features/agent/lib/toolsets/factory";
 import type { AgentMode, ModeContextMap } from "@features/agent/lib/modeRules";
-import { YOLO_CONTROL_TOOL_ID } from "@features/agent/lib/yoloControl";
+import { getModeConfig } from "@features/agent/lib/modes";
 import type { AgentMessage, AgentUsage } from "@features/agent/lib/types";
 import type { ChatEntry } from "@features/agent/chat/types";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
@@ -44,6 +44,9 @@ type SessionFactoryParams = ChatRunStoreAccess & {
 
 export async function createRunWritingSession(params: SessionFactoryParams) {
   const workspaceState = useBookWorkspaceStore.getState();
+  // bookId(UUID) 为解析 key；displayPath(books/<书名>) 为路径前缀/展示串。
+  const bookId = workspaceState.rootBookId;
+  const displayPath = workspaceState.rootPath;
   const enabledSkills = getEnabledSkills(useSkillsStore.getState());
   const defaultAgentMarkdown = await ensureMainAgentMarkdown();
   const manualContext = await resolveManualContext(params, enabledSkills);
@@ -52,12 +55,13 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
     readFile: readWorkspaceTextFile,
     // 把后端 RelationDto 映射成 projectContext 需要的精简形态:对端路径 + 标签 + 备注。
     // 由于关联是无向边,根据 active file 的相对路径推断对端在 a/b 哪侧。
-    readRelations: async (rootPath, entryPath) => {
-      const relations = await listEntryRelations(rootPath, entryPath);
-      const rootPrefix = `${rootPath}/`;
+    // 注意：listEntryRelations 的解析 key 是 bookId；路径前缀剥离/拼接用 displayPath。
+    readRelations: async (apiBookId, entryPath) => {
+      const relations = await listEntryRelations(apiBookId, entryPath);
+      const rootPrefix = displayPath ? `${displayPath}/` : "";
       // active file 是 display path,后端入参也是 display,内部转 relative 后返回 relative。
-      // 因此 self 的相对路径 = activeFilePath 去掉前缀。
-      const selfRelative = entryPath.startsWith(rootPrefix)
+      // 因此 self 的相对路径 = activeFilePath 去掉 displayPath 前缀。
+      const selfRelative = rootPrefix && entryPath.startsWith(rootPrefix)
         ? entryPath.slice(rootPrefix.length)
         : entryPath;
       return relations.map((relation) => {
@@ -67,14 +71,14 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
         return {
           note: relation.note,
           // 拼回 display path,使得 projectContext 的描述里展示完整工作区路径,AI 可直接 read。
-          otherEntryPath: otherRelative ? `${rootPrefix}${otherRelative}` : rootPath,
+          otherEntryPath: otherRelative ? `${rootPrefix}${otherRelative}` : (displayPath ?? ""),
           relationship: relation.relationship,
         };
       });
     },
     readTree: readWorkspaceTree,
     taskType: params.activeModeId,
-    workspaceRootPath: workspaceState.rootPath,
+    workspaceBookId: bookId,
   });
 
   return createWritingAgentSession({
@@ -83,6 +87,7 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
     conversationEntries: params.conversationEntries,
     conversationHistory: params.conversationHistory,
     debugLabel: `chat-session:${params.sessionId}`,
+    sessionId: params.sessionId,
     defaultAgentMarkdown,
     enabledSkills,
     enabledToolIds: getEnabledToolIds(params.activeModeId),
@@ -102,9 +107,12 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
     planningState: derivePlanningState(params.getLatestMessages()),
     projectContext,
     providerConfig: params.providerConfig,
-    workspaceRootPath: workspaceState.rootPath,
+    // workspaceBookId 给 env/session 解析；workspaceRootPath 给系统提示/材料展示。
+    workspaceBookId: bookId,
+    workspaceRootPath: displayPath,
     workspaceTools: buildBookWorkspaceTools({
-      rootPath: workspaceState.rootPath,
+      bookId,
+      displayPath,
       includeAsk: true,
     }),
   });
@@ -123,7 +131,7 @@ async function resolveManualContext(
     enabledSkills,
     readFile: readWorkspaceTextFile,
     selection,
-    workspaceRootPath: workspaceState.rootPath,
+    workspaceBookId: workspaceState.rootBookId,
   });
 }
 
@@ -137,22 +145,10 @@ function buildModeContext(
   };
 }
 
-function getRequiredControlToolId(mode: AgentMode) {
-  if (mode === "autopilot") return YOLO_CONTROL_TOOL_ID;
-  return null;
-}
-
+// CP-F：工具白名单过滤统一走 ModeConfig（lib/modes），不再在此重复 yolo_control 收敛逻辑。
 function getEnabledToolIds(mode: AgentMode) {
-  const requiredControlToolId = getRequiredControlToolId(mode);
-  const enabledToolIds = Object.entries(useAgentSettingsStore.getState().enabledTools)
+  const allEnabled = Object.entries(useAgentSettingsStore.getState().enabledTools)
     .filter(([, value]) => value)
-    .map(([id]) => id)
-    .filter((id) => {
-      if (id !== YOLO_CONTROL_TOOL_ID) return true;
-      return id === requiredControlToolId;
-    });
-  if (requiredControlToolId && !enabledToolIds.includes(requiredControlToolId)) {
-    return [requiredControlToolId, ...enabledToolIds];
-  }
-  return enabledToolIds;
+    .map(([id]) => id);
+  return getModeConfig(mode).tools.filterEnabledToolIds(allEnabled);
 }

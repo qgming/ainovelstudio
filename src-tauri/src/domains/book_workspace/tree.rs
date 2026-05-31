@@ -1,11 +1,8 @@
-// 图书工作区：目录树构建 + 内容搜索。
+// 图书工作区：目录树构建（遍历真实文件目录）。
 
-use crate::domains::book_workspace::data::{
-    load_book_by_root_path, load_entry_records, TreeNode, WorkspaceEntryRecord,
-};
+use crate::domains::book_workspace::data::{load_book_by_id, TreeNode};
+use crate::domains::book_workspace::fs_store::{WorkspaceEntry, WorkspaceStore};
 use crate::infrastructure::workspace_paths::CommandResult;
-use rusqlite::Connection;
-use std::collections::HashMap;
 
 #[path = "natural_sort.rs"]
 mod natural_sort;
@@ -21,11 +18,13 @@ fn sort_tree_nodes(nodes: &mut [TreeNode]) {
     });
 }
 
+/// 递归构建一个条目的树节点；目录会继续向下遍历真实子目录。
 fn build_tree_node(
+    store: &WorkspaceStore,
+    book_id: &str,
     book_root: &str,
-    entry: &WorkspaceEntryRecord,
-    grouped_entries: &HashMap<String, Vec<WorkspaceEntryRecord>>,
-) -> TreeNode {
+    entry: &WorkspaceEntry,
+) -> CommandResult<TreeNode> {
     let mut node = TreeNode {
         children: None,
         extension: entry.extension.clone(),
@@ -35,43 +34,29 @@ fn build_tree_node(
     };
 
     if entry.kind == "directory" {
-        let mut children = grouped_entries
-            .get(&entry.path)
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|child| build_tree_node(book_root, &child, grouped_entries))
-            .collect::<Vec<_>>();
+        let mut children = Vec::new();
+        for child in store.list_dir(book_id, &entry.path)? {
+            children.push(build_tree_node(store, book_id, book_root, &child)?);
+        }
         sort_tree_nodes(&mut children);
         if !children.is_empty() {
             node.children = Some(children);
         }
     }
 
-    node
+    Ok(node)
 }
 
 pub(crate) fn read_workspace_tree_db(
-    connection: &Connection,
-    root_path: &str,
+    store: &WorkspaceStore,
+    book_id: &str,
 ) -> CommandResult<TreeNode> {
-    let book = load_book_by_root_path(connection, root_path)?;
-    let entries = load_entry_records(connection, &book.id)?;
-    let mut grouped_entries = HashMap::<String, Vec<WorkspaceEntryRecord>>::new();
-    for entry in entries {
-        grouped_entries
-            .entry(entry.parent_path.clone())
-            .or_default()
-            .push(entry);
-    }
+    let book = load_book_by_id(store, book_id)?;
 
-    let mut children = grouped_entries
-        .get("")
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|entry| build_tree_node(&book.root_path, &entry, &grouped_entries))
-        .collect::<Vec<_>>();
+    let mut children = Vec::new();
+    for entry in store.list_dir(&book.id, "")? {
+        children.push(build_tree_node(store, &book.id, &book.root_path, &entry)?);
+    }
     sort_tree_nodes(&mut children);
 
     Ok(TreeNode {

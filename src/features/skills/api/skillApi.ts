@@ -101,3 +101,29 @@ export function deleteInstalledSkill(skillId: string) {
 export function importSkillZip(fileName: string, archiveBytes: number[]) {
   return invoke<SkillManifest[]>("import_skill_zip", { fileName, archiveBytes });
 }
+
+// —— skills_root 文件访问（供 pi loadSkills 的 ExecutionEnv 转发）——
+// path 相对 app_data_dir/skills/，后端做 .. 越界校验并锁在该目录内。
+
+export type SkillFsEntry = {
+  name: string;
+  isDir: boolean;
+  size: number;
+};
+
+export type SkillFsInfo = {
+  kind: "file" | "directory";
+  size: number;
+};
+
+export function skillFsRead(path: string) {
+  return invoke<string>("skill_fs_read", { path });
+}
+
+export function skillFsFileInfo(path: string) {
+  return invoke<SkillFsInfo | null>("skill_fs_file_info", { path });
+}
+
+export function skillFsListDir(path: string) {
+  return invoke<SkillFsEntry[]>("skill_fs_list_dir", { path });
+}

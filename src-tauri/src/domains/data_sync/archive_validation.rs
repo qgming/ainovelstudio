@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use std::collections::HashSet;
 use std::io::{Cursor, Read};
 use zip::ZipArchive;
 
@@ -9,10 +10,46 @@ pub(super) const MAX_CLIENT_STATE_SIZE: u64 = 8 * 1024 * 1024;
 pub(super) const MAX_MANIFEST_SIZE: u64 = 64 * 1024;
 
 const MAX_ARCHIVE_COMPRESSION_RATIO: u64 = 200;
-const MAX_ARCHIVE_ENTRIES: usize = 8;
+pub(super) const ARCHIVE_BOOKS_PREFIX: &str = "books/";
+pub(super) const ARCHIVE_SKILLS_PREFIX: &str = "skills/";
+
+const REQUIRED_ARCHIVE_FILES: [&str; 3] = ["manifest.json", "client-state.json", "app.db"];
+const MAX_ARCHIVE_ENTRIES: usize = 20_000;
 
 fn error_to_string(error: impl ToString) -> String {
     error.to_string()
+}
+
+fn is_valid_archive_path(name: &str) -> bool {
+    if REQUIRED_ARCHIVE_FILES.contains(&name) {
+        return true;
+    }
+    let Some(rest) = name
+        .strip_prefix(ARCHIVE_BOOKS_PREFIX)
+        .or_else(|| name.strip_prefix(ARCHIVE_SKILLS_PREFIX))
+    else {
+        return false;
+    };
+    let rest = rest.trim_end_matches('/');
+    rest.is_empty()
+        || (!rest.contains("//")
+            && rest
+                .split('/')
+                .all(|segment| segment != "." && segment != ".." && !segment.contains('\\')))
+}
+
+fn canonical_archive_path(name: &str) -> String {
+    for prefix in [ARCHIVE_BOOKS_PREFIX, ARCHIVE_SKILLS_PREFIX] {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            let rest = rest.trim_end_matches('/');
+            return if rest.is_empty() {
+                prefix.to_string()
+            } else {
+                format!("{prefix}{rest}")
+            };
+        }
+    }
+    name.to_string()
 }
 
 pub(super) fn read_archive_entry(
@@ -44,9 +81,17 @@ pub(super) fn validate_archive_entries(
     }
 
     let mut total_uncompressed = 0_u64;
+    let mut names = HashSet::new();
     for index in 0..archive.len() {
         let entry = archive.by_index(index).map_err(error_to_string)?;
-        if entry.is_dir() {
+        let name = entry.name().to_string();
+        if name.contains('\\') {
+            return Err("备份文件结构不合法。".into());
+        }
+        if !is_valid_archive_path(&name) {
+            return Err("备份文件结构不合法。".into());
+        }
+        if !names.insert(canonical_archive_path(&name)) {
             return Err("备份文件结构不合法。".into());
         }
         if entry.size() > MAX_ARCHIVE_TOTAL_SIZE {
@@ -67,14 +112,12 @@ pub(super) fn validate_archive_entries(
 }
 
 pub(super) fn validate_restored_database(connection: &Connection) -> CommandResult<()> {
+    // 技能/书籍已迁真实文件存储,其表不再属于 app.db,故不在校验清单内。
     for table_name in [
         "app_state",
-        "book_workspace_entries",
-        "book_workspaces",
         "chat_entries",
         "chat_sessions",
         "config_documents",
-        "skill_packages",
     ] {
         let exists = connection
             .query_row(

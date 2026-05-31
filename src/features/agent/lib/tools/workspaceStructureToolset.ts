@@ -87,7 +87,8 @@ function matchesBrowseExtensions(
 
 export function createWorkspaceStructureTools({
   onWorkspaceMutated,
-  rootPath,
+  bookId,
+  displayPath,
 }: WorkspaceToolContext): Record<string, AgentTool> {
   return {
     workspace_browse: {
@@ -95,28 +96,28 @@ export function createWorkspaceStructureTools({
       execute: async (input, context) => {
         const mode = normalizeBrowseMode(input.mode);
         const relativePath = normalizeRelativePath(
-          rootPath,
+          displayPath,
           String(input.path ?? ""),
         );
         const depth = asPositiveInt(input.depth, 2);
-        const tree = await readWorkspaceTree(rootPath, getAbortContext(context));
-        const node = findTreeNode(rootPath, tree, relativePath);
+        const tree = await readWorkspaceTree(bookId, getAbortContext(context));
+        const node = findTreeNode(displayPath, tree, relativePath);
         if (!node) {
           throw new Error(`未找到路径：${relativePath || "."}`);
         }
 
-        const displayPath = toDisplayPath(rootPath, node.path);
+        const nodeDisplayPath = toDisplayPath(displayPath, node.path);
         if (mode === "tree") {
           return ok(
-            `已浏览 ${displayPath} 的目录树。`,
-            pruneTree(rootPath, node, depth),
+            `已浏览 ${nodeDisplayPath} 的目录树。`,
+            pruneTree(displayPath, node, depth),
           );
         }
 
         if (mode === "stat") {
           return ok(
-            `已读取 ${displayPath} 的路径信息。`,
-            summarizeTreeNode(rootPath, node),
+            `已读取 ${nodeDisplayPath} 的路径信息。`,
+            summarizeTreeNode(displayPath, node),
           );
         }
 
@@ -137,7 +138,7 @@ export function createWorkspaceStructureTools({
               )
           : [];
         const children = sortBrowseChildren(
-          listTreeChildren(rootPath, node).filter((child) => {
+          listTreeChildren(displayPath, node).filter((child) => {
             if (kindFilter !== "all" && child.kind !== kindFilter) {
               return false;
             }
@@ -147,11 +148,11 @@ export function createWorkspaceStructureTools({
         );
         const limitedChildren =
           limit == null ? children : children.slice(0, limit);
-        return ok(formatBrowseListSummary(displayPath, limitedChildren), {
+        return ok(formatBrowseListSummary(nodeDisplayPath, limitedChildren), {
           children: limitedChildren,
           kind: node.kind,
           name: node.name,
-          path: displayPath,
+          path: nodeDisplayPath,
         });
       },
     },
@@ -166,8 +167,8 @@ export function createWorkspaceStructureTools({
           12000,
         );
         const intent = normalizeSearchIntent(input.intent);
-        const scope = normalizeSearchScopeInput(rootPath, input.scope ?? input.path);
-        const result = await searchWorkspaceContent(rootPath, query, {
+        const scope = normalizeSearchScopeInput(displayPath, input.scope ?? input.path);
+        const result = await searchWorkspaceContent(bookId, query, {
           abortSignal: abortContext?.abortSignal,
           includeAdjacent: input.includeAdjacent !== false,
           intent,
@@ -186,43 +187,43 @@ export function createWorkspaceStructureTools({
         const action = normalizePathAction(input.action);
         if (action === "create_folder") {
           const createdPath = await createWorkspaceDirectory(
-            rootPath,
+            bookId,
             String(input.parentPath ?? ""),
             ensureString(input.name, "workspace_path.name"),
             getAbortContext(context),
           );
           await onWorkspaceMutated?.();
-          return ok(`已创建文件夹 ${toDisplayPath(rootPath, createdPath)}`);
+          return ok(`已创建文件夹 ${toDisplayPath(displayPath, createdPath)}`);
         }
 
         if (action === "move") {
           const movedPath = await moveWorkspaceEntry(
-            rootPath,
+            bookId,
             ensureString(input.path, "workspace_path.path"),
             ensureString(input.targetParentPath, "workspace_path.targetParentPath"),
             getAbortContext(context),
           );
           await onWorkspaceMutated?.();
-          return ok(`已迁移到 ${toDisplayPath(rootPath, movedPath)}`);
+          return ok(`已迁移到 ${toDisplayPath(displayPath, movedPath)}`);
         }
 
         const renamedPath = await renameWorkspaceEntry(
-          rootPath,
+          bookId,
           ensureString(input.path, "workspace_path.path"),
           ensureString(input.name, "workspace_path.name"),
           getAbortContext(context),
         );
         await onWorkspaceMutated?.();
-        return ok(`已重命名为 ${toDisplayPath(rootPath, renamedPath)}`);
+        return ok(`已重命名为 ${toDisplayPath(displayPath, renamedPath)}`);
       },
     },
     workspace_delete: {
       description: "删除工作区文件或文件夹",
       execute: async (input, context) => {
         const path = ensureString(input.path, "workspace_delete.path");
-        await deleteWorkspaceEntry(rootPath, path, getAbortContext(context));
+        await deleteWorkspaceEntry(bookId, path, getAbortContext(context));
         await onWorkspaceMutated?.();
-        return ok(`已删除 ${toDisplayPath(rootPath, path)}`);
+        return ok(`已删除 ${toDisplayPath(displayPath, path)}`);
       },
     },
   };

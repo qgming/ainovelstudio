@@ -39,7 +39,7 @@ describe("manual turn context", () => {
         filePaths: ["章节/第一章.md", "设定/人物.md"],
         skillIds: ["plot-skill"],
       },
-      workspaceRootPath: "C:/books/北境余烬",
+      workspaceBookId: "C:/books/北境余烬",
     });
 
     expect(result.skills).toEqual([

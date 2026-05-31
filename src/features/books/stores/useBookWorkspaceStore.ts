@@ -8,7 +8,6 @@ import {
   deleteEntryRelation,
   deleteWorkspaceEntry,
   ensureBookWorkspaceTemplate,
-  getBookWorkspaceSummary,
   getBookWorkspaceSummaryById,
   getStoredWorkspaceSnapshot,
   listBookRelations,
@@ -17,8 +16,6 @@ import {
   readWorkspaceTree,
   renameWorkspaceEntry,
   setStoredWorkspaceSnapshot,
-  syncChangedBookFolderToWorkspace,
-  syncBookFolderToWorkspace,
   updateEntryRelation,
   writeWorkspaceTextFile,
 } from "@features/books/api/bookWorkspaceApi";
@@ -102,7 +99,7 @@ export type BookWorkspaceStore = {
 
 type LoadWorkspaceOptions = {
   isCurrent?: () => boolean;
-  rootPath: string;
+  bookId: string;
   selectedFilePath: string | null;
   workspaceSummary?: BookWorkspaceSummary;
 };
@@ -195,14 +192,6 @@ async function readAvailableBooks() {
   return listBookWorkspaces();
 }
 
-async function readWorkspaceSummary(rootPath: string): Promise<BookWorkspaceSummary> {
-  const summary = await getBookWorkspaceSummary(rootPath);
-  if (!summary || typeof summary.id !== "string" || typeof summary.path !== "string" || typeof summary.name !== "string") {
-    throw new Error("书籍元数据不完整。");
-  }
-  return summary;
-}
-
 async function readWorkspaceSummaryById(bookId: string): Promise<BookWorkspaceSummary> {
   const summary = await getBookWorkspaceSummaryById(bookId);
   if (!summary || typeof summary.id !== "string" || typeof summary.path !== "string" || typeof summary.name !== "string") {
@@ -262,31 +251,33 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
   }
 
   async function loadWorkspace({
-    rootPath,
+    bookId,
     selectedFilePath,
     isCurrent = () => true,
     workspaceSummary,
   }: LoadWorkspaceOptions) {
-    await ensureBookWorkspaceTemplate(rootPath);
+    await ensureBookWorkspaceTemplate(bookId);
     if (!isCurrent()) {
       return false;
     }
     const [rootNode, workspace] = await Promise.all([
-      readWorkspaceTree(rootPath),
-      workspaceSummary ? Promise.resolve(workspaceSummary) : readWorkspaceSummary(rootPath),
+      readWorkspaceTree(bookId),
+      workspaceSummary ? Promise.resolve(workspaceSummary) : readWorkspaceSummaryById(bookId),
     ]);
     if (!isCurrent()) {
       return false;
     }
+    // displayPath（books/<书名>）只作展示与路径拼接（tree 前缀/关联显示），不再参与解析。
+    const displayPath = workspace.path;
     const selectedNode = selectedFilePath ? findNodeByPath(rootNode, selectedFilePath) : null;
     const nextSelectedFilePath =
       selectedNode?.kind === "file" && isTextEditableFile(selectedNode.path)
         ? selectedNode.path
-        : findDefaultOpenFilePath(rootNode, rootPath);
+        : findDefaultOpenFilePath(rootNode, displayPath);
     const expandedPaths = buildExpandedPaths(rootNode, nextSelectedFilePath);
 
     if (nextSelectedFilePath && isTextEditableFile(nextSelectedFilePath)) {
-      const content = await readWorkspaceTextFile(rootPath, nextSelectedFilePath);
+      const content = await readWorkspaceTextFile(bookId, nextSelectedFilePath);
       if (!isCurrent()) {
         return false;
       }
@@ -300,9 +291,9 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         rootBookId: workspace.id,
         rootBookName: workspace.name,
         rootNode,
-        rootPath,
+        rootPath: displayPath,
       });
-      setStoredWorkspaceSnapshot(rootPath, nextSelectedFilePath);
+      setStoredWorkspaceSnapshot(workspace.id, nextSelectedFilePath);
       // 切换/刷新工作区后,异步刷新关联缓存,失败由 refreshRelations 内部消化。
       void get().refreshRelations();
       return true;
@@ -318,32 +309,32 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       rootBookId: workspace.id,
       rootBookName: workspace.name,
       rootNode,
-      rootPath,
+      rootPath: displayPath,
     });
 
-    setStoredWorkspaceSnapshot(rootPath, null);
+    setStoredWorkspaceSnapshot(workspace.id, null);
     void get().refreshRelations();
     return true;
   }
 
   async function reloadWorkspace(nextSelectedFilePath: string | null) {
-    const rootPath = get().rootPath;
-    if (!rootPath) {
+    const bookId = get().rootBookId;
+    if (!bookId) {
       return;
     }
 
-    await loadWorkspace({ rootPath, selectedFilePath: nextSelectedFilePath });
+    await loadWorkspace({ bookId, selectedFilePath: nextSelectedFilePath });
   }
 
   async function persistDirtyDraftIfNeeded() {
-    const { activeFilePath, draftContent, isDirty, rootPath } = get();
-    if (!rootPath || !activeFilePath || !isDirty) {
+    const { activeFilePath, draftContent, isDirty, rootBookId } = get();
+    if (!rootBookId || !activeFilePath || !isDirty) {
       return;
     }
 
-    await writeWorkspaceTextFile(rootPath, activeFilePath, draftContent);
+    await writeWorkspaceTextFile(rootBookId, activeFilePath, draftContent);
     set({ isDirty: false });
-    setStoredWorkspaceSnapshot(rootPath, activeFilePath);
+    setStoredWorkspaceSnapshot(rootBookId, activeFilePath);
   }
 
   return {
@@ -361,14 +352,14 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       set({ expandedPaths: isFullyExpanded ? [] : allDirectoryPaths });
     },
     confirmDelete: async () => {
-      const { activeFilePath, confirmState, rootPath } = get();
-      if (!confirmState || !rootPath) {
+      const { activeFilePath, confirmState, rootBookId } = get();
+      if (!confirmState || !rootBookId) {
         return;
       }
 
       try {
         set({ errorMessage: null, isBusy: true });
-        await deleteWorkspaceEntry(rootPath, confirmState.path);
+        await deleteWorkspaceEntry(rootBookId, confirmState.path);
         const nextSelectedFilePath = isSameOrDescendant(activeFilePath, confirmState.path)
           ? null
           : activeFilePath;
@@ -398,7 +389,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         set({ isBusy: true });
         const loaded = await loadWorkspace({
           isCurrent,
-          rootPath: snapshot.rootPath,
+          bookId: snapshot.bookId,
           selectedFilePath: snapshot.selectedFilePath,
         });
         if (!loaded || !isCurrent()) {
@@ -445,8 +436,8 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     },
     promptState: null,
     refreshWorkspace: async () => {
-      const { activeFilePath, draftContent, isDirty, rootPath } = get();
-      if (!rootPath) {
+      const { activeFilePath, draftContent, isDirty, rootBookId } = get();
+      if (!rootBookId) {
         return;
       }
 
@@ -454,22 +445,17 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       try {
         set({ errorMessage: null, isBusy: true });
 
-        await syncBookFolderToWorkspace(rootPath);
-        if (!isCurrent()) {
-          return;
-        }
-
         if (isDirty && activeFilePath) {
-          await writeWorkspaceTextFile(rootPath, activeFilePath, draftContent);
+          await writeWorkspaceTextFile(rootBookId, activeFilePath, draftContent);
           if (!isCurrent()) {
             return;
           }
-          setStoredWorkspaceSnapshot(rootPath, activeFilePath);
+          setStoredWorkspaceSnapshot(rootBookId, activeFilePath);
         }
 
         await loadWorkspace({
           isCurrent,
-          rootPath,
+          bookId: rootBookId,
           selectedFilePath: activeFilePath,
         });
       } catch (error) {
@@ -495,8 +481,8 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       }
     },
     refreshWorkspaceAfterExternalChange: async () => {
-      const { activeFilePath, rootPath } = get();
-      if (!rootPath) {
+      const { activeFilePath, rootBookId } = get();
+      if (!rootBookId) {
         return;
       }
 
@@ -505,7 +491,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         set({ errorMessage: null, isBusy: true });
         await loadWorkspace({
           isCurrent,
-          rootPath,
+          bookId: rootBookId,
           selectedFilePath: activeFilePath,
         });
       } catch (error) {
@@ -520,20 +506,18 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       }
     },
     syncWorkspaceFromMirrorIfChanged: async () => {
-      const { activeFilePath, rootPath } = get();
-      if (!rootPath) {
+      // 真实文件存储下不再有镜像旁路；文件即存储，无需从镜像同步。
+      // 保留方法签名以兼容调用方，直接重新加载当前工作区即可。
+      const { activeFilePath, rootBookId } = get();
+      if (!rootBookId) {
         return false;
       }
 
       const isCurrent = createWorkspaceLoadGuard();
       try {
-        const changed = await syncChangedBookFolderToWorkspace(rootPath);
-        if (!changed || !isCurrent()) {
-          return false;
-        }
         await loadWorkspace({
           isCurrent,
-          rootPath,
+          bookId: rootBookId,
           selectedFilePath: activeFilePath,
         });
         return isCurrent();
@@ -551,16 +535,16 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     rootNode: null,
     rootPath: null,
     saveActiveFile: async () => {
-      const { activeFilePath, draftContent, rootPath } = get();
-      if (!activeFilePath || !rootPath) {
+      const { activeFilePath, draftContent, rootBookId } = get();
+      if (!activeFilePath || !rootBookId) {
         return;
       }
 
       try {
         set({ errorMessage: null, isBusy: true });
-        await writeWorkspaceTextFile(rootPath, activeFilePath, draftContent);
+        await writeWorkspaceTextFile(rootBookId, activeFilePath, draftContent);
         set({ isDirty: false });
-        setStoredWorkspaceSnapshot(rootPath, activeFilePath);
+        setStoredWorkspaceSnapshot(rootBookId, activeFilePath);
       } catch (error) {
         set({ errorMessage: getReadableError(error) });
       }
@@ -581,7 +565,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         }
         const loaded = await loadWorkspace({
           isCurrent,
-          rootPath: workspace.path,
+          bookId: workspace.id,
           selectedFilePath: null,
           workspaceSummary: workspace,
         });
@@ -601,14 +585,14 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       }
     },
     selectFile: async (path) => {
-      const { expandedPaths, rootNode, rootPath } = get();
-      if (!rootPath || !isTextEditableFile(path)) {
+      const { expandedPaths, rootNode, rootBookId } = get();
+      if (!rootBookId || !isTextEditableFile(path)) {
         return;
       }
 
       try {
         set({ errorMessage: null, isBusy: true });
-        const content = await readWorkspaceTextFile(rootPath, path);
+        const content = await readWorkspaceTextFile(rootBookId, path);
         const nextExpandedPaths = rootNode
           ? [...new Set([...expandedPaths, ...buildExpandedPaths(rootNode, path)])]
           : expandedPaths;
@@ -618,7 +602,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
           expandedPaths: nextExpandedPaths,
           isDirty: false,
         });
-        setStoredWorkspaceSnapshot(rootPath, path);
+        setStoredWorkspaceSnapshot(rootBookId, path);
       } catch (error) {
         set({ errorMessage: getReadableError(error) });
       }
@@ -633,7 +617,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       set({ promptState: { ...promptState, value } });
     },
     submitPrompt: async () => {
-      const { activeFilePath, promptState, rootPath } = get();
+      const { activeFilePath, promptState, rootBookId } = get();
       if (!promptState) {
         return;
       }
@@ -654,7 +638,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
           const availableBooks = await readAvailableBooks();
           set({ promptState: null });
           await loadWorkspace({
-            rootPath: workspace.path,
+            bookId: workspace.id,
             selectedFilePath: null,
             workspaceSummary: workspace,
           });
@@ -668,12 +652,12 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
           return;
         }
 
-        if (!rootPath) {
+        if (!rootBookId) {
           throw new Error("当前没有打开书籍工作区。");
         }
 
         if (promptState.mode === "createFolder" && promptState.parentPath) {
-          await createWorkspaceDirectory(rootPath, promptState.parentPath, trimmedValue);
+          await createWorkspaceDirectory(rootBookId, promptState.parentPath, trimmedValue);
           set({ promptState: null });
           await reloadWorkspace(activeFilePath);
           set({ isBusy: false });
@@ -681,10 +665,10 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         }
 
         if (promptState.mode === "createFile" && promptState.parentPath) {
-          const nextFilePath = await createWorkspaceTextFile(rootPath, promptState.parentPath, trimmedValue);
+          const nextFilePath = await createWorkspaceTextFile(rootBookId, promptState.parentPath, trimmedValue);
           set({ promptState: null });
           await loadWorkspace({
-            rootPath,
+            bookId: rootBookId,
             selectedFilePath: nextFilePath,
           });
           set({ isBusy: false });
@@ -692,7 +676,7 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
         }
 
         if (promptState.mode === "rename" && promptState.targetPath) {
-          const nextPath = await renameWorkspaceEntry(rootPath, promptState.targetPath, trimmedValue);
+          const nextPath = await renameWorkspaceEntry(rootBookId, promptState.targetPath, trimmedValue);
           const nextSelectedFilePath = replacePathPrefix(activeFilePath, promptState.targetPath, nextPath);
           set({ promptState: null });
           await reloadWorkspace(nextSelectedFilePath);
@@ -714,13 +698,13 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
     updateDraft: (value) => set({ draftContent: value, isDirty: true }),
     // —— 文件关联 ——
     refreshRelations: async () => {
-      const rootPath = get().rootPath;
-      if (!rootPath) {
+      const { rootBookId, rootPath } = get();
+      if (!rootBookId || !rootPath) {
         return;
       }
       try {
-        const rawRelations = await listBookRelations(rootPath);
-        // 后端返回 entryAPath/entryBPath 是相对路径,这里转成 display path,
+        const rawRelations = await listBookRelations(rootBookId);
+        // 后端返回 entryAPath/entryBPath 是相对路径,这里用 displayPath(rootPath)转成展示路径,
         // 让 UI 组件可以直接拿 node.path 去比对。
         const relations: WorkspaceRelation[] = rawRelations.map((relation) => ({
           ...relation,
@@ -750,12 +734,12 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       }
     },
     createRelation: async (entryAPath, entryBPath, relationship, note) => {
-      const rootPath = get().rootPath;
-      if (!rootPath) {
+      const rootBookId = get().rootBookId;
+      if (!rootBookId) {
         throw new Error("当前没有打开的书籍。");
       }
       const created = await createEntryRelation(
-        rootPath,
+        rootBookId,
         entryAPath,
         entryBPath,
         relationship,
@@ -765,20 +749,20 @@ export const useBookWorkspaceStore = create<BookWorkspaceStore>((set, get) => {
       return created;
     },
     updateRelation: async (relationId, changes) => {
-      const rootPath = get().rootPath;
-      if (!rootPath) {
+      const rootBookId = get().rootBookId;
+      if (!rootBookId) {
         throw new Error("当前没有打开的书籍。");
       }
-      const updated = await updateEntryRelation(rootPath, relationId, changes);
+      const updated = await updateEntryRelation(rootBookId, relationId, changes);
       await get().refreshRelations();
       return updated;
     },
     deleteRelation: async (relationId) => {
-      const rootPath = get().rootPath;
-      if (!rootPath) {
+      const rootBookId = get().rootBookId;
+      if (!rootBookId) {
         throw new Error("当前没有打开的书籍。");
       }
-      await deleteEntryRelation(rootPath, relationId);
+      await deleteEntryRelation(rootBookId, relationId);
       await get().refreshRelations();
     },
   };

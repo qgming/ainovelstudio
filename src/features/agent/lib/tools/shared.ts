@@ -2,7 +2,10 @@ import type { AgentToolExecutionContext, ToolResult } from "../runtime";
 
 export type WorkspaceToolContext = {
   onWorkspaceMutated?: () => Promise<void>;
-  rootPath: string;
+  // 解析用：传给 bookWorkspaceApi 的书籍标识（UUID），作为所有工作区命令的第一个参数。
+  bookId: string;
+  // 展示用：可读工作区根串（books/<书名>），用于路径前缀解析与渲染（toDisplayPath 等）。
+  displayPath: string;
 };
 
 export type LocalResourceToolContext = {

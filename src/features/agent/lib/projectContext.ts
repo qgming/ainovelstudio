@@ -46,16 +46,17 @@ export type ProjectRelationRecord = {
 
 type LoadProjectContextInput = {
   activeFilePath?: string | null;
-  readFile: (rootPath: string, path: string) => Promise<string>;
+  readFile: (bookId: string, path: string) => Promise<string>;
   readRelations?: (
-    rootPath: string,
+    bookId: string,
     entryPath: string,
   ) => Promise<ProjectRelationRecord[]>;
-  readTree?: (rootPath: string) => Promise<{
+  readTree?: (bookId: string) => Promise<{
     children?: ProjectTreeNode[];
   }>;
   taskType?: string | null;
-  workspaceRootPath: string | null;
+  // 解析用：书籍标识（UUID），作为 readFile/readTree/readRelations 的第一个参数。
+  workspaceBookId: string | null;
 };
 
 function getBaseName(path: string) {
@@ -205,11 +206,11 @@ function collectManifestPaths(
 
 async function tryReadContextFile(
   readFile: LoadProjectContextInput["readFile"],
-  workspaceRootPath: string,
+  workspaceBookId: string,
   path: string,
 ) {
   try {
-    const content = await readFile(workspaceRootPath, path);
+    const content = await readFile(workspaceBookId, path);
     if (!content.trim()) return null;
     return { content, name: getBaseName(path), path };
   } catch {
@@ -240,7 +241,7 @@ async function loadManifestContextFiles(params: {
   manifest: ContextManifest | null;
   readFile: LoadProjectContextInput["readFile"];
   taskType?: string | null;
-  workspaceRootPath: string;
+  workspaceBookId: string;
 }) {
   const policyPaths = collectManifestPaths(
     chooseManifestPolicies(params.manifest, params.taskType),
@@ -249,7 +250,7 @@ async function loadManifestContextFiles(params: {
   for (const path of policyPaths) {
     pushUniqueContextFile(
       params.files,
-      await tryReadContextFile(params.readFile, params.workspaceRootPath, path),
+      await tryReadContextFile(params.readFile, params.workspaceBookId, path),
     );
   }
 }
@@ -257,9 +258,9 @@ async function loadManifestContextFiles(params: {
 async function loadStatusContextFiles(params: {
   files: ProjectContextPayload["files"];
   readTree: NonNullable<LoadProjectContextInput["readTree"]>;
-  workspaceRootPath: string;
+  workspaceBookId: string;
 }) {
-  const tree = await params.readTree(params.workspaceRootPath);
+  const tree = await params.readTree(params.workspaceBookId);
   const statusPaths = collectStatusJsonPaths(tree);
   statusPaths.forEach((path) =>
     pushUniqueContextFile(params.files, createPathOnlyContextFile(path))
@@ -272,10 +273,10 @@ async function loadRelationContextFiles(params: {
   activeFilePath: string;
   files: ProjectContextPayload["files"];
   readRelations: NonNullable<LoadProjectContextInput["readRelations"]>;
-  workspaceRootPath: string;
+  workspaceBookId: string;
 }) {
   const relations = await params.readRelations(
-    params.workspaceRootPath,
+    params.workspaceBookId,
     params.activeFilePath,
   );
   relations.slice(0, RELATION_FILE_LIMIT).forEach((relation) => {
@@ -297,9 +298,9 @@ export async function loadProjectContext({
   readRelations,
   readTree,
   taskType,
-  workspaceRootPath,
+  workspaceBookId,
 }: LoadProjectContextInput): Promise<ProjectContextPayload | null> {
-  if (!workspaceRootPath) {
+  if (!workspaceBookId) {
     return null;
   }
 
@@ -308,16 +309,16 @@ export async function loadProjectContext({
 
   pushUniqueContextFile(
     files,
-    await tryReadContextFile(readFile, workspaceRootPath, DEFAULT_PROJECT_AGENT_PATH),
+    await tryReadContextFile(readFile, workspaceBookId, DEFAULT_PROJECT_AGENT_PATH),
   );
   pushUniqueContextFile(
     files,
-    await tryReadContextFile(readFile, workspaceRootPath, DEFAULT_PROJECT_README_PATH),
+    await tryReadContextFile(readFile, workspaceBookId, DEFAULT_PROJECT_README_PATH),
   );
 
   const manifestFile = await tryReadContextFile(
     readFile,
-    workspaceRootPath,
+    workspaceBookId,
     DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH,
   );
   if (manifestFile) {
@@ -331,7 +332,7 @@ export async function loadProjectContext({
     manifest,
     readFile,
     taskType,
-    workspaceRootPath,
+    workspaceBookId,
   });
 
   if (readTree) {
@@ -339,7 +340,7 @@ export async function loadProjectContext({
       await loadStatusContextFiles({
         files,
         readTree,
-        workspaceRootPath,
+        workspaceBookId,
       });
     } catch {
       // ignore status preload failures and keep other default context
@@ -352,7 +353,7 @@ export async function loadProjectContext({
         activeFilePath,
         files,
         readRelations,
-        workspaceRootPath,
+        workspaceBookId,
       });
     } catch {
       // 关联拉取失败不阻塞主流程,保留其它默认上下文。

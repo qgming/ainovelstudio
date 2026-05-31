@@ -101,12 +101,12 @@ function readSnapshot(): WorkspaceSnapshot | null {
     }
 
     const parsed = JSON.parse(raw) as Partial<WorkspaceSnapshot>;
-    if (typeof parsed.rootPath !== "string") {
+    if (typeof parsed.bookId !== "string") {
       return null;
     }
 
     return {
-      rootPath: parsed.rootPath,
+      bookId: parsed.bookId,
       selectedFilePath:
         typeof parsed.selectedFilePath === "string" ? parsed.selectedFilePath : null,
     };
@@ -119,14 +119,14 @@ export function getStoredWorkspaceSnapshot() {
   return readSnapshot();
 }
 
-export function setStoredWorkspaceSnapshot(rootPath: string, selectedFilePath: string | null) {
+export function setStoredWorkspaceSnapshot(bookId: string, selectedFilePath: string | null) {
   if (typeof window === "undefined") {
     return;
   }
 
   window.localStorage.setItem(
     WORKSPACE_STORAGE_KEY,
-    JSON.stringify({ rootPath, selectedFilePath }),
+    JSON.stringify({ bookId, selectedFilePath }),
   );
 }
 
@@ -142,16 +142,8 @@ export function pickWorkspaceDirectory() {
   return invoke<string | null>("pick_book_directory");
 }
 
-export function openBookFolder(rootPath: string) {
-  return invoke<void>("open_book_folder", { rootPath });
-}
-
-export function syncBookFolderToWorkspace(rootPath: string) {
-  return invoke<boolean>("sync_book_folder_to_workspace", { rootPath });
-}
-
-export function syncChangedBookFolderToWorkspace(rootPath: string) {
-  return invoke<boolean>("sync_changed_book_folder_to_workspace", { rootPath });
+export function openBookFolder(bookId: string) {
+  return invoke<void>("open_book_folder", { bookId });
 }
 
 export function listBookWorkspaces() {
@@ -161,8 +153,8 @@ export function listBookWorkspaces() {
   });
 }
 
-export function getBookWorkspaceSummary(rootPath: string) {
-  return invoke<BookWorkspaceSummary>("get_book_workspace_summary", { rootPath }).then((summary) => {
+export function getBookWorkspaceSummary(bookId: string) {
+  return invoke<BookWorkspaceSummary>("get_book_workspace_summary", { bookId }).then((summary) => {
     cacheBookWorkspaceSummary(summary);
     return summary;
   });
@@ -182,28 +174,44 @@ export function importBookZip(fileName: string, archiveBytes: number[]) {
   });
 }
 
-export function exportBookZip(rootPath: string) {
-  return invoke<string | null>("export_book_zip", { rootPath });
+export function exportBookZip(bookId: string) {
+  return invoke<string | null>("export_book_zip", { bookId });
 }
 
-export function deleteBookWorkspace(rootPath: string) {
-  return invoke<void>("delete_book_workspace", { rootPath });
+export function deleteBookWorkspace(bookId: string) {
+  return invoke<void>("delete_book_workspace", { bookId });
 }
 
-export function ensureBookWorkspaceTemplate(rootPath: string) {
-  return invoke<string[]>("ensure_book_workspace_template", { rootPath });
+export function ensureBookWorkspaceTemplate(bookId: string) {
+  return invoke<string[]>("ensure_book_workspace_template", { bookId });
 }
 
-export function readWorkspaceTree(rootPath: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<TreeNode>("read_workspace_tree", { rootPath }, options);
+export function readWorkspaceTree(bookId: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<TreeNode>("read_workspace_tree", { bookId }, options);
 }
 
-export function readWorkspaceTextFile(rootPath: string, path: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<string>("read_text_file", { rootPath, path }, options);
+export function readWorkspaceTextFile(bookId: string, path: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("read_text_file", { bookId, path }, options);
 }
 
-export function writeWorkspaceTextFile(rootPath: string, path: string, contents: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<void>("write_text_file", { rootPath, path, contents }, options);
+export function writeWorkspaceTextFile(bookId: string, path: string, contents: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<void>("write_text_file", { bookId, path, contents }, options);
+}
+
+// 字符串替换编辑：把文件中唯一出现的 oldString 替换为 newString。
+// oldString 为空时表示创建新文件（要求文件不存在）。
+export function editWorkspaceTextFile(
+  bookId: string,
+  path: string,
+  oldString: string,
+  newString: string,
+  options?: InvokeCancellationOptions,
+) {
+  return invokeWithCancellation<void>(
+    "edit_text_file",
+    { bookId, path, oldString, newString },
+    options,
+  );
 }
 
 export type SearchWorkspaceContentOptions = InvokeCancellationOptions & {
@@ -215,7 +223,7 @@ export type SearchWorkspaceContentOptions = InvokeCancellationOptions & {
 };
 
 export function searchWorkspaceContent(
-  rootPath: string,
+  bookId: string,
   query: string,
   options?: SearchWorkspaceContentOptions,
 ) {
@@ -224,18 +232,18 @@ export function searchWorkspaceContent(
     intent: options?.intent,
     limit: options?.limit,
     query,
-    rootPath,
+    bookId,
     scope: options?.scope,
     tokenBudget: options?.tokenBudget,
   }, options);
 }
 
-export function readWorkspaceTextLine(rootPath: string, path: string, lineNumber: number, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<WorkspaceLineResult>("read_text_file_line", { lineNumber, path, rootPath }, options);
+export function readWorkspaceTextLine(bookId: string, path: string, lineNumber: number, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<WorkspaceLineResult>("read_text_file_line", { lineNumber, path, bookId }, options);
 }
 
 export function replaceWorkspaceTextLine(
-  rootPath: string,
+  bookId: string,
   path: string,
   lineNumber: number,
   contents: string,
@@ -251,7 +259,7 @@ export function replaceWorkspaceTextLine(
     nextLine: context?.nextLine,
     path,
     previousLine: context?.previousLine,
-    rootPath,
+    bookId,
   }, options);
 }
 
@@ -262,45 +270,45 @@ export function createBookWorkspace(parentPath: string, bookName: string) {
   });
 }
 
-export function createWorkspaceDirectory(rootPath: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<string>("create_workspace_directory", { rootPath, parentPath, name }, options);
+export function createWorkspaceDirectory(bookId: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("create_workspace_directory", { bookId, parentPath, name }, options);
 }
 
-export function createWorkspaceTextFile(rootPath: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<string>("create_workspace_text_file", { rootPath, parentPath, name }, options);
+export function createWorkspaceTextFile(bookId: string, parentPath: string, name: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("create_workspace_text_file", { bookId, parentPath, name }, options);
 }
 
-export function renameWorkspaceEntry(rootPath: string, path: string, nextName: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<string>("rename_workspace_entry", { rootPath, path, nextName }, options);
+export function renameWorkspaceEntry(bookId: string, path: string, nextName: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("rename_workspace_entry", { bookId, path, nextName }, options);
 }
 
-export function moveWorkspaceEntry(rootPath: string, path: string, targetParentPath: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<string>("move_workspace_entry", { rootPath, path, targetParentPath }, options);
+export function moveWorkspaceEntry(bookId: string, path: string, targetParentPath: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<string>("move_workspace_entry", { bookId, path, targetParentPath }, options);
 }
 
-export function deleteWorkspaceEntry(rootPath: string, path: string, options?: InvokeCancellationOptions) {
-  return invokeWithCancellation<void>("delete_workspace_entry", { rootPath, path }, options);
+export function deleteWorkspaceEntry(bookId: string, path: string, options?: InvokeCancellationOptions) {
+  return invokeWithCancellation<void>("delete_workspace_entry", { bookId, path }, options);
 }
 
 // —— 文件关联(无向多对多)相关 API ——
 
-export function listEntryRelations(rootPath: string, entryPath: string) {
-  return invoke<WorkspaceRelation[]>("list_entry_relations", { rootPath, entryPath });
+export function listEntryRelations(bookId: string, entryPath: string) {
+  return invoke<WorkspaceRelation[]>("list_entry_relations", { bookId, entryPath });
 }
 
-export function listBookRelations(rootPath: string) {
-  return invoke<WorkspaceRelation[]>("list_book_relations", { rootPath });
+export function listBookRelations(bookId: string) {
+  return invoke<WorkspaceRelation[]>("list_book_relations", { bookId });
 }
 
 export function createEntryRelation(
-  rootPath: string,
+  bookId: string,
   entryAPath: string,
   entryBPath: string,
   relationship: string,
   note?: string | null,
 ) {
   return invoke<WorkspaceRelation>("create_entry_relation", {
-    rootPath,
+    bookId,
     entryAPath,
     entryBPath,
     relationship,
@@ -311,11 +319,11 @@ export function createEntryRelation(
 // note 的三态语义:undefined=不修改;null=清空;字符串=改为指定值。
 // 通过 clearNote=true 表达"清空",避免 Option<Option<String>> 在 serde 上的歧义。
 export function updateEntryRelation(
-  rootPath: string,
+  bookId: string,
   relationId: string,
   changes: { note?: string | null; relationship?: string },
 ) {
-  const payload: Record<string, unknown> = { rootPath, relationId };
+  const payload: Record<string, unknown> = { bookId, relationId };
   if (changes.relationship !== undefined) {
     payload.relationship = changes.relationship;
   }
@@ -327,6 +335,42 @@ export function updateEntryRelation(
   return invoke<WorkspaceRelation>("update_entry_relation", payload);
 }
 
-export function deleteEntryRelation(rootPath: string, relationId: string) {
-  return invoke<void>("delete_entry_relation", { rootPath, relationId });
+export function deleteEntryRelation(bookId: string, relationId: string) {
+  return invoke<void>("delete_entry_relation", { bookId, relationId });
+}
+
+// —— per-book 会话存储（.sessions/）：供 pi AgentHarness 的 JsonlSessionRepo 落盘 ——
+// path 均相对 .sessions/，后端做 .. 越界校验并锁在该目录内。
+
+export type SessionFsEntry = {
+  name: string;
+  isDir: boolean;
+};
+
+export function sessionFsExists(bookId: string, path: string) {
+  return invoke<boolean>("session_fs_exists", { bookId, path });
+}
+
+export function sessionFsRead(bookId: string, path: string) {
+  return invoke<string>("session_fs_read", { bookId, path });
+}
+
+export function sessionFsWrite(bookId: string, path: string, contents: string) {
+  return invoke<void>("session_fs_write", { bookId, path, contents });
+}
+
+export function sessionFsAppend(bookId: string, path: string, contents: string) {
+  return invoke<void>("session_fs_append", { bookId, path, contents });
+}
+
+export function sessionFsCreateDir(bookId: string, path: string) {
+  return invoke<void>("session_fs_create_dir", { bookId, path });
+}
+
+export function sessionFsRemove(bookId: string, path: string) {
+  return invoke<void>("session_fs_remove", { bookId, path });
+}
+
+export function sessionFsListDir(bookId: string, path: string) {
+  return invoke<SessionFsEntry[]>("session_fs_list_dir", { bookId, path });
 }

@@ -1,16 +1,13 @@
-// 图书工作区：ZIP 导入与导出。
+// 图书工作区：ZIP 导入与导出（基于真实文件）。
 
-use crate::domains::book_workspace::data::{
-    ensure_directory_chain, insert_entry, load_book_by_id, load_book_by_root_path,
-    load_entry_record, load_entry_records, touch_book, BookRecord, BOOK_ROOT_PREFIX,
-};
+use crate::domains::book_workspace::data::{load_book_by_id, BookRecord};
+use crate::domains::book_workspace::fs_store::WorkspaceStore;
 use crate::domains::book_workspace::search::rebuild_book_search_index;
 use crate::domains::book_workspace::templates::create_book_workspace_db;
 use crate::infrastructure::workspace_paths::{
-    error_to_string, file_extension, normalize_relative_path, now_timestamp, parent_relative_path,
-    validate_name, validate_relative_segments, CommandResult,
+    error_to_string, normalize_relative_path, validate_name, validate_relative_segments,
+    CommandResult,
 };
-use rusqlite::{params, Connection, Transaction};
 use std::io::{Cursor, Read, Seek, Write};
 use std::path::Path;
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
@@ -134,72 +131,27 @@ fn relative_archive_path(path: String, root_prefix: Option<&str>) -> Option<Stri
     }
 }
 
-fn insert_archive_file_entry(
-    transaction: &Transaction<'_>,
-    book_id: &str,
-    relative_path: &str,
-    content_bytes: &[u8],
-    timestamp: u64,
-) -> CommandResult<()> {
-    ensure_directory_chain(
-        transaction,
-        book_id,
-        &parent_relative_path(relative_path),
-        timestamp,
-    )?;
-    if let Some(existing) = load_entry_record(transaction, book_id, relative_path)? {
-        if existing.kind != "file" {
-            return Err("ZIP 内文件路径与已有目录冲突。".into());
+/// 删除书内除 .project 外的所有顶层条目（导入无 .project 的纯资料 zip 时保留模板）。
+fn remove_non_project_template_entries(store: &WorkspaceStore, book_id: &str) -> CommandResult<()> {
+    for entry in store.list_dir(book_id, "")? {
+        if entry.path == ".project" {
+            continue;
         }
-        transaction
-            .execute(
-                r#"
-                UPDATE book_workspace_entries
-                SET extension = ?1, content_bytes = ?2, updated_at = ?3
-                WHERE book_id = ?4 AND path = ?5
-                "#,
-                params![
-                    file_extension(relative_path).as_deref(),
-                    content_bytes,
-                    timestamp as i64,
-                    book_id,
-                    relative_path,
-                ],
-            )
-            .map_err(error_to_string)?;
-        return Ok(());
+        store.remove(book_id, &entry.path)?;
     }
-    insert_entry(
-        transaction,
-        book_id,
-        relative_path,
-        "file",
-        file_extension(relative_path).as_deref(),
-        content_bytes,
-        timestamp,
-    )
+    Ok(())
 }
 
-fn remove_non_project_template_entries(
-    transaction: &Transaction<'_>,
-    book_id: &str,
-) -> CommandResult<()> {
-    transaction
-        .execute(
-            r#"
-            DELETE FROM book_workspace_entries
-            WHERE book_id = ?1
-              AND path != '.project'
-              AND path NOT LIKE '.project/%'
-            "#,
-            params![book_id],
-        )
-        .map_err(error_to_string)?;
+/// 清空书内全部内容（导入带 .project 的完整工作区 zip 时整体替换）。
+fn remove_all_entries(store: &WorkspaceStore, book_id: &str) -> CommandResult<()> {
+    for entry in store.list_dir(book_id, "")? {
+        store.remove(book_id, &entry.path)?;
+    }
     Ok(())
 }
 
 pub(crate) fn import_book_zip_db(
-    transaction: &Transaction<'_>,
+    store: &WorkspaceStore,
     file_name: &str,
     archive_bytes: Vec<u8>,
 ) -> CommandResult<BookRecord> {
@@ -207,27 +159,42 @@ pub(crate) fn import_book_zip_db(
     let file_paths = collect_book_archive_file_paths(&mut archive)?;
     let root_prefix = detect_book_workspace_root(&file_paths)?;
     let book_name = derive_imported_book_name(root_prefix.as_deref(), file_name)?;
-    let book = create_book_workspace_db(transaction, &book_name)?;
+    let book = create_book_workspace_db(store, &book_name)?;
 
-    if root_prefix.is_some() {
-        transaction
-            .execute(
-                "DELETE FROM book_workspace_entries WHERE book_id = ?1",
-                params![book.id],
-            )
-            .map_err(error_to_string)?;
-    } else {
-        remove_non_project_template_entries(transaction, &book.id)?;
+    // 解压写盘是非原子的多步操作：一旦中途失败(损坏条目/磁盘满/越界路径),
+    // 需回滚已创建的半成品书目录,否则会残留一本"名字被占、内容残缺"的书,
+    // 用户重导同一 zip 还会撞"同名书籍已存在"而无法清理。
+    let result = import_book_zip_into(store, &book.id, &mut archive, root_prefix.as_deref());
+    if let Err(error) = result {
+        // 回滚已创建的半成品书目录;尽力清理,不掩盖原始导入错误。
+        let _ = store.delete_book(&book.id);
+        return Err(error);
     }
 
-    let timestamp = now_timestamp();
+    store.touch(&book.id)?;
+    load_book_by_id(store, &book.id)
+}
+
+/// 把 zip 条目写入指定书目录并重建索引。失败时由调用方负责回滚书目录。
+fn import_book_zip_into<R: Read + Seek>(
+    store: &WorkspaceStore,
+    book_id: &str,
+    archive: &mut ZipArchive<R>,
+    root_prefix: Option<&str>,
+) -> CommandResult<()> {
+    if root_prefix.is_some() {
+        remove_all_entries(store, book_id)?;
+    } else {
+        remove_non_project_template_entries(store, book_id)?;
+    }
+
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(error_to_string)?;
         let path = normalize_relative_path(entry.name())?;
         if path.is_empty() || is_ignored_book_archive_path(&path) {
             continue;
         }
-        let Some(relative_path) = relative_archive_path(path, root_prefix.as_deref()) else {
+        let Some(relative_path) = relative_archive_path(path, root_prefix) else {
             continue;
         };
         if relative_path.is_empty() {
@@ -236,7 +203,7 @@ pub(crate) fn import_book_zip_db(
 
         if entry.is_dir() {
             validate_relative_segments(&relative_path)?;
-            ensure_directory_chain(transaction, &book.id, &relative_path, timestamp)?;
+            store.create_dir(book_id, &relative_path)?;
             continue;
         }
 
@@ -245,26 +212,16 @@ pub(crate) fn import_book_zip_db(
         entry
             .read_to_end(&mut content_bytes)
             .map_err(error_to_string)?;
-        insert_archive_file_entry(
-            transaction,
-            &book.id,
-            &relative_path,
-            &content_bytes,
-            timestamp,
-        )?;
+        store.write_bytes(book_id, &relative_path, &content_bytes)?;
     }
 
-    touch_book(transaction, &book.id, timestamp)?;
-    rebuild_book_search_index(transaction, &book.id)?;
-    load_book_by_id(transaction, &book.id)
+    rebuild_book_search_index(store, book_id)?;
+    Ok(())
 }
 
-pub(crate) fn export_book_zip_db(
-    connection: &Connection,
-    root_path: &str,
-) -> CommandResult<Vec<u8>> {
-    let book = load_book_by_root_path(connection, root_path)?;
-    let entries = load_entry_records(connection, &book.id)?;
+pub(crate) fn export_book_zip_db(store: &WorkspaceStore, book_id: &str) -> CommandResult<Vec<u8>> {
+    let book = load_book_by_id(store, book_id)?;
+    let entries = store.collect_all_entries(&book.id)?;
 
     let cursor = Cursor::new(Vec::new());
     let mut archive = ZipWriter::new(cursor);
@@ -281,9 +238,8 @@ pub(crate) fn export_book_zip_db(
         archive
             .start_file(archive_path, options)
             .map_err(error_to_string)?;
-        archive
-            .write_all(&entry.content_bytes)
-            .map_err(error_to_string)?;
+        let bytes = store.read_bytes(&book.id, &entry.path)?;
+        archive.write_all(&bytes).map_err(error_to_string)?;
     }
 
     archive
@@ -291,7 +247,3 @@ pub(crate) fn export_book_zip_db(
         .map_err(error_to_string)
         .map(|cursor| cursor.into_inner())
 }
-
-// 抑制对 BOOK_ROOT_PREFIX 未使用的警告（仅在 archive 内部不直接需要，但保留可见以利将来）。
-#[allow(dead_code)]
-const _: &str = BOOK_ROOT_PREFIX;
