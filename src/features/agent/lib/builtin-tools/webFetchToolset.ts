@@ -65,7 +65,10 @@ export function createWebFetchTools(): Record<string, AgentTool> {
         );
 
         if (!response.success) {
-          return ok(`网页读取失败：${response.error ?? "未知错误"}`, response);
+          return ok(
+            `网页读取失败：${response.error ?? "未知错误"}。确认 URL 含 http(s) 且可公开访问；可先用 web_search 重新找链接，或换 mode=full 重试。`,
+            response,
+          );
         }
 
         return ok(

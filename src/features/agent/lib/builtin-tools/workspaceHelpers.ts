@@ -225,11 +225,13 @@ export function applyTextEdit(
   const exactTarget = ensureString(target, "workspace_edit.target");
   const matchCount = countExactMatches(source, exactTarget);
   if (matchCount === 0) {
-    throw new Error("未找到 workspace_edit.target 指定的文本。");
+    throw new Error(
+      "未找到 workspace_edit.target 指定的文本。先用 workspace_grep 确认 target 原文是否存在、是否唯一，再重试。",
+    );
   }
   if (!replaceAll && matchCount !== expectedCount) {
     throw new Error(
-      `workspace_edit.target 命中 ${matchCount} 处，与 expectedCount=${expectedCount} 不一致。`,
+      `workspace_edit.target 命中 ${matchCount} 处，与 expectedCount=${expectedCount} 不一致。要全部替换传 replaceAll=true；只改其中一处改用 replace_anchor_range 或 replace_heading_range（配 occurrence）定位。`,
     );
   }
 

@@ -134,6 +134,34 @@ describe("AgentComposer", () => {
     scrollHeightMock.mockRestore();
   });
 
+  it("默认输入为空时显示不可点击的发送按钮", () => {
+    render(<AgentComposer {...buildComposerProps()} input="   " />);
+
+    expect(screen.getByRole("button", { name: "发送消息" })).toBeDisabled();
+  });
+
+  it("用户输入内容后发送按钮可点击", () => {
+    const handleSubmit = vi.fn();
+
+    render(
+      <AgentComposer
+        {...buildComposerProps()}
+        input="继续写下一段"
+        onSubmit={handleSubmit}
+      />,
+    );
+
+    const sendButton = screen.getByRole("button", { name: "发送消息" });
+    expect(sendButton).toBeInTheDocument();
+
+    fireEvent.click(sendButton);
+
+    expect(handleSubmit).toHaveBeenCalledWith({
+      filePaths: [],
+      skillIds: [],
+    });
+  });
+
   it("默认模式菜单只显示协作和 YOLO 模式", () => {
     render(<AgentComposer {...buildComposerProps()} />);
 
@@ -154,10 +182,10 @@ describe("AgentComposer", () => {
     render(
       <AgentComposer
         {...buildComposerProps()}
-	        modes={[
-	          { id: "book", label: "协作", description: "默认对话与任务执行模式", icon: Sparkles },
-	          { id: "autopilot", label: "YOLO", description: "按目标全自动执行", icon: Sparkles },
-	        ]}
+        modes={[
+          { id: "book", label: "协作", description: "默认对话与任务执行模式", icon: Sparkles },
+          { id: "autopilot", label: "YOLO", description: "按目标全自动执行", icon: Sparkles },
+        ]}
         onModeChange={handleModeChange}
       />,
     );
@@ -166,15 +194,48 @@ describe("AgentComposer", () => {
       button: 0,
       ctrlKey: false,
     });
-	    fireEvent.click(screen.getByRole("menuitem", { name: /YOLO/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /YOLO/ }));
 
-	    expect(handleModeChange).toHaveBeenCalledWith("autopilot");
-	    expect(screen.getByRole("button", { name: "当前模式：YOLO" })).toBeInTheDocument();
-	    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute(
-	      "placeholder",
-		      "输入全自动目标：YOLO 会循环执行、验证和回写，直到目标完成",
-	    );
-	  });
+    expect(handleModeChange).toHaveBeenCalledWith("autopilot");
+    expect(screen.getByRole("button", { name: "当前模式：YOLO" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute(
+      "placeholder",
+      "输入全自动目标：YOLO 会循环执行、验证和回写，直到目标完成",
+    );
+  });
+
+  it("运行中输入为空时只显示停止按钮", () => {
+    render(<AgentComposer {...buildComposerProps()} runStatus="running" />);
+
+    expect(screen.getByRole("button", { name: "停止输出" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发送纠偏" })).not.toBeInTheDocument();
+  });
+
+  it("运行中输入内容后把停止按钮切换成发送纠偏按钮", () => {
+    const handleSubmit = vi.fn();
+
+    render(
+      <AgentComposer
+        {...buildComposerProps()}
+        input="补充：优先保留伏笔"
+        onSubmit={handleSubmit}
+        runStatus="running"
+      />,
+    );
+
+    const steerButton = screen.getByRole("button", { name: "发送纠偏" });
+    expect(steerButton).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "停止输出" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发送消息" })).not.toBeInTheDocument();
+
+    fireEvent.click(steerButton);
+
+    expect(handleSubmit).toHaveBeenCalledWith({
+      filePaths: [],
+      skillIds: [],
+    });
+  });
 
   it("ask 单选模式下可以选择预设项并确认", () => {
     const onSubmitAskAnswer = vi.fn();

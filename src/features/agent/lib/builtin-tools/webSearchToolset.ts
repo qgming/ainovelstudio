@@ -134,7 +134,7 @@ export function createWebSearchTools(): Record<string, AgentTool> {
 
         if (!response.success) {
           return ok(
-            `网络搜索失败：${response.error ?? "没有可用的搜索实例"}`,
+            `网络搜索失败：${response.error ?? "没有可用的搜索实例"}。可换更具体的关键词重试，或改用 web_read 直接读已知 URL。`,
             response,
           );
         }
