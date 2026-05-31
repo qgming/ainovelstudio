@@ -90,14 +90,14 @@ vi.mock("@features/skills/api/skillApi", () => ({
   writeSkillFileContent: mockWriteSkillFileContent,
 }));
 
-vi.mock("./providerApi", () => ({
+vi.mock("./model-gateway/providerApi", () => ({
   forwardProviderRequestViaTauri: mockForwardProviderRequestViaTauri,
 }));
 
-import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./tools";
+import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./builtin-tools";
 import { __resetLeaderboardCacheForTests } from "@features/leaderboard/leaderboardApi";
-import { YOLO_CONTROL_KIND } from "./yoloControl";
-import { searxngSearchService } from "./tools/searxngSearchService";
+import { YOLO_CONTROL_KIND } from "./domain/yoloControl";
+import { searxngSearchService } from "./builtin-tools/searxngSearchService";
 
 function createFanqieRankApiJson(bookList: unknown[]) {
   return JSON.stringify({ code: 0, data: { book_list: bookList } });

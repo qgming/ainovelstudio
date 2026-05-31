@@ -1,6 +1,6 @@
-import type { AgentMode } from "@features/agent/lib/modeRules";
+import type { AgentMode } from "@features/agent/lib/modes/modeRules";
 import type { WritingAgentSession } from "@features/agent/lib/session";
-import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
+import type { ManualTurnContextSelection } from "@features/agent/lib/prompt-context/manualTurnContext";
 import type { ChatRunStoreState, ChatRunStoreSetter } from "./helpers";
 
 export const RUN_INTERRUPT_REASONS = ["manual_stop", "app_close", "restart", "reset", "coach"] as const;

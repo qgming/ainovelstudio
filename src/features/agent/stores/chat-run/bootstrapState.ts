@@ -1,4 +1,4 @@
-import { derivePlanningState } from "@features/agent/lib/planning";
+import { derivePlanningState } from "@features/agent/lib/modes/planning";
 import { entriesToMessages, getCompactionCount, getLatestCompactionEntry } from "@features/agent/chat/entries";
 import {
   buildInitialRun,

@@ -3,8 +3,8 @@ import { Brain, Wrench, Check, LoaderCircle, Circle, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
-import { getTodoItemsFromPart, type PlanItem } from "@features/agent/lib/planning";
-import { getYoloControlDataFromPart } from "@features/agent/lib/yoloControl";
+import { getTodoItemsFromPart, type PlanItem } from "@features/agent/lib/modes/planning";
+import { getYoloControlDataFromPart } from "@features/agent/lib/domain/yoloControl";
 
 const markdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0 text-inherit">{children}</p>,

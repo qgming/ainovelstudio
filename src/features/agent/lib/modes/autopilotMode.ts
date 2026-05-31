@@ -4,7 +4,7 @@
 // isAutopilotGoalCompleted / buildAutopilotContinuePrompt / needsProtocolRepair），
 // 改为基于「本轮 turnParts」判定，由 runner 在 turn_end 调用并以 harness.followUp 续轮。
 
-import { getYoloControlDataFromPart, YOLO_CONTROL_TOOL_ID } from "../yoloControl";
+import { getYoloControlDataFromPart, YOLO_CONTROL_TOOL_ID } from "../domain/yoloControl";
 import type { AgentPart } from "../types";
 import { filterEnabledToolIdsForMode } from "./toolFilter";
 import type {

@@ -1,10 +1,10 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "@earendil-works/pi-ai";
-import type { AgentTool as WorkspaceTool } from "../runtime";
+import type { AgentTool as WorkspaceTool } from "../session/runtime";
 import { createAskUserTool, type AskUserHandler } from "./askUserTool";
-import { createPiTool } from "./tools/builder";
-import { ALL_TOOL_SPECS } from "./tools/schemas";
-import type { PiToolInteractive, PiToolRunnerContext } from "./tools/types";
+import { createPiTool } from "./tool-bridge/builder";
+import { ALL_TOOL_SPECS } from "./tool-bridge/schemas";
+import type { PiToolInteractive, PiToolRunnerContext } from "./tool-bridge/types";
 
 export type BuildPiToolsParams = {
   workspaceTools: Record<string, WorkspaceTool>;

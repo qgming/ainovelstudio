@@ -1,9 +1,9 @@
-import type { AgentTool } from "../runtime";
+import type { AgentTool } from "../session/runtime";
 import {
   createYoloControlData,
   summarizeYoloControl,
   YOLO_CONTROL_TOOL_ID,
-} from "../yoloControl";
+} from "../domain/yoloControl";
 import { ok } from "./shared";
 
 export function createControlTools(): Record<string, AgentTool> {

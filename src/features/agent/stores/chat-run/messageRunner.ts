@@ -7,7 +7,7 @@ import {
 } from "@features/agent/chat/sessionRuntime";
 import type { AgentMessage, AgentPart, AgentRunStatus, AgentUsage } from "@features/agent/lib/types";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
-import { shouldCompactUsage } from "@features/agent/lib/contextCompaction";
+import { shouldCompactUsage } from "@features/agent/lib/prompt-context/contextCompaction";
 import {
   replaceMessageEntry,
   queuePatchFromEvent,

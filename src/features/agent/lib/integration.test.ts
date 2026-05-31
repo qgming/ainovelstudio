@@ -7,8 +7,8 @@ import {
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { invoke } from "@tauri-apps/api/core";
-import { DEFAULT_MAIN_AGENT_MARKDOWN } from "./promptContext";
-import { createWritingAgentSession } from "./session";
+import { DEFAULT_MAIN_AGENT_MARKDOWN } from "./prompt-context";
+import { createWritingAgentSession } from "./session/session";
 import { buildPiTools } from "./pi/buildPiTools";
 import type { AgentPart } from "./types";
 

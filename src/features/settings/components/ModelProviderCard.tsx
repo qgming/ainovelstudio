@@ -28,13 +28,13 @@ import {
 } from "lucide-react";
 import { ModelCatalogButton } from "./ModelCatalogButton";
 import { Toast, type ToastTone } from "@shared/components/Toast";
-import { testAgentProviderConnection } from "@features/agent/lib/modelGateway";
-import type { ProviderConnectionTestResult } from "@features/agent/lib/modelGateway";
+import { testAgentProviderConnection } from "@features/agent/lib/model-gateway";
+import type { ProviderConnectionTestResult } from "@features/agent/lib/model-gateway";
 import {
   normalizeReasoningEffort,
   REASONING_EFFORT_OPTIONS,
   type ReasoningEffort,
-} from "@features/agent/lib/reasoningEffort";
+} from "@features/agent/lib/model-gateway/reasoningEffort";
 import type {
   AgentProviderConfig,
   AgentProviderPreset,

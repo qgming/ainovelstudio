@@ -21,14 +21,18 @@ const mockGlobalTool = { _global: true };
 const mockWorkspaceMutated = vi.fn();
 const mockRefreshSkillsCaptured: { fn?: () => Promise<void> } = {};
 
-vi.mock("../tools", () => ({
+vi.mock("./globalToolset", () => ({
   createGlobalToolset: () => ({ global_tool: mockGlobalTool }),
+}));
+vi.mock("./resourceToolset", () => ({
   createLocalResourceToolset: (opts: {
     refreshSkills?: () => Promise<void>;
   }) => {
     mockRefreshSkillsCaptured.fn = opts.refreshSkills;
     return { local_tool: true };
   },
+}));
+vi.mock("./workspaceToolset", () => ({
   createWorkspaceToolset: (opts: {
     bookId: string;
     displayPath: string;
@@ -58,15 +62,10 @@ describe("createDefaultLocalResourceToolset", () => {
     expect(mockSkillsRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("includeAsk=false 时会从本地工具集中移除 ask_user", () => {
-    vi.doMock("../tools", () => ({
-      createGlobalToolset: () => ({ global_tool: mockGlobalTool }),
-      createLocalResourceToolset: () => ({ ask_user: { description: "ask_user", execute: vi.fn() }, local_tool: true }),
-      createWorkspaceToolset: (opts: { bookId: string; displayPath: string; onWorkspaceMutated: () => Promise<void> }) => {
-        mockWorkspaceMutated.mockImplementation(opts.onWorkspaceMutated);
-        return { workspace_tool: true, _bookId: opts.bookId, _displayPath: opts.displayPath };
-      },
-    }));
+  it("includeAsk=false 时返回的本地工具集中不含 ask_user", () => {
+    const tools = createDefaultLocalResourceToolset({ includeAsk: false });
+    expect(tools).not.toHaveProperty("ask_user");
+    expect(tools).toHaveProperty("local_tool");
   });
 });
 

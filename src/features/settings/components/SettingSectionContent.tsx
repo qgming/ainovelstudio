@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { DEFAULT_MAIN_AGENT_MARKDOWN } from "@features/agent/lib/promptContext";
-import { ALL_TOOL_DEFS } from "@features/agent/lib/toolDefs";
+import { DEFAULT_MAIN_AGENT_MARKDOWN } from "@features/agent/lib/prompt-context";
+import { ALL_TOOL_DEFS } from "@features/agent/lib/domain/toolDefs";
 import {
   getDefaultAgentProviderConfig,
   useAgentSettingsStore,

@@ -1,12 +1,12 @@
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import type { ManualTurnContextPayload } from "./manualTurnContext";
-import type { AgentMode, ModeContextMap } from "./modeRules";
-import type { PlanningState } from "./planning";
-import type { ProjectContextPayload } from "./projectContext";
+import type { ManualTurnContextPayload } from "../prompt-context/manualTurnContext";
+import type { AgentMode, ModeContextMap } from "../modes/modeRules";
+import type { PlanningState } from "../modes/planning";
+import type { ProjectContextPayload } from "../prompt-context/projectContext";
 import type { AgentTool } from "./runtime";
-import type { AgentMessage, AgentUsage, AskToolAnswer, AskUserRequest } from "./types";
+import type { AgentMessage, AgentUsage, AskToolAnswer, AskUserRequest } from "../types";
 
 export type WritingRuntimeContext = {
   activeFilePath: string | null;

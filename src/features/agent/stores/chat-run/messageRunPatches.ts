@@ -1,5 +1,5 @@
 import type { AgentMessage, AgentPart, AgentUsage } from "@features/agent/lib/types";
-import { derivePlanningState } from "@features/agent/lib/planning";
+import { derivePlanningState } from "@features/agent/lib/modes/planning";
 import { buildRun, deriveSessionTitle } from "@features/agent/chat/sessionRuntime";
 import type { ChatEntry } from "@features/agent/chat/types";
 import { ensureSessionState, type ChatRunStoreState } from "./helpers";

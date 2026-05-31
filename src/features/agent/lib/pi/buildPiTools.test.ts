@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { Value } from "typebox/value";
 import { validateToolCall, type ToolCall } from "@earendil-works/pi-ai";
-import type { AgentTool as WorkspaceTool, ToolResult } from "../runtime";
+import type { AgentTool as WorkspaceTool, ToolResult } from "../session/runtime";
 import { buildPiTools } from "./buildPiTools";
-import { ALL_TOOL_SPECS } from "./tools/schemas";
+import { ALL_TOOL_SPECS } from "./tool-bridge/schemas";
 
 function makeWorkspaceTool(impl: (input: Record<string, unknown>) => ToolResult | Promise<ToolResult>): WorkspaceTool {
   return { description: "test", execute: async (input) => impl(input) };

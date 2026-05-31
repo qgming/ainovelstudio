@@ -1,4 +1,4 @@
-import type { AgentTool } from "../runtime";
+import type { AgentTool } from "../session/runtime";
 import { createControlTools } from "./controlToolset";
 import { createFanqieLeaderboardTools } from "./fanqieLeaderboardToolset";
 import { createWebFetchTools } from "./webFetchToolset";

@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, AssistantMessageEvent } from "@earendil-works/pi-ai";
-import { createToolResultPart } from "../toolParts";
-import type { AgentSessionEvent } from "../core/events";
+import { createToolResultPart } from "../domain/toolParts";
+import type { AgentSessionEvent } from "../session/events";
 import type { AgentPart, AgentUsage, AskToolAnswer, AskUserRequest } from "../types";
 import { assistantMessageToAgentUsage, mapStopReasonToFinishReason, sumUsage } from "./usage";
 

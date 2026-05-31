@@ -3,12 +3,12 @@ import {
   readWorkspaceTextFile,
   readWorkspaceTree,
 } from "@features/books/api/bookWorkspaceApi";
-import { resolveManualTurnContext } from "@features/agent/lib/manualTurnContext";
-import { loadProjectContext } from "@features/agent/lib/projectContext";
+import { resolveManualTurnContext } from "@features/agent/lib/prompt-context/manualTurnContext";
+import { loadProjectContext } from "@features/agent/lib/prompt-context/projectContext";
 import { createWritingAgentSession } from "@features/agent/lib/session";
-import { derivePlanningState } from "@features/agent/lib/planning";
-import { buildBookWorkspaceTools } from "@features/agent/lib/toolsets/factory";
-import type { AgentMode, ModeContextMap } from "@features/agent/lib/modeRules";
+import { derivePlanningState } from "@features/agent/lib/modes/planning";
+import { buildBookWorkspaceTools } from "@features/agent/lib/builtin-tools/factory";
+import type { AgentMode, ModeContextMap } from "@features/agent/lib/modes/modeRules";
 import { getModeConfig } from "@features/agent/lib/modes";
 import type { AgentMessage, AgentUsage } from "@features/agent/lib/types";
 import type { ChatEntry } from "@features/agent/chat/types";

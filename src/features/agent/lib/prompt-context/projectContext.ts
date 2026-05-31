@@ -1,4 +1,4 @@
-import type { ContextManifest, ContextManifestPolicy } from "./longformTypes";
+import type { ContextManifest, ContextManifestPolicy } from "../domain/longformTypes";
 
 export const DEFAULT_PROJECT_AGENT_PATH = ".project/AGENTS.md";
 export const DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH = ".project/context-manifest.json";

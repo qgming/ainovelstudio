@@ -1,5 +1,5 @@
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
-import { buildModeRules, type AgentMode, type ModeContextMap } from "../modeRules";
+import { buildModeRules, type AgentMode, type ModeContextMap } from "../modes/modeRules";
 import { buildDynamicResourceDirectory } from "./dynamicResources";
 import { joinSections, renderPromptSections } from "./shared";
 

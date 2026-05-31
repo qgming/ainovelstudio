@@ -1,5 +1,5 @@
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { isExplicitReasoningEffort } from "../reasoningEffort";
+import { isExplicitReasoningEffort } from "./reasoningEffort";
 
 const PROVIDER_OPTIONS_KEY = "ainovelstudioProvider";
 

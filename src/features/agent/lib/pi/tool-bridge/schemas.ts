@@ -1,5 +1,5 @@
 import { Type, type TSchema } from "@earendil-works/pi-ai";
-import { normalizeTodoToolInput } from "../../tools/resourceHelpers";
+import { normalizeTodoToolInput } from "../../builtin-tools/resourceHelpers";
 import type { PiToolSpec } from "./types";
 
 // 把旧 ai-sdk-tools/*Builders.ts 里的 zod inputSchema 全量改写为 TypeBox。

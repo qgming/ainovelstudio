@@ -10,7 +10,7 @@ import {
   updateEntryRelation,
 } from "@features/books/api/bookWorkspaceApi";
 import type { WorkspaceRelation } from "@features/books/types";
-import type { AgentTool } from "../runtime";
+import type { AgentTool } from "../session/runtime";
 import {
   ensureString,
   normalizeRelativePath,

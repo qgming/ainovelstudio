@@ -1,5 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { forwardProviderRequestViaTauri } from "@features/agent/lib/providerApi";
+import { forwardProviderRequestViaTauri } from "@features/agent/lib/model-gateway/providerApi";
 import { decodeText } from "./fanqieDecoder";
 import {
   FEMALE_CATEGORIES_BASE,

@@ -1,7 +1,7 @@
 // CP-F：BOOK（图书工作区多轮协作）模式策略。
 
-import { getWriteProtocolRepairPrompt } from "../core/writeProtocolRepair";
-import { YOLO_CONTROL_TOOL_ID } from "../yoloControl";
+import { getWriteProtocolRepairPrompt } from "../session/writeProtocolRepair";
+import { YOLO_CONTROL_TOOL_ID } from "../domain/yoloControl";
 import { filterEnabledToolIdsForMode } from "./toolFilter";
 import type { ContinuationDecision, ContinuationInput, ModeConfig } from "./types";
 

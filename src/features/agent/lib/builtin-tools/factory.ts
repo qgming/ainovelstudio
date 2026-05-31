@@ -9,12 +9,10 @@
 
 import { useSkillsStore } from "@features/skills/stores/useSkillsStore";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
-import {
-  createGlobalToolset,
-  createLocalResourceToolset,
-  createWorkspaceToolset,
-} from "../tools";
-import type { AgentTool } from "../runtime";
+import { createGlobalToolset } from "./globalToolset";
+import { createLocalResourceToolset } from "./resourceToolset";
+import { createWorkspaceToolset } from "./workspaceToolset";
+import type { AgentTool } from "../session/runtime";
 
 export type AgentToolMap = Record<string, AgentTool>;
 

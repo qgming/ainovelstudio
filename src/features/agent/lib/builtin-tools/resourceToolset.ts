@@ -6,8 +6,8 @@ import {
   scanInstalledSkills,
   writeSkillFileContent,
 } from "@features/skills/api/skillApi";
-import { renderPlanItems } from "../planning";
-import type { AgentTool, AgentToolExecutionContext } from "../runtime";
+import { renderPlanItems } from "../modes/planning";
+import type { AgentTool, AgentToolExecutionContext } from "../session/runtime";
 import type {
   AskOption,
   AskSelectionMode,

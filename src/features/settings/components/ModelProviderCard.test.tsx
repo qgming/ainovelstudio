@@ -6,11 +6,11 @@ const { mockFetchProviderModels, mockTestAgentProviderConnection } = vi.hoisted(
   mockTestAgentProviderConnection: vi.fn(),
 }));
 
-vi.mock("@features/agent/lib/modelCatalog", () => ({
+vi.mock("@features/agent/lib/model-gateway/modelCatalog", () => ({
   fetchProviderModels: mockFetchProviderModels,
 }));
 
-vi.mock("@features/agent/lib/modelGateway", () => ({
+vi.mock("@features/agent/lib/model-gateway", () => ({
   testAgentProviderConnection: mockTestAgentProviderConnection,
 }));
 

@@ -1,6 +1,6 @@
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "@earendil-works/pi-ai";
-import type { AgentTool as WorkspaceTool, AgentToolInteractiveContext } from "../../runtime";
+import type { AgentTool as WorkspaceTool, AgentToolInteractiveContext } from "../../session/runtime";
 
 // pi 工具的提示词/参数规格：description + TypeBox 参数 schema。
 // 取代旧的 AgentToolPromptSpec（zod inputSchema）。

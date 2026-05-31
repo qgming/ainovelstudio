@@ -13,15 +13,15 @@
 // - 事件桥接仍复用 AgentEventAdapter（pi AgentEvent → AgentPart）。
 
 import type { AgentHarnessEvent } from "@earendil-works/pi-agent-core";
-import { logPromptDebug } from "../debug";
-import { createAsyncQueue } from "../core/partQueue";
-import type { AgentSessionEvent } from "../core/events";
+import { logPromptDebug } from "../utils/debug";
+import { createAsyncQueue } from "./partQueue";
+import type { AgentSessionEvent } from "./events";
 import { getModeConfig } from "../modes";
-import { getPlanningIntervention } from "../planning";
-import { buildUserTurnContent } from "../promptContext";
+import { getPlanningIntervention } from "../modes/planning";
+import { buildUserTurnContent } from "../prompt-context";
 import { AgentEventAdapter } from "../pi/eventAdapter";
 import type { AgentPart } from "../types";
-import { hasProviderConfig, type WritingRuntimeContext } from "../writingRuntimeContext";
+import { hasProviderConfig, type WritingRuntimeContext } from "./writingRuntimeContext";
 import { createNovelHarness } from "./harnessSession";
 
 export type RunWritingAgentHarnessOptions = {

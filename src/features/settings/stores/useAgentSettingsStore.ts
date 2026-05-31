@@ -14,11 +14,11 @@ import type { AgentProviderPreset, AgentModelConfigPreset } from "@features/sett
 import {
   getDefaultEnabledTools,
   migrateEnabledTools,
-} from "@features/agent/lib/toolDefs";
+} from "@features/agent/lib/domain/toolDefs";
 import {
   normalizeReasoningEffort,
   type ReasoningEffort,
-} from "@features/agent/lib/reasoningEffort";
+} from "@features/agent/lib/model-gateway/reasoningEffort";
 
 let initializePromise: Promise<void> | null = null;
 

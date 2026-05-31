@@ -1,4 +1,4 @@
-import type { AgentMessage, AgentPart } from "./types";
+import type { AgentMessage, AgentPart } from "../types";
 
 export type PlanItemStatus = "pending" | "in_progress" | "completed";
 

@@ -1,11 +1,11 @@
-import type { ChatEntry } from "../chat/types";
-import type { AgentSessionEvent } from "./core/events";
+import type { ChatEntry } from "../../chat/types";
+import type { AgentSessionEvent } from "./events";
 import {
   WritingAgentSession,
   type QueueMode,
   type CompactionRunner,
-} from "./core/session";
-import { runWritingAgentHarness } from "./runtime/writingAgentHarnessRunner";
+} from "./sessionCore";
+import { runWritingAgentHarness } from "./writingAgentHarnessRunner";
 import type { WritingRuntimeContext } from "./writingRuntimeContext";
 
 export type CreateWritingAgentSessionOptions = WritingRuntimeContext & {

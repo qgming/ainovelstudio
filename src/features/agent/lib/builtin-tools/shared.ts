@@ -1,4 +1,4 @@
-import type { AgentToolExecutionContext, ToolResult } from "../runtime";
+import type { AgentToolExecutionContext, ToolResult } from "../session/runtime";
 
 export type WorkspaceToolContext = {
   onWorkspaceMutated?: () => Promise<void>;

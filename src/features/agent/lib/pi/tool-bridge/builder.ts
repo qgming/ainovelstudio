@@ -1,8 +1,8 @@
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "@earendil-works/pi-ai";
-import { createToolRequestId, withAbort } from "../../asyncUtils";
-import type { ToolResult } from "../../runtime";
-import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "../../textTruncation";
+import { createToolRequestId, withAbort } from "../../utils/asyncUtils";
+import type { ToolResult } from "../../session/runtime";
+import { MAX_TOOL_OUTPUT_SUMMARY_CHARS, truncateTextWithMeta } from "../../utils/textTruncation";
 import type { BuildPiToolParams, PiToolRunnerContext, PiToolSpec } from "./types";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };

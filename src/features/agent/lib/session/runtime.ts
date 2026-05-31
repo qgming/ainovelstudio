@@ -1,4 +1,4 @@
-import type { AskToolAnswer, AskUserRequest } from "./types";
+import type { AskToolAnswer, AskUserRequest } from "../types";
 
 export type ToolResult = {
   ok: boolean;

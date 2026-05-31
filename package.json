@@ -11,8 +11,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude src/features/agent/lib/modelGateway.integration.test.ts --exclude coding-agent/**",
-    "test:integration": "vitest run src/features/agent/lib/modelGateway.integration.test.ts"
+    "test": "vitest run --exclude src/features/agent/lib/model-gateway/gateway.integration.test.ts --exclude coding-agent/**",
+    "test:integration": "vitest run src/features/agent/lib/model-gateway/gateway.integration.test.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.78.0",

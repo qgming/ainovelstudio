@@ -12,9 +12,9 @@ import type {
   AskToolAnswer,
   AskUserRequest,
 } from "@features/agent/lib/types";
-import type { AgentMode } from "@features/agent/lib/modeRules";
-import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
-import { derivePlanningState, type PlanningState } from "@features/agent/lib/planning";
+import type { AgentMode } from "@features/agent/lib/modes/modeRules";
+import type { ManualTurnContextSelection } from "@features/agent/lib/prompt-context/manualTurnContext";
+import { derivePlanningState, type PlanningState } from "@features/agent/lib/modes/planning";
 import {
   buildInitialRun,
   buildRun,

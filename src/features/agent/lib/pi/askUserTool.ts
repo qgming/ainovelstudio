@@ -1,9 +1,9 @@
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "@earendil-works/pi-ai";
-import { withAbort } from "../asyncUtils";
-import { normalizeAskAnswer, normalizeAskRequest, summarizeAskAnswer } from "../tools/resourceToolset";
+import { withAbort } from "../utils/asyncUtils";
+import { normalizeAskAnswer, normalizeAskRequest, summarizeAskAnswer } from "../builtin-tools/resourceToolset";
 import type { AskToolAnswer, AskUserRequest } from "../types";
-import { INTERACTION_TOOL_SPECS } from "./tools/schemas";
+import { INTERACTION_TOOL_SPECS } from "./tool-bridge/schemas";
 import type { AskUserToolDetails } from "./eventAdapter";
 
 // 通过 declaration merging 给 pi 扩展自定义消息类型：ask_user 交互留痕（仅 UI/审计，convertToLlm 会过滤）。

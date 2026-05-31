@@ -15,7 +15,7 @@ vi.mock("@earendil-works/pi-ai", async () => {
   };
 });
 
-import { generateAgentObject, generateAgentText, testAgentProviderConnection } from "./modelGateway";
+import { generateAgentObject, generateAgentText, testAgentProviderConnection } from "./index";
 import { Type } from "@earendil-works/pi-ai";
 
 // 构造一个最小可用的 AssistantMessage。

@@ -1,8 +1,8 @@
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
-import { ALL_TOOL_SPECS } from "../pi/tools/schemas";
-import { renderToolParameters } from "../pi/tools/renderToolParameters";
-import type { PiToolSpec } from "../pi/tools/types";
-import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "../toolDefs";
+import { ALL_TOOL_SPECS } from "../pi/tool-bridge/schemas";
+import { renderToolParameters } from "../pi/tool-bridge/renderToolParameters";
+import type { PiToolSpec } from "../pi/tool-bridge/types";
+import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "../domain/toolDefs";
 import { joinSections } from "./shared";
 
 const TOOL_SPECS: Record<string, PiToolSpec> = ALL_TOOL_SPECS;

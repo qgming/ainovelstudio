@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Check, Download, LoaderCircle } from "lucide-react";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { fetchProviderModels } from "@features/agent/lib/modelCatalog";
+import { fetchProviderModels } from "@features/agent/lib/model-gateway/modelCatalog";
 import { getSurfaceActionClassName } from "@shared/ui/action-button";
 import { Button } from "@shared/ui/button";
 import {

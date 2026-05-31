@@ -30,11 +30,11 @@ import {
   DropdownMenuTrigger,
 } from "@shared/ui/dropdown-menu";
 import { cn } from "@shared/utils";
-import type { AgentMode } from "@features/agent/lib/modeRules";
+import type { AgentMode } from "@features/agent/lib/modes/modeRules";
 import { getBaseName } from "@features/books/lib/paths";
 import type { TreeNode } from "@features/books/types";
-import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
-import type { PlanItem, PlanningState } from "@features/agent/lib/planning";
+import type { ManualTurnContextSelection } from "@features/agent/lib/prompt-context/manualTurnContext";
+import type { PlanItem, PlanningState } from "@features/agent/lib/modes/planning";
 import type { AgentRunStatus, AskToolAnswer } from "@features/agent/lib/types";
 import type { PendingAskState } from "@features/agent/stores/chat-run/helpers";
 import { AgentManualResourcePicker } from "./AgentManualResourcePicker";

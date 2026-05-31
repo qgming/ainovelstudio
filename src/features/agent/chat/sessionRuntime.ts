@@ -1,5 +1,5 @@
 import type { AgentMessage, AgentMessageMeta, AgentPart, AgentRun, AgentRunStatus } from "@features/agent/lib/types";
-import { mergeToolResultPart } from "@features/agent/lib/toolParts";
+import { mergeToolResultPart } from "@features/agent/lib/domain/toolParts";
 import type { ChatSessionPatch } from "./types";
 
 const DEFAULT_TITLE = "新对话";

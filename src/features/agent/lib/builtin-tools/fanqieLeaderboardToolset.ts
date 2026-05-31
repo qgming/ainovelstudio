@@ -7,7 +7,7 @@ import {
 import { MAIN_BOARDS, OVERALL_CATEGORY_ID } from "@features/leaderboard/leaderboardCatalog";
 import { buildLeaderboardStats, formatPercent } from "@features/leaderboard/leaderboardStats";
 import type { LeaderboardBook, MainBoard, SubCategory } from "@features/leaderboard/types";
-import type { AgentTool } from "../runtime";
+import type { AgentTool } from "../session/runtime";
 import { asPositiveInt, ensureString, ok } from "./shared";
 
 const BOARD_IDS = new Set(MAIN_BOARDS.map((board) => board.id));

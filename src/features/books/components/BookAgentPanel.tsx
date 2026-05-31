@@ -17,7 +17,7 @@ import { AgentComposer, DEFAULT_AGENT_COMPOSER_MODES } from "@features/agent/com
 import { AgentContextOverview } from "@features/agent/components/AgentContextOverview";
 import { AgentInfoDisplay } from "@features/agent/components/AgentInfoDisplay";
 import { AgentMessageList } from "@features/agent/components/AgentMessageList";
-import { deriveLatestYoloControl, type YoloControlData } from "@features/agent/lib/yoloControl";
+import { deriveLatestYoloControl, type YoloControlData } from "@features/agent/lib/domain/yoloControl";
 import { getLatestCompactionEntry } from "@features/agent/chat/entries";
 import { selectIsAgentRunActive } from "@features/agent/stores/chat-run/helpers";
 import { useChatRunStore } from "@features/agent/stores/useChatRunStore";

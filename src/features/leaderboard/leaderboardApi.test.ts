@@ -24,7 +24,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   isTauri: mockIsTauri,
 }));
 
-vi.mock("@features/agent/lib/providerApi", () => ({
+vi.mock("@features/agent/lib/model-gateway/providerApi", () => ({
   forwardProviderRequestViaTauri: mockForward,
 }));
 

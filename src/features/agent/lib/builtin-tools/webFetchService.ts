@@ -1,4 +1,4 @@
-import { forwardProviderRequestViaTauri } from "../providerApi";
+import { forwardProviderRequestViaTauri } from "../model-gateway/providerApi";
 import { CLIENT_REQUEST_TIMEOUT_MS } from "./webSearchConstants";
 import type { WebFetchResponse } from "./webSearchTypes";
 import {

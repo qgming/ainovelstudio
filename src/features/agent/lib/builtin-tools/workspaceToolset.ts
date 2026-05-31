@@ -1,4 +1,4 @@
-import type { AgentTool } from "../runtime";
+import type { AgentTool } from "../session/runtime";
 import { createWorkspaceRelationTools } from "./workspaceRelationToolset";
 import { createWorkspaceWordCountTools } from "./workspaceWordCountToolset";
 import { createWorkspaceStructureTools } from "./workspaceStructureToolset";

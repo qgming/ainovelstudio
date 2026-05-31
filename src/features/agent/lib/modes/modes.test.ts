@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { YOLO_CONTROL_KIND, YOLO_CONTROL_TOOL_ID } from "../yoloControl";
+import { YOLO_CONTROL_KIND, YOLO_CONTROL_TOOL_ID } from "../domain/yoloControl";
 import type { AgentPart } from "../types";
 import { getModeConfig } from "./index";
 import { bookMode, COLLAB_STEP_LIMIT } from "./bookMode";

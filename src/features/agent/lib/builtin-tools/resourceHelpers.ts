@@ -1,5 +1,5 @@
-import { normalizeSuggestedToolIds } from "../toolDefs";
-import type { PlanItem, PlanItemStatus } from "../planning";
+import { normalizeSuggestedToolIds } from "../domain/toolDefs";
+import type { PlanItem, PlanItemStatus } from "../modes/planning";
 
 export type SkillAction =
   | "create"

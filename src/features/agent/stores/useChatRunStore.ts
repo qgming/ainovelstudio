@@ -7,8 +7,8 @@
 import { create } from "zustand";
 import { createChatSession, deleteChatSession, setChatDraft, switchChatSession } from "@features/agent/chat/api";
 import type { AskToolAnswer } from "@features/agent/lib/types";
-import type { AgentMode } from "@features/agent/lib/modeRules";
-import type { ManualTurnContextSelection } from "@features/agent/lib/manualTurnContext";
+import type { AgentMode } from "@features/agent/lib/modes/modeRules";
+import type { ManualTurnContextSelection } from "@features/agent/lib/prompt-context/manualTurnContext";
 import {
   buildInitialState,
   DEFAULT_CHAT_BOOK_ID,

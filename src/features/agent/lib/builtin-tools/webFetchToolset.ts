@@ -1,4 +1,4 @@
-import type { AgentTool } from "../runtime";
+import type { AgentTool } from "../session/runtime";
 import { ensureString, ok } from "./shared";
 import type { WebFetchResponse } from "./webSearchTypes";
 import { webFetchService } from "./webFetchService";

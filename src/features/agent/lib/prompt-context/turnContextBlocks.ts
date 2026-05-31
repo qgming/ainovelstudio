@@ -1,5 +1,5 @@
-import type { ManualTurnContextPayload } from "../manualTurnContext";
-import type { ProjectContextPayload } from "../projectContext";
+import type { ManualTurnContextPayload } from "./manualTurnContext";
+import type { ProjectContextPayload } from "./projectContext";
 import { createMiddleExcerpt, MANUAL_CONTEXT_FILE_CHAR_LIMIT } from "./shared";
 
 export function buildManualContextBlock(

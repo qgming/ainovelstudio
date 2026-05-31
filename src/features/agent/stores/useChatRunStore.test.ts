@@ -59,7 +59,7 @@ vi.mock("@features/skills/stores/useSkillsStore", () => ({
   },
 }));
 
-vi.mock("@features/agent/lib/manualTurnContext", () => ({
+vi.mock("@features/agent/lib/prompt-context/manualTurnContext", () => ({
   resolveManualTurnContext: vi.fn(),
 }));
 
@@ -77,7 +77,7 @@ vi.mock("@features/agent/lib/session", () => ({
 
 import { appendChatEntry, createChatSession, initializeChatStorage } from "@features/agent/chat/api";
 import { cancelToolRequests } from "@features/books/api/bookWorkspaceApi";
-import { resolveManualTurnContext, type ManualTurnContextPayload } from "@features/agent/lib/manualTurnContext";
+import { resolveManualTurnContext, type ManualTurnContextPayload } from "@features/agent/lib/prompt-context/manualTurnContext";
 import { readAgentSettings } from "@features/settings/api/agentSettingsApi";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
 import { useChatRunStore as useAgentStore } from "./useChatRunStore";

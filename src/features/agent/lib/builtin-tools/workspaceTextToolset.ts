@@ -2,7 +2,7 @@ import {
   readWorkspaceTextFile,
   writeWorkspaceTextFile,
 } from "@features/books/api/bookWorkspaceApi";
-import type { AgentTool } from "../runtime";
+import type { AgentTool } from "../session/runtime";
 import {
   applyJsonPatch,
   appendJsonValueAtPointer,

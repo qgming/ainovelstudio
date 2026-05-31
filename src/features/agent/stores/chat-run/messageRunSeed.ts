@@ -1,5 +1,5 @@
 import { buildAssistantPlaceholderMessage, buildMessageMeta, buildUserMessage } from "@features/agent/chat/sessionRuntime";
-import type { AgentMode } from "@features/agent/lib/modeRules";
+import type { AgentMode } from "@features/agent/lib/modes/modeRules";
 import type { AgentMessage } from "@features/agent/lib/types";
 import type { ChatEntry } from "@features/agent/chat/types";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";

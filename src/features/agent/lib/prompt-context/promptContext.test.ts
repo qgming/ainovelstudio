@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
-import { buildRuntimeControlBlock, buildSystemPrompt, buildUserTurnContent } from "./promptContext";
+import { buildRuntimeControlBlock, buildSystemPrompt, buildUserTurnContent } from "./index";
 import type { ProjectContextPayload } from "./projectContext";
 
 function createSkill(overrides: Partial<ResolvedSkill> = {}): ResolvedSkill {

@@ -1,6 +1,6 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { buildProviderHeaders } from "../providerRequest";
+import { buildProviderHeaders } from "../model-gateway/providerRequest";
 
 // openai-completions 协议直接支持的 reasoning_effort 档位（与应用的 5 档一致，去掉 auto）。
 export type PiReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { testAgentProviderConnection } from "./modelGateway";
+import { testAgentProviderConnection } from "./index";
 
 const hasRealProviderEnv =
   Boolean(process.env.REAL_PROVIDER_BASE_URL) &&

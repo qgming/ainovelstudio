@@ -28,7 +28,7 @@ vi.mock("@features/books/api/bookWorkspaceApi", () => ({
   renameWorkspaceEntry: mockRename,
 }));
 
-import { createTauriExecutionEnv } from "@features/agent/lib/runtime/env/tauriExecutionEnv";
+import { createTauriExecutionEnv } from "@features/agent/lib/session/env/tauriExecutionEnv";
 
 const rootPath = "books/北境余烬";
 // 解析用书籍标识（UUID）；env 内所有 bookWorkspaceApi 调用以此为第一参数。

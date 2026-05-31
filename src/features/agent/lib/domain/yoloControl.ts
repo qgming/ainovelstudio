@@ -1,4 +1,4 @@
-import type { AgentMessage, AgentPart } from "./types";
+import type { AgentMessage, AgentPart } from "../types";
 
 export const YOLO_CONTROL_TOOL_ID = "yolo_control";
 export const YOLO_CONTROL_KIND = "yolo-control";

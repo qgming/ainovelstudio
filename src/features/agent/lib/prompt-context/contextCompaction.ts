@@ -1,10 +1,10 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";
-import { generateAgentObject } from "./modelGateway";
-import type { AgentMessage, AgentUsage } from "./types";
-import { extractMessageText } from "../chat/sessionRuntime";
-import type { ChatEntry, CompactionPayload } from "../chat/types";
-import { entriesToMessages, getLatestCompactionEntry, isMessageEntry } from "../chat/entries";
+import { generateAgentObject } from "../model-gateway";
+import type { AgentMessage, AgentUsage } from "../types";
+import { extractMessageText } from "../../chat/sessionRuntime";
+import type { ChatEntry, CompactionPayload } from "../../chat/types";
+import { entriesToMessages, getLatestCompactionEntry, isMessageEntry } from "../../chat/entries";
 
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128000;
 export const DEFAULT_COMPACTION_RESERVE_TOKENS = 16000;

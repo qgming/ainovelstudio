@@ -11,7 +11,7 @@
 // 返回 continue 时由 runner 调 harness.followUp(prompt) 在同一 prompt() 流内续轮；
 // 返回 stop 时不再 followUp，pi loop 自然走向 agent_end。
 
-import type { AgentMode, ModeContextMap } from "../modeRules";
+import type { AgentMode, ModeContextMap } from "./modeRules";
 import type { AgentPart } from "../types";
 
 /** turn_end 时供 decideContinuation 判定的输入。 */

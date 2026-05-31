@@ -1,6 +1,6 @@
-import type { ManualTurnContextPayload } from "../manualTurnContext";
-import { renderPlanItems, type PlanningIntervention, type PlanningState } from "../planning";
-import type { ProjectContextPayload } from "../projectContext";
+import type { ManualTurnContextPayload } from "./manualTurnContext";
+import { renderPlanItems, type PlanningIntervention, type PlanningState } from "../modes/planning";
+import type { ProjectContextPayload } from "./projectContext";
 import { buildManualContextBlock, buildProjectContextBlock } from "./turnContextBlocks";
 import { formatCurrentSystemDate, joinSections, renderPromptSections } from "./shared";
 

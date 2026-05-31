@@ -1,4 +1,4 @@
-import { generateCompactionPayload } from "@features/agent/lib/contextCompaction";
+import { generateCompactionPayload } from "@features/agent/lib/prompt-context/contextCompaction";
 import type { AgentSessionEvent } from "@features/agent/lib/session";
 import type { AgentMessage } from "@features/agent/lib/types";
 import { appendChatEntry } from "@features/agent/chat/api";

@@ -1,5 +1,5 @@
 import { appendChatEntry, deleteChatEntry } from "@features/agent/chat/api";
-import { derivePlanningState } from "@features/agent/lib/planning";
+import { derivePlanningState } from "@features/agent/lib/modes/planning";
 import {
   buildInitialRun,
   buildMessageMeta,
@@ -8,7 +8,7 @@ import {
   buildSystemMessage,
   deriveSessionTitle,
 } from "@features/agent/chat/sessionRuntime";
-import { formatProviderError } from "@features/agent/lib/errorFormatting";
+import { formatProviderError } from "@features/agent/lib/utils/errorFormatting";
 import type { AgentMessage, AgentRunStatus } from "@features/agent/lib/types";
 import type { ChatEntry, ChatSessionSummary } from "@features/agent/chat/types";
 import type { AgentProviderConfig } from "@features/settings/stores/useAgentSettingsStore";

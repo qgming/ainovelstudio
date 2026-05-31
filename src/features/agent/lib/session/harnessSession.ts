@@ -10,12 +10,12 @@
 
 import { AgentHarness, JsonlSessionRepo, formatSkillsForSystemPrompt } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import { getPlanningIntervention } from "../planning";
-import { buildRuntimeControlBlock, buildSystemPrompt } from "../promptContext";
+import { getPlanningIntervention } from "../modes/planning";
+import { buildRuntimeControlBlock, buildSystemPrompt } from "../prompt-context";
 import { buildPiTools } from "../pi/buildPiTools";
 import { toPiModel, toPiThinkingLevel } from "../pi/models";
-import { buildProviderRequestHeaders } from "../providerRequest";
-import type { WritingRuntimeContext } from "../writingRuntimeContext";
+import { buildProviderRequestHeaders } from "../model-gateway/providerRequest";
+import type { WritingRuntimeContext } from "./writingRuntimeContext";
 import { createTauriExecutionEnv } from "./env/tauriExecutionEnv";
 import { createSessionFileSystem } from "./env/sessionExecutionEnv";
 import { loadNovelSkills } from "./skills/loadNovelSkills";

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { BUILTIN_TOOLS } from "@features/agent/lib/toolDefs";
+import { BUILTIN_TOOLS } from "@features/agent/lib/domain/toolDefs";
 
 const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),

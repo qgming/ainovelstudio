@@ -5,7 +5,7 @@ import {
   isLikelyMultiStepPrompt,
   renderPlanItems,
 } from "./planning";
-import type { AgentMessage } from "./types";
+import type { AgentMessage } from "../types";
 
 function buildAssistantMessage(outputSummary: string): AgentMessage {
   return {
