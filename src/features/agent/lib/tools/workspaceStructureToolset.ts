@@ -1,6 +1,7 @@
 import {
   createWorkspaceDirectory,
   deleteWorkspaceEntry,
+  grepWorkspaceContent,
   moveWorkspaceEntry,
   readWorkspaceTree,
   renameWorkspaceEntry,
@@ -11,6 +12,7 @@ import type { AgentTool } from "../runtime";
 import {
   findTreeNode,
   formatBrowseListSummary,
+  formatGrepSummary,
   formatSearchSummary,
   listTreeChildren,
   normalizeBrowseMode,
@@ -181,8 +183,27 @@ export function createWorkspaceStructureTools({
         return ok(formatSearchSummary(result), result);
       },
     },
+    workspace_grep: {
+      description: "按字面量或正则精确匹配工作区文件内容",
+      execute: async (input, context) => {
+        const abortContext = getAbortContext(context);
+        const pattern = ensureString(input.pattern, "workspace_grep.pattern");
+        const scope = normalizeSearchScopeInput(displayPath, input.scope);
+        const result = await grepWorkspaceContent(bookId, pattern, {
+          abortSignal: abortContext?.abortSignal,
+          requestId: abortContext?.requestId,
+          isRegex: input.isRegex === true,
+          caseSensitive: input.caseSensitive === true,
+          scope,
+          limit: input.limit == null ? undefined : asPositiveInt(input.limit, 50),
+          contextLines:
+            input.contextLines == null ? undefined : asPositiveInt(input.contextLines, 0),
+        });
+        return ok(formatGrepSummary(result), result);
+      },
+    },
     workspace_path: {
-      description: "创建文件夹、重命名或移动工作区路径",
+      description: "创建文件夹、重命名、移动或删除工作区路径(只处理结构,不写正文)",
       execute: async (input, context) => {
         const action = normalizePathAction(input.action);
         if (action === "create_folder") {
@@ -207,6 +228,13 @@ export function createWorkspaceStructureTools({
           return ok(`已迁移到 ${toDisplayPath(displayPath, movedPath)}`);
         }
 
+        if (action === "delete") {
+          const path = ensureString(input.path, "workspace_path.path");
+          await deleteWorkspaceEntry(bookId, path, getAbortContext(context));
+          await onWorkspaceMutated?.();
+          return ok(`已删除 ${toDisplayPath(displayPath, path)}`);
+        }
+
         const renamedPath = await renameWorkspaceEntry(
           bookId,
           ensureString(input.path, "workspace_path.path"),
@@ -215,15 +243,6 @@ export function createWorkspaceStructureTools({
         );
         await onWorkspaceMutated?.();
         return ok(`已重命名为 ${toDisplayPath(displayPath, renamedPath)}`);
-      },
-    },
-    workspace_delete: {
-      description: "删除工作区文件或文件夹",
-      execute: async (input, context) => {
-        const path = ensureString(input.path, "workspace_delete.path");
-        await deleteWorkspaceEntry(bookId, path, getAbortContext(context));
-        await onWorkspaceMutated?.();
-        return ok(`已删除 ${toDisplayPath(displayPath, path)}`);
       },
     },
   };

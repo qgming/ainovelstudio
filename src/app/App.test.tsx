@@ -515,7 +515,7 @@ describe("App shell", () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith("export_book_zip", {
-        rootPath,
+        bookId,
       });
     });
 
@@ -551,7 +551,7 @@ describe("App shell", () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith("delete_book_workspace", {
-        rootPath,
+        bookId,
       });
     });
 

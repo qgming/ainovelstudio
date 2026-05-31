@@ -88,6 +88,7 @@ pub fn run() {
             domains::book_workspace::commands::write_text_file,
             domains::book_workspace::commands::edit_text_file,
             domains::book_workspace::commands::search_workspace_content,
+            domains::book_workspace::commands::grep_workspace_content,
             domains::book_workspace::commands::read_text_file_line,
             domains::book_workspace::commands::replace_text_file_line,
             domains::book_workspace::commands::create_book_workspace,

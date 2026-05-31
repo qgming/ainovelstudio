@@ -49,6 +49,23 @@ export type WorkspaceSearchResult = {
   truncated: boolean;
 };
 
+export type WorkspaceGrepMatch = {
+  path: string;
+  lineNumber: number;
+  line: string;
+  before: string[];
+  after: string[];
+};
+
+export type WorkspaceGrepResult = {
+  pattern: string;
+  isRegex: boolean;
+  caseSensitive: boolean;
+  matches: WorkspaceGrepMatch[];
+  total: number;
+  truncated: boolean;
+};
+
 export type WorkspaceLineResult = {
   lineNumber: number;
   path: string;

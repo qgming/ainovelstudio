@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   BookWorkspaceSummary,
   TreeNode,
+  WorkspaceGrepResult,
   WorkspaceLineResult,
   WorkspaceRelation,
   WorkspaceSearchIntent,
@@ -235,6 +236,30 @@ export function searchWorkspaceContent(
     bookId,
     scope: options?.scope,
     tokenBudget: options?.tokenBudget,
+  }, options);
+}
+
+export type GrepWorkspaceContentOptions = InvokeCancellationOptions & {
+  isRegex?: boolean;
+  caseSensitive?: boolean;
+  scope?: string[];
+  limit?: number;
+  contextLines?: number;
+};
+
+export function grepWorkspaceContent(
+  bookId: string,
+  pattern: string,
+  options?: GrepWorkspaceContentOptions,
+) {
+  return invokeWithCancellation<WorkspaceGrepResult>("grep_workspace_content", {
+    bookId,
+    pattern,
+    isRegex: options?.isRegex,
+    caseSensitive: options?.caseSensitive,
+    scope: options?.scope,
+    limit: options?.limit,
+    contextLines: options?.contextLines,
   }, options);
 }
 

@@ -4,11 +4,15 @@ const {
   mockCreateAgent,
   mockCreateSkill,
   mockCreateSkillReferenceFile,
+  mockCreateEntryRelation,
   mockCreateWorkspaceDirectory,
   mockCreateWorkspaceTextFile,
+  mockDeleteEntryRelation,
   mockDeleteInstalledAgent,
   mockDeleteInstalledSkill,
   mockDeleteWorkspaceEntry,
+  mockGrepWorkspaceContent,
+  mockListEntryRelations,
   mockMoveWorkspaceEntry,
   mockReadAgentFileContent,
   mockReadSkillFileContent,
@@ -19,6 +23,7 @@ const {
   mockScanInstalledSkills,
   mockSearchWorkspaceContent,
   mockForwardProviderRequestViaTauri,
+  mockUpdateEntryRelation,
   mockWriteAgentFileContent,
   mockWriteSkillFileContent,
   mockWriteWorkspaceTextFile,
@@ -26,11 +31,15 @@ const {
   mockCreateAgent: vi.fn(),
   mockCreateSkill: vi.fn(),
   mockCreateSkillReferenceFile: vi.fn(),
+  mockCreateEntryRelation: vi.fn(),
   mockCreateWorkspaceDirectory: vi.fn(),
   mockCreateWorkspaceTextFile: vi.fn(),
+  mockDeleteEntryRelation: vi.fn(),
   mockDeleteInstalledAgent: vi.fn(),
   mockDeleteInstalledSkill: vi.fn(),
   mockDeleteWorkspaceEntry: vi.fn(),
+  mockGrepWorkspaceContent: vi.fn(),
+  mockListEntryRelations: vi.fn(),
   mockMoveWorkspaceEntry: vi.fn(),
   mockReadAgentFileContent: vi.fn(),
   mockReadSkillFileContent: vi.fn(),
@@ -41,20 +50,26 @@ const {
   mockScanInstalledSkills: vi.fn(),
   mockSearchWorkspaceContent: vi.fn(),
   mockForwardProviderRequestViaTauri: vi.fn(),
+  mockUpdateEntryRelation: vi.fn(),
   mockWriteAgentFileContent: vi.fn(),
   mockWriteSkillFileContent: vi.fn(),
   mockWriteWorkspaceTextFile: vi.fn(),
 }));
 
 vi.mock("@features/books/api/bookWorkspaceApi", () => ({
+  createEntryRelation: mockCreateEntryRelation,
   createWorkspaceDirectory: mockCreateWorkspaceDirectory,
   createWorkspaceTextFile: mockCreateWorkspaceTextFile,
+  deleteEntryRelation: mockDeleteEntryRelation,
   deleteWorkspaceEntry: mockDeleteWorkspaceEntry,
+  grepWorkspaceContent: mockGrepWorkspaceContent,
+  listEntryRelations: mockListEntryRelations,
   moveWorkspaceEntry: mockMoveWorkspaceEntry,
   readWorkspaceTextFile: mockReadWorkspaceTextFile,
   readWorkspaceTree: mockReadWorkspaceTree,
   renameWorkspaceEntry: mockRenameWorkspaceEntry,
   searchWorkspaceContent: mockSearchWorkspaceContent,
+  updateEntryRelation: mockUpdateEntryRelation,
   writeWorkspaceTextFile: mockWriteWorkspaceTextFile,
 }));
 
@@ -1291,6 +1306,88 @@ describe("createWorkspaceToolset", () => {
       ok: true,
       summary: "已迁移到 归档/第一卷/第001章.md",
     });
+  });
+
+  it("workspace_path 支持 action=delete 删除文件", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockDeleteWorkspaceEntry.mockResolvedValue(undefined);
+
+    const result = await toolset.workspace_path.execute({
+      action: "delete",
+      path: "草稿/废弃.md",
+    });
+
+    expect(mockDeleteWorkspaceEntry).toHaveBeenCalledWith(rootPath, "草稿/废弃.md", undefined);
+    expect(onWorkspaceMutated).toHaveBeenCalled();
+    expect(result).toEqual({ ok: true, summary: "已删除 草稿/废弃.md" });
+  });
+
+  it("workspace_grep 按字面量匹配返回命中行摘要", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
+    mockGrepWorkspaceContent.mockResolvedValue({
+      pattern: "沈砚",
+      isRegex: false,
+      caseSensitive: false,
+      matches: [
+        { path: "正文/第001章.md", lineNumber: 1, line: "沈砚推门而入。", before: [], after: [] },
+      ],
+      total: 1,
+      truncated: false,
+    });
+
+    const result = await toolset.workspace_grep.execute({ pattern: "沈砚" });
+
+    expect(mockGrepWorkspaceContent).toHaveBeenCalledWith(
+      rootPath,
+      "沈砚",
+      expect.objectContaining({ isRegex: false, caseSensitive: false }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.summary).toContain("正文/第001章.md:1");
+    expect(result.data).toMatchObject({ total: 1, truncated: false });
+  });
+
+  it("workspace_relation 按 action 分发 create 与 list", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockCreateEntryRelation.mockResolvedValue({
+      id: "rel-1",
+      entryAPath: "设定/人物.md",
+      entryBPath: "正文/第001章.md",
+      relationship: "出场人物",
+      note: null,
+    });
+    mockListEntryRelations.mockResolvedValue([
+      {
+        id: "rel-1",
+        entryAPath: "设定/人物.md",
+        entryBPath: "正文/第001章.md",
+        relationship: "出场人物",
+        note: null,
+      },
+    ]);
+
+    const created = await toolset.workspace_relation.execute({
+      action: "create",
+      pathA: "设定/人物.md",
+      pathB: "正文/第001章.md",
+      relationship: "出场人物",
+    });
+    expect(mockCreateEntryRelation).toHaveBeenCalled();
+    expect(created.ok).toBe(true);
+    expect(created.summary).toContain("出场人物");
+
+    const listed = await toolset.workspace_relation.execute({
+      action: "list",
+      path: "设定/人物.md",
+    });
+    expect(mockListEntryRelations).toHaveBeenCalledWith(rootPath, "设定/人物.md");
+    expect(listed.ok).toBe(true);
+    expect(listed.data).toMatchObject({ relations: [{ id: "rel-1", relationship: "出场人物" }] });
   });
 });
 

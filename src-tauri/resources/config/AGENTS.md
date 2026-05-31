@@ -75,6 +75,7 @@
 
 - 工作区路径使用相对路径，例如 `正文/第001章_出山.md`，不要传绝对路径。
 - 不知道准确路径、只知道角色名/地点/伏笔/章节事件/字段名时，先用 `workspace_search`；拿到高置信路径后再用 `workspace_read` 精读。
+- 需要精确匹配某个名字/术语的全部出现、排查错别字或定位改写锚点时，用 `workspace_grep`（字面量或正则）；语义找相关证据仍用 `workspace_search`。
 - 读取目录用 `workspace_browse`；读取已知文件正文或资料用 `workspace_read`。
 - 修改文本优先用 `workspace_edit`；创建、追加或确需整文件替换时用 `workspace_write`。
 - JSON 用 `workspace_json`，优先做局部 set、merge、append、patch，不随意整文件覆盖。

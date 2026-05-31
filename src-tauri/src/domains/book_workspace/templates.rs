@@ -56,7 +56,7 @@ pub(crate) fn create_project_agents_template(book_name: &str) -> String {
 - `设定 ↔ 设定`(标签如"引用设定")
 
 维护方式:
-- AI 工具:`workspace_relation_list/create/update/delete`。
+- AI 工具:`workspace_relation`(action=list/create/update/delete)。
 - 手动:文件树点击文件行的关联图标(链接形状),弹出面板可新增/编辑/删除关联,也能跳转到对端文件。
 
 约定:标签写人话,优先复用本书已有标签;只改备注用 update,不要为重命名标签频繁删建。

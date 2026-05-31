@@ -1084,6 +1084,171 @@ pub(crate) fn search_workspace_content_db(
     })
 }
 
+// ============ grep：精确字面量/正则内容匹配 ============
+
+const DEFAULT_GREP_LIMIT: usize = 50;
+const MAX_GREP_LIMIT: usize = 500;
+const MAX_GREP_CONTEXT_LINES: usize = 10;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceGrepMatch {
+    pub(crate) path: String,
+    pub(crate) line_number: usize,
+    pub(crate) line: String,
+    pub(crate) before: Vec<String>,
+    pub(crate) after: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceGrepResult {
+    pub(crate) pattern: String,
+    pub(crate) is_regex: bool,
+    pub(crate) case_sensitive: bool,
+    pub(crate) matches: Vec<WorkspaceGrepMatch>,
+    pub(crate) total: usize,
+    pub(crate) truncated: bool,
+}
+
+/// 行匹配器：字面量子串或编译后的正则，统一 is_match 接口。
+enum LineMatcher {
+    Literal { needle: String, case_sensitive: bool },
+    Regex(regex::Regex),
+}
+
+impl LineMatcher {
+    fn is_match(&self, line: &str) -> bool {
+        match self {
+            LineMatcher::Literal {
+                needle,
+                case_sensitive,
+            } => {
+                if *case_sensitive {
+                    line.contains(needle)
+                } else {
+                    line.to_lowercase().contains(needle)
+                }
+            }
+            LineMatcher::Regex(re) => re.is_match(line),
+        }
+    }
+}
+
+fn build_grep_matcher(
+    pattern: &str,
+    is_regex: bool,
+    case_sensitive: bool,
+) -> CommandResult<LineMatcher> {
+    if is_regex {
+        // case_sensitive=false 时用 (?i) 内联标志开启忽略大小写。
+        let source = if case_sensitive {
+            pattern.to_string()
+        } else {
+            format!("(?i){pattern}")
+        };
+        let re = regex::Regex::new(&source)
+            .map_err(|error| format!("正则表达式无效：{error}"))?;
+        Ok(LineMatcher::Regex(re))
+    } else {
+        // 字面量匹配：忽略大小写时统一转小写比较（needle 先转）。
+        let needle = if case_sensitive {
+            pattern.to_string()
+        } else {
+            pattern.to_lowercase()
+        };
+        Ok(LineMatcher::Literal {
+            needle,
+            case_sensitive,
+        })
+    }
+}
+
+pub(crate) fn grep_workspace_content_db(
+    store: &WorkspaceStore,
+    book_id: &str,
+    pattern: &str,
+    is_regex: Option<bool>,
+    case_sensitive: Option<bool>,
+    scope: Option<Vec<String>>,
+    limit: Option<usize>,
+    context_lines: Option<usize>,
+    registry: &ToolCancellationRegistry,
+    request_id: Option<&str>,
+) -> CommandResult<WorkspaceGrepResult> {
+    let trimmed = pattern.trim();
+    if trimmed.is_empty() {
+        return Err("grep 检索模式不能为空。".into());
+    }
+    // 由 book_id 取书，确保书存在（与 search 一致）。
+    let book = load_book_by_id(store, book_id)?;
+    check_cancellation(registry, request_id)?;
+
+    let is_regex = is_regex.unwrap_or(false);
+    let case_sensitive = case_sensitive.unwrap_or(false);
+    let normalized_scope = normalize_scope(scope);
+    let normalized_limit = limit.unwrap_or(DEFAULT_GREP_LIMIT).clamp(1, MAX_GREP_LIMIT);
+    let context = context_lines.unwrap_or(0).min(MAX_GREP_CONTEXT_LINES);
+    let matcher = build_grep_matcher(trimmed, is_regex, case_sensitive)?;
+
+    let mut matches: Vec<WorkspaceGrepMatch> = Vec::new();
+    let mut total = 0usize;
+    let mut truncated = false;
+
+    // 遍历书内全部文件（路径升序）。仅文件、命中 scope、可解码为文本者参与匹配。
+    for entry in store.collect_all_entries(&book.id)? {
+        if entry.kind != "file" || !is_path_in_scope(&entry.path, &normalized_scope) {
+            continue;
+        }
+        check_cancellation(registry, request_id)?;
+        // 读不到（二进制/不存在）则跳过，不阻断整体 grep。
+        let Ok(contents) = store.read_text(&book.id, &entry.path) else {
+            continue;
+        };
+        let (lines, _) = split_text_lines(&contents);
+        for (index, line) in lines.iter().enumerate() {
+            if !matcher.is_match(line) {
+                continue;
+            }
+            total += 1;
+            if matches.len() >= normalized_limit {
+                truncated = true;
+                continue;
+            }
+            let before = if context == 0 {
+                Vec::new()
+            } else {
+                lines[index.saturating_sub(context)..index]
+                    .iter()
+                    .cloned()
+                    .collect()
+            };
+            let after = if context == 0 {
+                Vec::new()
+            } else {
+                let end = (index + 1 + context).min(lines.len());
+                lines[index + 1..end].iter().cloned().collect()
+            };
+            matches.push(WorkspaceGrepMatch {
+                path: display_relative_path(&entry.path),
+                line_number: index + 1,
+                line: line.clone(),
+                before,
+                after,
+            });
+        }
+    }
+
+    Ok(WorkspaceGrepResult {
+        pattern: trimmed.to_string(),
+        is_regex,
+        case_sensitive,
+        matches,
+        total,
+        truncated,
+    })
+}
+
 trait OptionalRow<T> {
     fn optional(self) -> rusqlite::Result<Option<T>>;
 }

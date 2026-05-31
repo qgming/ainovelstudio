@@ -11,7 +11,9 @@ use crate::domains::book_workspace::relations::{
     create_relation_by_root, delete_relation_by_root, list_book_relations_by_root,
     list_entry_relations_by_root, update_relation_by_root,
 };
-use crate::domains::book_workspace::search::search_workspace_content_db;
+use crate::domains::book_workspace::search::{
+    grep_workspace_content_db, search_workspace_content_db,
+};
 use crate::domains::book_workspace::templates::create_book_workspace_db;
 use crate::domains::book_workspace::tree::read_workspace_tree_db;
 use std::io::{Cursor, Write};
@@ -256,6 +258,164 @@ fn workspace_search_returns_agent_context_chunks() {
     assert!(hit.preview.contains("沈砚是黑钟持有者"));
     assert!(hit.matched_terms.iter().any(|term| term == "沈砚"));
     assert!(!result.suggested_reads.is_empty());
+}
+
+/// grep 字面量匹配：跨文件命中、返回相对路径与正确行号、scope 限定、上下文行。
+#[test]
+fn grep_workspace_content_matches_literal() {
+    let TestStore { store, _dir } = create_store();
+    let book = create_book(&store, "字面之书");
+    write_text_file_db(
+        &store,
+        &book.id,
+        "books/字面之书/设定/人物.md",
+        "# 沈砚\n沈砚是黑钟持有者。\n他在雪夜第一次听见钟声。",
+    )
+    .expect("file should be written");
+    write_text_file_db(
+        &store,
+        &book.id,
+        "books/字面之书/正文/第001章.md",
+        "沈砚推门而入。\n屋内空无一人。",
+    )
+    .expect("file should be written");
+
+    let registry = ToolCancellationRegistry::default();
+    let result = grep_workspace_content_db(
+        &store,
+        &book.id,
+        "沈砚",
+        Some(false),
+        Some(false),
+        None,
+        Some(50),
+        Some(1),
+        &registry,
+        None,
+    )
+    .expect("grep should run");
+
+    // 设定/人物.md 第 1、2 行 + 正文/第001章.md 第 1 行，共 3 处。
+    assert_eq!(result.total, 3);
+    assert_eq!(result.matches.len(), 3);
+    assert!(!result.truncated);
+    let first = result
+        .matches
+        .iter()
+        .find(|m| m.path == "正文/第001章.md")
+        .expect("正文命中应存在");
+    assert_eq!(first.line_number, 1);
+    assert_eq!(first.line, "沈砚推门而入。");
+    assert_eq!(first.after, vec!["屋内空无一人。".to_string()]);
+}
+
+/// grep 正则匹配 + scope 限定：只在指定子树内按正则匹配。
+#[test]
+fn grep_workspace_content_matches_regex_with_scope() {
+    let TestStore { store, _dir } = create_store();
+    let book = create_book(&store, "正则之书");
+    write_text_file_db(
+        &store,
+        &book.id,
+        "books/正则之书/设定/势力.md",
+        "黑钟教\n白塔会\n青羽盟",
+    )
+    .expect("file should be written");
+    write_text_file_db(
+        &store,
+        &book.id,
+        "books/正则之书/正文/第001章.md",
+        "黑钟教来犯。",
+    )
+    .expect("file should be written");
+
+    let registry = ToolCancellationRegistry::default();
+    // 限定 scope=设定，正则匹配「以『黑』或『白』开头的行」。
+    let result = grep_workspace_content_db(
+        &store,
+        &book.id,
+        "^[黑白]",
+        Some(true),
+        Some(false),
+        Some(vec!["设定".into()]),
+        Some(50),
+        Some(0),
+        &registry,
+        None,
+    )
+    .expect("grep should run");
+
+    assert_eq!(result.total, 2);
+    assert!(result.matches.iter().all(|m| m.path == "设定/势力.md"));
+    assert!(result.matches.iter().any(|m| m.line == "黑钟教"));
+    assert!(result.matches.iter().any(|m| m.line == "白塔会"));
+}
+
+/// grep 不命中返回空、limit 截断置 truncated、无效正则报错。
+#[test]
+fn grep_workspace_content_handles_empty_limit_and_invalid_regex() {
+    let TestStore { store, _dir } = create_store();
+    let book = create_book(&store, "边界之书");
+    write_text_file_db(
+        &store,
+        &book.id,
+        "books/边界之书/正文/第001章.md",
+        "甲\n甲\n甲\n乙",
+    )
+    .expect("file should be written");
+
+    let registry = ToolCancellationRegistry::default();
+
+    // 不命中。
+    let miss = grep_workspace_content_db(
+        &store,
+        &book.id,
+        "丙",
+        Some(false),
+        Some(false),
+        None,
+        Some(50),
+        Some(0),
+        &registry,
+        None,
+    )
+    .expect("grep should run");
+    assert_eq!(miss.total, 0);
+    assert!(miss.matches.is_empty());
+    assert!(!miss.truncated);
+
+    // limit=2：3 处「甲」中只返回 2，total=3，truncated=true。
+    let limited = grep_workspace_content_db(
+        &store,
+        &book.id,
+        "甲",
+        Some(false),
+        Some(false),
+        None,
+        Some(2),
+        Some(0),
+        &registry,
+        None,
+    )
+    .expect("grep should run");
+    assert_eq!(limited.total, 3);
+    assert_eq!(limited.matches.len(), 2);
+    assert!(limited.truncated);
+
+    // 无效正则报错。
+    let err = grep_workspace_content_db(
+        &store,
+        &book.id,
+        "[unclosed",
+        Some(true),
+        Some(false),
+        None,
+        Some(50),
+        Some(0),
+        &registry,
+        None,
+    );
+    assert!(err.is_err());
 }
 
 /// 子树增量重建：rename/move/delete 后，搜索索引只跟随被操作的子树变化。

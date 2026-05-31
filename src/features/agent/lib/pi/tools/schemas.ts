@@ -284,6 +284,38 @@ const wordCountInputSchema: TSchema = Type.Object({
   ),
 });
 
+const grepInputSchema: TSchema = Type.Object({
+  pattern: Type.String({
+    minLength: 1,
+    description: "要精确匹配的文本。isRegex=false 时按字面量子串匹配；isRegex=true 时按正则匹配。",
+  }),
+  isRegex: Type.Optional(
+    Type.Boolean({ description: "是否按正则匹配，默认 false（字面量）。需要 ^$、字符类、量词等才传 true。" }),
+  ),
+  caseSensitive: Type.Optional(
+    Type.Boolean({ description: "是否区分大小写，默认 false。中文通常不填；英文标识符大小写重要时传 true。" }),
+  ),
+  scope: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "可选的相对路径范围列表（如 ['正文', '设定']）限定搜索；不传则搜全书。不要传绝对路径。",
+    }),
+  ),
+  limit: Type.Optional(
+    Type.Integer({
+      minimum: 1,
+      maximum: 500,
+      description: "最多返回多少条匹配行，默认 50，最大 500。命中超过会截断并标记 truncated。",
+    }),
+  ),
+  contextLines: Type.Optional(
+    Type.Integer({
+      minimum: 0,
+      maximum: 10,
+      description: "每条命中额外返回的前后上下文行数，默认 0；定位锚点改写时可传 1-3。",
+    }),
+  ),
+});
+
 export const READ_TOOL_SPECS: Record<string, PiToolSpec> = {
   leaderboard: {
     description:
@@ -304,6 +336,11 @@ export const READ_TOOL_SPECS: Record<string, PiToolSpec> = {
     description:
       "读取工作区文本文件。已知准确路径时使用；未知路径先 browse/search。大文件不要直接 full，优先 head/tail/range/anchor_range/heading_range。",
     parameters: readInputSchema,
+  },
+  workspace_grep: {
+    description:
+      "按字面量或正则精确匹配工作区文件内容，返回命中的文件、行号和该行文本(可带前后上下文)。找某角色名/术语的所有出现、查错别字、定位改写锚点时用它；模糊语义检索(找相关设定/伏笔)用 workspace_search。",
+    parameters: grepInputSchema,
   },
   text_stats: {
     description:
@@ -437,16 +474,20 @@ const jsonInputSchema: TSchema = Type.Object({
 });
 
 const pathInputSchema: TSchema = Type.Object({
-  action: Type.Union([Type.Literal("create_folder"), Type.Literal("move"), Type.Literal("rename")], {
-    description: "路径动作。create_folder 需要 parentPath+name；rename 需要 path+name；move 需要 path+targetParentPath。",
-  }),
+  action: Type.Union(
+    [Type.Literal("create_folder"), Type.Literal("move"), Type.Literal("rename"), Type.Literal("delete")],
+    {
+      description:
+        "路径动作。create_folder 需要 parentPath+name；rename 需要 path+name；move 需要 path+targetParentPath；delete 删除 path 指向的文件或文件夹(高风险，通常仅用户明确要求时用)。",
+    },
+  ),
   name: Type.Optional(
     Type.String({ description: "create_folder/rename 使用的新名称，只写文件夹名或文件名，不要带父路径。" }),
   ),
   parentPath: Type.Optional(
     Type.String({ description: "create_folder 使用的父目录相对路径；根目录可传空字符串或不填。" }),
   ),
-  path: Type.Optional(Type.String({ description: "rename/move 使用的现有目标相对路径。删除请使用 workspace_delete。" })),
+  path: Type.Optional(Type.String({ description: "rename/move/delete 使用的现有目标相对路径。" })),
   targetParentPath: Type.Optional(Type.String({ description: "仅 move 使用。移动到的目标父目录相对路径。" })),
 });
 
@@ -485,29 +526,39 @@ const skillManageInputSchema: TSchema = Type.Object({
   skillId: Type.Optional(Type.String({ description: "管理动作通常都需要 skillId；先 list 获取准确 id。" })),
 });
 
-const relationListInputSchema: TSchema = Type.Object({
-  path: Type.String({ description: "要查看关联的工作区文件相对路径,不要传绝对路径。" }),
-});
-
-const relationCreateInputSchema: TSchema = Type.Object({
-  pathA: Type.String({ description: "第一个文件的相对路径。" }),
-  pathB: Type.String({ description: "第二个文件的相对路径。两者不能是同一文件,且必须已存在。" }),
-  relationship: Type.String({ description: '关系标签,自定义字符串(如"出场人物"、"涉及势力"、"引用设定"、"前置剧情")。' }),
-  note: Type.Optional(Type.String({ description: '一行可选备注,例如"本章主角"或"后文将揭示的伏笔"。' })),
-});
-
-const relationUpdateInputSchema: TSchema = Type.Object({
-  relationId: Type.String({ description: "要更新的关联 ID,通过 workspace_relation_list 获取。" }),
-  relationship: Type.Optional(Type.String({ description: "新的关系标签;不填则保持原标签。" })),
-  note: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "新的备注;传 null 表示清空备注;不填则保持原备注。" })),
-});
-
-const relationDeleteInputSchema: TSchema = Type.Object({
-  relationId: Type.String({ description: "要删除的关联 ID,通过 workspace_relation_list 获取。" }),
-});
-
-const deleteInputSchema: TSchema = Type.Object({
-  path: Type.String({ description: "要删除的工作区相对路径，不要传绝对路径。" }),
+const relationInputSchema: TSchema = Type.Object({
+  action: Type.Optional(
+    Type.Union(
+      [Type.Literal("list"), Type.Literal("create"), Type.Literal("update"), Type.Literal("delete")],
+      {
+        default: "list",
+        description:
+          "关联动作。list=列出某文件全部关联(需 path)；create=在两文件间建关联(需 pathA/pathB/relationship)；update=改关系标签或备注(需 relationId)；delete=删一条关联边(需 relationId)。",
+      },
+    ),
+  ),
+  path: Type.Optional(
+    Type.String({ description: "仅 action=list 使用。要查看关联的工作区文件相对路径,不要传绝对路径。" }),
+  ),
+  pathA: Type.Optional(Type.String({ description: "仅 action=create 使用。第一个文件的相对路径。" })),
+  pathB: Type.Optional(
+    Type.String({ description: "仅 action=create 使用。第二个文件的相对路径。两者不能是同一文件,且必须已存在。" }),
+  ),
+  relationship: Type.Optional(
+    Type.String({
+      description:
+        'create 必填、update 可选的关系标签,自定义字符串(如"出场人物"、"涉及势力"、"引用设定"、"前置剧情")。update 不填则保持原标签。',
+    }),
+  ),
+  note: Type.Optional(
+    Type.Union([Type.String(), Type.Null()], {
+      description:
+        'create/update 的一行可选备注(如"本章主角")。update 传 null 表示清空备注,不填则保持原备注。',
+    }),
+  ),
+  relationId: Type.Optional(
+    Type.String({ description: "update/delete 必填。要操作的关联 ID,通过 action=list 获取。" }),
+  ),
 });
 
 export const DATA_TOOL_SPECS: Record<string, PiToolSpec> = {
@@ -518,7 +569,7 @@ export const DATA_TOOL_SPECS: Record<string, PiToolSpec> = {
   },
   workspace_path: {
     description:
-      "只处理路径结构，不写正文内容。创建文件夹、重命名、移动用它；删除另拆为独立高风险工具。写作场景创建空白文本文件优先用 workspace_write，写文本用 workspace_edit / workspace_write，写 JSON 内容用 workspace_json。",
+      "只处理路径结构，不写正文内容。创建文件夹、重命名、移动、删除路径用它(删除走 action=delete，高风险)。写作场景创建空白文本文件优先用 workspace_write，写文本用 workspace_edit / workspace_write，写 JSON 内容用 workspace_json。",
     parameters: pathInputSchema,
   },
   skill_read: {
@@ -530,28 +581,10 @@ export const DATA_TOOL_SPECS: Record<string, PiToolSpec> = {
       "管理本地 skill。用户要求创建或修改技能时用 create/create_reference/write/delete 落盘。write 写的是技能文件完整内容，不是补丁片段。",
     parameters: skillManageInputSchema,
   },
-  workspace_delete: {
-    description: "删除工作区文件或文件夹。",
-    parameters: deleteInputSchema,
-  },
-  workspace_relation_list: {
+  workspace_relation: {
     description:
-      "列出某个工作区文件的全部关联(无向多对多)。返回每条关联的 id、对端路径、关系标签和备注;先用它再决定要不要 read 对端。",
-    parameters: relationListInputSchema,
-  },
-  workspace_relation_create: {
-    description:
-      "在两个工作区文件之间创建一条关联(无向)。同一对文件可以有多条不同 relationship 的关联;若想避免重复,先用 workspace_relation_list 查 pathA 的现有关联。",
-    parameters: relationCreateInputSchema,
-  },
-  workspace_relation_update: {
-    description:
-      "修改一条已有关联的关系标签或备注。relationId 通过 workspace_relation_list 获取;note 传 null 表示清空,不填则保持原值。",
-    parameters: relationUpdateInputSchema,
-  },
-  workspace_relation_delete: {
-    description: "删除一条关联(不影响文件本身)。relationId 通过 workspace_relation_list 获取。",
-    parameters: relationDeleteInputSchema,
+      "管理工作区文件之间的关联(无向多对多)。action=list 列出某文件全部关联(返回 id/对端路径/关系标签/备注)；create 在两文件间建关联(同一对文件可有多条不同 relationship)；update 改标签或备注；delete 删一条边(不影响文件)。改 relationId 类操作前先 list 取 id。",
+    parameters: relationInputSchema,
   },
 };
 
@@ -728,7 +761,7 @@ export const INTERACTION_TOOL_SPECS: Record<string, PiToolSpec> = {
   },
   workspace_search: {
     description:
-      "检索工作区事实源和正文证据，返回可直接用于推理的上下文片段。未知路径、缺人物/设定/伏笔/章节/状态证据、需要定位 JSON 字段或编辑锚点时优先使用；编辑前继续用 read 精读最高置信路径。",
+      "语义检索工作区事实源和正文证据，返回可直接用于推理的上下文片段。未知路径、缺人物/设定/伏笔/章节/状态证据、需要定位 JSON 字段或编辑锚点时优先使用；要精确字面量/正则匹配(找某名字所有出现、查错别字)用 workspace_grep；编辑前继续用 read 精读最高置信路径。",
     parameters: searchInputSchema,
   },
 };

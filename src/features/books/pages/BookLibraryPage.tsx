@@ -325,7 +325,7 @@ export function BookLibraryPage({ updateAction }: { updateAction?: BookLibraryUp
                   })}
               </div>
             ) : (
-              <div className="editor-empty-state min-h-[320px]">
+              <div className="flex h-full min-h-[320px] items-center justify-center px-8 text-center">
                 <div className="max-w-xl">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md border border-border bg-panel-subtle text-primary">
                     <BookOpenText className="h-7 w-7" />

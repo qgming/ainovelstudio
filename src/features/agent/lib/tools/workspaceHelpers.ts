@@ -1,4 +1,4 @@
-import type { TreeNode, WorkspaceSearchResult } from "@features/books/types";
+import type { TreeNode, WorkspaceGrepResult, WorkspaceSearchResult } from "@features/books/types";
 import {
   ensureString,
   toDisplayPath,
@@ -21,7 +21,7 @@ export type EditAction =
   | "replace_heading_range"
   | "replace_lines"
   | "replace";
-export type PathAction = "create_folder" | "move" | "rename";
+export type PathAction = "create_folder" | "move" | "rename" | "delete";
 
 export function splitTextLines(contents: string) {
   const normalized = contents.replace(/\r\n/g, "\n");
@@ -58,6 +58,21 @@ export function formatSearchSummary(
       const title = hit.sectionTitle ? ` · ${hit.sectionTitle}` : "";
       return `- ${hit.path}:${hit.startLine}-${hit.endLine} [${hit.sourceKind}${title}] ${hit.reason}`;
     }),
+  ].join("\n");
+}
+
+export function formatGrepSummary(result: WorkspaceGrepResult) {
+  if (result.matches.length === 0) {
+    return `未匹配到“${result.pattern}”。`;
+  }
+
+  const mode = result.isRegex ? "正则" : "字面量";
+  const truncation = result.truncated
+    ? `（已截断，实际命中 ${result.total} 处）`
+    : "";
+  return [
+    `${mode}匹配“${result.pattern}”命中 ${result.matches.length} 处${truncation}：`,
+    ...result.matches.map((match) => `- ${match.path}:${match.lineNumber} ${match.line.trim()}`),
   ].join("\n");
 }
 
@@ -158,7 +173,7 @@ export function normalizeEditAction(value: unknown): EditAction {
 }
 
 export function normalizePathAction(value: unknown): PathAction {
-  if (value === "create_folder" || value === "move") {
+  if (value === "create_folder" || value === "move" || value === "delete") {
     return value;
   }
   return "rename";

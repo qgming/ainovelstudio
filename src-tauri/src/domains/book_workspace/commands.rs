@@ -16,7 +16,10 @@ use crate::domains::book_workspace::relations::{
     create_relation_by_root, delete_relation_by_root, list_book_relations_by_root,
     list_entry_relations_by_root, update_relation_by_root, RelationDto,
 };
-use crate::domains::book_workspace::search::{search_workspace_content_db, WorkspaceSearchResult};
+use crate::domains::book_workspace::search::{
+    grep_workspace_content_db, search_workspace_content_db, WorkspaceGrepResult,
+    WorkspaceSearchResult,
+};
 use crate::domains::book_workspace::session_store::{
     session_append_db, session_create_dir_db, session_exists_db, session_list_dir_db,
     session_read_db, session_remove_db, session_write_db, SessionEntry,
@@ -324,6 +327,38 @@ pub fn search_workspace_content(
             scope,
             tokenBudget,
             includeAdjacent,
+            &registry,
+            requestId.as_deref(),
+        )
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+#[allow(clippy::too_many_arguments)]
+pub fn grep_workspace_content(
+    app: AppHandle,
+    bookId: String,
+    pattern: String,
+    isRegex: Option<bool>,
+    caseSensitive: Option<bool>,
+    scope: Option<Vec<String>>,
+    limit: Option<usize>,
+    contextLines: Option<usize>,
+    requestId: Option<String>,
+    registry: State<'_, ToolCancellationRegistry>,
+) -> CommandResult<WorkspaceGrepResult> {
+    with_cancellable_request(&registry, requestId.as_deref(), || {
+        let store = store(&app)?;
+        grep_workspace_content_db(
+            &store,
+            &bookId,
+            &pattern,
+            isRegex,
+            caseSensitive,
+            scope,
+            limit,
+            contextLines,
             &registry,
             requestId.as_deref(),
         )
