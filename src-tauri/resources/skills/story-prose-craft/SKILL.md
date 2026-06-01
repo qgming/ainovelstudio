@@ -4,6 +4,8 @@ description: |
   网文正文的写作技法手册。锁定视角、用动作承载画面、对话像人话、节奏有呼吸、标点干净、保留人设味——把"怎么把这一段写得像人写的"落成可执行规则。
   Use when: 写正文 / 续写 / 扩写 / 改写某段，或正文读着像 AI、视角混乱、对话僵硬、节奏平淡时调用。
   触发方式：/story-prose-craft、/正文规则、「怎么写正文」「这段读着像 AI」「对话太假」
+metadata:
+  displayName: 正文笔法
 ---
 
 # story-prose-craft
@@ -81,14 +83,14 @@ description: |
 ### 6. 节奏有呼吸
 
 - 日常叙事可以用长句铺气氛，关键处用短句发力。
+- 句长要有方差：避免一段里每句字数都差不多、匀速平铺（那是 AI 节奏）；故意混入 1-3 字短句制造跳跃。
 - 高潮可以连续短句三连击，但不要一直短句到底，之后要接长句缓冲。
 - 章节结尾要给读者继续读的理由：问题、反转、代价、危险、选择或情绪未结。
 
 ### 7. 不写 AI 套话
 
-- 出现即换：空气仿佛凝固了、命运的齿轮开始转动、他嘴角勾起一抹冷笑、周围人都倒吸一口凉气、这一刻他宛如神祇。
-- 换成动作、声音、直接反应。
-- 完整禁用词与句式表见 Reference Map 的 `banned-words.md`，写完一段对照自查。
+- 落笔时就避开套话：空气仿佛凝固了、命运的齿轮开始转动、嘴角勾起一抹冷笑、倒吸一口凉气、这一刻他宛如神祇——出现即换成动作、声音、直接反应。
+- 这是"写时预防"；成稿后的系统清理（禁用词表、句式、节奏指纹）交给 `story-deslop`，本条不展开词表。
 
 示例：
 
@@ -121,9 +123,10 @@ description: |
 
 ## Reference Map
 
-使用 `skill_read({ action: "read", skillId, relativePath })` 读取。禁用词与去 AI 味流程复用 `story-deslop`，需切换 `skillId`。
+使用 `skill_read({ action: "read", skillId, relativePath })` 读取。禁用词、句式与节奏指纹的系统清理复用 `story-deslop`，需切换 `skillId`。
 
 | 场景 | skillId | relativePath | 读取时机 | 重点 |
 |---|---|---|---|---|
-| 完整 AI 味禁用词与句式表 | `story-deslop` | `references/banned-words.md` | 写完一段自查、批量替换 | 一级 / 二级禁用词、句式模板、替换策略 |
+| 完整 AI 味禁用词与句式表 | `story-deslop` | `references/banned-words.md` | 写完一段自查、批量替换 | 一级 / 二级禁用词、句式模板、通用 AI 习语 |
+| 节奏指纹自查 | `story-deslop` | `references/rhythm-fingerprint.md` | 句长太匀、爱总结抒情、读着像 AI | 句长方差、段落均匀度、突发性 |
 | 去 AI 味三遍法与改写流程 | `story-deslop` | `references/anti-ai-writing.md` | 成稿后整体润色、AI 味偏重 | 三遍法、预防 AI 痕迹、改写范例 |

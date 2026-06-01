@@ -1,6 +1,6 @@
 import { AlertCircle } from "lucide-react";
 import type { KeyboardEvent } from "react";
-import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
+import { skillLabel, type ResolvedSkill } from "@features/skills/stores/useSkillsStore";
 import { Switch } from "@shared/ui/switch";
 
 type SkillCardProps = {
@@ -17,6 +17,9 @@ export function SkillCard({ onOpen, onToggle, skill }: SkillCardProps) {
     }
   };
 
+  const label = skillLabel(skill);
+  const showId = label !== skill.name;
+
   return (
     <article className="editor-block-tile">
       <div
@@ -29,9 +32,12 @@ export function SkillCard({ onOpen, onToggle, skill }: SkillCardProps) {
         <div className="flex items-start justify-between gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">Skill</p>
-            <h3 className="mt-1.5 line-clamp-2 text-[15px] font-medium leading-5 text-foreground sm:mt-2 sm:text-lg sm:leading-6">{skill.name}</h3>
+            <h3 className="mt-1.5 line-clamp-2 text-[15px] font-medium leading-5 text-foreground sm:mt-2 sm:text-lg sm:leading-6">{label}</h3>
+            {showId ? (
+              <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/70">{skill.name}</p>
+            ) : null}
           </div>
-          <Switch checked={skill.enabled} label={`切换技能 ${skill.name}`} onChange={() => onToggle()} />
+          <Switch checked={skill.enabled} label={`切换技能 ${label}`} onChange={() => onToggle()} />
         </div>
 
         <p className="line-clamp-3 text-[11px] leading-5 text-muted-foreground sm:line-clamp-4 sm:text-xs">{skill.description}</p>

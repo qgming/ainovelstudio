@@ -4,6 +4,8 @@ description: |
   长篇网文拆文的执行手册。把一本对标爆款拆成可复用的结构、节奏、爽点与反转模板。
   Use when: 用户要拆爆款 / 分析对标书 / 研究黄金三章 / 剖析情绪曲线 / 整合选题简报，或拆文步骤执行任务时调用。
   触发方式：/story-long-analyze、/长篇拆文、「帮我拆这本书」「分析黄金三章」
+metadata:
+  displayName: 长篇拆书
 ---
 
 # story-long-analyze

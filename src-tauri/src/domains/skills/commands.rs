@@ -64,6 +64,8 @@ pub struct SkillManifest {
     description: String,
     discovered_at: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frontmatter: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frontmatter_raw: Option<String>,
@@ -472,6 +474,9 @@ fn build_skill_manifest_from_files(
 
     let name =
         read_string_field(frontmatter_object, "name").unwrap_or_else(|| skill_id.to_string());
+    // 中文显示名:可选,不参与校验。优先 frontmatter.displayName,其次 metadata.displayName。
+    let display_name = read_string_field(frontmatter_object, "displayName")
+        .or_else(|| read_metadata_string_field(frontmatter_object, "displayName"));
     let description = read_string_field(frontmatter_object, "description")
         .unwrap_or_else(|| extract_description_from_body(&parsed_markdown.body));
     let version = read_string_field(frontmatter_object, "version")
@@ -494,6 +499,7 @@ fn build_skill_manifest_from_files(
         default_enabled: is_builtin,
         description,
         discovered_at: current_timestamp(),
+        display_name,
         frontmatter: parsed_markdown.frontmatter,
         frontmatter_raw: parsed_markdown.frontmatter_raw,
         id: skill_id.to_string(),

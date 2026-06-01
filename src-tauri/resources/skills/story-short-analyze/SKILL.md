@@ -4,6 +4,8 @@ description: |
   短篇网文拆文的执行手册。拆解爆款短篇的叙事结构、情绪曲线、反转技巧与钩子设计。
   Use when: 用户要拆短篇 / 分析对标短篇 / 研究反转 / 剖析情绪曲线，或拆文步骤处理短篇时调用。
   触发方式：/story-short-analyze、/短篇拆文、「帮我拆这个短篇」「分析这篇故事」
+metadata:
+  displayName: 短篇拆书
 ---
 
 # story-short-analyze

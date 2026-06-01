@@ -4,6 +4,8 @@ description: |
   短篇网文扫榜的执行手册。分析知乎盐言 / 七猫 / 黑岩 / 点众等平台短篇热门数据，捕捉风口题材。
   Use when: 用户要扫短篇榜单 / 看短篇风口 / 找短篇题材 / 选题前调研，或市场侦察步骤处理短篇方向时调用。
   触发方式：/story-short-scan、/短篇扫榜、「短篇什么火」「知乎故事排行」
+metadata:
+  displayName: 短篇扫榜
 ---
 
 # story-short-scan

@@ -1,5 +1,5 @@
 import { getBaseName } from "@features/books/lib/paths";
-import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
+import { skillLabel, type ResolvedSkill } from "@features/skills/stores/useSkillsStore";
 
 export type ManualTurnContextSelection = {
   filePaths: string[];
@@ -50,7 +50,7 @@ export function resolveManualTurnContext({
         .map((skill) => ({
           description: skill.description,
           id: skill.id,
-          name: skill.name,
+          name: skillLabel(skill),
         })),
     ),
     resolveManualFiles({

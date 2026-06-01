@@ -4,6 +4,8 @@ description: |
   长篇网文写作的执行手册。覆盖长篇开书、卷纲、细纲、人物 / 世界观、章节正文与连续推进。
   Use when: 用户要开长篇 / 写长篇大纲 / 写长篇正文 / 续写章节 / 推进连载，或长篇作者步骤执行任务时调用。
   触发方式：/story-long-write、/写长篇、「帮我开书」「写大纲」「续写下一章」
+metadata:
+  displayName: 长篇写作
 ---
 
 # story-long-write
@@ -59,6 +61,8 @@ description: |
 
 ### 章节正文
 
+落笔的具体技法（视角锁定、用动作名词承载画面、对话像人话、节奏呼吸、标点干净、保留人设味）统一按 `story-prose-craft` 执行，写本章正文前先读它的 `SKILL.md`。本节只列长篇章节的结构约束：
+
 1. 开篇 200 字内进入具体场景、行动或冲突，不用天气 / 背景说明开场。
 2. 单章只押一个核心冲突，附 1-2 个推进点；每个推进点都要改变人物处境、信息差或资源状态。
 3. 对话要推动关系和冲突，避免角色把设定完整讲给读者听。
@@ -111,4 +115,5 @@ description: |
 | 差异化 | `story-long-write` | `references/micro-innovation.md` | 题材同质化 | 微创新、差异化设计 |
 | 自检 | `story-long-write` | `references/quality-checklist.md` | 写完正文、质检前 | 毒点、质量检查、常见问题 |
 | 写作状态 | `story-long-write` | `references/writer-psychology.md` | 长篇推进焦虑、日更困难 | 码字习惯、职业规划、心理建设 |
+| 正文落笔技法 | `story-prose-craft` | `SKILL.md` | 写 / 续 / 改任意正文段落前 | 视角、动作画面、对话、节奏、标点、人设味 |
 | 去 AI 味 | `story-deslop` | `references/anti-ai-writing.md` | 出稿前预防或润色前 | 三遍法、禁用句式、改写范例 |

@@ -22,6 +22,7 @@ export type SkillManifest = {
   defaultEnabled?: boolean;
   description: string;
   discoveredAt: number;
+  displayName?: string;
   frontmatter?: Record<string, unknown>;
   frontmatterRaw?: string;
   id: string;

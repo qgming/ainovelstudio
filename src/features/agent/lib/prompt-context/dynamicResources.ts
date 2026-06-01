@@ -1,4 +1,5 @@
 import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
+import { skillLabel } from "@features/skills/stores/useSkillsStore";
 import { ALL_TOOL_SPECS } from "../pi/tool-bridge/schemas";
 import type { PiToolSpec } from "../pi/tool-bridge/types";
 import { ALL_TOOL_DEFS, normalizeSuggestedToolIds } from "../domain/toolDefs";
@@ -41,8 +42,9 @@ function buildToolBlock(toolId: string) {
 function buildSkillBlock(skill: ResolvedSkill) {
   const description = readFrontmatterString(skill, "description") ?? skill.description;
   const suggestedTools = normalizeSuggestedToolIds(skill.suggestedTools);
+  // 标题优先显示中文名(displayName),便于模型理解用途;id 单列供 skill_read 调用。
   return [
-    `### 技能：${readFrontmatterString(skill, "name") ?? skill.name}`,
+    `### 技能：${skillLabel(skill)}`,
     `- id：${skill.id}`,
     `- 头部说明：${description}`,
     skill.tags.length > 0 ? `- 匹配关键词：${skill.tags.join(", ")}` : null,

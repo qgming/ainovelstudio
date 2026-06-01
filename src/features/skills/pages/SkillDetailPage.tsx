@@ -29,7 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@shared/ui/tooltip";
 import { cn } from "@shared/utils";
 import { readSkillFileContent, writeSkillFileContent } from "@features/skills/api/skillApi";
 import type { SkillReferenceEntry } from "@features/skills/api/skillApi";
-import { getResolvedSkills, useSkillsStore } from "@features/skills/stores/useSkillsStore";
+import { getResolvedSkills, skillLabel, useSkillsStore } from "@features/skills/stores/useSkillsStore";
 
 type FileSection = {
   canCreate: boolean;
@@ -112,7 +112,7 @@ function DesktopSkillSidebar({
   return (
     <aside className="flex h-full w-[284px] shrink-0 flex-col overflow-hidden bg-app">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2 sm:px-5">
-        <SkillSidebarTitle onBack={onBack} skillName={skill.name} />
+        <SkillSidebarTitle onBack={onBack} skillName={skillLabel(skill)} />
         <nav className="mt-2 space-y-1" aria-label="技能文件导航">
           <FileTreeButton active={selectedPath === "SKILL.md"} label="SKILL.md" onClick={() => onSelectPath("SKILL.md")} />
 
@@ -200,7 +200,7 @@ function MobileSkillDirectoryPage({
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden bg-app">
       <div className="flex min-h-9 shrink-0 items-center bg-app px-4">
-        <SkillSidebarTitle onBack={onBack} skillName={skill.name} />
+        <SkillSidebarTitle onBack={onBack} skillName={skillLabel(skill)} />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
@@ -619,7 +619,7 @@ export function SkillDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>删除技能</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要删除技能“{skill.name}”吗？该操作会移除当前已安装技能数据，且无法恢复。
+              确定要删除技能“{skillLabel(skill)}”吗？该操作会移除当前已安装技能数据，且无法恢复。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

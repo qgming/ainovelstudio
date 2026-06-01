@@ -4,6 +4,8 @@ description: |
   短篇网文写作的执行手册。覆盖短篇立项、故事蓝图、整本成稿与按 revision_brief 返修。
   Use when: 用户要写短篇 / 写盐言故事 / 写番茄短篇 / 做短篇构思 / 设计反转，或短篇作者节点执行任务时调用。
   触发方式：/story-short-write、/写短篇、「帮我写一篇短篇」「写个盐言故事」
+metadata:
+  displayName: 短篇写作
 ---
 
 # story-short-write
@@ -40,7 +42,8 @@ description: |
 
 1. 完成 1 万到 3 万字独立完结。
 2. 强开头 / 强冲突 / 强情绪拉扯 / 强反转 / 清晰 payoff / 可发布性。
-3. 用 `text_stats` 核对字数。
+3. 正文落笔技法（视角、动作画面、对话、节奏、标点、人设味）按 `story-prose-craft` 执行，成稿前先读它的 `SKILL.md`。
+4. 用 `text_stats` 核对字数。
 
 ### 返修
 
@@ -93,6 +96,7 @@ description: |
 
 | 场景 | skillId | relativePath | 读取时机 | 重点 |
 |---|---|---|---|---|
+| 正文落笔技法 | `story-prose-craft` | `SKILL.md` | 写 / 改任意正文段落前 | 视角、动作画面、对话、节奏、标点、人设味 |
 | 开头设计 | `story-long-write` | `references/opening-design.md` | 开篇弱、钩子慢 | 黄金一章、开头模板 |
 | 钩子 | `story-long-write` | `references/hook-techniques.md` | 开头 / 结尾缺追读力 | 章首钩子、章尾钩子、悬念编排 |
 | 反转 | `story-long-write` | `references/reversal-toolkit.md` | 中段和结尾反转设计 | 反转类型、误导路径、揭示时机 |

@@ -22,7 +22,7 @@ import { getLatestCompactionEntry } from "@features/agent/chat/entries";
 import { selectIsAgentRunActive } from "@features/agent/stores/chat-run/helpers";
 import { useChatRunStore } from "@features/agent/stores/useChatRunStore";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
-import { getEnabledSkills, useSkillsStore } from "@features/skills/stores/useSkillsStore";
+import { getEnabledSkills, skillLabel, useSkillsStore } from "@features/skills/stores/useSkillsStore";
 import { useBookWorkspaceStore } from "@features/books/stores/useBookWorkspaceStore";
 
 type BookAgentPanelProps = {
@@ -320,7 +320,7 @@ export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookA
             description: skill.description,
             id: skill.id,
             kind: "skill" as const,
-            name: skill.name,
+            name: skillLabel(skill),
           })),
         ]}
         rootNode={rootNode}

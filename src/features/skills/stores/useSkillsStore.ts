@@ -19,6 +19,15 @@ export type ResolvedSkill = SkillManifest & {
   sourceLabel: string;
 };
 
+/**
+ * 技能的展示名：优先 frontmatter 的中文 displayName，缺失时回退到 id（name）。
+ * 用于技能页、详情页、agent 引用等所有面向用户/模型的展示位。
+ */
+export function skillLabel(skill: { displayName?: string; name: string }): string {
+  const display = skill.displayName?.trim();
+  return display ? display : skill.name;
+}
+
 type SkillPreferences = {
   enabledById: Record<string, boolean>;
 };
