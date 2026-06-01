@@ -62,19 +62,19 @@ describe("updateStore", () => {
 
   it("检测到新版本后会保存更新摘要", async () => {
     fetchLatestDirectUpdateMock.mockResolvedValue({
-      downloadUrl: "https://example.com/ainovelstudio_0.4.1_windows_x64.exe",
+      downloadUrl: "https://example.com/ainovelstudio_0.5.1_windows_x64.exe",
       notes: "修复若干问题",
       packageKind: "exe",
       publishedAt: "2026-04-21T00:00:00Z",
-      version: "0.4.1",
+      version: "0.5.1",
     });
 
     await useUpdateStore.getState().checkForUpdates();
 
     expect(useUpdateStore.getState().status).toBe("available");
     expect(useUpdateStore.getState().updateSummary).toMatchObject({
-      currentVersion: "0.4.0",
-      version: "0.4.1",
+      currentVersion: "0.5.0",
+      version: "0.5.1",
     });
   });
 
@@ -104,18 +104,18 @@ describe("updateStore", () => {
 
   it("启动时静默检查更新并保留可用版本", async () => {
     fetchLatestDirectUpdateMock.mockResolvedValue({
-      downloadUrl: "https://example.com/ainovelstudio_0.4.1_windows_x64.exe",
+      downloadUrl: "https://example.com/ainovelstudio_0.5.1_windows_x64.exe",
       notes: "修复若干问题",
       packageKind: "exe",
       publishedAt: "2026-04-21T00:00:00Z",
-      version: "0.4.1",
+      version: "0.5.1",
     });
 
     await useUpdateStore.getState().runStartupUpdateFlow();
 
     expect(fetchLatestDirectUpdateMock).toHaveBeenCalledTimes(1);
     expect(useUpdateStore.getState().status).toBe("available");
-    expect(useUpdateStore.getState().updateSummary?.version).toBe("0.4.1");
+    expect(useUpdateStore.getState().updateSummary?.version).toBe("0.5.1");
     expect(toastMock.success).not.toHaveBeenCalled();
   });
 });
