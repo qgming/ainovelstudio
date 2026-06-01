@@ -14,7 +14,7 @@ import {
 import { applyBootstrap } from "./bootstrapState";
 import { appendCompactionMarker, removeEntry } from "./entriesRuntime";
 import { runManualCompaction } from "./messageSessionFactory";
-import { COACH_PROMPT } from "./autopilot";
+import { COACH_PROMPT, ORGANIZE_MEMORY_PROMPT } from "./autopilot";
 import { submitAskAnswer, rejectPendingAsk } from "./askController";
 import { runAgentMessage } from "./messageRunner";
 import {
@@ -80,6 +80,12 @@ export function createChatRuntimeController(access: ChatRunStoreAccess) {
     await sendMessage({ options: { modeId: "book" }, promptOverride: COACH_PROMPT });
   }
 
+  // 「整理项目记忆」按钮：以固定指令发起一轮 BOOK 模式整理；运行中则忽略（按钮已 disabled）。
+  async function organizeMemory() {
+    if (selectIsAgentRunActive(access.get())) return;
+    await sendMessage({ options: { modeId: "book" }, promptOverride: ORGANIZE_MEMORY_PROMPT });
+  }
+
   async function compactSession(reason: "manual" | "threshold" = "manual") {
     const sessionId = access.get().activeSessionId;
     if (!sessionId || selectIsAgentRunActive(access.get())) return;
@@ -141,7 +147,7 @@ export function createChatRuntimeController(access: ChatRunStoreAccess) {
     submitAskAnswer(access, answer);
   }
 
-  return { coachMessage, compactSession, hardStopCurrentRun, initialize, sendMessage, followUpMessage, submitAsk };
+  return { coachMessage, organizeMemory, compactSession, hardStopCurrentRun, initialize, sendMessage, followUpMessage, submitAsk };
 
   async function initializeIfNeeded(bookId: string) {
     const state = access.get();

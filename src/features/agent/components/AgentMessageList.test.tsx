@@ -64,6 +64,7 @@ describe("BookAgentPanel", () => {
 
     expect(screen.getByRole("heading", { name: "Agent" })).toBeInTheDocument();
     expect(screen.getByLabelText("当前 Agent 模式")).toHaveTextContent("协作");
+    expect(screen.getByRole("button", { name: "整理项目记忆" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开会话上下文" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "鞭策" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开历史记录" })).toBeInTheDocument();
@@ -76,6 +77,27 @@ describe("BookAgentPanel", () => {
     expect(screen.queryByText("空闲")).not.toBeInTheDocument();
     expect(screen.queryByText("思考")).not.toBeInTheDocument();
     expect(screen.queryByText("read_file")).not.toBeInTheDocument();
+  });
+
+  it("点击「整理项目记忆」会调用 organizeMemory", () => {
+    useBookWorkspaceStore.setState({ rootBookId: "book-1" });
+    const organizeMemory = vi.fn().mockResolvedValue(undefined);
+    useAgentStore.setState({ organizeMemory });
+
+    render(<BookAgentPanel width={420} />);
+
+    const button = screen.getByRole("button", { name: "整理项目记忆" });
+    expect(button).not.toBeDisabled();
+    fireEvent.click(button);
+
+    expect(organizeMemory).toHaveBeenCalledTimes(1);
+  });
+
+  it("无活跃书籍时「整理项目记忆」按钮禁用", () => {
+    useBookWorkspaceStore.setState({ rootBookId: null });
+    render(<BookAgentPanel width={420} />);
+
+    expect(screen.getByRole("button", { name: "整理项目记忆" })).toBeDisabled();
   });
 
   it("顶部错误提示支持复制并使用线条样式", async () => {

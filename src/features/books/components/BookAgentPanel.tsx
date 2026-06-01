@@ -1,4 +1,4 @@
-import { Gauge, History, MoreHorizontal, SquarePen, Trash2 } from "lucide-react";
+import { Gauge, History, MoreHorizontal, NotebookPen, SquarePen, Trash2 } from "lucide-react";
 import { forwardRef, useEffect } from "react";
 import { Button } from "@shared/ui/button";
 import {
@@ -44,13 +44,15 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
         type="button"
         aria-label={ariaLabel}
         title={
-          ariaLabel === "打开会话上下文"
-            ? "打开会话上下文 — 查看当前会话和最近一次模型调用的上下文占用"
-            : ariaLabel === "打开历史记录"
-              ? "打开历史记录 — 查看当前书籍下的历史会话"
-              : ariaLabel === "收起历史记录"
-                ? "收起历史记录 — 收起历史会话列表"
-                : "开始新对话 — 新建一个独立的 Agent 会话"
+          ariaLabel === "整理项目记忆"
+            ? "整理项目记忆 — 让 Agent 读取并去重合并 .project/memory 下的记忆，核对伏笔台账"
+            : ariaLabel === "打开会话上下文"
+              ? "打开会话上下文 — 查看当前会话和最近一次模型调用的上下文占用"
+              : ariaLabel === "打开历史记录"
+                ? "打开历史记录 — 查看当前书籍下的历史会话"
+                : ariaLabel === "收起历史记录"
+                  ? "收起历史记录 — 收起历史会话列表"
+                  : "开始新对话 — 新建一个独立的 Agent 会话"
         }
         variant="ghost"
         size="icon-sm"
@@ -117,6 +119,7 @@ export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookA
   const latestCompactionTokensBefore = useChatRunStore((state) => state.latestCompactionTokensBefore);
   const manualContextSelection = useChatRunStore((state) => state.manualContextSelection);
   const openHistory = useChatRunStore((state) => state.openHistory);
+  const organizeMemory = useChatRunStore((state) => state.organizeMemory);
   const planningState = useChatRunStore((state) => state.planningState);
   const queuedFollowUpMessages = useChatRunStore((state) => state.queuedFollowUpMessages);
   const queuedSteeringMessages = useChatRunStore((state) => state.queuedSteeringMessages);
@@ -186,6 +189,14 @@ export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookA
       <PanelHeader className="border-b-0 bg-transparent px-2">
         <AgentHeaderButton modeLabel={activeModeLabel} />
         <PanelToolbar className="gap-0.5">
+          {/* 整理项目记忆：以固定指令发起一轮 BOOK 模式整理，复用现有消息流与工作区刷新 */}
+          <ToolbarButton
+            ariaLabel="整理项目记忆"
+            disabled={isRunning || !rootBookId}
+            onClick={() => void organizeMemory()}
+          >
+            <NotebookPen className="h-4 w-4" />
+          </ToolbarButton>
           {/* 会话上下文：使用 DropdownMenu 承载块状内容（非菜单项） */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

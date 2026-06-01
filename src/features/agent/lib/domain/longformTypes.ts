@@ -13,19 +13,6 @@ export type AgentCard = {
   writeScopes: string[];
 };
 
-export type ContextManifestPolicy = {
-  alwaysInclude: string[];
-  includeIfActive: string[];
-  priority: number;
-  taskType: string;
-};
-
-export type ContextManifest = {
-  bookName?: string;
-  policies: ContextManifestPolicy[];
-  version: number;
-};
-
 export type ChapterHarnessStage =
   | "chapter-plan"
   | "draft"

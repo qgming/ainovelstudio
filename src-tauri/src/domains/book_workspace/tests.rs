@@ -55,45 +55,54 @@ fn create_book_workspace_db_builds_template_tree() {
     assert_eq!(tree.name, "北境余烬");
     assert_eq!(tree.path, "books/北境余烬");
 
-    let project_agents = read_text_file_db(&store, &book.id, "books/北境余烬/.project/AGENTS.md")
-        .expect("project AGENTS should load");
-    assert!(project_agents.contains("# 北境余烬 工作区 AGENTS"));
-    assert!(project_agents.contains(".project/README.md"));
-    assert!(project_agents.contains("## 命名规则"));
-    assert!(project_agents.contains("正文/第001章_章名.md"));
-    assert!(project_agents.contains("大纲/细纲_第001章.md"));
-    assert!(project_agents.contains("设定/世界观.md"));
-
+    // README 是唯一项目入口,合并了原 AGENTS 的项目级约定。
     let project_readme = read_text_file_db(&store, &book.id, "books/北境余烬/.project/README.md")
         .expect("project README should load");
-    assert!(project_readme.contains("# 北境余烬 项目 README"));
+    assert!(project_readme.contains("# 北境余烬 项目入口"));
     assert!(project_readme.contains("剧情梗概"));
     assert!(project_readme.contains("## 写作风格"));
-    assert!(project_readme.contains("主角目标"));
+    assert!(project_readme.contains("## 命名规则"));
+    assert!(project_readme.contains("正文/第001章_章名.md"));
+    assert!(project_readme.contains("## 项目记忆维护约定"));
+    assert!(project_readme.contains(".project/memory/"));
 
-    let context_manifest = read_text_file_db(
-        &store,
-        &book.id,
-        "books/北境余烬/.project/context-manifest.json",
-    )
-    .expect("context manifest should load");
-    assert!(context_manifest.contains("\"taskType\": \"book\""));
+    // 新书不再生成 AGENTS / status / context-manifest。
+    assert!(
+        read_text_file_db(&store, &book.id, "books/北境余烬/.project/AGENTS.md").is_err(),
+        "new books should not create .project/AGENTS.md"
+    );
+    assert!(
+        read_text_file_db(
+            &store,
+            &book.id,
+            "books/北境余烬/.project/context-manifest.json"
+        )
+        .is_err(),
+        "new books should not create context-manifest.json"
+    );
+    assert!(
+        read_text_file_db(
+            &store,
+            &book.id,
+            "books/北境余烬/.project/status/project-state.json"
+        )
+        .is_err(),
+        "new books should not create status JSON"
+    );
 
-    let project_status = read_text_file_db(
-        &store,
-        &book.id,
-        "books/北境余烬/.project/status/project-state.json",
-    )
-    .expect("project status should load");
-    assert!(project_status.contains("\"bookName\": \"北境余烬\""));
+    // memory 文件带 frontmatter,供程序扫描出记忆清单。
+    let memory_index =
+        read_text_file_db(&store, &book.id, "books/北境余烬/.project/memory/index.md")
+            .expect("memory index should load");
+    assert!(memory_index.contains("name: 记忆导览"));
+    assert!(memory_index.contains("type: project"));
+    assert!(memory_index.contains("伏笔台账"));
 
-    let story_state = read_text_file_db(
-        &store,
-        &book.id,
-        "books/北境余烬/.project/status/story-state.json",
-    )
-    .expect("story state should load");
-    assert!(story_state.contains("\"bookName\": \"北境余烬\""));
+    let memory_project =
+        read_text_file_db(&store, &book.id, "books/北境余烬/.project/memory/project.md")
+            .expect("memory project should load");
+    assert!(memory_project.contains("name: 项目状态"));
+    assert!(memory_project.contains("type: project"));
 
     let children = tree.children.expect("tree should contain children");
     let child_names = children
@@ -114,25 +123,19 @@ fn create_book_workspace_db_builds_template_tree() {
         .iter()
         .map(|child| child.name.clone())
         .collect::<Vec<_>>();
-    assert_eq!(
-        project_child_names,
-        vec!["status", "AGENTS.md", "context-manifest.json", "README.md"]
-    );
+    assert_eq!(project_child_names, vec!["memory", "README.md"]);
 
-    let status_child_names = project_children
+    let memory_child_names = project_children
         .iter()
-        .find(|child| child.name == "status")
-        .expect("status should exist")
+        .find(|child| child.name == "memory")
+        .expect("memory should exist")
         .children
         .clone()
-        .expect("status should contain children")
+        .expect("memory should contain children")
         .into_iter()
         .map(|child| child.name)
         .collect::<Vec<_>>();
-    assert_eq!(
-        status_child_names,
-        vec!["project-state.json", "story-state.json"]
-    );
+    assert_eq!(memory_child_names, vec!["index.md", "project.md"]);
 }
 
 #[test]
@@ -489,41 +492,35 @@ fn ensure_book_workspace_template_restores_missing_defaults_only() {
     let TestStore { store, _dir } = create_store();
     let book = create_book(&store, "旧书升级");
 
+    // 用户改过 README:补缺逻辑不应覆盖。
     write_text_file_db(
         &store,
         &book.id,
-        "books/旧书升级/.project/AGENTS.md",
-        "# 自定义规则\n保留用户内容",
+        "books/旧书升级/.project/README.md",
+        "# 自定义入口\n保留用户内容",
     )
-    .expect("custom AGENTS should write");
-    delete_workspace_entry_db(
-        &store,
-        &book.id,
-        "books/旧书升级/.project/context-manifest.json",
-    )
-    .expect("manifest should delete");
-    delete_workspace_entry_db(&store, &book.id, "books/旧书升级/.project/status")
-        .expect("status directory should delete");
+    .expect("custom README should write");
+    // 删掉 memory 目录:补缺逻辑应当重建 index/project。
+    delete_workspace_entry_db(&store, &book.id, "books/旧书升级/.project/memory")
+        .expect("memory directory should delete");
 
     let created_paths =
         ensure_book_workspace_template_db(&store, &book.id).expect("template should repair");
 
-    assert!(created_paths.contains(&".project/context-manifest.json".to_string()));
-    assert!(created_paths.contains(&".project/status".to_string()));
-    assert!(created_paths.contains(&".project/status/project-state.json".to_string()));
-    assert!(created_paths.contains(&".project/status/story-state.json".to_string()));
+    assert!(created_paths.contains(&".project/memory".to_string()));
+    assert!(created_paths.contains(&".project/memory/index.md".to_string()));
+    assert!(created_paths.contains(&".project/memory/project.md".to_string()));
+    // README 已存在,不应出现在新建列表中。
+    assert!(!created_paths.contains(&".project/README.md".to_string()));
 
-    let project_agents = read_text_file_db(&store, &book.id, "books/旧书升级/.project/AGENTS.md")
-        .expect("project AGENTS should remain readable");
-    assert_eq!(project_agents, "# 自定义规则\n保留用户内容");
+    let project_readme = read_text_file_db(&store, &book.id, "books/旧书升级/.project/README.md")
+        .expect("project README should remain readable");
+    assert_eq!(project_readme, "# 自定义入口\n保留用户内容");
 
-    let context_manifest = read_text_file_db(
-        &store,
-        &book.id,
-        "books/旧书升级/.project/context-manifest.json",
-    )
-    .expect("manifest should be restored");
-    assert!(context_manifest.contains("\"taskType\": \"book\""));
+    let memory_index =
+        read_text_file_db(&store, &book.id, "books/旧书升级/.project/memory/index.md")
+            .expect("memory index should be restored");
+    assert!(memory_index.contains("name: 记忆导览"));
 }
 
 #[test]
@@ -543,7 +540,7 @@ fn import_and_export_zip_roundtrip() {
 }
 
 #[test]
-fn import_plain_zip_without_project_agents() {
+fn import_plain_zip_without_project_readme() {
     let cursor = Cursor::new(Vec::new());
     let mut archive = ZipWriter::new(cursor);
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
@@ -559,9 +556,13 @@ fn import_plain_zip_without_project_agents() {
     let book =
         import_book_zip_db(&store, "普通资料.zip", archive_bytes).expect("plain zip should import");
 
-    let project_agents = read_text_file_db(&store, &book.id, "books/普通资料/.project/AGENTS.md")
-        .expect("project AGENTS should be supplemented");
-    assert!(project_agents.contains("# 普通资料 工作区 AGENTS"));
+    let project_readme = read_text_file_db(&store, &book.id, "books/普通资料/.project/README.md")
+        .expect("project README should be supplemented");
+    assert!(project_readme.contains("# 普通资料 项目入口"));
+    let memory_index =
+        read_text_file_db(&store, &book.id, "books/普通资料/.project/memory/index.md")
+            .expect("memory index should be supplemented");
+    assert!(memory_index.contains("name: 记忆导览"));
     assert_eq!(
         read_root_child_names(&store, &book.id),
         vec![".project", "章节"]

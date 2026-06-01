@@ -36,11 +36,11 @@ describe("renderToolParameters", () => {
     expect(lines.some((line) => line.startsWith("  - action?："))).toBe(true);
   });
 
-  it("数组元素的嵌套子字段也渲染（workspace_json.patch[].op）", () => {
-    const lines = renderToolParameters(ALL_TOOL_SPECS.workspace_json.parameters);
+  it("数组元素的嵌套子字段也渲染（update_plan.items[].content）", () => {
+    const lines = renderToolParameters(ALL_TOOL_SPECS.update_plan.parameters);
     const joined = lines.join("\n");
-    // patch 是可选数组；其元素 op 必填（无 default、无 optional）
-    expect(joined).toContain("    - patch[].op：");
-    expect(joined).toContain("    - patch[].from?：");
+    // items 是数组；其元素 content 必填（无 default、无 optional），status 可选
+    expect(joined).toContain("    - items[].content：");
+    expect(joined).toContain("    - items[].status?：");
   });
 });

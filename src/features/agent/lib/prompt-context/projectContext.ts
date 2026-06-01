@@ -1,23 +1,18 @@
-import type { ContextManifest, ContextManifestPolicy } from "../domain/longformTypes";
-
-export const DEFAULT_PROJECT_AGENT_PATH = ".project/AGENTS.md";
-export const DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH = ".project/context-manifest.json";
 export const DEFAULT_PROJECT_README_PATH = ".project/README.md";
-export const DEFAULT_PROJECT_STATUS_PATH = ".project/status";
-const MANIFEST_FILE_LIMIT = 12;
-const STATUS_FILE_LIMIT = 4;
+export const DEFAULT_PROJECT_MEMORY_DIR = ".project/memory";
+const MEMORY_FILE_LIMIT = 50;
 const RELATION_FILE_LIMIT = 12;
-// 优先级靠前的新双文件结构,后面 4 个为向后兼容旧 5 文件命名。
-const STATUS_FILE_PRIORITIES = [
-  "project-state.json",
-  "story-state.json",
-  // legacy filenames (旧版工作区兼容)
-  "latest-plot.json",
-  "character-state.json",
-  "system-state.json",
-  "continuity-index.json",
-  "factory-index.json",
-] as const;
+
+// 记忆文件 frontmatter 的 type 枚举(与 SKILL/模板约定一致)。
+export type MemoryFileType =
+  | "project"
+  | "character"
+  | "setting"
+  | "plot"
+  | "foreshadow"
+  | "timeline"
+  | "style"
+  | "other";
 
 export type ProjectContextPayload = {
   source: string;
@@ -26,6 +21,10 @@ export type ProjectContextPayload = {
     description?: string;
     name: string;
     path: string;
+    // 记忆清单条目专属:由文件 frontmatter 解析得到,供清单渲染。
+    memoryType?: string;
+    useWhen?: string;
+    updated?: string;
   }>;
 };
 
@@ -87,121 +86,125 @@ function findTreeNodeByPath(
   return null;
 }
 
-function getStatusFilePriority(path: string) {
-  const index = STATUS_FILE_PRIORITIES.indexOf(
-    getBaseName(path) as (typeof STATUS_FILE_PRIORITIES)[number],
-  );
-  return index >= 0 ? index : STATUS_FILE_PRIORITIES.length;
-}
+type MemoryFrontmatter = {
+  name?: string;
+  description?: string;
+  useWhen?: string;
+  type?: string;
+  updated?: string;
+};
 
-function getJsonContextDescription(path: string) {
-  const name = getBaseName(path);
-  const descriptions: Record<string, string> = {
-    // 新双文件结构
-    "project-state.json":
-      "项目级状态真值层，通常记录当前阶段、当前章节、活跃文件、阻塞项和下一步动作。",
-    "story-state.json":
-      "剧情/人物/连续性合并状态，通常记录当前剧情位置、最近章节、人物状态、关系网、伏笔与连续性风险。",
-    // legacy 兼容
-    "character-state.json": "人物状态真值层，通常记录角色当前位置、关系、动机、伤势、能力、秘密与阶段性变化。",
-    "continuity-index.json": "连续性索引，通常记录伏笔、承接点、未解决事项、时间线和容易前后矛盾的事实。",
-    "factory-index.json": "生产索引，通常记录章节生产、资料生成、批量任务或工厂化流程的入口信息。",
-    "latest-plot.json": "最新剧情状态，通常记录当前章节、主线目标、近期事件、下一步推进方向和关键冲突。",
-    "system-state.json": "系统/世界状态，通常记录世界观规则、组织局势、能力体系、资源变化和外部环境。",
-  };
-
-  if (path === DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH) {
-    return "上下文策略文件，程序已读取用于决定默认上下文；需要查看策略细节时再按路径 read。";
-  }
-
-  return descriptions[name] ?? "JSON 结构化资料文件，默认只注入路径；需要字段细节时再按路径 read。";
-}
-
-function collectStatusJsonPaths(
-  root: {
-    children?: ProjectTreeNode[];
-  },
-) {
-  const statusNode = findTreeNodeByPath(root.children, DEFAULT_PROJECT_STATUS_PATH);
-  if (!statusNode || statusNode.kind !== "directory") {
-    return [];
-  }
-
-  const statusChildren = statusNode.children ?? [];
-
-  return statusChildren
-    .filter((node) =>
-      node.kind === "file" && node.path.toLowerCase().endsWith(".json")
-    )
-    .sort((left, right) =>
-      getStatusFilePriority(left.path) - getStatusFilePriority(right.path)
-      || left.path.localeCompare(right.path),
-    )
-    .slice(0, STATUS_FILE_LIMIT)
-    .map((node) => node.path);
-}
-
-function normalizePathList(value: unknown) {
-  return Array.isArray(value)
-    ? value.map((item) => String(item).trim()).filter(Boolean)
-    : [];
-}
-
-function normalizeManifestPolicy(value: unknown): ContextManifestPolicy | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Record<string, unknown>;
-  const taskType = typeof candidate.taskType === "string" ? candidate.taskType.trim() : "";
-  if (!taskType) return null;
-  return {
-    alwaysInclude: normalizePathList(candidate.alwaysInclude),
-    includeIfActive: normalizePathList(candidate.includeIfActive),
-    priority: typeof candidate.priority === "number" ? candidate.priority : 0,
-    taskType,
-  };
-}
-
-function parseContextManifest(content: string): ContextManifest | null {
-  try {
-    const parsed = JSON.parse(content) as Record<string, unknown>;
-    const policies = Array.isArray(parsed.policies)
-      ? parsed.policies
-        .map(normalizeManifestPolicy)
-        .filter((item): item is ContextManifestPolicy => item !== null)
-      : [];
-    return {
-      bookName: typeof parsed.bookName === "string" ? parsed.bookName : undefined,
-      policies,
-      version: typeof parsed.version === "number" ? parsed.version : 1,
-    };
-  } catch {
+// 轻量解析记忆 md 顶部的 YAML frontmatter。只取 name/description/type/updated，
+// 并从 description 的多行块里抽出 "Use when:" 一行单独呈现。
+// 不引第三方 YAML 库——frontmatter 字段简单且受模板约束，手解析足够且更快。
+export function parseMemoryFrontmatter(content: string): MemoryFrontmatter | null {
+  const normalized = content.replace(/\r\n/g, "\n");
+  if (!normalized.startsWith("---")) {
     return null;
   }
+  const end = normalized.indexOf("\n---", 3);
+  if (end < 0) {
+    return null;
+  }
+  const block = normalized.slice(3, end).replace(/^\n/, "");
+  const lines = block.split("\n");
+
+  const result: MemoryFrontmatter = {};
+  let currentKey: "description" | null = null;
+  const descriptionLines: string[] = [];
+
+  for (const rawLine of lines) {
+    // 顶层 key 形如 `name:` `type:`（无前导空格）。带前导空格的视为块标量延续行。
+    const keyMatch = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(rawLine);
+    const isIndented = /^\s+\S/.test(rawLine);
+
+    if (keyMatch && !isIndented) {
+      const key = keyMatch[1].toLowerCase();
+      const value = keyMatch[2].trim();
+      if (key === "description") {
+        currentKey = "description";
+        if (value && value !== "|" && value !== ">") {
+          descriptionLines.push(value);
+        }
+        continue;
+      }
+      currentKey = null;
+      if (key === "name") result.name = stripQuotes(value);
+      else if (key === "type") result.type = stripQuotes(value);
+      else if (key === "updated") result.updated = stripQuotes(value);
+      continue;
+    }
+
+    if (currentKey === "description" && isIndented) {
+      descriptionLines.push(rawLine.trim());
+    }
+  }
+
+  if (descriptionLines.length > 0) {
+    const useWhenLine = descriptionLines.find((line) => /^use\s*when[:：]/i.test(line));
+    if (useWhenLine) {
+      result.useWhen = useWhenLine.replace(/^use\s*when[:：]\s*/i, "").trim();
+    }
+    const descOnly = descriptionLines.filter((line) => line !== useWhenLine);
+    if (descOnly.length > 0) {
+      result.description = descOnly.join(" ").trim();
+    } else if (!result.description) {
+      result.description = descriptionLines.join(" ").trim();
+    }
+  }
+
+  return result;
 }
 
-function chooseManifestPolicies(
-  manifest: ContextManifest | null,
-  taskType?: string | null,
-) {
-  if (!manifest?.policies.length) return [];
-  const normalizedTaskType = taskType?.trim();
-  const matched = normalizedTaskType
-    ? manifest.policies.filter((policy) => policy.taskType === normalizedTaskType)
-    : [];
-  return (matched.length ? matched : manifest.policies)
-    .sort((left, right) => right.priority - left.priority)
-    .slice(0, 2);
+function stripQuotes(value: string) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
 }
 
-function collectManifestPaths(
-  policies: ContextManifestPolicy[],
-  activeFilePath?: string | null,
-) {
-  const paths = new Set<string>();
-  policies.forEach((policy) => {
-    policy.alwaysInclude.forEach((path) => paths.add(path));
-    if (activeFilePath) policy.includeIfActive.forEach((path) => paths.add(path));
-  });
-  return Array.from(paths).slice(0, MANIFEST_FILE_LIMIT);
+// 取文件首行的 markdown 标题作为无 frontmatter 时的兜底摘要。
+function extractFirstHeading(content: string) {
+  const normalized = content.replace(/\r\n/g, "\n");
+  for (const line of normalized.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#")) {
+      return trimmed.replace(/^#+\s*/, "").trim();
+    }
+    if (trimmed) {
+      return trimmed.slice(0, 60);
+    }
+  }
+  return "";
+}
+
+// 记忆清单的稳定排序：index.md、project.md 这类入口文件优先，其余按文件名稳定排序。
+// 不依赖 localeCompare 的 CJK/ASCII 跨区域行为，保证注入顺序在各环境一致。
+const MEMORY_FILE_ORDER = ["index.md", "project.md"];
+
+function memoryFileRank(path: string) {
+  const index = MEMORY_FILE_ORDER.indexOf(getBaseName(path));
+  return index >= 0 ? index : MEMORY_FILE_ORDER.length;
+}
+
+function collectMemoryFilePaths(root: { children?: ProjectTreeNode[] }) {
+  const memoryNode = findTreeNodeByPath(root.children, DEFAULT_PROJECT_MEMORY_DIR);
+  if (!memoryNode || memoryNode.kind !== "directory") {
+    return [];
+  }
+  const children = memoryNode.children ?? [];
+  return children
+    .filter((node) => node.kind === "file" && node.path.toLowerCase().endsWith(".md"))
+    .map((node) => node.path)
+    .sort((left, right) => {
+      const rankDiff = memoryFileRank(left) - memoryFileRank(right);
+      return rankDiff !== 0 ? rankDiff : left.localeCompare(right);
+    })
+    .slice(0, MEMORY_FILE_LIMIT);
 }
 
 async function tryReadContextFile(
@@ -218,15 +221,6 @@ async function tryReadContextFile(
   }
 }
 
-function createPathOnlyContextFile(path: string): ProjectContextPayload["files"][number] {
-  const isJson = path.toLowerCase().endsWith(".json");
-  return {
-    description: isJson ? getJsonContextDescription(path) : undefined,
-    name: getBaseName(path),
-    path,
-  };
-}
-
 function pushUniqueContextFile(
   files: ProjectContextPayload["files"],
   file: ProjectContextPayload["files"][number] | null,
@@ -235,36 +229,39 @@ function pushUniqueContextFile(
   files.push(file);
 }
 
-async function loadManifestContextFiles(params: {
-  activeFilePath?: string | null;
-  files: ProjectContextPayload["files"];
-  manifest: ContextManifest | null;
-  readFile: LoadProjectContextInput["readFile"];
-  taskType?: string | null;
-  workspaceBookId: string;
-}) {
-  const policyPaths = collectManifestPaths(
-    chooseManifestPolicies(params.manifest, params.taskType),
-    params.activeFilePath,
-  );
-  for (const path of policyPaths) {
-    pushUniqueContextFile(
-      params.files,
-      await tryReadContextFile(params.readFile, params.workspaceBookId, path),
-    );
-  }
-}
-
-async function loadStatusContextFiles(params: {
+// 扫描 .project/memory/ 下所有 md，解析 frontmatter，生成"记忆清单"条目（path-only，不带正文）。
+// AI 看清单的 name/description/Use when 决定要不要 workspace_read 精读。
+async function loadMemoryContextFiles(params: {
   files: ProjectContextPayload["files"];
   readTree: NonNullable<LoadProjectContextInput["readTree"]>;
+  readFile: LoadProjectContextInput["readFile"];
   workspaceBookId: string;
 }) {
   const tree = await params.readTree(params.workspaceBookId);
-  const statusPaths = collectStatusJsonPaths(tree);
-  statusPaths.forEach((path) =>
-    pushUniqueContextFile(params.files, createPathOnlyContextFile(path))
-  );
+  const paths = collectMemoryFilePaths(tree);
+  for (const path of paths) {
+    let content = "";
+    try {
+      content = await params.readFile(params.workspaceBookId, path);
+    } catch {
+      continue;
+    }
+    if (!content.trim()) continue;
+
+    const frontmatter = parseMemoryFrontmatter(content);
+    const name = frontmatter?.name?.trim() || getBaseName(path);
+    const description =
+      frontmatter?.description?.trim() || extractFirstHeading(content) || undefined;
+
+    pushUniqueContextFile(params.files, {
+      name,
+      path,
+      description,
+      memoryType: frontmatter?.type?.trim() || undefined,
+      useWhen: frontmatter?.useWhen?.trim() || undefined,
+      updated: frontmatter?.updated?.trim() || undefined,
+    });
+  }
 }
 
 // 把 active file 的关联文件追加为 path-only 描述型条目,description 形如
@@ -297,7 +294,6 @@ export async function loadProjectContext({
   readFile,
   readRelations,
   readTree,
-  taskType,
   workspaceBookId,
 }: LoadProjectContextInput): Promise<ProjectContextPayload | null> {
   if (!workspaceBookId) {
@@ -305,48 +301,28 @@ export async function loadProjectContext({
   }
 
   const files: ProjectContextPayload["files"] = [];
-  let manifest: ContextManifest | null = null;
 
-  pushUniqueContextFile(
-    files,
-    await tryReadContextFile(readFile, workspaceBookId, DEFAULT_PROJECT_AGENT_PATH),
-  );
+  // ① README:唯一项目入口,全文注入。
   pushUniqueContextFile(
     files,
     await tryReadContextFile(readFile, workspaceBookId, DEFAULT_PROJECT_README_PATH),
   );
 
-  const manifestFile = await tryReadContextFile(
-    readFile,
-    workspaceBookId,
-    DEFAULT_PROJECT_CONTEXT_MANIFEST_PATH,
-  );
-  if (manifestFile) {
-    manifest = parseContextManifest(manifestFile.content);
-    pushUniqueContextFile(files, createPathOnlyContextFile(manifestFile.path));
-  }
-
-  await loadManifestContextFiles({
-    activeFilePath,
-    files,
-    manifest,
-    readFile,
-    taskType,
-    workspaceBookId,
-  });
-
+  // ② 记忆清单:扫描 memory/ 解析 frontmatter,path-only 注入(不带正文)。
   if (readTree) {
     try {
-      await loadStatusContextFiles({
+      await loadMemoryContextFiles({
         files,
         readTree,
+        readFile,
         workspaceBookId,
       });
     } catch {
-      // ignore status preload failures and keep other default context
+      // 记忆扫描失败不阻塞主流程,保留 README 等默认上下文。
     }
   }
 
+  // ③ active file 的关联文件:path-only 注入(现有机制)。
   if (activeFilePath && readRelations) {
     try {
       await loadRelationContextFiles({

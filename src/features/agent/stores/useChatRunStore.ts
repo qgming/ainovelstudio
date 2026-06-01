@@ -33,6 +33,7 @@ type ChatRunStoreActions = {
   hardStopCurrentRun: (reason?: RunInterruptReason) => Promise<void>;
   initialize: (bookId?: string | null) => Promise<void>;
   openHistory: () => void;
+  organizeMemory: () => Promise<void>;
   reset: () => void;
   sendMessage: (selection?: ManualTurnContextSelection) => Promise<void>;
   setActiveMode: (modeId: AgentMode) => void;
@@ -95,6 +96,7 @@ export const useChatRunStore = create<ChatRunStore>((set, get) => {
     hardStopCurrentRun: (reason = "manual_stop") => runtime.hardStopCurrentRun(reason),
     initialize: (bookId = DEFAULT_CHAT_BOOK_ID) => runtime.initialize(bookId ?? DEFAULT_CHAT_BOOK_ID),
     openHistory: () => set({ isHistoryOpen: true }),
+    organizeMemory: () => runtime.organizeMemory(),
     reset: () => {
       void runtime.hardStopCurrentRun("reset");
       set(buildInitialState());

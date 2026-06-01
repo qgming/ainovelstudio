@@ -149,24 +149,22 @@ describe("prompt context", () => {
     expect(runtime).toContain("- 当前系统日期：2026年4月18日");
   });
 
-  it("项目默认上下文会注入 .project/AGENTS.md、.project/README.md 和状态 JSON", () => {
+  it("项目默认上下文会全文注入 README，并把记忆按 frontmatter 渲染为清单", () => {
     const projectContext: ProjectContextPayload = {
       source: "项目默认上下文",
       files: [
         {
-          content: "# 项目规则\n\n先看设定再动笔。",
-          name: "AGENTS.md",
-          path: ".project/AGENTS.md",
-        },
-        {
-          content: "# 项目说明\n\n核心冲突：逃出试炼场。",
+          content: "# 项目入口\n\n核心冲突：逃出试炼场。",
           name: "README.md",
           path: ".project/README.md",
         },
         {
-          description: "最新剧情状态，通常记录当前章节、主线目标、近期事件、下一步推进方向和关键冲突。",
-          name: "latest-plot.json",
-          path: ".project/status/latest-plot.json",
+          name: "项目状态",
+          path: ".project/memory/project.md",
+          description: "作品定位、当前阶段、近期目标。",
+          memoryType: "project",
+          useWhen: "确认创作方向、当前进度时读。",
+          updated: "第012章",
         },
       ],
     };
@@ -177,14 +175,13 @@ describe("prompt context", () => {
     });
 
     expect(prompt).toContain("## 项目默认上下文");
-    expect(prompt).toContain(".project/AGENTS.md");
     expect(prompt).toContain(".project/README.md");
-    expect(prompt).toContain(".project/status/latest-plot.json");
-    expect(prompt).toContain("先看设定再动笔");
     expect(prompt).toContain("核心冲突：逃出试炼场");
-    expect(prompt).toContain("仅路径提示");
-    expect(prompt).toContain("最新剧情状态");
-    expect(prompt).not.toContain("推进试炼");
+    expect(prompt).toContain(".project/memory/project.md");
+    expect(prompt).toContain("项目状态（project）");
+    expect(prompt).toContain("何时读：确认创作方向、当前进度时读。");
+    expect(prompt).toContain("更新：第012章");
+    expect(prompt).toContain("仅列出记忆条目");
   });
 
   it("book 模式渲染图书工作区契约与项目入口", () => {
@@ -196,7 +193,7 @@ describe("prompt context", () => {
     });
 
     expect(system).toContain("# 模式：BOOK");
-    expect(system).toContain(".project/AGENTS.md");
+    expect(system).toContain(".project/README.md");
     expect(system).toContain("按当前任务切换职责重点");
   });
 

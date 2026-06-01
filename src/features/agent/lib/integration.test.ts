@@ -308,19 +308,17 @@ describe("agent session (streaming)", () => {
         source: "项目默认上下文",
         files: [
           {
-            content: "# 项目规则\n\n先读取设定。",
-            name: "AGENTS.md",
-            path: ".project/AGENTS.md",
-          },
-          {
-            content: "# 项目说明\n\n主角目标：拿到神骨。",
+            content: "# 项目入口\n\n主角目标：拿到神骨。",
             name: "README.md",
             path: ".project/README.md",
           },
           {
-            content: '{"chapter": 12}',
-            name: "latest-plot.json",
-            path: ".project/status/latest-plot.json",
+            name: "项目状态",
+            path: ".project/memory/project.md",
+            description: "作品定位、当前阶段、近期目标。",
+            memoryType: "project",
+            useWhen: "确认创作方向、当前进度时读。",
+            updated: "第012章",
           },
         ],
       },
@@ -341,11 +339,11 @@ describe("agent session (streaming)", () => {
     const context = lastStreamContext();
     const currentTurnText = currentTurnUserText(context);
     expect(currentTurnText).toContain("## 项目默认上下文");
-    expect(currentTurnText).toContain(".project/AGENTS.md");
     expect(currentTurnText).toContain(".project/README.md");
-    expect(currentTurnText).toContain(".project/status/latest-plot.json");
-    expect(currentTurnText).toContain("先读取设定");
     expect(currentTurnText).toContain("主角目标：拿到神骨");
+    expect(currentTurnText).toContain(".project/memory/project.md");
+    expect(currentTurnText).toContain("项目状态（project）");
+    expect(currentTurnText).toContain("仅列出记忆条目");
   });
 
   it("把运行 abortSignal 透传给 pi streamSimple", async () => {

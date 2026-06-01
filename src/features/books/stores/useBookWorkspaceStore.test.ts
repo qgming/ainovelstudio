@@ -166,7 +166,7 @@ describe("useBookWorkspaceStore", () => {
     mockInvoke.mockImplementation(async (command: string) => {
       switch (command) {
         case "ensure_book_workspace_template":
-          return [".project/context-manifest.json"];
+          return [".project/memory/index.md"];
         case "get_book_workspace_summary_by_id":
           return { id: bookId, name: "北境余烬", path: rootPath, updatedAt: 1710000000 };
         case "read_workspace_tree":

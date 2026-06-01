@@ -39,11 +39,11 @@ describe("buildPiTools", () => {
   it("execute: 带 data 时 content 为 JSON 串、details 含 data", async () => {
     const tools = buildPiTools({
       workspaceTools: {
-        workspace_json: makeWorkspaceTool(() => ({ ok: true, summary: "已读取", data: { stage: 3 } })),
+        workspace_search: makeWorkspaceTool(() => ({ ok: true, summary: "已读取", data: { stage: 3 } })),
       },
-      enabledToolIds: ["workspace_json"],
+      enabledToolIds: ["workspace_search"],
     });
-    const result = await tools[0].execute("c1", { path: "s.json", action: "get" });
+    const result = await tools[0].execute("c1", { query: "stage" });
     expect(result.details).toMatchObject({ ok: true, summary: "已读取", data: { stage: 3 } });
     expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ data: { stage: 3 } });
   });

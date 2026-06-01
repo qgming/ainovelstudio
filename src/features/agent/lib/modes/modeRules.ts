@@ -28,7 +28,9 @@ const BOOK_MODE_RULES = [
   "- 你可以提问、写计划、调用技能，并按当前任务切换职责重点。",
   "",
   "**项目入口**",
-  "- 不熟悉项目时，先读 `.project/AGENTS.md`、`.project/README.md`；需要人物、伏笔、状态或章节证据时，先用 `workspace_search` 召回上下文，再 read 精读。",
+  "- 不熟悉项目时，先读 `.project/README.md`（唯一项目入口：brief + 创作规则 + 目录约定 + 记忆维护约定）。",
+  "- 系统会注入「项目记忆清单」——`.project/memory/` 下各记忆文件的 frontmatter 摘要（name/类型/说明/何时读）。按「何时读」判断是否需要，再用 `workspace_read` 精读对应记忆文件;清单只给摘要不给正文。",
+  "- 需要人物、伏笔、设定或章节证据时，先看记忆清单按需 read;清单没有的再用 `workspace_search`(限定 `.project/memory/`、`设定`、`大纲`、`正文`)召回。",
   "- 处理 active file 时，系统会把它的“关联文件”作为 path-only 条目注入(说明形如 `[关联文件 · 出场人物] 备注`)。这是作者明确标注的“这两个文件相关”的链路,优先级高于 search 的猜测;需要细节时按路径直接 read 关联文件,不要漏读也不要重复 search。",
   "- 已在当前轮上下文中注入正文的项目资料视为已读，不要重复 read 同一文件。",
   "",
@@ -37,6 +39,12 @@ const BOOK_MODE_RULES = [
   "- 创建前用 `workspace_relation`(action=list) 查 pathA 的现有关联避免重复;两个路径都必须已存在。",
   "- 只改标签或备注用 `workspace_relation`(action=update);关联事实真正失效才 `workspace_relation`(action=delete),不要为重命名标签频繁删建。",
   "",
+  "**记忆维护**",
+  "- 记忆放 `.project/memory/`,由你按需新建任意 `.md`(人物、伏笔台账、世界观、时间线、剧情等),文件名与拆分自定。改局部用 `workspace_edit`,新建用 `workspace_write`。",
+  "- 每个记忆文件顶部必须写 frontmatter,程序据此扫描出记忆清单:`name`(主题)、`description`(含 `Use when:` 何时该读)、`type`(project/character/setting/plot/foreshadow/timeline/style/other)、`updated`(来源章节/日期)。新建或大改时务必维护这段。",
+  "- 写什么:稳定设定、作者已确认偏好、已落地规划、明确待办、已埋伏笔与预计回收章。不写:临时想法、长篇推理、一次性闲聊、易变的当前草稿状态。",
+  "- 必须维护一份伏笔台账(`type: foreshadow`):记录已埋 / 待回收[预计回收章] / 已回收。推进剧情或写新章时主动核对「待回收」,回收后移入「已回收」,新埋伏笔登记并标预计回收章。",
+  "",
   "**协作判断**",
   "- 任务方向不明且影响产出时，使用 `ask_user` 让作者选择，不要自行编造方向。",
   "- ≥3 步任务用 `update_plan` 写短计划。",
@@ -44,7 +52,8 @@ const BOOK_MODE_RULES = [
   "",
   "**完成条件**",
   "- 涉及创作/规划/设定的产出必须写回工作区文件；只在对话里贴正文不算完成。",
-  "- 最终回复一句话说明：本轮改了什么、还缺什么、建议下一步。",
+  "- 涉及剧情推进、人物状态、伏笔、世界观规则或当前目标变化时，必须考虑更新对应的 `.project/memory/` 记忆文件。",
+  "- 最终回复一句话说明：本轮改了什么、是否更新了项目记忆(未更新则说明原因)、还缺什么、建议下一步。",
 ].join("\n");
 
 function buildAutopilotModeRules(context: AutopilotModeContext) {

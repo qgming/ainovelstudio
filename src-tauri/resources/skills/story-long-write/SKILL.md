@@ -21,9 +21,8 @@ description: |
 
 接到任务后必读：
 
-- `.project/AGENTS.md`、`.project/README.md`：风格、字数、禁写约束。
-- `.project/status/project-state.json`（当前阶段、当前章节、活跃文件、阻塞项、下一步）。
-- `.project/status/story-state.json`（剧情位置、最近章节、人物状态、关系网、伏笔与连续性）。
+- `.project/README.md`：风格、字数、禁写约束、目录约定与记忆维护约定。
+- 系统注入的「项目记忆清单」：按 frontmatter 摘要找到 `type: project`（当前阶段/章节/活跃文件/下一步）、相关 `type: character`（人物状态）、`type: foreshadow`（伏笔台账）等记忆文件，按需 `workspace_read` 精读。
 - 上一章 / 最近 1-3 章正文（续写或返修时）。
 - 当前卷的卷级大纲、当前章节细纲（若有）。
 - 本章涉及的角色 / 势力 / 世界观设定。
@@ -38,10 +37,10 @@ description: |
 
 ### 续写阶段（已有项目）
 
-1. 读 `.project/status/project-state.json` 的 `currentChapterFile`、`activeFiles` 拿到当前章节与活跃文件。
+1. 读 `type: project` 记忆（如 `.project/memory/project.md`）拿到当前章节与活跃文件。
 2. 读上一章正文与当前章细纲（若无则先补）。
 3. 写 `正文/第NNN章_章名.md`：开篇 200 字内有具体场景或冲突；单章一个核心冲突 + 1-2 个推进点 + 一个主爽点；章末必留钩子。
-4. 字数符合 README / AGENTS 约定（默认汉字 2500-3500），写完用 `text_stats` 复核。
+4. 字数符合 README 约定（默认汉字 2500-3500），写完用 `text_stats` 复核。
 
 ### 返修阶段（收到 revision_brief）
 
@@ -86,9 +85,9 @@ description: |
 - `大纲/大纲.md`、`大纲/细纲_第NNN章.md`
 - `正文/第NNN章_章名.md`
 - `设定/世界观/*.md`、`设定/角色/角色名.md`、`设定/势力/势力名.md`（仅在创作必须时新建）
-- `.project/status/project-state.json`：`currentChapterFile`、`activeFiles`、`currentPhase` 等进度字段。
+- `.project/memory/` 记忆：更新 `type: project` 记忆的当前章节/活跃文件/阶段；推进剧情时核对并更新 `type: foreshadow` 伏笔台账（待回收→已回收、登记新埋伏笔及预计回收章）；人物状态有稳定变化时更新对应 `type: character` 记忆。更新记忆时同步其 frontmatter 的 `updated`。
 
-不要写：`.project/status/story-state.json` 的 `characters` / `continuity` 段（人物状态、伏笔与连续性由连续性维护流程负责，写正文时不主动重写）。
+写记忆只记稳定事实，不写临时草稿状态；更新用 `workspace_edit` 局部改，新建记忆用 `workspace_write` 并补全 frontmatter。
 
 ## Reference Map
 

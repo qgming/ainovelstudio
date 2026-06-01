@@ -85,13 +85,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "workspace_write",
     name: "写入文本",
     description:
-      "创建空白文本文件，或对已有文件整体追加、覆盖写入；改局部内容用局部编辑，写 JSON 用 JSON 数据。",
-  },
-  {
-    id: "workspace_json",
-    name: "JSON 数据",
-    description:
-      "读写 JSON 文件的首选工具，按 JSON Pointer 概览、搜索、读取、创建或局部更新；优先 set、merge、append、patch，不随意整文件覆盖。适合维护状态文件、改字段、补模板、追加历史。",
+      "创建空白文本文件，或对已有文件整体追加、覆盖写入；改局部内容用局部编辑。",
   },
   {
     id: "workspace_path",

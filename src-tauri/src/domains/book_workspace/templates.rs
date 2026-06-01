@@ -10,32 +10,56 @@ fn render_book_template(template: &str, book_name: &str) -> String {
     template.replace("{BOOK_NAME}", book_name)
 }
 
-pub(crate) fn create_project_agents_template(book_name: &str) -> String {
+pub(crate) fn create_project_readme_template(book_name: &str) -> String {
     render_book_template(
-        r#"# {BOOK_NAME} 工作区 AGENTS
+        r#"# {BOOK_NAME} 项目入口
 
-本文件定义本书的项目级约定。通用主代理人设、读取原则、写回规则与 Skill 用法由全局 AGENTS 提供,本文件只补充本书特有的约定。
+本文件是这本书的唯一项目入口:既是创作 brief,也是本书的项目级约定。通用主代理人设由全局 AGENTS 提供,本文件只补充本书特有的内容。保持短,但要足够指导 AI 和作者继续推进。
 
 ## 协作目标
 
-你和作者共享这个图书工作区。你的任务不是只给建议,而是把作者当前目标推进成可用成果:作品 brief、大纲、细纲、正文、设定、状态更新或审稿结论。
+你和作者共享这个图书工作区。任务不是只给建议,而是把作者当前目标推进成可用成果:作品 brief、大纲、细纲、正文、设定或审稿结论。
 
 能直接完成的任务就直接完成;需要选择题材、视角、主线、风格等关键方向时再问。问之前先看本书已有资料,避免让作者重复交代。
 
-## 事实源(本书特定路径)
+## 作品定位
 
-- `.project/README.md`:作品定位、读者承诺、主线、人物概览、风格和当前重点。
-- `.project/status/*.json`:剧情、人物、连续性、当前进度和协作状态的结构化状态。
-- `设定/`、`大纲/`、`正文/`:设定、大纲和正文内容。
+- 书名:`{BOOK_NAME}`
+- 平台:待补充
+- 类型:长篇 / 短篇待定
+- 题材:待补充
+- 目标读者:待补充
+- 目标字数:待补充
+- 一句话设定:待补充
+- 核心卖点:待补充
+- 读者承诺:待补充。读者点开这本书,预期持续获得什么爽感、情绪或新鲜感。
+- 开篇承诺:待补充。前 3 章要让读者相信什么、期待什么。
 
-资料冲突时:已经写入的正文事实优先;其次是 status 和设定;再其次是 README 与旧对话。作者最新明确要求优先于旧资料。
+## 故事总览
+
+- 剧情梗概:待补充。用 80-120 字说明主角、目标、阻力、升级方向和阶段回报。
+- 主角目标:待补充。要能转化成具体行动。
+- 核心冲突:待补充
+- 升级路径:待补充
+- 主要反转:待补充
+- 结局方向:待补充
+
+## 写作风格
+
+- 叙事视角:待补充
+- 语言风格:待补充
+- 情绪基调:待补充
+- 单章字数:默认 2500-3500 汉字
+- 禁写约束:待补充
+- 节奏偏好:待补充。例:快节奏打脸、慢热悬疑、强情绪拉扯。
+- 对话口味:待补充。例:短句、有来有回、口语感强。
 
 ## 目录约定
 
 - `设定/`:人物、世界观、势力、道具、规则等设定资料。
 - `大纲/`:全书大纲、卷纲、章纲、阶段方案。
 - `正文/`:章节正文、番外、修订稿、终稿。
-- `.project/status/`:程序和 AI 共同维护的轻量状态 JSON。
+- `.project/memory/`:项目长期记忆(Markdown),记录稳定事实、当前进度、伏笔台账等。
 
 ## 命名规则
 
@@ -43,6 +67,10 @@ pub(crate) fn create_project_agents_template(book_name: &str) -> String {
 2. 章级细纲:`大纲/细纲_第001章.md`。
 3. 设定文件按主题命名,例如 `设定/主角.md`、`设定/世界观.md`。
 4. 同一类型文件保持一种编号和命名格式。
+
+## 事实源优先级
+
+资料冲突时:已经写入的正文事实优先;其次是 `.project/memory/` 与设定;再其次是本文件与旧对话。作者最新明确要求优先于旧资料。
 
 ## 文件关联
 
@@ -61,6 +89,27 @@ pub(crate) fn create_project_agents_template(book_name: &str) -> String {
 
 约定:标签写人话,优先复用本书已有标签;只改备注用 update,不要为重命名标签频繁删建。
 
+## 项目记忆维护约定
+
+- 记忆放 `.project/memory/`,由 AI 在创作中按需新建任意 `.md` 文件(人物、伏笔台账、世界观、时间线、剧情等),文件名和拆分由 AI 决定。
+- **每个记忆文件顶部必须写 frontmatter**,程序据此扫描出"这本书有哪些记忆、各管什么",AI 才能按需精读:
+
+  ```
+  ---
+  name: 主角-林川
+  description: |
+    主角林川的核心设定与当前状态。
+    Use when: 写林川出场 / 核对能力边界、性格、底线时读。
+  type: character        # project | character | setting | plot | foreshadow | timeline | style | other
+  updated: 第023章 / 2025-01-01
+  ---
+  ```
+
+- **写什么**:稳定设定、作者已确认偏好、已落地规划、明确待办、已埋伏笔与预计回收章。尽量在 `updated` 标来源(第N章/设定文件)。
+- **不写**:临时想法、长篇推理过程、一次性闲聊、易变的当前草稿状态。
+- **必须维护一份伏笔台账**(`type: foreshadow`):记录已埋 / 待回收[预计回收章] / 已回收。推进剧情或写新章时主动核对"待回收",回收后移入"已回收",新埋伏笔登记并标预计回收章。
+- 优先用 `workspace_edit` 局部更新记忆;新建记忆用 `workspace_write`;检索记忆用 `workspace_search` / `workspace_grep` 并限定 `.project/memory/` 范围。
+
 ## 创作判断
 
 - 本书的既有文风优先。改文前先判断原文想要达成的情绪和节奏。
@@ -68,157 +117,109 @@ pub(crate) fn create_project_agents_template(book_name: &str) -> String {
 - 设定必须能落到人物选择、场景动作和剧情后果上。
 - 审稿要指出真实问题:哪里拖、哪里空、哪里不可信、哪里爽点不足、哪里文风跑偏。
 - 不确定的事实不要编成设定。需要推断时明确说这是推断。
-"#,
-        book_name,
-    )
-}
-
-pub(crate) fn create_project_readme_template(book_name: &str) -> String {
-    render_book_template(
-        r#"# {BOOK_NAME} 项目 README
-
-本文件是这本书的创作 brief。保持短，但要足够指导 AI 和作者继续推进。新事实一旦确定，优先补这里或 status。
-
-## 作品定位
-
-- 书名：`{BOOK_NAME}`
-- 平台：待补充
-- 类型：长篇 / 短篇待定
-- 题材：待补充
-- 目标读者：待补充
-- 目标字数：待补充
-- 一句话设定：待补充
-- 核心卖点：待补充
-- 读者承诺：待补充。读者点开这本书，预期持续获得什么爽感、情绪或新鲜感。
-- 开篇承诺：待补充。前 3 章要让读者相信什么、期待什么。
-
-## 故事总览
-
-- 剧情梗概：待补充。用 80-120 字说明主角、目标、阻力、升级方向和阶段回报。
-- 主角目标：待补充。要能转化成具体行动。
-- 核心冲突：待补充
-- 升级路径：待补充
-- 主要反转：待补充
-- 结局方向：待补充
-
-## 角色
-
-- 主角：待补充。包含欲望、短板、底线、能力边界和开局处境。
-- 核心配角：待补充。写清和主角的关系、功能与变化。
-- 主要对手：待补充。写清压迫力、资源、目标和失败代价。
-- 关键关系：待补充
-
-## 写作风格
-
-- 叙事视角：待补充
-- 语言风格：待补充
-- 情绪基调：待补充
-- 单章字数：默认 2500-3500 汉字
-- 禁写约束：待补充
-- 节奏偏好：待补充。例：快节奏打脸、慢热悬疑、强情绪拉扯。
-- 对话口味：待补充。例：短句、有来有回、口语感强。
-
-## 当前状态
-
-- 当前阶段：构思中
-- 当前进度：待补充
-- 当前卷 / 当前章节：待补充
-- 当前目标：待补充
-- 阻塞点：待补充
-- 下一步：先补齐作品定位、剧情梗概、主角目标、读者承诺和大纲
 
 ## 首轮建议补齐
 
-- `设定/作品定位.md`
-- `设定/主角.md`
-- `设定/世界观.md`
-- `大纲/大纲.md`
-- `大纲/细纲_第001章.md`
+- `.project/memory/project.md`(作品定位、当前阶段、目标)
+- `设定/作品定位.md`、`设定/主角.md`、`设定/世界观.md`
+- `大纲/大纲.md`、`大纲/细纲_第001章.md`
 - `正文/第001章_章名.md`
-
-## 状态维护约定
-
-- 当前阶段、当前章节、活跃文件、阻塞项变化后更新 `.project/status/project-state.json`。
-- 剧情推进、人物变化、伏笔与连续性变化后更新 `.project/status/story-state.json`。
 "#,
         book_name,
     )
 }
 
-pub(crate) fn create_project_status_template(book_name: &str) -> String {
+pub(crate) fn create_memory_index_template(book_name: &str) -> String {
     render_book_template(
-        r#"{
-  "bookName": "{BOOK_NAME}",
-  "projectStage": "构思中",
-  "currentPhase": "构思中",
-  "currentObjective": "完成作品 brief 和开篇方向",
-  "currentVolume": null,
-  "currentChapterFile": null,
-  "lastCompletedChapter": null,
-  "activeFiles": [],
-  "blockers": [
-    "题材未定",
-    "读者承诺未定",
-    "主角目标未定"
-  ],
-  "nextAction": "先补齐 .project/README.md，再建立大纲和第001章细纲",
-  "updatedAt": null
-}
+        r#"---
+name: 记忆导览
+description: |
+  《{BOOK_NAME}》项目记忆的导览与维护规则。
+  Use when: 不清楚记忆怎么组织、要新建记忆文件、或需要整理记忆时读。
+type: project
+updated: 初始化
+---
+
+# {BOOK_NAME} 项目记忆导览
+
+本目录是这本书的长期记忆。每个 `.md` 文件记录一类稳定事实,由 AI 在创作中按需新建。
+系统会**自动扫描本目录每个文件的 frontmatter** 生成"记忆清单"注入对话,你无需手动维护索引——
+只要保证每个记忆文件顶部的 frontmatter 写对即可。
+
+## 文件 frontmatter 规范
+
+每个记忆文件顶部必须有:
+
+```
+---
+name: 文件主题(人读名,如 主角-林川 / 伏笔台账 / 世界观-修炼体系)
+description: |
+  一句话说明这个文件记录什么。
+  Use when: 写明"什么任务/什么时候该读这个文件"。
+type: project | character | setting | plot | foreshadow | timeline | style | other
+updated: 来源章节 / 日期(如 第023章 / 2025-01-01)
+---
+```
+
+## 写什么 / 不写什么
+
+- **写**:稳定设定、作者已确认偏好、已落地规划、明确待办、已埋伏笔与预计回收章。尽量标来源。
+- **不写**:临时想法、长篇推理过程、一次性闲聊、易变的当前草稿状态。
+
+## 必备记忆
+
+- **伏笔台账**(`type: foreshadow`):记录已埋 / 待回收[预计回收章] / 已回收。
+  推进剧情或写新章时主动核对"待回收",回收后移入"已回收",新埋伏笔登记并标预计回收章。
+
+## 常见记忆文件(按需新建,文件名自定)
+
+- `project.md`(`type: project`):作品定位、当前阶段、近期目标、下一步。
+- `主角-XXX.md`、`配角-XXX.md`(`type: character`):人物设定、当前状态、关系、秘密、能力边界。
+- `世界观-XXX.md`、`势力-XXX.md`(`type: setting`):世界规则、组织、能力体系。
+- `主线.md`、`第N卷-剧情.md`(`type: plot`):主线、当前剧情位置、最近事件、未解决问题。
+- `伏笔台账.md`(`type: foreshadow`):见上。
+- `时间线.md`(`type: timeline`):按故事内时间排序的关键事件 + 所在章节。
 "#,
         book_name,
     )
 }
 
-pub(crate) fn create_story_state_template(book_name: &str) -> String {
+pub(crate) fn create_memory_project_template(book_name: &str) -> String {
     render_book_template(
-        r#"{
-  "bookName": "{BOOK_NAME}",
-  "plot": {
-    "currentArc": null,
-    "currentVolume": null,
-    "currentChapter": null,
-    "currentScene": null,
-    "recentChapters": [],
-    "activeConflicts": [],
-    "openThreads": [],
-    "sceneQueue": [],
-    "unresolvedQuestions": [],
-    "nextExpectedPush": null
-  },
-  "characters": {},
-  "relationships": [],
-  "continuity": {
-    "canonFacts": [],
-    "timelineAnchors": [],
-    "foreshadowing": [],
-    "resolvedThreads": [],
-    "risks": []
-  },
-  "updatedAt": null
-}
-"#,
-        book_name,
-    )
-}
+        r#"---
+name: 项目状态
+description: |
+  《{BOOK_NAME}》的作品定位、当前阶段、近期目标与下一步。
+  Use when: 确认创作方向、当前进度、活跃文件或下一步该做什么时读。
+type: project
+updated: 初始化
+---
 
-pub(crate) fn create_context_manifest_template(book_name: &str) -> String {
-    render_book_template(
-        r#"{
-  "bookName": "{BOOK_NAME}",
-  "version": 3,
-  "policies": [
-    {
-      "taskType": "book",
-      "alwaysInclude": [
-        ".project/AGENTS.md",
-        ".project/README.md",
-        ".project/status/project-state.json"
-      ],
-      "includeIfActive": [],
-      "priority": 10
-    }
-  ]
-}
+# {BOOK_NAME} 项目状态
+
+## 作品定位
+
+- 题材 / 类型:待补充
+- 目标读者 / 平台:待补充
+- 核心卖点 / 读者承诺:待补充
+
+## 当前阶段
+
+- 阶段:构思中
+- 当前卷 / 当前章节:待补充
+- 活跃文件:待补充
+
+## 近期目标
+
+- 待补充
+
+## 阻塞点
+
+- 题材未定 / 读者承诺未定 / 主角目标未定
+
+## 下一步
+
+- 先补齐作品定位与开篇方向,再建立大纲和第001章细纲。
 "#,
         book_name,
     )
@@ -228,27 +229,19 @@ pub(crate) fn build_book_template(
     book_name: &str,
 ) -> (Vec<&'static str>, Vec<(&'static str, String)>) {
     (
-        vec![".project", ".project/status", "设定", "大纲", "正文"],
+        vec![".project", ".project/memory", "设定", "大纲", "正文"],
         vec![
-            (
-                ".project/AGENTS.md",
-                create_project_agents_template(book_name),
-            ),
             (
                 ".project/README.md",
                 create_project_readme_template(book_name),
             ),
             (
-                ".project/context-manifest.json",
-                create_context_manifest_template(book_name),
+                ".project/memory/index.md",
+                create_memory_index_template(book_name),
             ),
             (
-                ".project/status/project-state.json",
-                create_project_status_template(book_name),
-            ),
-            (
-                ".project/status/story-state.json",
-                create_story_state_template(book_name),
+                ".project/memory/project.md",
+                create_memory_project_template(book_name),
             ),
         ],
     )

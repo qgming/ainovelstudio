@@ -105,7 +105,7 @@ fn normalize_token_budget(token_budget: Option<usize>) -> usize {
 
 fn normalize_intent(value: Option<&str>) -> String {
     match value.unwrap_or("auto").trim() {
-        "fact" | "character" | "plot" | "chapter" | "path" | "status" | "conflict" => {
+        "fact" | "character" | "plot" | "chapter" | "path" | "memory" | "conflict" => {
             value.unwrap_or("auto").trim().to_string()
         }
         _ => "auto".into(),
@@ -131,8 +131,8 @@ fn is_path_in_scope(path: &str, scope: &[String]) -> bool {
 fn classify_source_kind(path: &str, kind: &str, extension: Option<&str>) -> String {
     let normalized = path.replace('\\', "/");
     let lowered = normalized.to_lowercase();
-    if normalized.starts_with(".project/status/") {
-        return "project_status".into();
+    if normalized.starts_with(".project/memory/") {
+        return "project_memory".into();
     }
     if normalized.starts_with(".project/") {
         return "project".into();
@@ -166,7 +166,7 @@ fn classify_source_kind(path: &str, kind: &str, extension: Option<&str>) -> Stri
 
 fn source_kind_boost(source_kind: &str) -> f64 {
     match source_kind {
-        "project_status" => 5.0,
+        "project_memory" => 5.0,
         "character" | "worldbuilding" => 4.0,
         "outline" | "project" => 3.0,
         "json" | "notes" => 2.0,
@@ -178,10 +178,10 @@ fn source_kind_boost(source_kind: &str) -> f64 {
 
 fn intent_boost(intent: &str, source_kind: &str) -> f64 {
     match (intent, source_kind) {
-        ("status", "project_status") => 6.0,
+        ("memory", "project_memory") => 6.0,
         ("character", "character") => 6.0,
-        ("fact", "character" | "worldbuilding" | "outline" | "project_status") => 3.0,
-        ("plot" | "conflict", "outline" | "project_status") => 3.0,
+        ("fact", "character" | "worldbuilding" | "outline" | "project_memory") => 3.0,
+        ("plot" | "conflict", "outline" | "project_memory") => 3.0,
         ("chapter", "chapter") => 4.0,
         ("path", "directory") => 3.0,
         _ => 0.0,
@@ -330,7 +330,7 @@ fn heading_title(line: &str) -> Option<String> {
 fn chunk_target_chars(source_kind: &str, extension: Option<&str>) -> usize {
     if source_kind == "chapter" {
         CHAPTER_CHUNK_TARGET_CHARS
-    } else if extension == Some(".json") || source_kind == "project_status" {
+    } else if extension == Some(".json") {
         JSON_CHUNK_TARGET_CHARS
     } else {
         DEFAULT_CHUNK_TARGET_CHARS

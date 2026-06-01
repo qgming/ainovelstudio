@@ -1,6 +1,6 @@
 import type { AgentPart } from "../types";
 
-const WRITE_TOOL_IDS = new Set(["workspace_write", "workspace_edit", "workspace_json"]);
+const WRITE_TOOL_IDS = new Set(["workspace_write", "workspace_edit"]);
 const MAX_REPAIR_TEXT_CHARS = 1200;
 
 export type WriteProtocolRepairConfig = {
@@ -123,8 +123,8 @@ export function buildWriteProtocolRepairPrompt(params: {
     "3. 一旦信息足够，必须立即调用相关写入工具完成落盘：",
     "   - 新写整段/整章/大块续写：`workspace_write`",
     "   - 修改已有正文局部内容：`workspace_edit`",
-    "   - 维护 `.project/status/*.json` 等状态数据：`workspace_json`",
-    "4. 写入完成后，做最小必要核对；可用 `workspace_read`、`text_stats` 或 `workspace_json` 验证。",
+    "   - 更新 `.project/memory/*.md` 等项目记忆：`workspace_edit`（新建用 `workspace_write`，补全 frontmatter）",
+    "4. 写入完成后，做最小必要核对；可用 `workspace_read`、`text_stats` 或 `workspace_search` 验证。",
     "5. 最后再给出简短结果汇报。",
     "",
     "硬约束：",

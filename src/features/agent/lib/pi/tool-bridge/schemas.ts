@@ -108,7 +108,7 @@ const writeInputSchema: TSchema = Type.Object({
 export const WRITE_TOOL_SPECS: Record<string, PiToolSpec> = {
   workspace_write: {
     description:
-      "创建空白文本文件或整文件追加、覆盖写入。create 创建空白文件；append 追加到末尾；replace 覆盖全文。改已有文件局部内容用 workspace_edit，JSON 文件用 workspace_json。",
+      "创建空白文本文件或整文件追加、覆盖写入。create 创建空白文件；append 追加到末尾；replace 覆盖全文。改已有文件局部内容用 workspace_edit。",
     parameters: writeInputSchema,
   },
   workspace_edit: {
@@ -351,128 +351,6 @@ export const READ_TOOL_SPECS: Record<string, PiToolSpec> = {
 
 // ============ data ============
 
-const jsonPatchOpSchema = Type.Object({
-  from: Type.Optional(Type.String({ description: "copy / move 时来源 JSON Pointer，例如 /chapters/0。" })),
-  op: Type.Union(
-    [Type.Literal("add"), Type.Literal("copy"), Type.Literal("move"), Type.Literal("remove"), Type.Literal("replace"), Type.Literal("test")],
-    { description: "RFC 6902 风格的 patch 动作：add/copy/move/remove/replace/test。" },
-  ),
-  path: Type.String({ description: "patch 目标 JSON Pointer，例如 /stage 或 /chapters/0/title。" }),
-  value: Type.Optional(Type.Unknown({ description: "add / replace / test 时使用的值；remove/copy/move 通常不填。" })),
-});
-
-const jsonBatchOpSchema = Type.Object({
-  action: Type.Union(
-    [
-      Type.Literal("append"),
-      Type.Literal("delete"),
-      Type.Literal("ensure_template"),
-      Type.Literal("history_append"),
-      Type.Literal("merge"),
-      Type.Literal("set"),
-      Type.Literal("text_append"),
-    ],
-    { description: "batch 中的单步动作；不支持 get/search/overview/create/patch。" },
-  ),
-  limit: Type.Optional(Type.Integer({ minimum: 1, description: "batch 中 history_append 的历史数组保留上限。" })),
-  pointer: Type.Optional(
-    Type.String({ description: "batch 中该步操作的 JSON Pointer。空字符串表示根节点；路径不存在时 set/ensure_template 可创建中间对象。" }),
-  ),
-  separator: Type.Optional(
-    Type.String({ description: "仅 batch 的 text_append 使用。追加文本前插入的分隔符，例如 '\\n'。" }),
-  ),
-  timestamp: Type.Optional(
-    Type.String({ description: "batch 中 history_append 的写入时间；不填则工具生成当前时间。" }),
-  ),
-  timestampField: Type.Optional(
-    Type.String({ description: "batch 中 history_append 的时间字段名，默认 updatedAt。" }),
-  ),
-  value: Type.Optional(
-    Type.Unknown({
-      description: "该步要写入的新值。set/merge/append/text_append/ensure_template/history_append 通常必填；delete 不填。",
-    }),
-  ),
-});
-
-const jsonInputSchema: TSchema = Type.Object({
-  action: Type.Optional(
-    Type.Union(
-      [
-        Type.Literal("append"),
-        Type.Literal("batch"),
-        Type.Literal("create"),
-        Type.Literal("delete"),
-        Type.Literal("ensure_template"),
-        Type.Literal("get"),
-        Type.Literal("history_append"),
-        Type.Literal("merge"),
-        Type.Literal("overview"),
-        Type.Literal("patch"),
-        Type.Literal("search"),
-        Type.Literal("set"),
-        Type.Literal("text_append"),
-      ],
-      {
-        default: "get",
-        description:
-          "JSON 动作。get 读指针值；overview 看结构骨架；search 搜 key/value；create 新建文件；set 覆盖指针值；merge 合并对象；append 追加数组；text_append 追加字符串；delete 删除节点；ensure_template 补默认结构；history_append 追加带时间历史；batch/patch 多步一次写回。维护 .project/status 时优先 batch / patch / ensure_template，不要整文件重写。",
-      },
-    ),
-  ),
-  patch: Type.Optional(
-    Type.Array(jsonPatchOpSchema, {
-      description: "patch：按顺序执行的 JSON Patch 操作；适合标准 add/remove/replace/copy/move/test。",
-    }),
-  ),
-  operations: Type.Optional(
-    Type.Array(jsonBatchOpSchema, {
-      description: "batch：按顺序依次执行多个局部更新，一次读写文件；多字段更新优先用它。",
-    }),
-  ),
-  caseSensitive: Type.Optional(Type.Boolean({ description: "search：是否区分大小写；中文通常不填。" })),
-  limit: Type.Optional(
-    Type.Integer({ minimum: 1, description: "history_append 的历史数组最大保留条数；search 的最大匹配数。" }),
-  ),
-  maxChars: Type.Optional(
-    Type.Integer({ minimum: 1, description: "读取或写入后返回 value 的最大字符数，默认 4000；大对象可调小，避免结果过长。" }),
-  ),
-  maxDepth: Type.Optional(
-    Type.Integer({ minimum: 0, description: "overview：结构概览递归深度，默认 2；越大返回越长。" }),
-  ),
-  maxEntries: Type.Optional(
-    Type.Integer({ minimum: 1, description: "overview：最多返回多少个结构节点，默认 80。" }),
-  ),
-  overwrite: Type.Optional(
-    Type.Boolean({ description: "create：目标文件已存在时是否覆盖，默认 false；不确定时先 get/overview。" }),
-  ),
-  path: Type.String({ description: "目标 JSON 文件的相对工作区路径，不要传绝对路径。" }),
-  pointer: Type.Optional(
-    Type.String({ description: "JSON Pointer。空字符串或不填表示根节点；对象字段用 /field，数组下标用 /0，例如 /stage、/chapters/0/title。" }),
-  ),
-  query: Type.Optional(
-    Type.String({ description: "search：要搜索的 key 或 value 文本；找字段名时 searchIn=key。" }),
-  ),
-  searchIn: Type.Optional(
-    Type.Union([Type.Literal("all"), Type.Literal("key"), Type.Literal("value")], {
-      description: "search：all 搜 key+value；key 只搜字段名；value 只搜值。",
-    }),
-  ),
-  separator: Type.Optional(
-    Type.String({ description: "text_append：追加文本前插入的分隔符，例如 '\\n' 或 '\\n\\n'。" }),
-  ),
-  timestamp: Type.Optional(
-    Type.String({ description: "history_append：手动指定写入时间；不填则工具生成当前时间。" }),
-  ),
-  timestampField: Type.Optional(
-    Type.String({ description: "history_append：记录时间字段名，默认 updatedAt。" }),
-  ),
-  value: Type.Optional(
-    Type.Unknown({
-      description: "写入的新值。set/merge/append/text_append/ensure_template/history_append/create 通常需要；delete/get/overview/search 不需要。",
-    }),
-  ),
-});
-
 const pathInputSchema: TSchema = Type.Object({
   action: Type.Union(
     [Type.Literal("create_folder"), Type.Literal("move"), Type.Literal("rename"), Type.Literal("delete")],
@@ -562,14 +440,9 @@ const relationInputSchema: TSchema = Type.Object({
 });
 
 export const DATA_TOOL_SPECS: Record<string, PiToolSpec> = {
-  workspace_json: {
-    description:
-      "读写 JSON 文件的首选工具，支持局部字段更新与批量 patch。读取先 overview/search/get；改字段用 set/merge/append/text_append/delete；多字段更新优先 batch；补状态模板用 ensure_template；追加事件流用 history_append。不要用 workspace_write 直接覆写 JSON。",
-    parameters: jsonInputSchema,
-  },
   workspace_path: {
     description:
-      "只创建、重命名、移动或删除路径结构，不写文件内容。create_folder/rename/move/delete 路径用它（delete 走 action=delete，高风险）。写文本内容用 workspace_edit / workspace_write，写 JSON 用 workspace_json。",
+      "只创建、重命名、移动或删除路径结构，不写文件内容。create_folder/rename/move/delete 路径用它（delete 走 action=delete，高风险）。写文本内容用 workspace_edit / workspace_write。",
     parameters: pathInputSchema,
   },
   skill_read: {
@@ -709,12 +582,12 @@ const searchInputSchema: TSchema = Type.Object({
         Type.Literal("plot"),
         Type.Literal("chapter"),
         Type.Literal("path"),
-        Type.Literal("status"),
+        Type.Literal("memory"),
         Type.Literal("conflict"),
       ],
       {
         default: "auto",
-        description: "检索意图。找人物设定用 character/fact，找当前状态用 status，找章节正文用 chapter，找路径用 path；不确定时 auto。",
+        description: "检索意图。找人物设定用 character/fact，找项目记忆(进度/伏笔/设定沉淀)用 memory，找章节正文用 chapter，找路径用 path；不确定时 auto。",
       },
     ),
   ),
@@ -730,7 +603,7 @@ const searchInputSchema: TSchema = Type.Object({
   scope: Type.Optional(
     Type.Array(Type.String(), {
       description:
-        "可选的相对路径范围列表，如 ['.project/status', '设定', '大纲']。找事实源时优先限定 ['.project/status','设定','大纲','正文']；不要传绝对路径。",
+        "可选的相对路径范围列表，如 ['.project/memory', '设定', '大纲']。找事实源时优先限定 ['.project/memory','设定','大纲','正文']；不要传绝对路径。",
     }),
   ),
   tokenBudget: Type.Optional(

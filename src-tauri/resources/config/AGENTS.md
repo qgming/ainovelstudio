@@ -51,12 +51,12 @@
 
 ## 工作区与项目上下文
 
-不熟悉项目时，优先读 `.project/AGENTS.md`、`.project/README.md`；需要人物、伏笔、状态、章节线索时，用 `workspace_search` 限定 `.project/status`、`设定`、`大纲`、`正文` 召回证据，再按需读具体文件。
+不熟悉项目时，优先读 `.project/README.md`（唯一项目入口）。系统会注入「项目记忆清单」——`.project/memory/` 下各记忆文件的 frontmatter 摘要（name/类型/说明/何时读）；按"何时读"判断后用 `workspace_read` 精读对应记忆。需要人物、伏笔、设定、章节线索时，先看记忆清单按需读，清单没有的再用 `workspace_search` 限定 `.project/memory`、`设定`、`大纲`、`正文` 召回证据。
 
 资料冲突时按此顺序处理：
 
 1. 已写入的正文事实优先。
-2. 项目状态和设定优先于临时对话记忆。
+2. `.project/memory` 记忆与设定优先于临时对话记忆。
 3. 最新明确的作者指令优先于旧资料。
 4. 无法判断时，指出冲突让作者选择，或采用风险最小的局部方案。
 
@@ -68,6 +68,7 @@
 - 读目录用 `workspace_browse`；读已知文件正文或资料用 `workspace_read`。
 - 改文本优先 `workspace_edit`；创建、追加或确需整文件替换时用 `workspace_write`。
 - JSON 用 `workspace_json`，优先局部 set、merge、append、patch，不随意整文件覆盖。
+- 项目长期记忆放 `.project/memory/`（Markdown）：记录稳定设定、当前进度、伏笔台账等。涉及剧情推进、人物状态、伏笔、世界观或当前目标变化时，用 `workspace_edit`/`workspace_write` 更新对应记忆文件；每个记忆文件顶部需带 frontmatter（name/description+Use when/type/updated），程序据此扫描出记忆清单。
 - 建文件夹、移动、重命名等路径操作用 `workspace_path`。
 - 删除、大幅覆盖、批量重命名、目录迁移属高风险操作，先说明范围和可回滚性；没有作者明确要求时不做。
 - 长篇写入按工具约束分步落盘，避免一次塞入过长内容。

@@ -17,7 +17,7 @@ const MAX_BOOK_ARCHIVE_DEPTH: usize = 12;
 const MAX_BOOK_ARCHIVE_ENTRIES: usize = 5_000;
 const MAX_BOOK_ARCHIVE_FILE_SIZE: u64 = 10 * 1024 * 1024;
 const MAX_BOOK_ARCHIVE_TOTAL_SIZE: u64 = 256 * 1024 * 1024;
-const REQUIRED_BOOK_WORKSPACE_FILE: &str = ".project/AGENTS.md";
+const REQUIRED_BOOK_WORKSPACE_FILE: &str = ".project/README.md";
 
 fn is_ignored_book_archive_path(path: &str) -> bool {
     path.split('/')

@@ -19,7 +19,7 @@ description: |
 ## Inputs To Read
 
 - 待润色的文件全文（用 `workspace_read`）。
-- `.project/AGENTS.md` 与 README 的风格基线（用户文风、字数约束、禁写约束）。
+- `.project/README.md` 与 `.project/memory/` 的风格基线（用户文风、字数约束、禁写约束）。
 
 ## Procedure
 
@@ -85,7 +85,7 @@ description: |
 - 当前文件（用 `workspace_edit` 做最小修改）。
 - 完成后用 `text_stats` 核对字数变化在合理范围。
 
-不要写：新章节、设定文件、状态 JSON。
+不要写：新章节、设定文件、项目记忆。
 
 ## Reference Map
 

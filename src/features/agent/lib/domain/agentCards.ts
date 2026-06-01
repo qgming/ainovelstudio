@@ -30,11 +30,10 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
       "skill_read",
       "workspace_edit",
       "workspace_write",
-      "workspace_json",
       "workspace_path",
       "text_stats",
     ],
-    writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/status/"],
+    writeScopes: ["正文/", "大纲/", "设定/", ".project/README.md", ".project/memory/"],
   },
 ];
 

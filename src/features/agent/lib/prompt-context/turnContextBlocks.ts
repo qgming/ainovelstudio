@@ -55,11 +55,20 @@ export function buildProjectContextBlock(
     ...projectContext.files.map((file) => {
       if (!file.content?.trim()) {
         const isRelationFile = file.description?.startsWith("[关联文件 · ") ?? false;
+        // 记忆清单条目:带 frontmatter 的 type/Use when/updated，提示 AI 何时该 read。
+        const isMemoryEntry = file.path.startsWith(".project/memory/");
+        const heading = file.memoryType
+          ? `### ${file.name}（${file.memoryType}）`
+          : `### ${file.name}`;
         return [
-          `### ${file.name}`,
+          heading,
           `- 路径：${file.path}`,
           file.description ? `- 说明：${file.description}` : null,
-          "- 注入方式：仅路径提示，未注入文件正文；需要内容时请按路径调用 workspace_read 读取最小必要范围。",
+          file.useWhen ? `- 何时读：${file.useWhen}` : null,
+          file.updated ? `- 更新：${file.updated}` : null,
+          isMemoryEntry
+            ? "- 注入方式：仅列出记忆条目，未注入正文；需要内容时按路径调用 workspace_read 精读。"
+            : "- 注入方式：仅路径提示，未注入文件正文；需要内容时请按路径调用 workspace_read 读取最小必要范围。",
           isRelationFile
             ? "- 来源:作者已显式建立的关联,涉及当前 active file 的剧情/设定链路,优先 read 而非 search。"
             : null,
