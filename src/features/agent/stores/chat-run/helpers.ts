@@ -13,6 +13,7 @@ import type {
   AskUserRequest,
 } from "@features/agent/lib/types";
 import type { AgentMode } from "@features/agent/lib/modes/modeRules";
+import type { GoalRuntimeState } from "@features/agent/lib/domain/goalControl";
 import type { ManualTurnContextSelection } from "@features/agent/lib/prompt-context/manualTurnContext";
 import { derivePlanningState, type PlanningState } from "@features/agent/lib/modes/planning";
 import {
@@ -69,7 +70,8 @@ export type ChatRunStoreState = {
   activeModeId: AgentMode;
   activeRunRequestId: string | null;
   activeSessionId: string | null;
-  autopilotGoalsBySession: Record<string, string>;
+  goalStatesBySession: Record<string, GoalRuntimeState>;
+  goalsBySession: Record<string, string>;
   pendingAsk: PendingAskState | null;
   queuedFollowUpMessages: string[];
   queuedSteeringMessages: string[];
@@ -101,7 +103,8 @@ export function buildInitialState(): ChatRunStoreState {
     activeModeId: "book",
     activeRunRequestId: null,
     activeSessionId: null,
-    autopilotGoalsBySession: {},
+    goalStatesBySession: {},
+    goalsBySession: {},
     pendingAsk: null,
     queuedFollowUpMessages: [],
     queuedSteeringMessages: [],

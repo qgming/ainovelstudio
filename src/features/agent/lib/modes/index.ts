@@ -1,13 +1,13 @@
 // CP-F：模式注册表。getModeConfig 是访问模式策略的统一入口。
 
 import type { AgentMode } from "./modeRules";
-import { autopilotMode } from "./autopilotMode";
+import { goalMode } from "./goalMode";
 import { bookMode } from "./bookMode";
 import type { ModeConfig } from "./types";
 
 export const MODE_CONFIGS = {
   book: bookMode,
-  autopilot: autopilotMode,
+  goal: goalMode,
 } as const;
 
 /**

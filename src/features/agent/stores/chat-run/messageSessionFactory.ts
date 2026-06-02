@@ -8,6 +8,7 @@ import { loadProjectContext } from "@features/agent/lib/prompt-context/projectCo
 import { createWritingAgentSession, compactBookSession } from "@features/agent/lib/session";
 import { derivePlanningState } from "@features/agent/lib/modes/planning";
 import { buildBookWorkspaceTools } from "@features/agent/lib/builtin-tools/factory";
+import type { GoalRuntimeState } from "@features/agent/lib/domain/goalControl";
 import type { AgentMode, ModeContextMap } from "@features/agent/lib/modes/modeRules";
 import { getModeConfig } from "@features/agent/lib/modes";
 import type { AgentMessage, AgentUsage } from "@features/agent/lib/types";
@@ -28,8 +29,10 @@ type SessionFactoryParams = ChatRunStoreAccess & {
   activeModeId: AgentMode;
   assistantMessageId: string;
   attachUsage: (usage: AgentUsage) => void;
-  autopilotGoal: string | null;
-  autopilotIteration: number;
+  goalIteration: number;
+  goalObjective: string | null;
+  goalState: GoalRuntimeState | null;
+  onGoalStateChange: (state: GoalRuntimeState) => void;
   conversationEntries: ChatEntry[];
   conversationHistory: AgentMessage[];
   getLatestMessages: () => AgentMessage[];
@@ -94,6 +97,7 @@ export async function createRunWritingSession(params: SessionFactoryParams) {
     manualContext,
     mode: params.activeModeId,
     modeContext: buildModeContext(params),
+    onGoalStateChange: params.onGoalStateChange,
     onAskUser: createAskHandler({
       ...params,
       getSessionId: () => params.sessionId,
@@ -138,14 +142,15 @@ async function resolveManualContext(
 function buildModeContext(
   params: SessionFactoryParams,
 ): ModeContextMap[AgentMode] | undefined {
-  if (params.activeModeId !== "autopilot") return undefined;
+  if (params.activeModeId !== "goal") return undefined;
   return {
-    goal: params.autopilotGoal ?? params.nextInput,
-    iteration: params.autopilotIteration,
+    goal: params.goalObjective ?? params.nextInput,
+    iteration: params.goalIteration,
+    goalState: params.goalState ?? undefined,
   };
 }
 
-// CP-F：工具白名单过滤统一走 ModeConfig（lib/modes），不再在此重复 yolo_control 收敛逻辑。
+// 工具白名单过滤统一走 ModeConfig（lib/modes），不再在此重复 goal_control 收敛逻辑。
 function getEnabledToolIds(mode: AgentMode) {
   const allEnabled = Object.entries(useAgentSettingsStore.getState().enabledTools)
     .filter(([, value]) => value)

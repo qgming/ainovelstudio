@@ -3,7 +3,7 @@ import type { AgentUsage } from "../types";
 
 // 把 pi-ai 的 StopReason 映射成应用一直使用的 finishReason 字符串。
 // 旧引擎里 finishReason 取自 AI SDK（"stop"/"tool-calls"/"length" 等），
-// 这里把 pi 的 toolUse 归一成 "tool-calls" 以保持下游（writeProtocolRepair/steering 判断）语义一致。
+// 这里把 pi 的 toolUse 归一成 "tool-calls" 以保持下游 steering 判断语义一致。
 export function mapStopReasonToFinishReason(stopReason: StopReason): string {
   switch (stopReason) {
     case "toolUse":

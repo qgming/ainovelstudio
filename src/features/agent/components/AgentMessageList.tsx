@@ -26,7 +26,7 @@ type MessageRenderBlock =
   | { kind: "part"; index: number; part: AgentPart }
   | { kind: "tool-group"; endIndex: number; parts: ToolCallPart[]; startIndex: number };
 
-const COMPACT_TOOL_EXCLUSIONS = new Set(["update_plan", "yolo_control"]);
+const COMPACT_TOOL_EXCLUSIONS = new Set(["update_plan", "goal_control"]);
 
 function isNearBottom(element: HTMLDivElement) {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_THRESHOLD;

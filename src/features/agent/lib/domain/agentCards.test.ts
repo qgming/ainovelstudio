@@ -6,9 +6,9 @@ import {
 } from "./agentCards";
 
 describe("agent cards", () => {
-  it("内置卡片只保留 autopilot", () => {
+  it("内置卡片只保留目标模式", () => {
     expect(BUILTIN_AGENT_CARDS).toHaveLength(1);
-    expect(BUILTIN_AGENT_CARDS[0]?.id).toBe("autopilot");
+    expect(BUILTIN_AGENT_CARDS[0]?.id).toBe("goal");
   });
 
   it("已废弃的长篇模式不再解析到内置卡片", () => {
@@ -17,13 +17,13 @@ describe("agent cards", () => {
     expect(getBuiltinAgentCard("style-polish")).toBeNull();
   });
 
-  it("解析 YOLO card", () => {
-    const card = getBuiltinAgentCard("autopilot");
+  it("解析目标模式 card", () => {
+    const card = getBuiltinAgentCard("goal");
 
-    expect(card?.name).toBe("YOLO 全自动目标");
+    expect(card?.name).toBe("目标模式");
     expect(card?.banTools).toEqual([]);
-    expect(card?.contextPolicyId).toBe("autopilot");
-    expect(card?.tools).toContain("yolo_control");
+    expect(card?.contextPolicyId).toBe("goal");
+    expect(card?.tools).toContain("goal_control");
     expect(card?.tools).toContain("workspace_write");
   });
 
@@ -37,13 +37,13 @@ describe("agent cards", () => {
     expect(card?.writeScopes).toEqual(["正文/"]);
   });
 
-  it("resolveAgentCard 在 YOLO 模式 + override 时合并字段", () => {
-    const card = resolveAgentCard("autopilot", {
-      name: "YOLO Pro",
+  it("resolveAgentCard 在目标模式 + override 时合并字段", () => {
+    const card = resolveAgentCard("goal", {
+      name: "目标 Pro",
     });
 
-    expect(card?.name).toBe("YOLO Pro");
-    expect(card?.mode).toBe("autopilot");
-    expect(card?.tools).toContain("yolo_control");
+    expect(card?.name).toBe("目标 Pro");
+    expect(card?.mode).toBe("goal");
+    expect(card?.tools).toContain("goal_control");
   });
 });

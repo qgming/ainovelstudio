@@ -22,10 +22,10 @@ export const BUILTIN_TOOLS: ToolDef[] = [
       "更新当前会话的多步计划清单；参数用 items 数组，同一时间最多保留一个进行中步骤，可选 phase 字段标记长链路阶段。≥3 步任务使用。",
   },
   {
-    id: "yolo_control",
-    name: "YOLO 检查",
+    id: "goal_control",
+    name: "目标检查",
     description:
-      "YOLO 模式每轮结束时上报 complete、continue 或 blocked，明确控制自动循环是否结束；不能用纯文本代替。",
+      "目标模式每轮结束时上报 complete、continue 或 blocked，明确控制持续执行是否结束；不能用纯文本代替。",
   },
   {
     id: "workspace_browse",

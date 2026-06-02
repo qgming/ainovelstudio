@@ -17,7 +17,7 @@ import { AgentComposer, DEFAULT_AGENT_COMPOSER_MODES } from "@features/agent/com
 import { AgentContextOverview } from "@features/agent/components/AgentContextOverview";
 import { AgentInfoDisplay } from "@features/agent/components/AgentInfoDisplay";
 import { AgentMessageList } from "@features/agent/components/AgentMessageList";
-import { deriveLatestYoloControl, type YoloControlData } from "@features/agent/lib/domain/yoloControl";
+import { deriveLatestGoalControl, type GoalControlData, type GoalRuntimeState } from "@features/agent/lib/domain/goalControl";
 import { getLatestCompactionEntry } from "@features/agent/chat/entries";
 import { selectIsAgentRunActive } from "@features/agent/stores/chat-run/helpers";
 import { useChatRunStore } from "@features/agent/stores/useChatRunStore";
@@ -81,16 +81,32 @@ function AgentHeaderButton({ modeLabel }: { modeLabel: string }) {
   );
 }
 
-function getYoloActionLabel(action: YoloControlData["action"]) {
+function getGoalActionLabel(action: GoalControlData["action"]) {
   if (action === "complete") return "已完成";
   if (action === "blocked") return "已阻塞";
   return "继续执行";
 }
 
-function buildYoloStatusLine(goal: string, control: YoloControlData | null) {
-  if (!control) return `YOLO：${goal}`;
-  const status = control.accepted ? getYoloActionLabel(control.action) : "未通过";
-  return `YOLO：${status} · ${goal}`;
+function buildGoalStatusLine(goal: string, control: GoalControlData | null) {
+  if (!control) return `目标：${goal}`;
+  const status = control.accepted ? getGoalActionLabel(control.action) : "未通过";
+  return `目标：${status} · ${goal}`;
+}
+
+function buildRuntimeGoalStatusLine(goal: string, state: GoalRuntimeState | null, control: GoalControlData | null) {
+  if (!state) return buildGoalStatusLine(goal, control);
+  const statusMap: Record<GoalRuntimeState["status"], string> = {
+    active: "执行中",
+    blocked: "已阻塞",
+    budget_limited: "预算收口",
+    complete: "已完成",
+  };
+  const budget = state.tokenBudget === null
+    ? `${state.usage.tokensUsed} tokens`
+    : `${state.usage.tokensUsed}/${state.tokenBudget} tokens`;
+  const audit = state.auditFailures.length > 0 ? ` · 待审计 ${state.auditFailures.length}` : "";
+  const blocked = state.blockedCount > 0 ? ` · 阻塞 ${state.blockedCount}/3` : "";
+  return `目标：${statusMap[state.status]} · ${goal} · ${budget}${audit}${blocked}`;
 }
 
 export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookAgentPanelProps) {
@@ -98,8 +114,11 @@ export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookA
   const rootBookId = useBookWorkspaceStore((state) => state.rootBookId);
   const activeModeId = useChatRunStore((state) => state.activeModeId);
   const activeSessionId = useChatRunStore((state) => state.activeSessionId);
-  const autopilotGoal = useChatRunStore((state) =>
-    state.activeSessionId ? (state.autopilotGoalsBySession[state.activeSessionId] ?? null) : null,
+  const goalObjective = useChatRunStore((state) =>
+    state.activeSessionId ? (state.goalsBySession[state.activeSessionId] ?? null) : null,
+  );
+  const goalRuntimeState = useChatRunStore((state) =>
+    state.activeSessionId ? (state.goalStatesBySession[state.activeSessionId] ?? null) : null,
   );
   const compactSession = useChatRunStore((state) => state.compactSession);
   const compactionCount = useChatRunStore((state) => state.compactionCount);
@@ -137,7 +156,7 @@ export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookA
   const submitAskAnswer = useChatRunStore((state) => state.submitAskAnswer);
   const switchSession = useChatRunStore((state) => state.switchSession);
   const initializeAgentHistory = useChatRunStore((state) => state.initialize);
-  const yoloControlState = deriveLatestYoloControl(run.messages);
+  const goalControlState = deriveLatestGoalControl(run.messages);
   const initializeSkills = useSkillsStore((state) => state.initialize);
   const manifests = useSkillsStore((state) => state.manifests);
   const preferences = useSkillsStore((state) => state.preferences);
@@ -289,10 +308,10 @@ export function BookAgentPanel({ resizeHandle, variant = "flush", width }: BookA
           message={errorMessage}
         />
       ) : null}
-      {activeModeId === "autopilot" && autopilotGoal ? (
+      {activeModeId === "goal" && goalObjective ? (
         <AgentInfoDisplay
-          description={buildYoloStatusLine(autopilotGoal, yoloControlState)}
-          title="YOLO 状态"
+          description={buildRuntimeGoalStatusLine(goalObjective, goalRuntimeState, goalControlState)}
+          title="目标状态"
         />
       ) : null}
       <AgentMessageList messages={run.messages} runStatus={displayRunStatus} />

@@ -1,4 +1,5 @@
 import { buildAssistantPlaceholderMessage, buildMessageMeta, buildUserMessage } from "@features/agent/chat/sessionRuntime";
+import { createGoalRuntimeState, type GoalRuntimeState } from "@features/agent/lib/domain/goalControl";
 import type { AgentMode } from "@features/agent/lib/modes/modeRules";
 import type { AgentMessage } from "@features/agent/lib/types";
 import type { ChatEntry } from "@features/agent/chat/types";
@@ -9,8 +10,9 @@ import type { ChatRunStoreAccess, SendMessageRequest } from "./runtimeTypes";
 
 export type RunContext = {
   activeModeId: AgentMode;
-  autopilotGoal: string | null;
-  autopilotIteration: number;
+  goalIteration: number;
+  goalObjective: string | null;
+  goalState: GoalRuntimeState | null;
   nextInput: string;
   runRequestId: string;
 };
@@ -41,8 +43,14 @@ export function createMessageRunSeed(params: ChatRunStoreAccess & { request: Sen
   const workspaceState = useBookWorkspaceStore.getState();
   const nextInput = params.request.promptOverride ?? state.input.trim();
   const activeModeId = params.request.options?.modeId ?? state.activeModeId;
-  const autopilotGoal = activeModeId === "autopilot"
-    ? params.request.options?.autopilotGoal ?? nextInput
+  const goalObjective = activeModeId === "goal"
+    ? params.request.options?.goalObjective ?? nextInput
+    : null;
+  const existingGoalState = state.activeSessionId ? state.goalStatesBySession[state.activeSessionId] : undefined;
+  const goalState = activeModeId === "goal" && goalObjective
+    ? params.request.options?.goalState
+      ?? (existingGoalState?.objective === goalObjective ? existingGoalState : undefined)
+      ?? createGoalRuntimeState(goalObjective, params.request.options?.goalTokenBudget ?? null)
     : null;
   const messageMeta = buildMessageMeta(workspaceState.rootPath, workspaceState.activeFilePath);
   const userMessage = buildUserMessage(nextInput, messageMeta);
@@ -51,8 +59,9 @@ export function createMessageRunSeed(params: ChatRunStoreAccess & { request: Sen
     assistantMessage,
     context: {
       activeModeId,
-      autopilotGoal,
-      autopilotIteration: params.request.options?.autopilotIteration ?? 1,
+      goalIteration: params.request.options?.goalIteration ?? 1,
+      goalObjective,
+      goalState,
       nextInput,
       runRequestId: buildRunRequestId(),
     },

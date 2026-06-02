@@ -195,26 +195,30 @@ describe("prompt context", () => {
     expect(system).toContain("# 模式：BOOK");
     expect(system).toContain(".project/README.md");
     expect(system).toContain("按当前任务切换职责重点");
+    expect(system).toContain("普通对话/编辑模式");
+    expect(system).toContain("不需要调用 `goal_control`");
+    expect(system).not.toContain("完成审计");
   });
 
-  it("autopilot 模式渲染 YOLO 契约与目标上下文", () => {
+  it("goal 模式渲染目标契约与目标上下文", () => {
     const system = buildSystemPrompt({
       defaultAgentMarkdown: "# 主代理",
       enabledSkills: [],
       enabledToolIds: ["update_plan"],
-      mode: "autopilot",
+      mode: "goal",
       modeContext: {
         goal: "完成第一章审校并写回文件",
         iteration: 1,
       },
     });
 
-    expect(system).toContain("# 模式：YOLO");
-    expect(system).toContain("全自动目标执行");
+    expect(system).toContain("# 模式：目标");
+    expect(system).toContain("目标是锁定的完成契约");
     expect(system).toContain("完成第一章审校并写回文件");
     expect(system).toContain("第 1 轮");
     expect(system).toContain("不用 ask");
-    expect(system).toContain("yolo_control");
+    expect(system).toContain("goal_control");
+    expect(system).toContain("完成审计");
     expect(system).toContain('action="complete"');
   });
 });

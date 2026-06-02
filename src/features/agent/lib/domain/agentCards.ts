@@ -1,7 +1,7 @@
 import type { AgentCard } from "./longformTypes";
-import { YOLO_CONTROL_TOOL_ID } from "./yoloControl";
+import { GOAL_CONTROL_TOOL_ID } from "./goalControl";
 
-// 内置 Agent 卡片：仅保留 YOLO 全自动卡。
+// 内置 Agent 卡片：仅保留目标执行卡。
 // 原本的 6 张长篇卡（book-design/volume-plan/chapter-write/continuity-review/
 // style-polish/state-maintain）UI 未暴露、tools/banTools/writeScopes 也未被强制，
 // 属于伪功能，已整体移除。
@@ -9,16 +9,16 @@ export const BUILTIN_AGENT_CARDS: AgentCard[] = [
   {
     banTools: [],
     body: [
-      "按目标全自动执行，主动读取资料、规划、写回、验证和维护状态。",
+      "按目标持续执行，主动读取资料、规划、写回、验证和维护状态。",
       "缺少普通过程选择时自行决策；遇到外部授权或高风险破坏性操作时报告阻塞项。",
     ].join("\n"),
-    contextPolicyId: "autopilot",
-    id: "autopilot",
-    mode: "autopilot",
+    contextPolicyId: "goal",
+    id: "goal",
+    mode: "goal",
     modelPresetId: null,
-    name: "YOLO 全自动目标",
+    name: "目标模式",
     tools: [
-      YOLO_CONTROL_TOOL_ID,
+      GOAL_CONTROL_TOOL_ID,
       "update_plan",
       "workspace_browse",
       "workspace_read",

@@ -12,7 +12,7 @@ export type PiToolSpec = {
   prepareArguments?: (args: unknown) => unknown;
 };
 
-// 把工具名解析成可选执行参数（如 ask_user/yolo_control 需要 toolCallId）。
+// 把工具名解析成可选执行参数（如 ask_user/goal_control 需要 toolCallId）。
 export type ResolvePiToolOptions = (toolCallId: string) => { toolCallId?: string } | undefined;
 
 // 运行期交互句柄（ask_user 用）。

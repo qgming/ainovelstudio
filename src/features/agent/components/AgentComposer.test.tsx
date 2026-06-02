@@ -162,7 +162,7 @@ describe("AgentComposer", () => {
     });
   });
 
-  it("默认模式菜单只显示协作和 YOLO 模式", () => {
+  it("默认模式菜单只显示协作和目标模式", () => {
     render(<AgentComposer {...buildComposerProps()} />);
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "当前模式：协作" }), {
@@ -172,11 +172,11 @@ describe("AgentComposer", () => {
 
     const menuItems = screen.getAllByRole("menuitem");
     expect(menuItems).toHaveLength(2);
+    expect(screen.getByRole("menuitem", { name: /目标/ })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /协作/ })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /YOLO/ })).toBeInTheDocument();
   });
 
-  it("默认显示协作模式并支持切换到 YOLO 模式", () => {
+  it("默认显示协作模式并支持切换到目标模式", () => {
     const handleModeChange = vi.fn();
 
     render(
@@ -184,7 +184,7 @@ describe("AgentComposer", () => {
         {...buildComposerProps()}
         modes={[
           { id: "book", label: "协作", description: "默认对话与任务执行模式", icon: Sparkles },
-          { id: "autopilot", label: "YOLO", description: "按目标全自动执行", icon: Sparkles },
+          { id: "goal", label: "目标", description: "按目标持续执行", icon: Sparkles },
         ]}
         onModeChange={handleModeChange}
       />,
@@ -194,13 +194,13 @@ describe("AgentComposer", () => {
       button: 0,
       ctrlKey: false,
     });
-    fireEvent.click(screen.getByRole("menuitem", { name: /YOLO/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /目标/ }));
 
-    expect(handleModeChange).toHaveBeenCalledWith("autopilot");
-    expect(screen.getByRole("button", { name: "当前模式：YOLO" })).toBeInTheDocument();
+    expect(handleModeChange).toHaveBeenCalledWith("goal");
+    expect(screen.getByRole("button", { name: "当前模式：目标" })).toBeInTheDocument();
     expect(screen.getByLabelText("Agent 输入框")).toHaveAttribute(
       "placeholder",
-      "输入全自动目标：YOLO 会循环执行、验证和回写，直到目标完成",
+      "输入目标：Agent 会持续执行、验证和回写，直到目标完成或真实阻塞",
     );
   });
 

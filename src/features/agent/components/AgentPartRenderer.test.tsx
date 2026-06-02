@@ -200,22 +200,23 @@ describe("AgentPartRenderer", () => {
     expect(card?.className).not.toContain("bg-message-card");
   });
 
-  it("YOLO 检查卡片可展开并点击内容收起", () => {
+  it("目标检查卡片可展开并点击内容收起", () => {
     render(
       <AgentPartRenderer
         part={{
           type: "tool-call",
-          toolName: "yolo_control",
-          toolCallId: "yolo-1",
+          toolName: "goal_control",
+          toolCallId: "goal-1",
           status: "completed",
           inputSummary: "{\"action\":\"complete\"}",
           output: {
             accepted: true,
             action: "complete",
+            audit: ["完成第一章 -> 文件已写回"],
             createdAt: "2026-05-10T00:00:00.000Z",
             evidence: ["文件已写回"],
             goal: "完成第一章",
-            kind: "yolo-control",
+            kind: "goal-control",
             missing: [],
             reason: "验证完毕",
             remaining: [],
@@ -227,11 +228,12 @@ describe("AgentPartRenderer", () => {
       />,
     );
 
-    expect(screen.getByText("YOLO 检查")).toBeInTheDocument();
+    expect(screen.getByText("目标检查")).toBeInTheDocument();
     expect(screen.queryByText("验证完毕")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /YOLO 检查/ }));
+    fireEvent.click(screen.getByRole("button", { name: /目标检查/ }));
     expect(screen.getByText("验证完毕")).toBeInTheDocument();
+    expect(screen.getByText("审计：完成第一章 -> 文件已写回")).toBeInTheDocument();
     expect(screen.getByText("证据：文件已写回")).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button")[1]);

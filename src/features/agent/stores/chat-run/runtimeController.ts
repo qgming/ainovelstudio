@@ -14,7 +14,7 @@ import {
 import { applyBootstrap } from "./bootstrapState";
 import { appendCompactionMarker, removeEntry } from "./entriesRuntime";
 import { runManualCompaction } from "./messageSessionFactory";
-import { COACH_PROMPT, ORGANIZE_MEMORY_PROMPT } from "./autopilot";
+import { COACH_PROMPT, ORGANIZE_MEMORY_PROMPT } from "./goalPrompts";
 import { submitAskAnswer, rejectPendingAsk } from "./askController";
 import { runAgentMessage } from "./messageRunner";
 import {

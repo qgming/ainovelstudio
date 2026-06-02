@@ -5,6 +5,7 @@ import {
   mergePart,
 } from "@features/agent/chat/sessionRuntime";
 import type { AgentMessage, AgentPart, AgentRunStatus, AgentUsage } from "@features/agent/lib/types";
+import type { GoalRuntimeState } from "@features/agent/lib/domain/goalControl";
 import { useAgentSettingsStore } from "@features/settings/stores/useAgentSettingsStore";
 import {
   replaceMessageEntry,
@@ -52,7 +53,7 @@ class MessageRunner {
   private readonly assistantMessage: AgentMessage;
   private conversationEntries: ChatEntry[];
   private conversationHistory: AgentMessage[];
-  private readonly context: RunContext;
+  private context: RunContext;
   private readonly messageMeta: ReturnType<typeof createMessageRunSeed>["messageMeta"];
   private readonly persistor: ReturnType<typeof createAssistantPersistor>;
   private readonly userMessage: AgentMessage;
@@ -152,8 +153,10 @@ class MessageRunner {
       activeModeId: this.context.activeModeId,
       assistantMessageId: this.assistantMessage.id,
       attachUsage: (usage) => this.attachUsage(usage),
-      autopilotGoal: this.context.autopilotGoal,
-      autopilotIteration: this.context.autopilotIteration,
+      goalIteration: this.context.goalIteration,
+      goalObjective: this.context.goalObjective,
+      goalState: this.context.goalState,
+      onGoalStateChange: (state) => this.applyGoalState(state),
       conversationEntries: this.conversationEntries,
       conversationHistory: this.conversationHistory,
       getLatestMessages: () => this.latestMessages,
@@ -270,6 +273,15 @@ class MessageRunner {
     });
   }
 
+  private applyGoalState(goalState: GoalRuntimeState) {
+    if (!this.isCurrentRun() || !this.sessionId) return;
+    this.context = { ...this.context, goalState };
+    this.params.set((state) => ({
+      goalStatesBySession: { ...state.goalStatesBySession, [this.sessionId as string]: goalState },
+      goalsBySession: { ...state.goalsBySession, [this.sessionId as string]: goalState.objective },
+    }));
+  }
+
   private async finishCompletedRun() {
     this.flushStreamParts();
     this.params.sessionSlot.clear();
@@ -328,7 +340,8 @@ class MessageRunner {
     return {
       abortController: this.abortController,
       assistantMessageId: this.assistantMessage.id,
-      autopilotGoal: this.context.autopilotGoal,
+      goalState: this.context.goalState,
+      goalObjective: this.context.goalObjective,
       latestEntries: this.latestEntries,
       latestMessages: this.latestMessages,
       runRequestId: this.context.runRequestId,

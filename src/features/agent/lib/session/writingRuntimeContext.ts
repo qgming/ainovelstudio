@@ -3,6 +3,7 @@ import type { ResolvedSkill } from "@features/skills/stores/useSkillsStore";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import type { ManualTurnContextPayload } from "../prompt-context/manualTurnContext";
 import type { AgentMode, ModeContextMap } from "../modes/modeRules";
+import type { GoalRuntimeState } from "../domain/goalControl";
 import type { PlanningState } from "../modes/planning";
 import type { ProjectContextPayload } from "../prompt-context/projectContext";
 import type { AgentTool } from "./runtime";
@@ -36,6 +37,7 @@ export type WritingRuntimeContext = {
     status: "start" | "finish";
   }) => void;
   onUsage?: (usage: AgentUsage) => void;
+  onGoalStateChange?: (state: GoalRuntimeState) => void;
   // 测试注入用：pi-agent-core 的 StreamFn（替代 pi 默认的 streamSimple）。
   streamFn?: StreamFn;
 };

@@ -511,14 +511,17 @@ const todoObjectInputSchema: TSchema = Type.Object({
   }),
 });
 
-const yoloControlInputSchema: TSchema = Type.Object({
+const goalControlInputSchema: TSchema = Type.Object({
   action: Type.Union([Type.Literal("complete"), Type.Literal("continue"), Type.Literal("blocked")], {
-    description: "YOLO 检查动作。complete=目标完成；continue=还需继续下一轮；blocked=需要用户授权或补充信息。",
+    description: "目标检查动作。complete=目标完成；continue=还需继续下一轮；blocked=需要用户授权或补充信息。",
   }),
   evidence: Type.Optional(
-    Type.Array(Type.String(), { default: [], description: "完成证据。complete 时至少 1 条，写具体文件、工具结果或落地事项。" }),
+    Type.Array(Type.String(), { default: [], description: "完成证据。complete 时至少 1 条，写具体文件、工具结果、命令输出、统计或落地事项。" }),
   ),
-  goal: Type.String({ minLength: 1, description: "当前 YOLO 总目标，必须复述用户目标。" }),
+  goal: Type.String({ minLength: 1, description: "当前锁定目标，必须复述用户目标，不要缩小范围。" }),
+  audit: Type.Optional(
+    Type.Array(Type.String(), { default: [], description: "完成审计清单。complete 时列出目标中每个显式要求如何被证据覆盖；continue 时可列出尚未覆盖项。" }),
+  ),
   nextAction: Type.Optional(Type.String({ description: "continue 时必填，写下一轮最重要动作。" })),
   reason: Type.String({ minLength: 1, description: "本次检查结论的原因。" }),
   remaining: Type.Optional(
@@ -526,7 +529,7 @@ const yoloControlInputSchema: TSchema = Type.Object({
   ),
   requiredUserAction: Type.Optional(Type.String({ description: "blocked 时必填，说明需要用户做什么。" })),
   stateUpdated: Type.Optional(
-    Type.Boolean({ default: false, description: "成果涉及项目状态时是否已维护状态文件；complete 时必须为 true。" }),
+    Type.Boolean({ default: false, description: "成果涉及项目状态、记忆或文件落盘时是否已维护；complete 时必须为 true。" }),
   ),
   verification: Type.Optional(
     Type.Array(Type.String(), { default: [], description: "验证结果。complete 时至少 1 条，写已读取/统计/搜索核对的结果。" }),
@@ -624,10 +627,10 @@ export const INTERACTION_TOOL_SPECS: Record<string, PiToolSpec> = {
     // 复刻旧 zod z.preprocess(normalizeTodoToolInput)：在 schema 校验前归一化非规范 todo 形态。
     prepareArguments: (args) => normalizeTodoToolInput(args),
   },
-  yolo_control: {
+  goal_control: {
     description:
-      "YOLO 模式每轮结束时上报 complete/continue/blocked。每轮结束必须调用一次；不要用自然语言代替这三种结论。",
-    parameters: yoloControlInputSchema,
+      "目标模式每轮结束时上报 complete/continue/blocked。每轮结束必须调用一次；complete 前必须完成证据审计，不要用自然语言代替这三种结论。",
+    parameters: goalControlInputSchema,
   },
   workspace_browse: {
     description:

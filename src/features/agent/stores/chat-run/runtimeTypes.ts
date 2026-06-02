@@ -1,4 +1,5 @@
 import type { AgentMode } from "@features/agent/lib/modes/modeRules";
+import type { GoalRuntimeState } from "@features/agent/lib/domain/goalControl";
 import type { WritingAgentSession } from "@features/agent/lib/session";
 import type { ManualTurnContextSelection } from "@features/agent/lib/prompt-context/manualTurnContext";
 import type { ChatRunStoreState, ChatRunStoreSetter } from "./helpers";
@@ -12,8 +13,10 @@ export function isRunInterruptReason(value: unknown): value is RunInterruptReaso
 }
 
 export type SendMessageOptions = {
-  autopilotGoal?: string;
-  autopilotIteration?: number;
+  goalIteration?: number;
+  goalObjective?: string;
+  goalState?: GoalRuntimeState;
+  goalTokenBudget?: number | null;
   modeId?: AgentMode;
 };
 

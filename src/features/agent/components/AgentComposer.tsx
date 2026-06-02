@@ -109,22 +109,22 @@ const COMPOSER_MIN_ROWS = 2;
 const COMPOSER_MAX_HEIGHT_PX = 240;
 const DEFAULT_COMPOSER_MODE_ID: AgentMode = "book";
 const MODE_INPUT_PLACEHOLDERS: Record<AgentMode, string> = {
-  autopilot: "输入全自动目标：YOLO 会循环执行、验证和回写，直到目标完成",
   book: "输入想法、问题或要处理的任务",
+  goal: "输入目标：Agent 会持续执行、验证和回写，直到目标完成或真实阻塞",
 };
 
 export const DEFAULT_AGENT_COMPOSER_MODES: AgentComposerMode[] = [
   {
-    description: "默认对话与任务执行模式",
+    description: "普通对话、编辑和任务执行模式",
     icon: Sparkles,
-    id: DEFAULT_COMPOSER_MODE_ID,
+    id: "book",
     label: "协作",
   },
   {
-    description: "按目标全自动读取、执行、验证和回写",
+    description: "围绕一个明确目标持续执行、验证和回写",
     icon: Zap,
-    id: "autopilot",
-    label: "YOLO",
+    id: "goal",
+    label: "目标",
   },
 ];
 

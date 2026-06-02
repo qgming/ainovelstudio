@@ -298,8 +298,8 @@ describe("useChatRunStore", () => {
     expect(prompt).not.toContain("爽点");
   });
 
-  it("YOLO 模式以 autopilot 模式与目标启动，单次 prompt 驱动 harness 内循环至完成", async () => {
-    // CP-F：autopilot 续轮已收进 harness 内循环（runWritingAgentHarness 的 decideContinuation），
+  it("目标模式以 goal 模式与目标启动，单次 prompt 驱动 harness 内循环至完成", async () => {
+    // CP-F：goal 续轮已收进 harness 内循环（runWritingAgentHarness 的 decideContinuation），
     // 不再由 React store 外循环重复调用 prompt。本测试 mock 在 session.prompt 边界之上，
     // 故 runPrompt 只被调用 1 次；多轮续轮判定由 lib/modes/modes.test.ts 覆盖。
     // 这里只验证「以正确模式/目标启动」+「单次流末尾的 complete 裁定收口到 completed」。
@@ -307,24 +307,25 @@ describe("useChatRunStore", () => {
       yield { type: "text-delta", delta: "推进并完成第一章审校。" };
       yield {
         type: "tool-call",
-        toolName: "yolo_control",
-        toolCallId: "yolo-control-1",
+        toolName: "goal_control",
+        toolCallId: "goal-control-1",
         status: "running",
         inputSummary: '{"action":"complete"}',
       };
       yield {
         type: "tool-result",
-        toolName: "yolo_control",
-        toolCallId: "yolo-control-1",
+        toolName: "goal_control",
+        toolCallId: "goal-control-1",
         status: "completed",
-        outputSummary: '{"kind":"yolo-control","action":"complete"}',
+        outputSummary: '{"kind":"goal-control","action":"complete"}',
         output: {
           accepted: true,
           action: "complete",
+          audit: ["目标要求：完成第一章审校并写回文件 -> 已审校并写回"],
           createdAt: "2026-05-10T00:00:00.000Z",
           evidence: ["文件已写回"],
           goal: "完成第一章审校并写回文件",
-          kind: "yolo-control",
+          kind: "goal-control",
           missing: [],
           reason: "完成",
           remaining: [],
@@ -335,7 +336,7 @@ describe("useChatRunStore", () => {
     });
 
     useAgentStore.setState({
-      activeModeId: "autopilot",
+      activeModeId: "goal",
       activeSessionId: "session-1",
       input: "完成第一章审校并写回文件",
       isHydrated: true,
@@ -352,12 +353,23 @@ describe("useChatRunStore", () => {
     await useAgentStore.getState().sendMessage();
 
     expect(streamControl.runPrompt).toHaveBeenCalledTimes(1);
-    expect(streamControl.runPrompt.mock.calls[0]?.[0]?.mode).toBe("autopilot");
+    expect(streamControl.runPrompt.mock.calls[0]?.[0]?.mode).toBe("goal");
     expect(streamControl.runPrompt.mock.calls[0]?.[0]?.modeContext).toMatchObject({
       goal: "完成第一章审校并写回文件",
       iteration: 1,
+      goalState: {
+        objective: "完成第一章审校并写回文件",
+        status: "active",
+        tokenBudget: null,
+        usage: { activeSeconds: 0, tokensUsed: 0 },
+      },
     });
-    expect(useAgentStore.getState().autopilotGoalsBySession["session-1"]).toBe("完成第一章审校并写回文件");
+    expect(useAgentStore.getState().goalsBySession["session-1"]).toBe("完成第一章审校并写回文件");
+    expect(useAgentStore.getState().goalStatesBySession["session-1"]).toMatchObject({
+      objective: "完成第一章审校并写回文件",
+      status: "active",
+      tokenBudget: null,
+    });
     expect(useAgentStore.getState().run.status).toBe("completed");
   });
 

@@ -8,16 +8,19 @@
  * - 短而硬：每条规则要么是"必须 / 禁止"，要么是"分支判断"；不写方法论。
  */
 
-export type AgentMode = "book" | "autopilot";
+import type { GoalRuntimeState } from "../domain/goalControl";
+
+export type AgentMode = "book" | "goal";
 
 export type BookModeContext = Record<string, never>;
-export type AutopilotModeContext = {
+export type GoalModeContext = {
   goal: string;
   iteration: number;
+  goalState?: GoalRuntimeState;
 };
 export type ModeContextMap = {
-  autopilot: AutopilotModeContext;
   book: BookModeContext;
+  goal: GoalModeContext;
 };
 
 const BOOK_MODE_RULES = [
@@ -50,27 +53,40 @@ const BOOK_MODE_RULES = [
   "- ≥3 步任务用 `update_plan` 写短计划。",
   "- 正文、卷纲、细纲和检查结论都由主代理直接完成；需要专项视角时，在计划中拆成清晰步骤。",
   "",
-  "**完成条件**",
-  "- 涉及创作/规划/设定的产出必须写回工作区文件；只在对话里贴正文不算完成。",
-  "- 涉及剧情推进、人物状态、伏笔、世界观规则或当前目标变化时，必须考虑更新对应的 `.project/memory/` 记忆文件。",
-  "- 最终回复一句话说明：本轮改了什么、是否更新了项目记忆(未更新则说明原因)、还缺什么、建议下一步。",
+  "**编辑方式**",
+  "- 这是普通对话/编辑模式，不做目标模板检查，也不需要调用 `goal_control`。",
+  "- 用户明确要求修改、保存或维护项目资料时，直接使用工作区工具落盘；用户只是讨论、询问或试写时，可以只在对话中回答。",
+  "- 涉及剧情推进、人物状态、伏笔或世界观规则且用户要求落盘时，顺手考虑是否需要更新 `.project/memory/`。",
+  "- 最终回复保持自然简短：说明本轮做了什么、关键结果和可选下一步即可。",
 ].join("\n");
 
-function buildAutopilotModeRules(context: AutopilotModeContext) {
+function buildGoalModeRules(context: GoalModeContext) {
   const goal = context.goal?.trim() || "未指定";
   const iteration = context.iteration || 1;
+  const goalState = context.goalState;
   return [
-    "# 模式：YOLO（全自动目标执行）",
+    "# 模式：目标（持续执行直到完成）",
     "",
     "**当前目标**",
     `- 目标:${goal}`,
-    `- 当前全自动轮次:第 ${iteration} 轮`,
+    `- 当前目标轮次:第 ${iteration} 轮`,
+    goalState ? `- 目标状态:${goalState.status}` : null,
+    goalState ? `- 已用:${goalState.usage.tokensUsed} tokens / ${goalState.usage.activeSeconds} 秒` : null,
+    goalState?.tokenBudget ? `- token 预算:${goalState.tokenBudget}` : null,
     "",
-    "**YOLO 专属契约**",
-    "- 普通过程决策自行判断，不用 ask；遇到外部授权或高风险破坏性操作再调 blocked。",
-    "- 每轮最后必须调用 `yolo_control`，不能用纯文本宣布完成或继续。",
-    '- complete:目标已验收 + 状态已回写时使用，action="complete"，evidence/verification 写明证据，stateUpdated=true。',
-    '- continue:剩余任务清晰、可立即推进时使用，action="continue"，remaining 写剩余任务，nextAction 写下一轮动作。',
+    "**目标执行契约**",
+    "- 目标是锁定的完成契约；不要在执行中偷换、缩小或改写目标。若目标本身必须改变，先 blocked 说明原因。",
+    "- 参考 /goal 与 /until-done 的 North Star 原则：目标、验收标准、约束和已授权范围必须稳定；计划可以重排，目标不能漂移。",
+    "- 普通过程决策自行判断并推进，不用 ask；只有缺关键输入、外部授权或高风险破坏性操作时才 blocked。",
+    "- 每轮按 Inspect → Plan → Act → Verify → Report 推进；多步任务要用 `update_plan` 保持当前计划可见。",
+    "- 完成前必须做完成审计：把目标里的每个显式要求映射到新鲜证据（文件、工具结果、统计、搜索核对、测试、构建、截图或其他真实产物）。",
+    "- 不接受代理信号作为完成证明：有计划、做了大部分、某个检查通过、文本看起来合理，都不能单独证明目标完成。",
+    "- 每轮最后必须调用 `goal_control`，不能用纯文本宣布完成或继续。",
+    "- 若 `goal_control` 上次返回审计失败、缺证据或未写回状态，本轮必须先补验证与落盘，再重新裁定。",
+    "- 若目标达到 token 预算，停止展开新工作，只收口总结进展、剩余项和下一步；预算耗尽不代表完成。",
+    "- 只有同一阻塞条件连续 3 轮仍无法推进时才进入 blocked；前两轮应先尝试低风险替代路径、读取资料或缩小下一步。",
+    '- complete:仅在目标全部验收 + 状态已回写时使用，action="complete"，audit 逐项映射显式要求，evidence/verification 写明证据，stateUpdated=true，remaining 为空。',
+    '- continue:任一要求未验证、仍有剩余任务或需要更多证据时使用，action="continue"，remaining 写剩余任务，nextAction 写下一轮动作。',
     '- blocked:遇到外部授权、高风险操作或缺关键输入时使用，action="blocked"，requiredUserAction 写明用户要做什么。',
   ].join("\n");
 }
@@ -80,10 +96,10 @@ export function buildModeRules<M extends AgentMode>(
   context: ModeContextMap[M],
 ): string {
   switch (mode) {
-    case "autopilot":
-      return buildAutopilotModeRules(context as AutopilotModeContext);
     case "book":
       return BOOK_MODE_RULES;
+    case "goal":
+      return buildGoalModeRules(context as GoalModeContext);
     default:
       return BOOK_MODE_RULES;
   }

@@ -21,7 +21,8 @@ export function applyBootstrap(
   const nextMessagesBySession = filterRecord(state.messagesBySession, validIds);
   const nextEntriesBySession = filterRecord(state.entriesBySession, validIds);
   const nextDraftsBySession = filterRecord(state.draftsBySession, validIds);
-  const nextAutopilotGoalsBySession = filterRecord(state.autopilotGoalsBySession, validIds);
+  const nextGoalStatesBySession = filterRecord(state.goalStatesBySession, validIds);
+  const nextGoalsBySession = filterRecord(state.goalsBySession, validIds);
 
   if (bootstrap.activeSessionId) {
     nextEntriesBySession[bootstrap.activeSessionId] = bootstrap.activeSessionEntries;
@@ -44,7 +45,8 @@ export function applyBootstrap(
 
   return {
     activeSessionId: bootstrap.activeSessionId,
-    autopilotGoalsBySession: nextAutopilotGoalsBySession,
+    goalStatesBySession: nextGoalStatesBySession,
+    goalsBySession: nextGoalsBySession,
     currentBookId: bootstrap.bookId ?? state.currentBookId,
     draftsBySession: nextDraftsBySession,
     errorMessage: null,

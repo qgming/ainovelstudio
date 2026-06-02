@@ -1,28 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { YOLO_CONTROL_KIND, YOLO_CONTROL_TOOL_ID } from "../domain/yoloControl";
+import {
+  applyGoalControl,
+  createGoalRuntimeState,
+  GOAL_CONTROL_KIND,
+  GOAL_CONTROL_TOOL_ID,
+  type GoalRuntimeState,
+} from "../domain/goalControl";
 import type { AgentPart } from "../types";
 import { getModeConfig } from "./index";
 import { bookMode, COLLAB_STEP_LIMIT } from "./bookMode";
-import { autopilotMode, buildAutopilotContinuePrompt } from "./autopilotMode";
+import { buildGoalContinuePrompt, goalMode } from "./goalMode";
 
-// 构造一个携带 YoloControlData 的 yolo_control tool-result part。
-function yoloControlPart(
+function goalControlPart(
   action: "complete" | "continue" | "blocked",
   overrides: Partial<Record<string, unknown>> = {},
-): AgentPart {
+): Extract<AgentPart, { type: "tool-result" }> {
   return {
     type: "tool-result",
-    toolName: YOLO_CONTROL_TOOL_ID,
-    toolCallId: "yolo-1",
+    toolName: GOAL_CONTROL_TOOL_ID,
+    toolCallId: "goal-1",
     status: "completed",
     outputSummary: "",
     output: {
       accepted: true,
       action,
+      audit: action === "complete" ? ["目标要求已逐项核对"] : [],
       createdAt: "2026-05-10T00:00:00.000Z",
       evidence: action === "complete" ? ["已写回"] : [],
       goal: "完成第一章",
-      kind: YOLO_CONTROL_KIND,
+      kind: GOAL_CONTROL_KIND,
       missing: [],
       warnings: [],
       reason: "测试",
@@ -38,10 +44,10 @@ function yoloControlPart(
 describe("getModeConfig", () => {
   it("已知模式返回对应配置", () => {
     expect(getModeConfig("book")).toBe(bookMode);
-    expect(getModeConfig("autopilot")).toBe(autopilotMode);
+    expect(getModeConfig("goal")).toBe(goalMode);
   });
 
-  it("未传/未知模式回退 book", () => {
+  it("未传模式回退 book", () => {
     expect(getModeConfig(undefined)).toBe(bookMode);
   });
 });
@@ -52,33 +58,33 @@ describe("step limit", () => {
     expect(bookMode.stepLimit).toBe(1000);
   });
 
-  it("autopilot 模式无上限", () => {
-    expect(autopilotMode.stepLimit).toBeNull();
+  it("goal 模式无轮数上限", () => {
+    expect(goalMode.stepLimit).toBeNull();
   });
 });
 
 describe("tools.filterEnabledToolIds", () => {
-  it("book 剔除 yolo_control", () => {
+  it("book 剔除 goal_control", () => {
     const result = bookMode.tools.filterEnabledToolIds([
       "workspace_read",
-      YOLO_CONTROL_TOOL_ID,
+      GOAL_CONTROL_TOOL_ID,
       "update_plan",
     ]);
     expect(result).toEqual(["workspace_read", "update_plan"]);
   });
 
-  it("autopilot 强制带 yolo_control（即便未启用）", () => {
-    const result = autopilotMode.tools.filterEnabledToolIds(["workspace_read"]);
-    expect(result).toContain(YOLO_CONTROL_TOOL_ID);
+  it("goal 强制带 goal_control（即便未启用）", () => {
+    const result = goalMode.tools.filterEnabledToolIds(["workspace_read"]);
+    expect(result).toContain(GOAL_CONTROL_TOOL_ID);
     expect(result).toContain("workspace_read");
   });
 
-  it("autopilot 不重复添加已启用的 yolo_control", () => {
-    const result = autopilotMode.tools.filterEnabledToolIds([
-      YOLO_CONTROL_TOOL_ID,
+  it("goal 不重复添加已启用的 goal_control", () => {
+    const result = goalMode.tools.filterEnabledToolIds([
+      GOAL_CONTROL_TOOL_ID,
       "workspace_read",
     ]);
-    expect(result.filter((id) => id === YOLO_CONTROL_TOOL_ID)).toHaveLength(1);
+    expect(result.filter((id: string) => id === GOAL_CONTROL_TOOL_ID)).toHaveLength(1);
   });
 });
 
@@ -94,14 +100,13 @@ describe("book loop.decideContinuation", () => {
     repairCount: 0,
   };
 
-  it("写入任务却无写入工具调用 → 注入协议修复 followUp", () => {
+  it("协作模式不做写入协议修复或目标模板检查", () => {
     const decision = bookMode.loop.decideContinuation(baseInput);
-    expect(decision.kind).toBe("continue");
-    expect(decision.reason).toBe("write_repair");
-    expect(decision.followUpPrompt).toContain("协议修复");
+    expect(decision.kind).toBe("stop");
+    expect(decision.reason).toBeUndefined();
   });
 
-  it("已修复过（repairCount>0）→ 停", () => {
+  it("协作模式即使 repairCount>0 也不触发后台续轮", () => {
     const decision = bookMode.loop.decideContinuation({ ...baseInput, repairCount: 1 });
     expect(decision.kind).toBe("stop");
   });
@@ -117,51 +122,121 @@ describe("book loop.decideContinuation", () => {
   });
 });
 
-describe("autopilot loop.decideContinuation", () => {
+describe("goal loop.decideContinuation", () => {
+  function stateWithControl(action: "complete" | "continue" | "blocked", overrides: Partial<Record<string, unknown>> = {}) {
+    return applyGoalControl(createGoalRuntimeState("完成第一章"), goalControlPart(action, overrides).output as never);
+  }
+
   const baseInput = {
     turnCount: 1,
     stepLimit: null,
     finishReason: "stop",
     turnParts: [] as AgentPart[],
     modeContext: { goal: "完成第一章", iteration: 1 },
-    enabledToolIds: [YOLO_CONTROL_TOOL_ID],
+    enabledToolIds: [GOAL_CONTROL_TOOL_ID],
     userPrompt: "完成第一章",
     repairCount: 0,
   };
 
-  it("本轮无 yolo_control → 续轮（协议修复）", () => {
-    const decision = autopilotMode.loop.decideContinuation(baseInput);
+  it("本轮无 goal_control → 续轮（协议修复）", () => {
+    const decision = goalMode.loop.decideContinuation(baseInput);
     expect(decision.kind).toBe("continue");
     expect(decision.reason).toBe("write_repair");
     expect(decision.followUpPrompt).toContain("协议修复");
   });
 
-  it("yolo_control complete → 停（goal_completed）", () => {
-    const decision = autopilotMode.loop.decideContinuation({
+  it("目标状态已完成 → 停（goal_completed）", () => {
+    const completeState = stateWithControl("complete");
+    const decision = goalMode.loop.decideContinuation({
       ...baseInput,
-      turnParts: [yoloControlPart("complete")],
+      goalState: completeState,
+      turnParts: [goalControlPart("complete")],
     });
     expect(decision.kind).toBe("stop");
     expect(decision.reason).toBe("goal_completed");
   });
 
-  it("yolo_control blocked → 停（blocked）", () => {
-    const decision = autopilotMode.loop.decideContinuation({
+  it("complete 审计不完整 → 继续而不是误判完成", () => {
+    const weakComplete = stateWithControl("complete", {
+      audit: [],
+      evidence: [],
+      stateUpdated: false,
+      verification: [],
+    });
+    const decision = goalMode.loop.decideContinuation({
       ...baseInput,
-      turnParts: [yoloControlPart("blocked")],
+      goalState: weakComplete,
+      turnParts: [goalControlPart("complete", {
+        audit: [],
+        evidence: [],
+        stateUpdated: false,
+        verification: [],
+      })],
+    });
+    expect(decision.kind).toBe("continue");
+    expect(decision.reason).toBe("goal_continue");
+    expect(decision.followUpPrompt).toContain("待修复审计问题");
+  });
+
+  it("blocked 未连续 3 次 → 继续尝试替代路径", () => {
+    const blockedOnce = stateWithControl("blocked");
+    const decision = goalMode.loop.decideContinuation({
+      ...baseInput,
+      goalState: blockedOnce,
+      turnParts: [goalControlPart("blocked")],
+    });
+    expect(decision.kind).toBe("continue");
+    expect(decision.reason).toBe("goal_continue");
+    expect(decision.followUpPrompt).toContain("连续阻塞次数:1/3");
+  });
+
+  it("blocked 连续 3 次 → 停（blocked）", () => {
+    const blockedState: GoalRuntimeState = {
+      ...createGoalRuntimeState("完成第一章"),
+      blockedCount: 3,
+      status: "blocked",
+    };
+    const decision = goalMode.loop.decideContinuation({
+      ...baseInput,
+      goalState: blockedState,
+      turnParts: [goalControlPart("blocked")],
     });
     expect(decision.kind).toBe("stop");
     expect(decision.reason).toBe("blocked");
   });
 
-  it("yolo_control continue → 续轮（yolo_continue），轮次推进", () => {
-    const decision = autopilotMode.loop.decideContinuation({
+  it("预算触顶时先注入一次收口提示，已收口后停止", () => {
+    const budgetState: GoalRuntimeState = {
+      ...createGoalRuntimeState("完成第一章", 10),
+      status: "budget_limited",
+      usage: { activeSeconds: 12, tokensUsed: 10 },
+    };
+    const wrapUp = goalMode.loop.decideContinuation({
+      ...baseInput,
+      goalState: budgetState,
+      turnParts: [goalControlPart("continue")],
+    });
+    expect(wrapUp.kind).toBe("continue");
+    expect(wrapUp.reason).toBe("budget_limited");
+    expect(wrapUp.followUpPrompt).toContain("目标预算收口");
+
+    const stop = goalMode.loop.decideContinuation({
+      ...baseInput,
+      goalState: { ...budgetState, budgetLimitNotified: true },
+      turnParts: [goalControlPart("continue")],
+    });
+    expect(stop.kind).toBe("stop");
+    expect(stop.reason).toBe("budget_limited");
+  });
+
+  it("goal_control continue → 续轮（goal_continue），轮次推进", () => {
+    const decision = goalMode.loop.decideContinuation({
       ...baseInput,
       turnCount: 2,
-      turnParts: [yoloControlPart("continue")],
+      turnParts: [goalControlPart("continue")],
     });
     expect(decision.kind).toBe("continue");
-    expect(decision.reason).toBe("yolo_continue");
+    expect(decision.reason).toBe("goal_continue");
     expect(decision.followUpPrompt).toContain("第 3 轮");
     expect(decision.followUpPrompt).toContain("自动检查");
   });
@@ -176,8 +251,8 @@ describe("approval.decideToolCall", () => {
     })).toEqual({ block: false });
   });
 
-  it("autopilot 放行常规工作区工具", () => {
-    expect(autopilotMode.approval.decideToolCall({
+  it("goal 放行常规工作区工具", () => {
+    expect(goalMode.approval.decideToolCall({
       toolName: "workspace_write",
       input: {},
       modeContext: { goal: "g", iteration: 1 },
@@ -185,20 +260,21 @@ describe("approval.decideToolCall", () => {
   });
 });
 
-describe("buildAutopilotContinuePrompt", () => {
-  it("普通续轮含三种 action", () => {
-    const prompt = buildAutopilotContinuePrompt("完成第一章", 2);
-    expect(prompt).toContain("YOLO 自动检查");
+describe("buildGoalContinuePrompt", () => {
+  it("普通续轮含三种 action 和完成审计要求", () => {
+    const prompt = buildGoalContinuePrompt("完成第一章", 2);
+    expect(prompt).toContain("目标自动检查");
     expect(prompt).toContain("完成第一章");
     expect(prompt).toContain("第 2 轮");
     expect(prompt).toContain('action="complete"');
     expect(prompt).toContain('action="continue"');
     expect(prompt).toContain('action="blocked"');
+    expect(prompt).toContain("证据不足");
   });
 
   it("协议修复模式不同 header", () => {
-    const prompt = buildAutopilotContinuePrompt("完成第一章", 3, true);
-    expect(prompt).toContain("YOLO 协议修复");
+    const prompt = buildGoalContinuePrompt("完成第一章", 3, true);
+    expect(prompt).toContain("目标协议修复");
     expect(prompt).toContain("不要继续执行新任务");
   });
 });

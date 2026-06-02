@@ -708,7 +708,7 @@ describe("agent session (streaming)", () => {
     }
 
     const context = lastStreamContext();
-    expect(context.systemPrompt ?? "").toContain("浏览工作区结构");
+    expect(context.systemPrompt ?? "").toContain("浏览工作区目录结构");
     expect(context.tools?.some((t) => t.name === "workspace_browse")).toBe(true);
 
     const toolCall = parts.find((p) => p.type === "tool-call");

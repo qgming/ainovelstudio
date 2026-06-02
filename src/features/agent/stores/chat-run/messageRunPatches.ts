@@ -1,4 +1,5 @@
 import type { AgentMessage, AgentPart, AgentUsage } from "@features/agent/lib/types";
+import type { GoalRuntimeState } from "@features/agent/lib/domain/goalControl";
 import { derivePlanningState } from "@features/agent/lib/modes/planning";
 import { buildRun, deriveSessionTitle } from "@features/agent/chat/sessionRuntime";
 import type { ChatEntry } from "@features/agent/chat/types";
@@ -8,7 +9,8 @@ import { replaceMessageEntry } from "./entriesRuntime";
 type RunPatchContext = {
   abortController: AbortController;
   assistantMessageId: string;
-  autopilotGoal: string | null;
+  goalState: GoalRuntimeState | null;
+  goalObjective: string | null;
   latestEntries: ChatEntry[];
   latestMessages: AgentMessage[];
   runRequestId: string;
@@ -39,9 +41,12 @@ export function buildActiveRunPatch(
   return {
     abortController: context.abortController,
     activeRunRequestId: context.runRequestId,
-    autopilotGoalsBySession: context.autopilotGoal
-      ? { ...state.autopilotGoalsBySession, [sessionId]: context.autopilotGoal }
-      : state.autopilotGoalsBySession,
+    goalsBySession: context.goalObjective
+      ? { ...state.goalsBySession, [sessionId]: context.goalObjective }
+      : state.goalsBySession,
+    goalStatesBySession: context.goalState
+      ? { ...state.goalStatesBySession, [sessionId]: context.goalState }
+      : state.goalStatesBySession,
     inflightToolRequestIds: [],
     errorMessage: null,
     entriesBySession: { ...state.entriesBySession, [sessionId]: context.latestEntries },

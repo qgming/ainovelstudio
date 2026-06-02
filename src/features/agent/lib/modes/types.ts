@@ -4,7 +4,7 @@
 // - 工具白名单过滤      ← 原 messageSessionFactory.getEnabledToolIds / getRequiredControlToolId
 // - 步数上限           ← 原 core/stepLimits.resolveAgentStepLimit
 // - 模式规则文本        ← 原 modeRules.buildModeRules
-// - 循环续轮策略        ← 原 stores/chat-run/autopilot.ts（外循环整体内聚）
+// - 循环续轮策略        ← goal 模式目标续轮（外循环整体内聚）
 // - tool_call 审批策略  ← 新增，驱动 harness.on("tool_call")
 //
 // 续轮契约（pi 推荐方式）：runner 在 turn_end 调用 loop.decideContinuation，
@@ -13,6 +13,8 @@
 
 import type { AgentMode, ModeContextMap } from "./modeRules";
 import type { AgentPart } from "../types";
+import type { AgentUsage } from "../types";
+import type { GoalRuntimeState } from "../domain/goalControl";
 
 /** turn_end 时供 decideContinuation 判定的输入。 */
 export type ContinuationInput<M extends AgentMode = AgentMode> = {
@@ -24,13 +26,17 @@ export type ContinuationInput<M extends AgentMode = AgentMode> = {
   finishReason?: string;
   /** 本轮累积的 AgentPart（含 text/reasoning/tool-call/tool-result）。 */
   turnParts: readonly AgentPart[];
-  /** 模式专属上下文（autopilot 含 goal/iteration）。 */
+  /** 模式专属上下文（goal 含目标与轮次）。 */
   modeContext: ModeContextMap[M] | undefined;
+  /** 目标模式运行时状态，含状态/预算/用量/上次裁定。 */
+  goalState?: GoalRuntimeState;
+  /** 本轮 turn_end 的 usage。 */
+  latestUsage?: AgentUsage | null;
   /** 本次 run 启用的工具 id。 */
   enabledToolIds: readonly string[];
   /** 触发本次 run 的用户 prompt。 */
   userPrompt: string;
-  /** 已注入的协议修复次数（writeProtocolRepair 单次约束用）。 */
+  /** 已注入的控制协议修复次数（目标模式缺控制信号时使用）。 */
   repairCount: number;
 };
 
@@ -42,9 +48,10 @@ export type ContinuationDecision = {
   /** 判定理由，便于调试/日志。 */
   reason?:
     | "goal_completed"
+    | "budget_limited"
     | "blocked"
     | "step_limit"
-    | "yolo_continue"
+    | "goal_continue"
     | "write_repair";
 };
 
@@ -65,7 +72,7 @@ export type ToolApprovalDecision = {
 export type ModeConfig<M extends AgentMode = AgentMode> = {
   id: M;
   tools: {
-    /** 本模式必须启用的控制工具 id（autopilot=yolo_control；book=null）。 */
+    /** 本模式必须启用的控制工具 id（goal=goal_control；book=null）。 */
     requiredControlToolId: string | null;
     /** 从全部已启用工具 id 过滤出本模式应使用的集合。 */
     filterEnabledToolIds(allEnabled: readonly string[]): string[];

@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
 import { getTodoItemsFromPart, type PlanItem } from "@features/agent/lib/modes/planning";
-import { getYoloControlDataFromPart } from "@features/agent/lib/domain/yoloControl";
+import { getGoalControlDataFromPart } from "@features/agent/lib/domain/goalControl";
 
 const markdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => <p className="mb-3 last:mb-0 text-inherit">{children}</p>,
@@ -120,8 +120,8 @@ function PlanProgressCard({
   );
 }
 
-function YoloControlCard({ part }: { part: Extract<AgentPart, { type: "tool-call" }> }) {
-  const data = getYoloControlDataFromPart(part);
+function GoalControlCard({ part }: { part: Extract<AgentPart, { type: "tool-call" }> }) {
+  const data = getGoalControlDataFromPart(part);
   if (!data) return null;
   const summary = data.accepted
     ? data.action === "complete"
@@ -134,12 +134,13 @@ function YoloControlCard({ part }: { part: Extract<AgentPart, { type: "tool-call
     <AccordionCard
       collapseOnContentClick
       icon={Zap}
-      label="YOLO 检查"
+      label="目标检查"
       summary={summary}
       status={data.accepted ? normalizeRenderableStatus(part.status) : "failed"}
     >
       <div className="space-y-2 text-sm leading-6 text-foreground">
         <div>{data.reason}</div>
+        {data.audit.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">审计：{data.audit.join("；")}</div> : null}
         {data.evidence.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">证据：{data.evidence.join("；")}</div> : null}
         {data.verification.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">验证：{data.verification.join("；")}</div> : null}
         {data.remaining.length > 0 ? <div className="text-xs leading-5 text-muted-foreground">剩余：{data.remaining.join("；")}</div> : null}
@@ -344,8 +345,8 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
         return <PlanProgressCard items={items} part={part} />;
       }
     }
-    if (part.toolName === "yolo_control") {
-      const card = <YoloControlCard part={part} />;
+    if (part.toolName === "goal_control") {
+      const card = <GoalControlCard part={part} />;
       if (card) return card;
     }
 

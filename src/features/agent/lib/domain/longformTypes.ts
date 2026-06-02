@@ -6,7 +6,7 @@ export type AgentCard = {
   body: string;
   contextPolicyId: string;
   id: string;
-  mode: "book" | "autopilot";
+  mode: "book" | "goal";
   modelPresetId: string | null;
   name: string;
   tools: string[];

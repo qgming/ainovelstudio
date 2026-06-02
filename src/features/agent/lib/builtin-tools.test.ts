@@ -96,7 +96,7 @@ vi.mock("./model-gateway/providerApi", () => ({
 
 import { createGlobalToolset, createLocalResourceToolset, createWorkspaceToolset } from "./builtin-tools";
 import { __resetLeaderboardCacheForTests } from "@features/leaderboard/leaderboardApi";
-import { YOLO_CONTROL_KIND } from "./domain/yoloControl";
+import { GOAL_CONTROL_KIND } from "./domain/goalControl";
 import { searxngSearchService } from "./builtin-tools/searxngSearchService";
 
 function createFanqieRankApiJson(bookList: unknown[]) {
@@ -803,11 +803,12 @@ describe("createGlobalToolset", () => {
     ]);
   });
 
-  it("yolo_control 会返回结构化结果检查信号", async () => {
+  it("goal_control 会返回结构化目标检查信号", async () => {
     const toolset = createGlobalToolset();
 
-    const result = await toolset.yolo_control.execute({
+    const result = await toolset.goal_control.execute({
       action: "complete",
+      audit: ["完成第一章 -> 文件已写回"],
       evidence: ["文件已写回"],
       goal: "完成第一章",
       reason: "文件已写回，验证通过。",
@@ -816,11 +817,11 @@ describe("createGlobalToolset", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.summary).toContain("YOLO 目标完成");
+    expect(result.summary).toContain("目标已完成");
     expect(result.data).toMatchObject({
       accepted: true,
       action: "complete",
-      kind: YOLO_CONTROL_KIND,
+      kind: GOAL_CONTROL_KIND,
       reason: "文件已写回，验证通过。",
     });
     expect(result.data).toHaveProperty("createdAt");

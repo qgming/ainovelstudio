@@ -119,21 +119,20 @@ describe("BookAgentPanel", () => {
     });
   });
 
-  it("YOLO 模式设定目标后在顶部显示目标信息", () => {
+  it("目标模式设定目标后在顶部显示目标信息", () => {
     useAgentStore.setState({
-      activeModeId: "autopilot",
+      activeModeId: "goal",
       activeSessionId: "session-1",
-      autopilotGoalsBySession: {
+      goalsBySession: {
         "session-1": "完成第一章审校并写回文件",
       },
     });
 
     render(<BookAgentPanel width={420} />);
 
-    expect(screen.getByLabelText("当前 Agent 模式")).toHaveTextContent("YOLO");
-    expect(screen.getByLabelText("YOLO 状态")).toBeInTheDocument();
-    expect(screen.getByText("YOLO：完成第一章审校并写回文件")).toBeInTheDocument();
-    expect(screen.queryByText("目标模式")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前 Agent 模式")).toHaveTextContent("目标");
+    expect(screen.getByLabelText("目标状态")).toBeInTheDocument();
+    expect(screen.getByText("目标：完成第一章审校并写回文件")).toBeInTheDocument();
   });
 
   it("点击会话上下文按钮后显示当前会话与 token 占用", () => {

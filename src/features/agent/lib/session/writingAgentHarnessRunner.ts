@@ -5,7 +5,7 @@
 // - 引擎从低层 runAgentLoop 换成 AgentHarness（自带 jsonl 会话持久化 + 队列 + on() 钩子）。
 // - 历史不再每轮重注入：pi 持久会话（per-book .sessions/）已持有，故 prompt 只发本轮内容。
 // - 控制流改用 harness 原生能力，模式策略统一从 ModeConfig 读：
-//     · 续轮（writeProtocolRepair / autopilot 目标续轮）
+//     · 续轮（goal 目标续轮）
 //         → turn_end 调 modeConfig.loop.decideContinuation，continue 时 harness.followUp(prompt)
 //           在同一 prompt() 流内续轮（pi 推荐方式，整个 prompt() Promise 不 resolve 直到目标完成）。
 //     · 步数预算 → turn_end 计数，达 modeConfig.stepLimit 后不再续轮（软收敛），abort 仅作硬中止兜底。
@@ -20,6 +20,13 @@ import type { AgentSessionEvent } from "./events";
 import { getModeConfig } from "../modes";
 import { getPlanningIntervention } from "../modes/planning";
 import { buildRuntimeControlBlock, buildUserTurnContent } from "../prompt-context";
+import {
+  applyGoalControl,
+  applyGoalUsage,
+  getGoalControlDataFromPart,
+  markGoalBudgetLimitNotified,
+  type GoalRuntimeState,
+} from "../domain/goalControl";
 import { AgentEventAdapter } from "../pi/eventAdapter";
 import type { AgentPart, AgentUsage } from "../types";
 import { hasProviderConfig, type WritingRuntimeContext } from "./writingRuntimeContext";
@@ -69,18 +76,42 @@ function messageHasRuntimeContext(message: AgentMessage): boolean {
 function buildRuntimeContextMessage(
   prompt: string,
   context: WritingRuntimeContext,
+  goalState?: GoalRuntimeState,
 ): AgentMessage {
   const body = buildRuntimeControlBlock({
     planningIntervention: getPlanningIntervention(context.planningState, prompt),
     planningState: context.planningState,
     workspaceRootPath: context.workspaceRootPath,
   });
-  const text = [RUNTIME_CONTEXT_MARKER, body, "</runtime_context>"].join("\n");
+  const goalBlock = goalState
+    ? [
+        "<goal_runtime>",
+        `status: ${goalState.status}`,
+        `objective: ${goalState.objective}`,
+        `goal_id: ${goalState.goalId}`,
+        `tokens_used: ${goalState.usage.tokensUsed}`,
+        `active_seconds: ${goalState.usage.activeSeconds}`,
+        `token_budget: ${goalState.tokenBudget ?? "none"}`,
+        goalState.lastControl ? `last_control: ${goalState.lastControl.action} - ${goalState.lastControl.reason}` : null,
+        goalState.auditFailures.length ? `audit_failures: ${goalState.auditFailures.join("；")}` : null,
+        goalState.blockedCount ? `blocked_count: ${goalState.blockedCount}/3` : null,
+        "</goal_runtime>",
+      ].filter(Boolean).join("\n")
+    : "";
+  const text = [RUNTIME_CONTEXT_MARKER, body, goalBlock, "</runtime_context>"].filter(Boolean).join("\n");
   return {
     role: "user",
     content: [{ type: "text", text }],
     timestamp: 0,
   };
+}
+
+function findLatestGoalControl(parts: readonly AgentPart[]) {
+  for (const part of [...parts].reverse()) {
+    const data = getGoalControlDataFromPart(part);
+    if (data) return data;
+  }
+  return null;
 }
 
 // 整轮（含所有续轮）结束、harness 回到 idle 后，按 pi 自带阈值判断是否压缩 pi 会话。
@@ -137,10 +168,14 @@ export async function* runWritingAgentHarness({
 
   const stepLimit = modeConfig.stepLimit;
   // 协议修复续轮的硬上限：即便模式持续返回 write_repair（例如模型始终不调用
-  // yolo_control），也不能无限续轮烧 token。达到上限后停止续轮,让本轮自然收敛。
+  // goal_control），也不能无限续轮烧 token。达到上限后停止续轮,让本轮自然收敛。
   const MAX_REPAIR_FOLLOWUPS = 3;
   let turnCount = 0;
   let repairCount = 0;
+  let turnStartedAt: number | null = null;
+  let goalState = toolContext.modeContext && "goalState" in toolContext.modeContext
+    ? toolContext.modeContext.goalState
+    : undefined;
   // 累积「当前 turn」内产出的 AgentPart，用于续轮判定（text/reasoning/tool-call/tool-result）。
   let currentTurnParts: AgentPart[] = [];
   let failure: Error | null = null;
@@ -164,7 +199,7 @@ export async function* runWritingAgentHarness({
     abortSignal.addEventListener("abort", onAbort, { once: true });
   }
 
-  // tool_call 审批钩子：按模式策略放行/拦截（book 全放行；autopilot 仅拦高风险）。
+  // tool_call 审批钩子：按模式策略放行/拦截（book 全放行；goal 仅拦高风险）。
   // 用 emitHook 派发（subscribe 收不到），故必须用 harness.on。
   const offToolCall = harness.on("tool_call", (event) => {
     const decision = modeConfig.approval.decideToolCall({
@@ -183,7 +218,7 @@ export async function* runWritingAgentHarness({
   // 钩子不持久化返回的 messages（仅本次请求生效），故每次先剔除上一条注入再追加最新，避免堆叠。
   const offContext = harness.on("context", (event) => {
     const filtered = event.messages.filter((message) => !messageHasRuntimeContext(message));
-    const runtimeMessage = buildRuntimeContextMessage(prompt, toolContext);
+    const runtimeMessage = buildRuntimeContextMessage(prompt, toolContext, goalState);
     // 找到最后一条 user（当前轮输入），把运行时块插在它前面；找不到则追加到尾部。
     let lastUserIndex = -1;
     for (let i = filtered.length - 1; i >= 0; i -= 1) {
@@ -220,21 +255,38 @@ export async function* runWritingAgentHarness({
       emit(evt);
       if (evt.type === "turn_start") {
         currentTurnParts = [];
+        turnStartedAt = Date.now();
       }
       if (evt.type === "turn_end") {
         turnCount += 1;
+        const activeSecondsDelta = turnStartedAt === null ? 0 : Math.max(0, Math.floor((Date.now() - turnStartedAt) / 1000));
+        turnStartedAt = null;
         if (evt.usage) {
           latestUsage = evt.usage;
           toolContext.onUsage?.(evt.usage);
         }
         if (evt.finishReason === "error") {
           // 模型调用失败：记录错误并停止续轮。不再 followUp,否则会对同一个失败的
-          // provider 无限重试(autopilot stepLimit=null 时尤甚)。让 prompt() 自然
+          // provider 无限重试(goal stepLimit=null 时尤甚)。让 prompt() 自然
           // resolve,失败在 stream 结束后于 line 178 抛出。
           failure = new Error(evt.errorMessage ?? "模型调用失败。");
           continue;
         }
         if (abortSignal.aborted) continue;
+
+        if (toolContext.mode === "goal" && goalState) {
+          const turnUsage = evt.usage ?? latestUsage;
+          const usageApplied = applyGoalUsage(
+            goalState,
+            turnUsage ? turnUsage.noCacheTokens + turnUsage.outputTokens : 0,
+            activeSecondsDelta,
+          );
+          goalState = applyGoalControl(usageApplied.state, findLatestGoalControl(currentTurnParts));
+          if (goalState.status === "budget_limited" && usageApplied.crossedBudget) {
+            goalState = { ...goalState, budgetLimitNotified: false };
+          }
+          toolContext.onGoalStateChange?.(goalState);
+        }
 
         // 步数预算：达上限不再续轮（软收敛，让本轮自然 agent_end）；不主动打断运行中的 turn。
         if (stepLimit !== null && turnCount >= stepLimit) {
@@ -248,6 +300,8 @@ export async function* runWritingAgentHarness({
           finishReason: evt.finishReason,
           turnParts: currentTurnParts,
           modeContext: toolContext.modeContext as never,
+          goalState,
+          latestUsage: evt.usage ?? latestUsage,
           enabledToolIds: toolContext.enabledToolIds,
           userPrompt: prompt,
           repairCount,
@@ -258,6 +312,10 @@ export async function* runWritingAgentHarness({
             continue;
           }
           if (decision.reason === "write_repair") repairCount += 1;
+          if (decision.reason === "budget_limited" && goalState?.status === "budget_limited") {
+            goalState = markGoalBudgetLimitNotified(goalState);
+            toolContext.onGoalStateChange?.(goalState);
+          }
           void harness.followUp(decision.followUpPrompt);
         }
       }

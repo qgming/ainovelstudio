@@ -2,8 +2,8 @@
 
 /**
  * 从全部已启用工具 id 过滤出某模式应使用的集合。
- * - 剔除「控制工具」中不属于本模式的（如 book 模式剔除 yolo_control）。
- * - 强制带上本模式所需的控制工具（如 autopilot 强制带 yolo_control），即便用户未在设置里开启。
+ * - 剔除「控制工具」中不属于本模式的（如 book 模式剔除 goal_control）。
+ * - 强制带上本模式所需的控制工具（如 goal 强制带 goal_control），即便用户未在设置里开启。
  *
  * @param allEnabled        用户在设置里启用的全部工具 id
  * @param requiredControlToolId 本模式必须启用的控制工具 id（无则 null）
