@@ -67,7 +67,7 @@ describe("AgentPartRenderer", () => {
     expect(codeBlocks[0]).toHaveTextContent('"children": [');
   });
 
-  it("思考卡片展开后点击内容区域可以折叠", () => {
+  it("深度思考行可展开并再次点击折叠", () => {
     render(
       <AgentPartRenderer
         part={{
@@ -78,12 +78,12 @@ describe("AgentPartRenderer", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /思考/ }));
+    fireEvent.click(screen.getByRole("button", { name: /深度思考/ }));
     expect(screen.getAllByText("正在分析请求。").length).toBeGreaterThan(0);
     expect(screen.queryByText("正在思考")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button")[1]);
-    expect(screen.getAllByText("正在分析请求。")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /深度思考/ }));
+    expect(screen.queryByText("正在分析请求。")).not.toBeInTheDocument();
   });
 
   it("ask 卡片在等待输入时显示题面，在完成后显示已提交摘要", () => {

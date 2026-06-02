@@ -346,7 +346,8 @@ describe("BookAgentPanel", () => {
 
     const { rerender } = render(<BookAgentPanel width={420} />);
 
-    expect(screen.getByText("read_workspace_tree")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /查看 1 个步骤/ }));
+    expect(screen.getByRole("button", { name: /read_workspace_tree/ })).toBeInTheDocument();
     expect(screen.getByLabelText("运行中")).toBeInTheDocument();
     expect(screen.queryByText("运行中")).not.toBeInTheDocument();
 
@@ -379,7 +380,7 @@ describe("BookAgentPanel", () => {
 
     expect(screen.getByLabelText("运行成功")).toBeInTheDocument();
     expect(screen.queryByText("运行成功")).not.toBeInTheDocument();
-    expect(screen.queryAllByText("read_workspace_tree")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /read_workspace_tree/ })).toBeInTheDocument();
   });
 
   it("运行中时显示停止按钮并可终止输出", async () => {
@@ -455,7 +456,8 @@ describe("BookAgentPanel", () => {
     render(<BookAgentPanel width={420} />);
 
     expect(screen.getByText("请帮我续写")).toBeInTheDocument();
-    expect(screen.getByText("read_file")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /查看 1 个步骤/ }));
+    expect(screen.getByRole("button", { name: /读取章节/ })).toBeInTheDocument();
   });
 
   it("发送后立即在底部显示正在思考", () => {
@@ -513,7 +515,8 @@ describe("BookAgentPanel", () => {
 
     render(<BookAgentPanel width={420} />);
 
-    expect(screen.getByText("read_file")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /查看 1 个步骤/ }));
+    expect(screen.getByRole("button", { name: /章节\/第一章.md/ })).toBeInTheDocument();
     expect(screen.getByText("正在思考")).toBeInTheDocument();
   });
 
@@ -599,10 +602,11 @@ describe("AgentMessageList", () => {
     );
 
     expect(screen.queryByText("正在思考")).not.toBeInTheDocument();
-    expect(screen.getByText("read_file")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /查看 1 个步骤/ }));
+    expect(screen.getByRole("button", { name: /章节\/第一章.md/ })).toBeInTheDocument();
   });
 
-  it("折叠的工具消息是一行灰色文字且没有卡片背景", () => {
+  it("连续工具调用默认收成步骤行，展开后每个工具一行并可查看结果", () => {
     render(
       <AgentMessageList
         runStatus="completed"
@@ -620,18 +624,35 @@ describe("AgentMessageList", () => {
                 inputSummary: '{"path":"章节/第一章.md"}',
                 outputSummary: "已读取章节",
               },
+              {
+                type: "tool-call",
+                toolName: "edit_file",
+                toolCallId: "tool-2",
+                status: "completed",
+                inputSummary: '{"path":"章节/第一章.md"}',
+                outputSummary: "已写回章节",
+              },
             ],
           },
         ]}
       />,
     );
 
-    const collapsed = screen.getByRole("button", { name: /read_file/ }).closest("section");
+    const collapsed = screen.getByRole("button", { name: /查看 2 个步骤/ }).closest("section");
     expect(collapsed).not.toBeNull();
     expect(collapsed?.className).toContain("text-muted-foreground");
     expect(collapsed?.className).not.toContain("bg-message-card");
-    expect(collapsed?.className).not.toContain("border");
-    expect(screen.getByRole("button", { name: /read_file/ }).querySelectorAll("svg")).toHaveLength(1);
+    expect(screen.queryByText("章节/第一章.md")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看 2 个步骤/ }));
+    expect(screen.getAllByRole("button", { name: /章节\/第一章.md/ })).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: /已读取/ }));
+    expect(screen.getByText("Response")).toBeInTheDocument();
+    expect(screen.getByText("已读取章节")).toBeInTheDocument();
+    const responsePanel = screen.getByText("Response").parentElement;
+    expect(responsePanel?.className).toContain("max-h-[18rem]");
+    expect(responsePanel?.className).toContain("overflow-y-auto");
   });
 
   it("assistant 正式文本使用无卡片背景的正文样式", () => {

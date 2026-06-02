@@ -1,5 +1,5 @@
 import { useState, memo } from "react";
-import { Brain, Wrench, Check, LoaderCircle, Circle, Zap } from "lucide-react";
+import { Brain, Wrench, Check, LoaderCircle, Circle, Zap, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { type AgentPart, type AgentRunStatus } from "@features/agent/lib/types";
@@ -226,7 +226,7 @@ function AccordionCard({
   );
 }
 
-const MarkdownText = memo(function MarkdownText({ className = "", text }: { className?: string; text: string }) {
+export const MarkdownText = memo(function MarkdownText({ className = "", text }: { className?: string; text: string }) {
   return (
     <div className={`agent-markdown text-sm leading-6 text-inherit ${className}`.trim()}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
@@ -236,7 +236,7 @@ const MarkdownText = memo(function MarkdownText({ className = "", text }: { clas
   );
 });
 
-function formatStructuredText(text: string) {
+export function formatStructuredText(text: string) {
   const trimmed = text.trim();
   if (!trimmed) {
     return text;
@@ -250,8 +250,66 @@ function formatStructuredText(text: string) {
   }
 }
 
-function normalizeRenderableStatus(status: AgentRunStatus): "idle" | "running" | "completed" | "failed" {
+export function normalizeRenderableStatus(status: AgentRunStatus): "idle" | "running" | "completed" | "failed" {
   return status === "awaiting_user" ? "running" : status;
+}
+
+export function ToolOutputPanel({
+  emptyText = "无输出内容。",
+  outputSummary,
+  validationError,
+}: {
+  emptyText?: string;
+  outputSummary?: string | null;
+  validationError?: string;
+}) {
+  const formattedOutput = outputSummary ? formatStructuredText(outputSummary) : null;
+
+  return (
+    <div className="space-y-2 text-sm leading-6 text-foreground">
+      {formattedOutput ? (
+        <div className="max-h-[18rem] overflow-y-auto rounded-[8px] border border-border bg-card px-3 py-2 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:bg-panel">
+          <div className="mb-1 text-xs font-medium leading-5 text-muted-foreground">Response</div>
+          <MarkdownText text={formattedOutput} />
+        </div>
+      ) : (
+        <div className="rounded-[8px] border border-border bg-card px-3 py-2 text-sm leading-6 text-muted-foreground dark:bg-panel">
+          {emptyText}
+        </div>
+      )}
+      {validationError ? (
+        <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
+          {validationError}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ReasoningBlock({ part }: { part: Extract<AgentPart, { type: "reasoning" }> }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <section className="text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="group flex min-h-8 w-full items-center gap-2 px-1 py-0.5 text-left text-[15px] font-medium leading-6 text-muted-foreground"
+      >
+        <Brain aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="shrink-0">深度思考</span>
+        <ChevronDown
+          aria-hidden="true"
+          className={["h-3.5 w-3.5 shrink-0 transition-transform", open ? "rotate-180" : ""].join(" ")}
+        />
+      </button>
+      {open ? (
+        <div className="ml-4 border-l border-border pl-4 pt-1 pb-2 text-muted-foreground">
+          <MarkdownText className="text-muted-foreground" text={part.detail} />
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 export function AgentPartRenderer({ part, renderMarkdown = true }: { part: AgentPart; renderMarkdown?: boolean }) {
@@ -276,11 +334,7 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
   }
 
   if (part.type === "reasoning") {
-    return (
-      <AccordionCard collapseOnContentClick icon={Brain} label="思考" summary={part.detail}>
-        <MarkdownText className="text-foreground" text={part.detail} />
-      </AccordionCard>
-    );
+    return <ReasoningBlock part={part} />;
   }
 
   if (part.type === "tool-call") {
@@ -295,7 +349,6 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
       if (card) return card;
     }
 
-    const formattedOutput = part.outputSummary ? formatStructuredText(part.outputSummary) : null;
     const summary = part.outputSummary
       || (part.status === "running" || part.status === "awaiting_user" ? "正在执行..." : "无输出内容");
 
@@ -307,22 +360,11 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
         summary={summary}
         status={normalizeRenderableStatus(part.status)}
       >
-        <div className="space-y-2 text-sm leading-6 text-foreground">
-          {formattedOutput ? (
-            <div className="px-0 py-0 text-foreground">
-              <MarkdownText text={formattedOutput} />
-            </div>
-          ) : (
-            <div className="text-sm leading-6 text-muted-foreground">
-              {part.status === "running" || part.status === "awaiting_user" ? "正在等待工具返回结果。" : "无输出内容。"}
-            </div>
-          )}
-          {part.validationError ? (
-            <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
-              {part.validationError}
-            </div>
-          ) : null}
-        </div>
+        <ToolOutputPanel
+          emptyText={part.status === "running" || part.status === "awaiting_user" ? "正在等待工具返回结果。" : "无输出内容。"}
+          outputSummary={part.outputSummary}
+          validationError={part.validationError}
+        />
       </AccordionCard>
     );
   }
@@ -332,7 +374,6 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
       return null;
     }
 
-    const formattedOutput = formatStructuredText(part.outputSummary);
     return (
       <AccordionCard
         collapseOnContentClick
@@ -341,12 +382,7 @@ export function AgentPartRenderer({ part, renderMarkdown = true }: { part: Agent
         summary={part.validationError}
         status={normalizeRenderableStatus(part.status)}
       >
-        <div className="space-y-2 text-sm leading-6 text-foreground">
-          <div className="rounded-[8px] border border-[#f5c2c7] bg-[#fff5f6] px-3 py-2 text-[#9f1239] dark:border-[#5d2626] dark:bg-[#2b1719] dark:text-[#fda4af]">
-            {part.validationError}
-          </div>
-          {formattedOutput ? <MarkdownText text={formattedOutput} /> : null}
-        </div>
+        <ToolOutputPanel outputSummary={part.outputSummary} validationError={part.validationError} />
       </AccordionCard>
     );
   }
