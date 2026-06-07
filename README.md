@@ -9,14 +9,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/qgming/ainovelstudio/releases/latest">
-    <img src="https://img.shields.io/badge/Download-最新版本-0f172a?style=for-the-badge" alt="Download latest release" />
-  </a>
-  <img src="https://img.shields.io/badge/Version-0.5.0-111827?style=for-the-badge" alt="Version 0.5.0" />
-  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-1f2937?style=for-the-badge" alt="Platform Windows and Android" />
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white" alt="Tauri 2" />
   <img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" alt="React 19" />
   <img src="https://img.shields.io/badge/SQLite-Local%20First-0F80CC?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite Local First" />
@@ -24,7 +16,6 @@
 </p>
 
 <p align="center">
-  <a href="#下载与安装"><strong>下载</strong></a> ·
   <a href="#设计理念"><strong>设计理念</strong></a> ·
   <a href="#快速上手"><strong>快速上手</strong></a> ·
   <a href="#核心功能"><strong>功能</strong></a> ·
@@ -46,17 +37,6 @@
 - 一个数据和模型都由作者掌控的桌面应用。
 
 神笔写作的目标很朴素：让 AI 成为作者工作区里的执行者，而不是替代作者做最终判断。作品结构、事实源、节奏取舍和发布策略，始终应该握在作者手里。
-
-## 下载与安装
-
-| 平台          | 安装包                                                                                                             |
-| ------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Windows x64   | [下载 EXE](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.5.0_windows_x64.exe)   |
-| Android arm64 | [下载 APK](https://github.com/qgming/ainovelstudio/releases/latest/download/ainovelstudio_0.5.0_android_arm64.apk) |
-
-更多历史版本见 [Releases](https://github.com/qgming/ainovelstudio/releases)。
-
-安装后首次使用建议先进入“设置 -> 模型设置”配置一个 OpenAI-compatible 模型接口，再新建或导入一本书。
 
 ## 设计理念
 
