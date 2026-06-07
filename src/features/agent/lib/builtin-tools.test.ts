@@ -191,6 +191,276 @@ describe("createWorkspaceToolset", () => {
     expect(result).toEqual({ ok: true, summary: "已追加写入 章节/第一章.md" });
   });
 
+  it("workspace_write append 文件不存在时会自动创建并写入内容", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件不存在"));
+
+    const result = await toolset.workspace_write.execute({
+      action: "append",
+      content: "新文件内容",
+      path: "章节/第二章.md",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第二章.md",
+      "新文件内容",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, summary: "已创建并写入 章节/第二章.md" });
+  });
+
+  it("workspace_write append 当 Rust 返回'只能读取文件内容'错误时会正确创建文件", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("只能读取文件内容。"));
+
+    const result = await toolset.workspace_write.execute({
+      action: "append",
+      content: "新文件内容",
+      path: "章节/第四章.md",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第四章.md",
+      "新文件内容",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, summary: "已创建并写入 章节/第四章.md" });
+  });
+
+  it("workspace_write replace 文件不存在时会自动创建并写入内容", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件不存在"));
+
+    const result = await toolset.workspace_write.execute({
+      action: "replace",
+      content: "全新内容",
+      path: "章节/第三章.md",
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第三章.md",
+      "全新内容",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, summary: "已创建并写入 章节/第三章.md" });
+  });
+
+  it("workspace_write append 遇到非缺失读取错误时仍会抛出", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockRejectedValue(new Error("文件文本编码无法识别，请转换为 UTF-8 或 GBK 后重试。"));
+
+    await expect(toolset.workspace_write.execute({
+      action: "append",
+      content: "内容",
+      path: "章节/第一章.md",
+    })).rejects.toThrow("文件文本编码无法识别");
+
+    expect(mockWriteWorkspaceTextFile).not.toHaveBeenCalled();
+    expect(onWorkspaceMutated).not.toHaveBeenCalled();
+  });
+
+  it("workspace_edit replace_between 可以替换两个锚点之间的内容", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一段内容在这里。\n\n第二段需要替换的内容。\n可能有多行。\n\n第三段内容在这里。"
+    );
+
+    const result = await toolset.workspace_edit.execute({
+      action: "replace_between",
+      path: "章节/第一章.md",
+      before: "第一段内容在这里。",
+      after: "第三段内容在这里。",
+      content: "\n\n第二段的新内容。\n\n"
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "章节/第一章.md",
+      "第一段内容在这里。\n\n第二段的新内容。\n\n第三段内容在这里。",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      ok: true,
+      summary: '已更新 章节/第一章.md（replace_between，在"第一段内容在这里。"与"第三段内容在这里。"之间）。'
+    });
+  });
+
+  it("workspace_edit replace_between includeAnchors=true 时连同锚点一起替换", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "保留的前面\n前锚点\n旧内容\n后锚点\n保留的后面"
+    );
+
+    const result = await toolset.workspace_edit.execute({
+      action: "replace_between",
+      path: "test.md",
+      before: "前锚点",
+      after: "后锚点",
+      content: "全新内容",
+      includeAnchors: true
+    });
+
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "test.md",
+      "保留的前面\n全新内容\n保留的后面",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(true);
+  });
+
+  it("workspace_edit replace_between 找不到前置锚点时抛出错误", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue("一些内容");
+
+    await expect(toolset.workspace_edit.execute({
+      action: "replace_between",
+      path: "test.md",
+      before: "不存在的锚点",
+      after: "后面",
+      content: "新内容"
+    })).rejects.toThrow("未找到前置锚点");
+
+    expect(mockWriteWorkspaceTextFile).not.toHaveBeenCalled();
+    expect(onWorkspaceMutated).not.toHaveBeenCalled();
+  });
+
+  it("workspace_edit replace_between 找不到后置锚点时抛出错误", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue("前面的内容");
+
+    await expect(toolset.workspace_edit.execute({
+      action: "replace_between",
+      path: "test.md",
+      before: "前面",
+      after: "不存在的锚点",
+      content: "新内容"
+    })).rejects.toThrow("未找到后置锚点");
+
+    expect(mockWriteWorkspaceTextFile).not.toHaveBeenCalled();
+    expect(onWorkspaceMutated).not.toHaveBeenCalled();
+  });
+
+  it("workspace_edit replace_between 支持 occurrence 参数选择第几次匹配", async () => {
+    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一段\n分隔符\n内容1\n分隔符\n第二段\n分隔符\n内容2\n分隔符\n第三段"
+    );
+
+    const result = await toolset.workspace_edit.execute({
+      action: "replace_between",
+      path: "test.md",
+      before: "分隔符",
+      after: "分隔符",
+      content: "\n替换后的内容1\n",
+      occurrence: 1  // 使用第1次出现的"分隔符"作为 before
+    });
+
+    // 第1次出现的"分隔符"后面，找到第2次出现的"分隔符"，替换中间的"内容1"
+    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
+      rootPath,
+      "test.md",
+      "第一段\n分隔符\n替换后的内容1\n分隔符\n第二段\n分隔符\n内容2\n分隔符\n第三段",
+      undefined,
+    );
+    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(true);
+  });
+
+
+  it("workspace_read between 模式可以读取两个锚点之间的内容", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "第一段内容在这里。\n\n第二段需要读取的内容。\n可能有多行。\n\n第三段内容在这里。"
+    );
+
+    const result = await toolset.workspace_read.execute({
+      mode: "between",
+      path: "章节/第一章.md",
+      before: "第一段内容在这里。",
+      after: "第三段内容在这里。"
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      summary: "\n\n第二段需要读取的内容。\n可能有多行。\n\n"
+    });
+  });
+
+  it("workspace_read between 模式 includeAnchors=true 时包含锚点", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue(
+      "保留的前面\n前锚点\n中间内容\n后锚点\n保留的后面"
+    );
+
+    const result = await toolset.workspace_read.execute({
+      mode: "between",
+      path: "test.md",
+      before: "前锚点",
+      after: "后锚点",
+      includeAnchors: true
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      summary: "前锚点\n中间内容\n后锚点"
+    });
+  });
+
+  it("workspace_read between 模式找不到前置锚点时抛出错误", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue("一些内容");
+
+    await expect(toolset.workspace_read.execute({
+      mode: "between",
+      path: "test.md",
+      before: "不存在的锚点",
+      after: "后面"
+    })).rejects.toThrow("未找到前置锚点");
+  });
+
+  it("workspace_read between 模式找不到后置锚点时抛出错误", async () => {
+    const rootPath = "C:/books/北境余烬";
+    const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
+    mockReadWorkspaceTextFile.mockResolvedValue("前面的内容");
+
+    await expect(toolset.workspace_read.execute({
+      mode: "between",
+      path: "test.md",
+      before: "前面",
+      after: "不存在的锚点"
+    })).rejects.toThrow("未找到后置锚点");
+  });
+
   it("workspace_browse 可以列出目录内容", async () => {
     const rootPath = "C:/books/北境余烬";
     const toolset = createWorkspaceToolset({ bookId: rootPath, displayPath: rootPath });
@@ -584,65 +854,6 @@ describe("createWorkspaceToolset", () => {
     expect(result).toEqual({
       ok: true,
       summary: "已更新 章节/第一卷/第1章.md（replace，命中 1 处）。",
-    });
-  });
-
-  it("workspace_edit 支持按行段整体替换文本", async () => {
-    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
-    const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
-    mockReadWorkspaceTextFile.mockResolvedValue(
-      "第一行\n第二行\n第三行\n第四行\n",
-    );
-
-    const result = await toolset.workspace_edit.execute({
-      action: "replace_lines",
-      content: "替换后的第二行\n替换后的第三行",
-      endLine: 3,
-      path: "章节/第一卷/第1章.md",
-      startLine: 2,
-    });
-
-    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
-      rootPath,
-      "章节/第一卷/第1章.md",
-      "第一行\n替换后的第二行\n替换后的第三行\n第四行\n",
-      undefined,
-    );
-    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({
-      ok: true,
-      summary: "已更新 章节/第一卷/第1章.md（replace_lines，行 2-3）。",
-    });
-  });
-
-  it("workspace_edit 支持按锚点范围整体替换文本", async () => {
-    const onWorkspaceMutated = vi.fn().mockResolvedValue(undefined);
-    const rootPath = "C:/books/北境余烬";
-    const toolset = createWorkspaceToolset({ onWorkspaceMutated, bookId: rootPath, displayPath: rootPath });
-    mockReadWorkspaceTextFile.mockResolvedValue(
-      "第一行\n铺垫句\n主角抬头看向夜空\n情绪落点\n尾声",
-    );
-
-    const result = await toolset.workspace_edit.execute({
-      action: "replace_anchor_range",
-      afterLines: 1,
-      anchor: "主角抬头",
-      beforeLines: 1,
-      content: "新的场景段落\n新的情绪落点",
-      path: "章节/第一卷/第1章.md",
-    });
-
-    expect(mockWriteWorkspaceTextFile).toHaveBeenCalledWith(
-      rootPath,
-      "章节/第一卷/第1章.md",
-      "第一行\n新的场景段落\n新的情绪落点\n尾声",
-      undefined,
-    );
-    expect(onWorkspaceMutated).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({
-      ok: true,
-      summary: "已更新 章节/第一卷/第1章.md（replace_anchor_range，行 2-4）。",
     });
   });
 

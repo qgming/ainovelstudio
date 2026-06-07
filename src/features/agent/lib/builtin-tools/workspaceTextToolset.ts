@@ -6,13 +6,13 @@ import type { AgentTool } from "../session/runtime";
 import {
   readRangeAroundAnchor,
   readRangeByHeading,
-  resolveAnchorWindow,
   resolveHeadingWindow,
 } from "./workspaceReadHelpers";
 import {
   applyTextEdit,
   normalizeEditAction,
   normalizeReadMode,
+  replaceBetween,
   replaceTextByLineRange,
   renderLineWindow,
   splitTextLines,
@@ -46,7 +46,7 @@ function normalizeWriteAction(value: unknown) {
 
 function isMissingWorkspaceTextFileError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return /(?:目标路径|文件).*(?:不存在|未找到)|not found/i.test(message);
+  return /(?:目标路径|文件).*(?:不存在|未找到)|not found|只能读取文件内容/i.test(message);
 }
 
 export function createWorkspaceTextTools({
@@ -80,11 +80,15 @@ export function createWorkspaceTextTools({
           return ok(`已创建空白文件 ${path}`);
         }
 
+        // append 和 replace：如果文件不存在则自动创建
         const currentContent = await readWorkspaceTextFile(
           bookId,
           path,
           abortContext,
-        );
+        ).catch((error: unknown) => {
+          if (isMissingWorkspaceTextFileError(error)) return "";
+          throw error;
+        });
         const content = String(input.content ?? "");
         const nextContent = action === "replace"
           ? content
@@ -96,7 +100,14 @@ export function createWorkspaceTextTools({
           abortContext,
         );
         await onWorkspaceMutated?.();
-        return ok(action === "replace" ? `已覆盖写入 ${path}` : `已追加写入 ${path}`);
+
+        // 如果是从空内容写入，说明是新创建的文件
+        const isNewFile = currentContent === "";
+        if (action === "replace") {
+          return ok(isNewFile ? `已创建并写入 ${path}` : `已覆盖写入 ${path}`);
+        } else {
+          return ok(isNewFile ? `已创建并写入 ${path}` : `已追加写入 ${path}`);
+        }
       },
     },
     workspace_read: {
@@ -150,6 +161,30 @@ export function createWorkspaceTextTools({
           );
         }
 
+        if (mode === "between") {
+          const before = ensureString(input.before, "workspace_read.before");
+          const after = ensureString(input.after, "workspace_read.after");
+          const includeAnchors = Boolean(input.includeAnchors);
+          const occurrence = asPositiveInt(input.occurrence, 1);
+
+          // 使用 replaceBetween 的逻辑来定位，但只提取内容不替换
+          const result = replaceBetween(
+            content,
+            before,
+            after,
+            "", // 不需要替换内容
+            includeAnchors,
+            occurrence,
+          );
+
+          // 提取两个锚点之间的内容
+          let startPos = includeAnchors ? result.beforeIndex : result.beforeIndex + before.length;
+          let endPos = includeAnchors ? result.afterIndex + after.length : result.afterIndex;
+          const extractedContent = content.substring(startPos, endPos);
+
+          return ok(extractedContent);
+        }
+
         const startLine = asPositiveInt(input.startLine, 1);
         const endLine = asPositiveInt(input.endLine, startLine);
         if (endLine < startLine) {
@@ -176,53 +211,6 @@ export function createWorkspaceTextTools({
           path,
           getAbortContext(context),
         );
-        if (action === "replace_lines") {
-          const startLine = asPositiveInt(input.startLine, 1);
-          const endLine = asPositiveInt(input.endLine, startLine);
-          const result = replaceTextByLineRange(
-            currentContent,
-            content,
-            startLine,
-            endLine,
-          );
-          await writeWorkspaceTextFile(
-            bookId,
-            path,
-            result.nextContent,
-            getAbortContext(context),
-          );
-          await onWorkspaceMutated?.();
-          return ok(
-            `已更新 ${path}（replace_lines，行 ${result.startLine}-${result.endLine}）。`,
-          );
-        }
-        if (action === "replace_anchor_range") {
-          const lines = splitTextLines(currentContent);
-          const { startIndex, endIndex } = resolveAnchorWindow({
-            afterLines: asNonNegativeInt(input.afterLines, 20),
-            anchor: ensureString(input.anchor, "workspace_edit.anchor"),
-            beforeLines: asNonNegativeInt(input.beforeLines, 20),
-            caseSensitive: Boolean(input.caseSensitive),
-            lines,
-            occurrence: asPositiveInt(input.occurrence, 1),
-          });
-          const result = replaceTextByLineRange(
-            currentContent,
-            content,
-            startIndex + 1,
-            endIndex,
-          );
-          await writeWorkspaceTextFile(
-            bookId,
-            path,
-            result.nextContent,
-            getAbortContext(context),
-          );
-          await onWorkspaceMutated?.();
-          return ok(
-            `已更新 ${path}（replace_anchor_range，行 ${result.startLine}-${result.endLine}）。`,
-          );
-        }
         if (action === "replace_heading_range") {
           const lines = splitTextLines(currentContent);
           const { startIndex, endIndex } = resolveHeadingWindow({
@@ -245,6 +233,30 @@ export function createWorkspaceTextTools({
           await onWorkspaceMutated?.();
           return ok(
             `已更新 ${path}（replace_heading_range，行 ${result.startLine}-${result.endLine}）。`,
+          );
+        }
+        if (action === "replace_between") {
+          const before = ensureString(input.before, "workspace_edit.before");
+          const after = ensureString(input.after, "workspace_edit.after");
+          const includeAnchors = Boolean(input.includeAnchors);
+          const occurrence = asPositiveInt(input.occurrence, 1);
+          const result = replaceBetween(
+            currentContent,
+            before,
+            after,
+            content,
+            includeAnchors,
+            occurrence,
+          );
+          await writeWorkspaceTextFile(
+            bookId,
+            path,
+            result.nextContent,
+            getAbortContext(context),
+          );
+          await onWorkspaceMutated?.();
+          return ok(
+            `已更新 ${path}（replace_between，在"${before}"与"${after}"之间${includeAnchors ? "（含锚点）" : ""}）。`,
           );
         }
         const result = applyTextEdit(
