@@ -67,7 +67,7 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "workspace_read",
     name: "读取工作区文件",
     description:
-      "读取已知路径的文本文件正文或局部行段；未知路径先浏览或搜索。full 整文件返回，超约 6000 字符会被截断，大文件用 head/tail/range 分段读。",
+      "读取已知路径的文本文件正文或局部行段；未知路径先浏览或搜索。full 返回完整文件；大文件用 head/tail/range/between 分段读。between 推荐：只需前后锚点，不需行号。",
   },
   {
     id: "text_stats",
@@ -79,13 +79,13 @@ export const BUILTIN_TOOLS: ToolDef[] = [
     id: "workspace_edit",
     name: "局部编辑",
     description:
-      "对已有文本文件做局部替换、插入或追加；适合改 md/txt 的少量内容，不需要整份重写。创建全新文件用写入文本。",
+      "对已有文本文件做局部编辑：精确替换（replace）、两锚点间替换（replace_between，推荐，不需行号）、标题块替换（replace_heading_range）、定点插入（insert_before/after）、头尾追加（prepend/append）。创建新文件用写入文本。",
   },
   {
     id: "workspace_write",
     name: "写入文本",
     description:
-      "创建空白文本文件，或对已有文件整体追加、覆盖写入；改局部内容用局部编辑。",
+      "创建或写入文本文件。create 仅创建空白文件；append 追加内容（文件不存在会自动创建）；replace 覆盖全文（文件不存在会自动创建）。创建新文件并写入内容直接用 append。改局部内容用局部编辑。",
   },
   {
     id: "workspace_path",

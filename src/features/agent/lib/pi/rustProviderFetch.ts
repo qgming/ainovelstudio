@@ -155,6 +155,12 @@ async function streamViaRust(
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       const channel = new Channel<StreamEvent>();
+      // SSE 缓冲区：累积不完整的消息，等待完整的 SSE 事件
+      // mimo-v2.5-pro 会逐字符发送 JSON 值，导致消息被切断
+      let sseBuffer = '';
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+
       channel.onmessage = (event) => {
         switch (event.type) {
           case "open": {
@@ -168,12 +174,73 @@ async function streamViaRust(
             );
             break;
           }
-          case "chunk":
-            controller.enqueue(Uint8Array.from(event.bytes));
+          case "chunk": {
+            // 解码当前 chunk
+            const chunkText = decoder.decode(Uint8Array.from(event.bytes), { stream: true });
+
+            // 开发环境：记录原始 chunk
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('[SSE Chunk]', chunkText.length > 200 ? chunkText.substring(0, 200) + '...' : chunkText);
+            }
+
+            // 累积到缓冲区
+            sseBuffer += chunkText;
+
+            // 提取完整的 SSE 消息（以 \n\n 分隔）
+            const messages: string[] = [];
+            let pos = 0;
+
+            while (true) {
+              // 查找完整消息的结束标记（\n\n 或 \r\n\r\n）
+              const doubleLF = sseBuffer.indexOf('\n\n', pos);
+              const doubleCRLF = sseBuffer.indexOf('\r\n\r\n', pos);
+
+              let endPos = -1;
+              let delimiterLen = 0;
+
+              if (doubleLF !== -1 && (doubleCRLF === -1 || doubleLF < doubleCRLF)) {
+                endPos = doubleLF;
+                delimiterLen = 2;
+              } else if (doubleCRLF !== -1) {
+                endPos = doubleCRLF;
+                delimiterLen = 4;
+              }
+
+              if (endPos === -1) {
+                // 没有完整消息，保留缓冲区
+                break;
+              }
+
+              // 提取完整消息
+              const message = sseBuffer.substring(pos, endPos + delimiterLen);
+              messages.push(message);
+              pos = endPos + delimiterLen;
+            }
+
+            // 保留未完成的部分
+            sseBuffer = sseBuffer.substring(pos);
+
+            // 发送完整的消息
+            if (messages.length > 0) {
+              const completeText = messages.join('');
+              controller.enqueue(encoder.encode(completeText));
+
+              // 开发环境：记录重组后的完整消息
+              if (process.env.NODE_ENV !== 'production') {
+                console.log('[SSE Complete]', messages.length, 'messages,', completeText.length, 'bytes');
+              }
+            }
             break;
-          case "done":
+          }
+          case "done": {
+            // 流结束时，如果缓冲区还有数据，也发送出去
+            if (sseBuffer.length > 0) {
+              controller.enqueue(encoder.encode(sseBuffer));
+              sseBuffer = '';
+            }
             controller.close();
             break;
+          }
           case "error":
             if (opened) {
               controller.error(new Error(event.message));

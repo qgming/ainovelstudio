@@ -135,7 +135,12 @@ pub async fn stream_provider_request(
 
     // 5) 流式逐块回传。Open 之后的失败（读流中断/取消）也发 Error，但前端此时已建好 Response，
     //    会用 controller.error() 让 SDK 读取中途抛错。
+    //
+    // SSE 缓冲：某些模型（如 mimo-v2.5-pro）会逐字符发送 JSON 值，导致消息在网络包边界被切断。
+    // 我们需要累积字节，等待完整的 SSE 消息（以 \n\n 结尾）再发送，避免前端收到不完整的 JSON。
     let mut stream = response.bytes_stream();
+    let mut sse_buffer = Vec::new();
+
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
@@ -144,11 +149,69 @@ pub async fn stream_provider_request(
             }
             next = stream.next() => match next {
                 Some(Ok(bytes)) => {
-                    if channel
-                        .send(StreamEvent::Chunk { bytes: bytes.to_vec() })
-                        .is_err()
+                    // 累积到缓冲区
+                    sse_buffer.extend_from_slice(&bytes);
+
+                    // 开发环境：记录原始字节
+                    #[cfg(debug_assertions)]
                     {
-                        return Ok(()); // 前端关闭，停止拉流省带宽
+                        if let Ok(text) = std::str::from_utf8(&bytes) {
+                            eprintln!("[SSE Chunk] {}", text);
+                        }
+                    }
+
+                    // 查找完整的 SSE 消息（以 \n\n 或 \r\n\r\n 结尾）
+                    let mut complete_messages = Vec::new();
+                    let mut search_pos = 0;
+
+                    while search_pos < sse_buffer.len() {
+                        // 查找 \n\n
+                        let double_lf = sse_buffer[search_pos..]
+                            .windows(2)
+                            .position(|w| w == b"\n\n")
+                            .map(|p| search_pos + p + 2);
+
+                        // 查找 \r\n\r\n
+                        let double_crlf = sse_buffer[search_pos..]
+                            .windows(4)
+                            .position(|w| w == b"\r\n\r\n")
+                            .map(|p| search_pos + p + 4);
+
+                        // 选择最近的边界
+                        let boundary = match (double_lf, double_crlf) {
+                            (Some(lf), Some(crlf)) => Some(lf.min(crlf)),
+                            (Some(lf), None) => Some(lf),
+                            (None, Some(crlf)) => Some(crlf),
+                            (None, None) => None,
+                        };
+
+                        if let Some(end_pos) = boundary {
+                            // 找到完整消息，提取它（包含边界）
+                            complete_messages.push(sse_buffer[search_pos..end_pos].to_vec());
+                            search_pos = end_pos;
+                        } else {
+                            // 没有更多完整消息
+                            break;
+                        }
+                    }
+
+                    // 逐个发送完整的消息（不要合并）
+                    for message in complete_messages {
+                        #[cfg(debug_assertions)]
+                        {
+                            if let Ok(text) = std::str::from_utf8(&message) {
+                                eprintln!("[SSE Complete] {} bytes", text.len());
+                            }
+                        }
+
+                        if channel.send(StreamEvent::Chunk { bytes: message }).is_err() {
+                            return Ok(()); // 前端关闭
+                        }
+                    }
+
+                    // 移除已发送的部分，保留未完成的数据
+                    if search_pos > 0 {
+                        sse_buffer.drain(..search_pos);
                     }
                 }
                 Some(Err(error)) => {
@@ -156,6 +219,14 @@ pub async fn stream_provider_request(
                     return Ok(());
                 }
                 None => {
+                    // 流结束：如果缓冲区还有剩余数据，也发送出去
+                    if !sse_buffer.is_empty() {
+                        #[cfg(debug_assertions)]
+                        {
+                            eprintln!("[SSE] Flushing {} remaining bytes", sse_buffer.len());
+                        }
+                        let _ = channel.send(StreamEvent::Chunk { bytes: sse_buffer.clone() });
+                    }
                     let _ = channel.send(StreamEvent::Done);
                     return Ok(());
                 }

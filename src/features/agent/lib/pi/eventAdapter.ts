@@ -106,14 +106,15 @@ export class AgentEventAdapter {
   }
 
   adapt(event: AgentEvent): AdaptResult {
-    switch (event.type) {
-      case "agent_start":
-        return { parts: [], events: [{ type: "agent_start", sessionId: this.options.sessionId }] };
+    try {
+      switch (event.type) {
+        case "agent_start":
+          return { parts: [], events: [{ type: "agent_start", sessionId: this.options.sessionId }] };
 
-      case "agent_end":
-        return { parts: [], events: [{ type: "agent_end", sessionId: this.options.sessionId }] };
+        case "agent_end":
+          return { parts: [], events: [{ type: "agent_end", sessionId: this.options.sessionId }] };
 
-      case "turn_start": {
+        case "turn_start": {
         this.turnIndex += 1;
         // id 改用 pi 的 uuidv7（同毫秒单调不碰撞），替代旧的 Date.now()-turnIndex，
         // 避免续轮/连续 run 在同一毫秒生成相同 assistant 消息 id 触发主键冲突。
@@ -210,6 +211,14 @@ export class AgentEventAdapter {
 
       default:
         return EMPTY;
+    }
+    } catch (error) {
+      console.error('[eventAdapter] 处理事件时出错:', {
+        eventType: event.type,
+        error: error instanceof Error ? error.message : String(error),
+        event
+      });
+      throw error;
     }
   }
 

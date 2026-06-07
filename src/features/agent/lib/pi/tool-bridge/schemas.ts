@@ -20,43 +20,43 @@ const editInputSchema: TSchema = Type.Object({
         Type.Literal("insert_after"),
         Type.Literal("insert_before"),
         Type.Literal("prepend"),
-        Type.Literal("replace_anchor_range"),
+        Type.Literal("replace_between"),
         Type.Literal("replace_heading_range"),
-        Type.Literal("replace_lines"),
         Type.Literal("replace"),
       ],
       {
         default: "replace",
         description:
-          "编辑动作。replace=替换精确 target；append/prepend=文件末尾/开头追加；insert_before/insert_after=围绕 target 插入；replace_lines=按行号替换；replace_anchor_range=按锚点附近窗口替换；replace_heading_range=替换 Markdown 标题块。",
+          "编辑动作。replace=替换精确 target；replace_between=替换两个锚点之间的内容（推荐，不需要行号）；replace_heading_range=替换 Markdown 标题块；append/prepend=文件末尾/开头追加；insert_before/insert_after=围绕 target 插入。",
       },
     ),
   ),
-  afterLines: Type.Optional(
-    Type.Integer({
-      minimum: 0,
-      maximum: 200,
-      description: "replace_anchor_range：anchor 行之后额外覆盖多少行；只填需要被替换的范围，避免过大。",
+  anchor: Type.Optional(
+    Type.String({ description: "已废弃，请使用 replace_between 或 replace_heading_range。" }),
+  ),
+  before: Type.Optional(
+    Type.String({
+      description: "replace_between 必填。前置锚点，标记要替换区域的开始位置。默认不包含此锚点本身，除非 includeAnchors=true。",
     }),
   ),
-  anchor: Type.Optional(
-    Type.String({ description: "replace_anchor_range 必填。文件中能唯一定位的原文锚点；优先选短而稳定的一整行。" }),
+  after: Type.Optional(
+    Type.String({
+      description: "replace_between 必填。后置锚点，标记要替换区域的结束位置。默认不包含此锚点本身，除非 includeAnchors=true。",
+    }),
   ),
-  beforeLines: Type.Optional(
-    Type.Integer({
-      minimum: 0,
-      maximum: 200,
-      description: "replace_anchor_range：anchor 行之前额外覆盖多少行；默认覆盖窗口较小。",
+  includeAnchors: Type.Optional(
+    Type.Boolean({
+      description: "replace_between 可选。为 true 时连同前后锚点一起替换；默认 false 只替换中间内容。",
     }),
   ),
   caseSensitive: Type.Optional(
-    Type.Boolean({ description: "replace_anchor_range：中文通常不填；英文标识符大小写重要时传 true。" }),
+    Type.Boolean({ description: "已废弃。" }),
   ),
   content: Type.String({
-    description: "要写入的新文本片段。replace/replace_lines/replace_* 是替换后的完整片段；append/prepend/insert_* 是新增片段。",
+    description: "要写入的新文本片段。replace/replace_* 是替换后的完整片段；append/prepend/insert_* 是新增片段。注意：作为 JSON 字符串传递，换行用 \\n 表示，不要使用真实换行符。",
   }),
   endLine: Type.Optional(
-    Type.Integer({ minimum: 1, description: "replace_lines：结束行号，包含该行；必须 >= startLine。" }),
+    Type.Integer({ minimum: 1, description: "已废弃，请使用 replace_between。" }),
   ),
   expectedCount: Type.Optional(
     Type.Integer({
@@ -72,7 +72,7 @@ const editInputSchema: TSchema = Type.Object({
   occurrence: Type.Optional(
     Type.Integer({
       minimum: 1,
-      description: "replace_anchor_range / replace_heading_range：使用第几次命中，默认 1；同名标题/锚点多处出现时必须指定。",
+      description: "replace_between / replace_heading_range：使用第几次命中，默认 1；同名标题/锚点多处出现时必须指定。",
     }),
   ),
   path: Type.String({ description: "目标文本文件的相对工作区路径，不要传绝对路径。修改前通常应已 read 过当前内容。" }),
@@ -80,11 +80,25 @@ const editInputSchema: TSchema = Type.Object({
     Type.Boolean({ description: "replace：为 true 时替换所有 target；除非用户明确要求全局替换，否则保持 false。" }),
   ),
   startLine: Type.Optional(
-    Type.Integer({ minimum: 1, description: "replace_lines：起始行号，从 1 开始；替换前先 read range 核对行号。" }),
+    Type.Integer({ minimum: 1, description: "已废弃，请使用 replace_between。" }),
   ),
   target: Type.Optional(
     Type.String({
       description: "replace / insert_before / insert_after 必填。必须是文件里的原文片段；不要填新文本或模糊描述。",
+    }),
+  ),
+  afterLines: Type.Optional(
+    Type.Integer({
+      minimum: 0,
+      maximum: 200,
+      description: "已废弃，请使用 replace_between。",
+    }),
+  ),
+  beforeLines: Type.Optional(
+    Type.Integer({
+      minimum: 0,
+      maximum: 200,
+      description: "已废弃，请使用 replace_between。",
     }),
   ),
 });
@@ -93,11 +107,13 @@ const writeInputSchema: TSchema = Type.Object({
   action: Type.Optional(
     Type.Union([Type.Literal("create"), Type.Literal("append"), Type.Literal("replace")], {
       default: "append",
-      description: "写入方式。create=创建空白文本文件；append=追加到已有文件末尾；replace=覆盖已有文件全文。",
+      description: "写入方式。create=创建空白文件（文件必须不存在）；append=追加内容（文件不存在会自动创建）；replace=覆盖全文（文件不存在会自动创建）。",
     }),
   ),
   content: Type.Optional(
-    Type.String({ description: "要写入的文本内容。action=create 时不填；append/replace 时填写。长章节建议分多次 append。" }),
+    Type.String({
+      description: "要写入的文本内容。action=create 时不填；append/replace 时必填。创建新文件并写入内容直接用 append。注意：作为 JSON 字符串传递，换行用 \\n 表示，不要使用真实换行符。"
+    }),
   ),
   path: Type.String({
     description:
@@ -108,12 +124,12 @@ const writeInputSchema: TSchema = Type.Object({
 export const WRITE_TOOL_SPECS: Record<string, PiToolSpec> = {
   workspace_write: {
     description:
-      "创建空白文本文件或整文件追加、覆盖写入。create 创建空白文件；append 追加到末尾；replace 覆盖全文。改已有文件局部内容用 workspace_edit。",
+      "创建或写入文本文件。create 仅创建空白文件；append 追加内容到末尾（文件不存在会自动创建）；replace 覆盖全文（文件不存在会自动创建）。创建新文件并写入内容直接用 append。改已有文件局部内容用 workspace_edit。",
     parameters: writeInputSchema,
   },
   workspace_edit: {
     description:
-      "对已有文本文件做局部替换、插入或追加。改少量文字、插入片段、替换标题块或按行号替换时首选；按 action 提供 target / 行号 / anchor / heading。创建全新文件用 workspace_write。",
+      "对已有文本文件做局部编辑：replace 精确替换片段、replace_between 替换两个锚点之间的内容（推荐，不需要行号）、replace_heading_range 按标题块替换、insert_before/after 定点插入、prepend/append 文件头尾追加。创建新文件或大段内容写入用 workspace_write。",
     parameters: editInputSchema,
   },
 };
@@ -236,6 +252,21 @@ const readInputSchema: TSchema = Type.Object({
     Type.Integer({ minimum: 0, maximum: 200, description: "anchor_range：anchor 行之后额外返回多少行。" }),
   ),
   anchor: Type.Optional(Type.String({ description: "anchor_range 必填。文件中已有的定位锚点；优先选唯一短句或标题。" })),
+  before: Type.Optional(
+    Type.String({
+      description: "between 必填。前置锚点，标记要读取区域的开始位置。默认不包含此锚点本身，除非 includeAnchors=true。",
+    }),
+  ),
+  after: Type.Optional(
+    Type.String({
+      description: "between 必填。后置锚点，标记要读取区域的结束位置。默认不包含此锚点本身，除非 includeAnchors=true。",
+    }),
+  ),
+  includeAnchors: Type.Optional(
+    Type.Boolean({
+      description: "between 可选。为 true 时包含前后锚点；默认 false 只返回中间内容。",
+    }),
+  ),
   beforeLines: Type.Optional(
     Type.Integer({ minimum: 0, maximum: 200, description: "anchor_range：anchor 行之前额外返回多少行。" }),
   ),
@@ -253,6 +284,7 @@ const readInputSchema: TSchema = Type.Object({
     Type.Union(
       [
         Type.Literal("anchor_range"),
+        Type.Literal("between"),
         Type.Literal("full"),
         Type.Literal("head"),
         Type.Literal("heading_range"),
@@ -262,12 +294,12 @@ const readInputSchema: TSchema = Type.Object({
       {
         default: "full",
         description:
-          "full 返回全文（超约 6000 字符会被截断且无法续读）；head/tail 返回头尾片段；range 返回行段；anchor_range 返回锚点附近；heading_range 返回 Markdown 标题块。大文件改用定向模式分段读，不要靠 full。",
+          "full 返回完整文件内容；head/tail 返回头尾片段；range 按行号读取；between 读取两锚点之间内容（推荐，不需行号）；anchor_range 返回锚点附近；heading_range 返回 Markdown 标题块。大文件建议用分段模式。",
       },
     ),
   ),
   occurrence: Type.Optional(
-    Type.Integer({ minimum: 1, description: "anchor_range / heading_range：使用第几次命中，默认 1；同名标题多处出现时指定。" }),
+    Type.Integer({ minimum: 1, description: "anchor_range / between / heading_range：使用第几次命中，默认 1；同名标题/锚点多处出现时指定。" }),
   ),
   path: Type.String({ description: "目标文本文件的相对工作区路径，不要传绝对路径。" }),
   startLine: Type.Optional(Type.Integer({ minimum: 1, description: "range：起始行号，从 1 开始。" })),
@@ -334,7 +366,7 @@ export const READ_TOOL_SPECS: Record<string, PiToolSpec> = {
   },
   workspace_read: {
     description:
-      "读取已知路径的工作区文本文件正文。未知路径先用 workspace_browse 或 workspace_search。full 整文件返回，超约 6000 字符会被截断且无法续读；大文件改用 head/tail/range/anchor_range/heading_range 分段读。",
+      "读取已知路径的工作区文本文件正文。未知路径先用 workspace_browse 或 workspace_search。full 返回完整文件；大文件建议用 head/tail/range/between/anchor_range/heading_range 分段读。between 模式推荐：只需前后锚点，不需行号。",
     parameters: readInputSchema,
   },
   workspace_grep: {

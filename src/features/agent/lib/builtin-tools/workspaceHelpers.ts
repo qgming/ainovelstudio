@@ -7,6 +7,7 @@ import {
 export type BrowseMode = "list" | "stat" | "tree";
 export type ReadMode =
   | "anchor_range"
+  | "between"
   | "full"
   | "head"
   | "heading_range"
@@ -17,9 +18,8 @@ export type EditAction =
   | "insert_after"
   | "insert_before"
   | "prepend"
-  | "replace_anchor_range"
+  | "replace_between"
   | "replace_heading_range"
-  | "replace_lines"
   | "replace";
 export type PathAction = "create_folder" | "move" | "rename" | "delete";
 
@@ -149,6 +149,7 @@ export function normalizeBrowseMode(value: unknown): BrowseMode {
 
 export function normalizeReadMode(value: unknown): ReadMode {
   return value === "anchor_range" ||
+    value === "between" ||
     value === "head" ||
     value === "heading_range" ||
     value === "range" ||
@@ -163,9 +164,8 @@ export function normalizeEditAction(value: unknown): EditAction {
     value === "insert_after" ||
     value === "insert_before" ||
     value === "prepend" ||
-    value === "replace_anchor_range" ||
-    value === "replace_heading_range" ||
-    value === "replace_lines"
+    value === "replace_between" ||
+    value === "replace_heading_range"
   ) {
     return value;
   }
@@ -203,11 +203,82 @@ function countExactMatches(source: string, target: string) {
   return count;
 }
 
+function findNthOccurrence(source: string, target: string, occurrence: number): number {
+  let count = 0;
+  let index = 0;
+  while ((index = source.indexOf(target, index)) >= 0) {
+    count += 1;
+    if (count === occurrence) {
+      return index;
+    }
+    index += target.length;
+  }
+  return -1;
+}
+
+export function replaceBetween(
+  source: string,
+  before: string,
+  after: string,
+  replacement: string,
+  includeAnchors: boolean,
+  occurrence: number,
+): { nextContent: string; beforeIndex: number; afterIndex: number } {
+  if (!before) {
+    throw new Error("workspace_edit.before 不能为空。");
+  }
+  if (!after) {
+    throw new Error("workspace_edit.after 不能为空。");
+  }
+
+  // 1. 查找 before 的第 N 次出现
+  const beforeIndex = findNthOccurrence(source, before, occurrence);
+  if (beforeIndex === -1) {
+    const totalCount = countExactMatches(source, before);
+    if (totalCount === 0) {
+      throw new Error(
+        `未找到前置锚点"${before}"。使用 workspace_grep 确认锚点是否存在。`,
+      );
+    }
+    throw new Error(
+      `前置锚点"${before}"只有 ${totalCount} 次出现，但 occurrence=${occurrence}。`,
+    );
+  }
+
+  // 2. 在 before 之后查找 after
+  const searchStart = beforeIndex + before.length;
+  const afterIndex = source.indexOf(after, searchStart);
+  if (afterIndex === -1) {
+    throw new Error(
+      `在前置锚点"${before}"之后未找到后置锚点"${after}"。确认顺序是否正确，或使用 workspace_grep 确认后置锚点是否存在。`,
+    );
+  }
+
+  // 3. 确定替换范围
+  let startPos: number;
+  let endPos: number;
+  if (includeAnchors) {
+    startPos = beforeIndex;
+    endPos = afterIndex + after.length;
+  } else {
+    startPos = beforeIndex + before.length;
+    endPos = afterIndex;
+  }
+
+  // 4. 执行替换
+  const nextContent = includeAnchors
+    ? source.substring(0, startPos) + replacement + source.substring(endPos)
+    : source.substring(0, startPos) + replacement + source.substring(endPos);
+
+  return { nextContent, beforeIndex, afterIndex };
+}
+
+
 export function applyTextEdit(
   source: string,
   action: Exclude<
     EditAction,
-    "replace_anchor_range" | "replace_heading_range" | "replace_lines"
+    "replace_between" | "replace_heading_range"
   >,
   target: string | undefined,
   content: string,
